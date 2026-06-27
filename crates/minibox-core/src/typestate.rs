@@ -349,7 +349,11 @@ mod tests {
 
     #[test]
     fn compile_fail_docs_exist() {
-        // This test just confirms the module compiles.
-        // The compile_fail doctests above verify invalid transitions are rejected.
+        // This test confirms the module compiles and the typestate machine works.
+        // The compile_fail doctests above verify invalid transitions are rejected at compile time.
+        use crate::domain::ContainerState as RS;
+        let c = test_container();
+        assert_eq!(c.runtime_state(), RS::Created);
+        assert_eq!(c.id, "abc123");
     }
 }

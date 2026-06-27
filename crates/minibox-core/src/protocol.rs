@@ -55,6 +55,19 @@ pub enum PushCredentials {
     Token { token: String },
 }
 
+impl PushCredentials {
+    /// Return a short identifier for the credential variant.
+    ///
+    /// Useful for audit log entries and metrics labels.
+    pub const fn credential_type(&self) -> &'static str {
+        match self {
+            Self::Anonymous => "anonymous",
+            Self::Basic { .. } => "basic",
+            Self::Token { .. } => "token",
+        }
+    }
+}
+
 impl std::fmt::Debug for PushCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -935,6 +948,11 @@ fn is_valid_env_key(key: &str) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn default_max_depth_is_three() {
+        assert_eq!(default_max_depth(), 3);
+    }
+
     /// Local alias for the `test_run!` macro — uses `TestRunDefaults` +
     /// struct-update syntax to work around edition 2024 macro hygiene.
     macro_rules! test_run {
@@ -1318,6 +1336,7 @@ mod tests {
     fn daemon_request_run_defaults_ephemeral_false() {
         let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run { ephemeral, .. } => assert!(!ephemeral),
             _ => panic!("expected Run"),
@@ -1328,6 +1347,7 @@ mod tests {
     fn daemon_request_run_explicit_ephemeral_true() {
         let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"ephemeral":true}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run { ephemeral, .. } => assert!(ephemeral),
             _ => panic!("expected Run"),
@@ -1354,9 +1374,10 @@ mod tests {
     #[test]
     fn daemon_response_container_stopped_roundtrip() {
         let msg = DaemonResponse::ContainerStopped { exit_code: 42 };
+        let encoded = encode_response(&msg).expect("encode");
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"exit_code\":42"));
-        let back: DaemonResponse = serde_json::from_str(&json).unwrap();
+        let back: DaemonResponse = decode_response(&encoded).expect("decode");
         match back {
             DaemonResponse::ContainerStopped { exit_code } => assert_eq!(exit_code, 42),
             _ => panic!("expected ContainerStopped"),
@@ -1387,6 +1408,7 @@ mod tests {
     fn daemon_request_run_without_network_defaults_to_none() {
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run { network, .. } => assert_eq!(network, None),
             _ => panic!("expected Run"),
@@ -1482,6 +1504,7 @@ mod tests {
     fn daemon_request_container_logs_follow_defaults_false() {
         let json = r#"{"type":"ContainerLogs","container_id":"abc"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "ContainerLogs");
         match req {
             DaemonRequest::ContainerLogs { follow, .. } => assert!(!follow),
             _ => panic!("expected ContainerLogs"),
@@ -1511,6 +1534,7 @@ mod tests {
         // Old clients that don't send mounts/privileged must still deserialize.
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run {
                 mounts, privileged, ..
@@ -1564,6 +1588,7 @@ mod tests {
         // Old clients omitting `tty` must still deserialise cleanly.
         let json = r#"{"type":"Run","image":"alpine","tag":"latest","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run { tty, .. } => assert!(!tty),
             _ => panic!("wrong variant"),
@@ -1602,6 +1627,7 @@ mod tests {
             platform: None,
             cgroup_parent: None,
         };
+        assert_eq!(req.type_tag(), "Run");
         let json = serde_json::to_string(&req).expect("serialize");
         // Pin the type discriminant and required fields.
         assert!(json.contains("\"type\":\"Run\""), "type tag: {json}");
@@ -1628,10 +1654,11 @@ mod tests {
 
     #[test]
     fn daemon_request_wire_snapshot_stop() {
-        let json = serde_json::to_string(&DaemonRequest::Stop {
+        let req = DaemonRequest::Stop {
             id: "abc123def456".to_string(),
-        })
-        .expect("serialize");
+        };
+        assert_eq!(req.type_tag(), "Stop");
+        let json = serde_json::to_string(&req).expect("serialize");
         assert_eq!(json, r#"{"type":"Stop","id":"abc123def456"}"#);
     }
 
@@ -1643,12 +1670,13 @@ mod tests {
 
     #[test]
     fn daemon_request_wire_snapshot_pull() {
-        let json = serde_json::to_string(&DaemonRequest::Pull {
+        let req = DaemonRequest::Pull {
             image: "library/nginx".to_string(),
             tag: Some("stable".to_string()),
             platform: None,
-        })
-        .expect("serialize");
+        };
+        assert_eq!(req.type_tag(), "Pull");
+        let json = serde_json::to_string(&req).expect("serialize");
         assert_eq!(
             json,
             r#"{"type":"Pull","image":"library/nginx","tag":"stable"}"#
@@ -1657,29 +1685,38 @@ mod tests {
 
     #[test]
     fn daemon_response_wire_snapshot_container_created() {
-        let json = serde_json::to_string(&DaemonResponse::ContainerCreated {
+        let resp = DaemonResponse::ContainerCreated {
             id: "deadbeef1234".to_string(),
-        })
-        .expect("serialize");
+        };
+        let encoded = encode_response(&resp).expect("encode");
+        let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(json, r#"{"type":"ContainerCreated","id":"deadbeef1234"}"#);
+        let decoded = decode_response(&encoded).expect("decode");
+        assert!(matches!(decoded, DaemonResponse::ContainerCreated { .. }));
     }
 
     #[test]
     fn daemon_response_wire_snapshot_success() {
-        let json = serde_json::to_string(&DaemonResponse::Success {
+        let resp = DaemonResponse::Success {
             message: "stopped".to_string(),
-        })
-        .expect("serialize");
+        };
+        let encoded = encode_response(&resp).expect("encode");
+        let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(json, r#"{"type":"Success","message":"stopped"}"#);
+        let decoded = decode_response(&encoded).expect("decode");
+        assert!(matches!(decoded, DaemonResponse::Success { .. }));
     }
 
     #[test]
     fn daemon_response_wire_snapshot_error() {
-        let json = serde_json::to_string(&DaemonResponse::Error {
+        let resp = DaemonResponse::Error {
             message: "container not found".to_string(),
-        })
-        .expect("serialize");
+        };
+        let encoded = encode_response(&resp).expect("encode");
+        let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(json, r#"{"type":"Error","message":"container not found"}"#);
+        let decoded = decode_response(&encoded).expect("decode");
+        assert!(matches!(decoded, DaemonResponse::Error { .. }));
     }
 
     #[test]
@@ -1710,16 +1747,25 @@ mod tests {
 
     #[test]
     fn daemon_response_wire_snapshot_container_stopped() {
-        let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 0 })
-            .expect("serialize");
+        let resp = DaemonResponse::ContainerStopped { exit_code: 0 };
+        let encoded = encode_response(&resp).expect("encode");
+        let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":0}"#);
+        let decoded = decode_response(&encoded).expect("decode");
+        assert!(matches!(decoded, DaemonResponse::ContainerStopped { .. }));
     }
 
     #[test]
     fn daemon_response_wire_snapshot_container_stopped_nonzero_exit() {
-        let json = serde_json::to_string(&DaemonResponse::ContainerStopped { exit_code: 137 })
-            .expect("serialize");
+        let resp = DaemonResponse::ContainerStopped { exit_code: 137 };
+        let encoded = encode_response(&resp).expect("encode");
+        let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(json, r#"{"type":"ContainerStopped","exit_code":137}"#);
+        let decoded = decode_response(&encoded).expect("decode");
+        assert!(matches!(
+            decoded,
+            DaemonResponse::ContainerStopped { exit_code: 137 }
+        ));
     }
 
     #[test]
@@ -1730,11 +1776,15 @@ mod tests {
 
     #[test]
     fn push_credentials_wire_snapshot_basic() {
-        let json = serde_json::to_string(&PushCredentials::Basic {
+        let creds = PushCredentials::Basic {
             username: "user".to_string(),
             password: "s3cr3t".to_string(),
-        })
-        .expect("serialize");
+        };
+        assert_eq!(creds.credential_type(), "basic");
+        // Exercise the Debug impl (redaction) as part of the SUT.
+        let dbg = format!("{creds:?}");
+        assert!(dbg.contains("Basic"), "variant name must appear: {dbg}");
+        let json = serde_json::to_string(&creds).expect("serialize");
         assert_eq!(
             json,
             r#"{"type":"Basic","username":"user","password":"s3cr3t"}"#
@@ -1747,6 +1797,8 @@ mod tests {
             username: "user".to_string(),
             password: "super-secret-pw".to_string(),
         };
+        assert_eq!(creds.credential_type(), "basic");
+        // Verify the Debug impl on the SUT type redacts the password.
         let dbg = format!("{creds:?}");
         assert!(
             dbg.contains("[REDACTED]"),
@@ -1764,6 +1816,8 @@ mod tests {
         let creds = PushCredentials::Token {
             token: "ghp_secret123".to_string(),
         };
+        assert_eq!(creds.credential_type(), "token");
+        // Verify the Debug impl on the SUT type redacts the token.
         let dbg = format!("{creds:?}");
         assert!(dbg.contains("[REDACTED]"), "token must be redacted: {dbg}");
         assert!(
@@ -1837,6 +1891,7 @@ mod tests {
     #[test]
     fn daemon_request_wire_format_run_field_names_stable() {
         let req = test_run!(image: "i".to_string(), command: Vec::<String>::new());
+        assert_eq!(req.type_tag(), "Run");
         let v: serde_json::Value =
             serde_json::from_str(&serde_json::to_string(&req).expect("serialize")).expect("parse");
         let obj = v.as_object().expect("object");
@@ -1871,6 +1926,7 @@ mod tests {
     fn daemon_request_pull_without_platform_deserializes() {
         let json = r#"{"type":"Pull","image":"alpine","tag":"latest"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Pull");
         match req {
             DaemonRequest::Pull { platform, .. } => assert_eq!(platform, None),
             _ => panic!("expected Pull"),
@@ -1881,6 +1937,7 @@ mod tests {
     fn daemon_request_pull_with_platform_deserializes() {
         let json = r#"{"type":"Pull","image":"alpine","tag":"latest","platform":"linux/arm64"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Pull");
         match req {
             DaemonRequest::Pull { platform, .. } => {
                 assert_eq!(platform, Some("linux/arm64".to_string()));
@@ -1893,6 +1950,7 @@ mod tests {
     fn daemon_request_run_without_platform_deserializes() {
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run { platform, .. } => assert_eq!(platform, None),
             _ => panic!("expected Run"),
@@ -1903,6 +1961,7 @@ mod tests {
     fn daemon_request_run_with_platform_deserializes() {
         let json = r#"{"type":"Run","image":"alpine","command":["sh"],"memory_limit_bytes":null,"cpu_weight":null,"platform":"linux/arm64"}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Run");
         match req {
             DaemonRequest::Run { platform, .. } => {
                 assert_eq!(platform, Some("linux/arm64".to_string()));
@@ -1924,6 +1983,7 @@ mod tests {
             containers: false,
             restart: false,
         };
+        assert_eq!(req.type_tag(), "Update");
         let json = serde_json::to_string(&req).expect("serialize");
         assert!(json.contains("\"type\":\"Update\""), "type tag: {json}");
         assert!(json.contains("\"alpine:latest\""), "image: {json}");
@@ -1939,6 +1999,7 @@ mod tests {
     fn daemon_request_update_defaults_bools_false() {
         let json = r#"{"type":"Update","images":["alpine:latest"]}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Update");
         match req {
             DaemonRequest::Update {
                 images,
@@ -1960,6 +2021,7 @@ mod tests {
     fn daemon_request_update_all_true() {
         let json = r#"{"type":"Update","images":[],"all":true}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Update");
         match req {
             DaemonRequest::Update { all, images, .. } => {
                 assert!(all);
@@ -1974,6 +2036,7 @@ mod tests {
     fn daemon_request_update_containers_and_restart() {
         let json = r#"{"type":"Update","images":[],"containers":true,"restart":true}"#;
         let req: DaemonRequest = serde_json::from_str(json).expect("parse");
+        assert_eq!(req.type_tag(), "Update");
         match req {
             DaemonRequest::Update {
                 containers,
@@ -1994,11 +2057,14 @@ mod tests {
             image: "alpine:latest".to_string(),
             status: "updated".to_string(),
         };
+        let encoded = encode_response(&resp).expect("encode");
         let json = serde_json::to_string(&resp).expect("serialize");
         assert_eq!(
             json, r#"{"type":"UpdateProgress","image":"alpine:latest","status":"updated"}"#,
             "wire snapshot mismatch: {json}",
         );
+        let decoded = decode_response(&encoded).expect("decode");
+        assert!(matches!(decoded, DaemonResponse::UpdateProgress { .. }));
     }
 
     // -------------------------------------------------------------------
@@ -2063,12 +2129,14 @@ mod kani_proofs {
         assert!(!is_valid_env_key(""), "empty key must be rejected");
     }
 
+    const INJECTION_TEST_KEYS: [&str; 6] = ["A=B", "X\0Y", "K\nV", "=", "\0", "\n"];
+
     /// Proof 15: is_valid_env_key rejects keys containing '=', NUL, or newline.
     /// These are the critical injection characters for env var parsing.
     #[kani::proof]
     fn is_valid_env_key_rejects_injection_chars() {
         // Pre-built strings avoid format! overhead in CBMC.
-        let bad_keys: [&str; 6] = ["A=B", "X\0Y", "K\nV", "=", "\0", "\n"];
+        let bad_keys = INJECTION_TEST_KEYS;
         let i: usize = kani::any();
         kani::assume(i < bad_keys.len());
         assert!(

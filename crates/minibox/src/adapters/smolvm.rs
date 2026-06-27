@@ -483,13 +483,25 @@ mod tests {
     fn _assert_filesystem_provider<T: FilesystemProvider>() {}
     fn _assert_resource_limiter<T: ResourceLimiter>() {}
 
-    /// Compile-time check: all four adapters satisfy the required domain traits.
+    /// Compile-time and runtime check: all four adapters satisfy the required domain traits
+    /// and can be instantiated.
     #[test]
     fn adapter_implements_all_traits() {
+        // Compile-time trait satisfaction (fails to compile if a trait is not implemented).
         let _ = _assert_image_registry::<SmolVmRegistry>;
         let _ = _assert_container_runtime::<SmolVmRuntime>;
         let _ = _assert_filesystem_provider::<SmolVmFilesystem>;
         let _ = _assert_resource_limiter::<SmolVmLimiter>;
+        // Runtime: verify the adapters can be constructed.
+        let registry = SmolVmRegistry::new();
+        let runtime = SmolVmRuntime::new();
+        let filesystem = SmolVmFilesystem::new();
+        let limiter = SmolVmLimiter::new();
+        assert!(
+            !registry.image.is_empty(),
+            "SmolVmRegistry must have a non-empty default image"
+        );
+        drop((runtime, filesystem, limiter));
     }
 
     /// Registry with injected executor returns true when image exists.

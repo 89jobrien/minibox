@@ -311,11 +311,14 @@ mod kani_proofs {
 
         if !clone_succeeded {
             // Clone failed: parent frees the pointer (line 152).
+            // SAFETY: clone failed so the trampoline was never called; ptr still owns the allocation.
             let _ = unsafe { Box::from_raw(ptr) };
             free_count += 1;
         } else {
             // Clone succeeded without CLONE_VM: parent frees its copy (line 164).
             // Child has its own address space copy freed in the trampoline.
+            // SAFETY: clone() without CLONE_VM gives parent and child separate address spaces;
+            // the parent frees its copy here; the child's copy is freed in the trampoline.
             let _ = unsafe { Box::from_raw(ptr) };
             free_count += 1;
         }

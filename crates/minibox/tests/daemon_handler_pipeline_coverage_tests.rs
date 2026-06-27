@@ -108,10 +108,12 @@ async fn test_handle_update_restart_true_no_candidates_succeeds() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        true, // restart=true
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: true,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,
@@ -172,10 +174,12 @@ async fn test_handle_update_restart_true_stopped_container_not_restarted() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        true, // restart=true
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: true,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,
@@ -231,10 +235,12 @@ async fn test_handle_update_all_true_empty_store_immediate_success() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
     handler::handle_update(
-        vec![], // explicit list is ignored when all=true
-        true,   // all=true
-        false,
-        false,
+        handler::UpdateParams {
+            images: vec![],
+            all: true,
+            containers: false,
+            restart: false,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,

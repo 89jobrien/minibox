@@ -135,6 +135,12 @@ impl std::fmt::Display for ExecutionManifestDigest {
     }
 }
 
+impl AsRef<str> for ExecutionManifestDigest {
+    fn as_ref(&self) -> &str {
+        &self.hex
+    }
+}
+
 // ─── Digest computation ──────────────────────────────────────────────────────
 
 impl ExecutionManifest {

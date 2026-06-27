@@ -80,9 +80,7 @@ async fn fetch_logs(container_id: &str, socket_path: &std::path::Path) -> Vec<St
     }
 
     // Keep only the last LOG_TAIL_LINES entries.
-    if lines.len() > LOG_TAIL_LINES {
-        lines.drain(..lines.len() - LOG_TAIL_LINES);
-    }
+    trim_log_lines(&mut lines, LOG_TAIL_LINES);
     lines
 }
 
@@ -98,6 +96,15 @@ fn find_container<'a>(id: &str, containers: &'a [ContainerInfo]) -> Option<&'a C
         Some(matches[0])
     } else {
         None
+    }
+}
+
+/// Trim `lines` in place so at most `limit` entries remain (keeping the tail).
+///
+/// Extracted from [`fetch_logs`] so tests can call the logic directly.
+pub fn trim_log_lines(lines: &mut Vec<String>, limit: usize) {
+    if lines.len() > limit {
+        lines.drain(..lines.len() - limit);
     }
 }
 
@@ -254,9 +261,7 @@ mod tests {
     #[test]
     fn log_tail_trims_to_limit() {
         let mut lines: Vec<String> = (0..30).map(|i| format!("line {i}")).collect();
-        if lines.len() > LOG_TAIL_LINES {
-            lines.drain(..lines.len() - LOG_TAIL_LINES);
-        }
+        trim_log_lines(&mut lines, LOG_TAIL_LINES);
         assert_eq!(lines.len(), LOG_TAIL_LINES);
         assert_eq!(lines[0], "line 10");
     }

@@ -14,8 +14,16 @@ use crate::daemon::state::DaemonState;
 use super::run::{RunParams, handle_run};
 use super::{HandlerDependencies, PolicyOverride, send_error};
 
+/// Bundled user-supplied parameters for a pipeline run request.
+pub struct PipelineParams {
+    pub pipeline_path: String,
+    pub input: Option<serde_json::Value>,
+    pub image: Option<String>,
+    pub budget: Option<serde_json::Value>,
+    pub env: Vec<(String, String)>,
+}
+
 /// Run a crux pipeline inside an ephemeral container.
-// qual:allow(complexity) reason: "pipeline lifecycle phases in cfg(unix) block"
 ///
 /// Higher-level than `handle_run`: pulls image, creates container with the
 /// pipeline file bind-mounted at `/pipeline.crux`, streams `ContainerOutput`
@@ -40,17 +48,53 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 /// If the file is present it is parsed as JSON and included in `PipelineComplete.trace`.
 /// If absent or unparseable, a synthetic empty trace `{"steps":[]}` is used —
 /// the pipeline still completes successfully (the exit code determines success).
-// qual:allow(iosp) reason: "handler orchestration — validate, run container, collect trace"
+/// Build the container env list for a pipeline run: inherit caller pairs,
+/// inject `CRUX_PLUGIN_PATH`, and optionally `CRUX_BUDGET_JSON` / `CRUX_INPUT_JSON`.
+fn build_pipeline_env(
+    caller_env: Vec<(String, String)>,
+    budget: Option<&serde_json::Value>,
+    input: Option<&serde_json::Value>,
+) -> Vec<String> {
+    let mut env: Vec<String> = caller_env
+        .into_iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    env.push("CRUX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
+    if let Some(b) = budget
+        && let Ok(s) = serde_json::to_string(b)
+    {
+        env.push(format!("CRUX_BUDGET_JSON={s}"));
+    }
+    if let Some(inp) = input
+        && let Ok(s) = serde_json::to_string(inp)
+    {
+        env.push(format!("CRUX_INPUT_JSON={s}"));
+    }
+    env
+}
+
+/// Build the bind mount that maps the host pipeline file into the container.
+fn build_pipeline_mount(host_pipeline: std::path::PathBuf) -> BindMount {
+    BindMount {
+        host_path: host_pipeline,
+        container_path: std::path::PathBuf::from("/pipeline.crux"),
+        read_only: true,
+    }
+}
+
 pub async fn handle_pipeline(
-    pipeline_path: String,
-    input: Option<serde_json::Value>,
-    image: Option<String>,
-    budget: Option<serde_json::Value>,
-    env: Vec<(String, String)>,
+    params: PipelineParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let PipelineParams {
+        pipeline_path,
+        input,
+        image,
+        budget,
+        env,
+    } = params;
     #[cfg(not(unix))]
     {
         let _ = (pipeline_path, input, image, budget, env, state, deps);
@@ -79,27 +123,8 @@ pub async fn handle_pipeline(
             return;
         }
 
-        // Build the bind mount: pipeline file → /pipeline.crux (read-only).
-        let pipeline_mount = BindMount {
-            host_path: host_pipeline,
-            container_path: std::path::PathBuf::from("/pipeline.crux"),
-            read_only: true,
-        };
-
-        // Build env list: inherit caller env, add CRUX_PLUGIN_PATH and optional budget.
-        let mut container_env: Vec<String> =
-            env.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
-        container_env.push("CRUX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
-        if let Some(ref b) = budget
-            && let Ok(s) = serde_json::to_string(b)
-        {
-            container_env.push(format!("CRUX_BUDGET_JSON={s}"));
-        }
-        if let Some(inp) = &input
-            && let Ok(s) = serde_json::to_string(inp)
-        {
-            container_env.push(format!("CRUX_INPUT_JSON={s}"));
-        }
+        let pipeline_mount = build_pipeline_mount(host_pipeline);
+        let container_env = build_pipeline_env(env, budget.as_ref(), input.as_ref());
 
         // Bridge channel: collect all streaming responses from handle_run internally.
         const PIPELINE_CHANNEL_CAPACITY: usize = 64;

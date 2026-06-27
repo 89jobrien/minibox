@@ -184,6 +184,9 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     let sh = sh.clone();
     gated(GateId::Prepush, &root, move || {
+        // TODO: add `cargo check --target x86_64-unknown-linux-musl` here to catch
+        // cfg(target_os = "linux") compile failures before pushing. Would have prevented
+        // the 2026-05-22 cluster of 5 iterative CI-fix-push cycles. See mistakes.md.
         cmd!(
             sh,
             "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"

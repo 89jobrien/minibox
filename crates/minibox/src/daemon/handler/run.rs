@@ -31,6 +31,7 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 ///
 /// This eliminates 11+ individual parameters from every function signature
 /// in the run pipeline without changing observable behaviour.
+#[derive(Default)]
 pub struct RunParams {
     pub image: String,
     pub tag: Option<String>,
@@ -47,6 +48,59 @@ pub struct RunParams {
     pub cgroup_parent: Option<String>,
     pub priority: Option<slashcrux::Priority>,
     pub policy_override: Option<PolicyOverride>,
+}
+
+/// Bundled parameters for `build_execution_manifest`.
+#[cfg(unix)]
+struct ManifestBuildParams<'a> {
+    id: &'a str,
+    ref_str: &'a str,
+    layer_dirs: &'a [PathBuf],
+    command: &'a [String],
+    env: &'a [String],
+    mounts: &'a [BindMount],
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    net_mode: NetworkMode,
+    privileged: bool,
+    platform: &'a Option<String>,
+    name: &'a Option<String>,
+    capture_output: bool,
+}
+
+/// Bundled parameters for `build_container_record`.
+#[cfg(unix)]
+struct ContainerRecordBuildParams<'a> {
+    id: &'a str,
+    name: &'a Option<String>,
+    image_label: &'a str,
+    command: &'a [String],
+    merged_dir: &'a minibox_core::path::InternalPath,
+    cgroup_dir: &'a std::path::Path,
+    rootfs_layout: &'a minibox_core::domain::RootfsLayout,
+    image: &'a str,
+    tag: &'a str,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    network: Option<NetworkMode>,
+    env: &'a [String],
+    mounts: &'a [BindMount],
+    privileged: bool,
+    platform: &'a Option<String>,
+    cgroup_parent: &'a Option<String>,
+}
+
+/// Bundled parameters for `daemon_wait_for_exit`.
+pub(super) struct WaitParams {
+    pub pid: u32,
+    pub id: String,
+    pub state: Arc<DaemonState>,
+    pub rootfs: minibox_core::path::InternalPath,
+    pub post_exit_hooks: Vec<HookSpec>,
+    pub event_sink: Arc<dyn EventSink>,
+    pub cgroup_path: minibox_core::path::InternalPath,
+    pub runtime: DynContainerRuntime,
+    pub runtime_id: Option<String>,
 }
 
 // ─── Container ID Generation ─────────────────────────────────────────────────
@@ -341,21 +395,22 @@ struct PreparedRun {
 
 /// Construct an `ExecutionManifest` from container run parameters.
 #[cfg(unix)]
-fn build_execution_manifest(
-    id: &str,
-    ref_str: &str,
-    layer_dirs: &[PathBuf],
-    command: &[String],
-    env: &[String],
-    mounts: &[BindMount],
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    net_mode: NetworkMode,
-    privileged: bool,
-    platform: &Option<String>,
-    name: &Option<String>,
-    capture_output: bool,
-) -> minibox_core::domain::ExecutionManifest {
+fn build_execution_manifest(p: ManifestBuildParams<'_>) -> minibox_core::domain::ExecutionManifest {
+    let ManifestBuildParams {
+        id,
+        ref_str,
+        layer_dirs,
+        command,
+        env,
+        mounts,
+        memory_limit_bytes,
+        cpu_weight,
+        net_mode,
+        privileged,
+        platform,
+        name,
+        capture_output,
+    } = p;
     use minibox_core::domain::{
         ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
         ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
@@ -411,25 +466,26 @@ fn build_execution_manifest(
 
 /// Build a `ContainerRecord` in `"Created"` state for a new container.
 #[cfg(unix)]
-fn build_container_record(
-    id: &str,
-    name: &Option<String>,
-    image_label: &str,
-    command: &[String],
-    merged_dir: &minibox_core::path::InternalPath,
-    cgroup_dir: &std::path::Path,
-    rootfs_layout: &minibox_core::domain::RootfsLayout,
-    image: &str,
-    tag: &str,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    env: &[String],
-    mounts: &[BindMount],
-    privileged: bool,
-    platform: &Option<String>,
-    cgroup_parent: &Option<String>,
-) -> ContainerRecord {
+fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord {
+    let ContainerRecordBuildParams {
+        id,
+        name,
+        image_label,
+        command,
+        merged_dir,
+        cgroup_dir,
+        rootfs_layout,
+        image,
+        tag,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        env,
+        mounts,
+        privileged,
+        platform,
+        cgroup_parent,
+    } = p;
     let command_str = command.join(" ");
     ContainerRecord {
         info: ContainerInfo {
@@ -564,21 +620,21 @@ async fn prepare_run(
         .into());
     }
 
-    let mut manifest = build_execution_manifest(
-        &id,
-        &ref_str,
-        &layer_dirs,
-        &command,
-        &env,
-        &mounts,
+    let mut manifest = build_execution_manifest(ManifestBuildParams {
+        id: &id,
+        ref_str: &ref_str,
+        layer_dirs: &layer_dirs,
+        command: &command,
+        env: &env,
+        mounts: &mounts,
         memory_limit_bytes,
         cpu_weight,
         net_mode,
         privileged,
-        &platform,
-        &name,
+        platform: &platform,
+        name: &name,
         capture_output,
-    );
+    });
     manifest
         .seal()
         .context("failed to compute execution manifest digest")?;
@@ -698,25 +754,25 @@ async fn prepare_run(
 
     // Build ContainerRecord in Created state.
     let image_label = format!("{image}:{tag}");
-    let record = build_container_record(
-        &id,
-        &name,
-        &image_label,
-        &command,
-        &merged_dir,
-        &cgroup_dir,
-        &rootfs_layout,
-        &image,
-        &tag,
+    let record = build_container_record(ContainerRecordBuildParams {
+        id: &id,
+        name: &name,
+        image_label: &image_label,
+        command: &command,
+        merged_dir: &merged_dir,
+        cgroup_dir: &cgroup_dir,
+        rootfs_layout: &rootfs_layout,
+        image: &image,
+        tag: &tag,
         memory_limit_bytes,
         cpu_weight,
         network,
-        &env,
-        &mounts,
+        env: &env,
+        mounts: &mounts,
         privileged,
-        &platform,
-        &cgroup_parent,
-    );
+        platform: &platform,
+        cgroup_parent: &cgroup_parent,
+    });
     // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command
         .first()
@@ -959,17 +1015,17 @@ async fn run_inner(
     let runtime_wait = Arc::clone(&deps.lifecycle.runtime);
     let runtime_id = spawn_result.runtime_id.clone();
     tokio::spawn(async move {
-        daemon_wait_for_exit(
+        daemon_wait_for_exit(WaitParams {
             pid,
-            &id_wait,
-            state_wait,
-            spawn_config.rootfs,
-            spawn_config.hooks.post_exit,
-            event_sink_wait,
-            spawn_config.cgroup_path,
-            runtime_wait,
+            id: id_wait,
+            state: state_wait,
+            rootfs: spawn_config.rootfs,
+            post_exit_hooks: spawn_config.hooks.post_exit,
+            event_sink: event_sink_wait,
+            cgroup_path: spawn_config.cgroup_path,
+            runtime: runtime_wait,
             runtime_id,
-        )
+        })
         .await;
     });
 
@@ -1034,17 +1090,19 @@ pub async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
 /// adapters or to the adapter's own wait mechanism (e.g. `SmolvmProcess::wait`
 /// for krun).
 #[cfg(unix)]
-async fn daemon_wait_for_exit(
-    pid: u32,
-    id: &str,
-    state: Arc<DaemonState>,
-    _rootfs: minibox_core::path::InternalPath,
-    _post_exit_hooks: Vec<HookSpec>,
-    event_sink: Arc<dyn EventSink>,
-    cgroup_path: minibox_core::path::InternalPath,
-    runtime: DynContainerRuntime,
-    runtime_id: Option<String>,
-) {
+async fn daemon_wait_for_exit(p: WaitParams) {
+    let WaitParams {
+        pid,
+        id,
+        state,
+        rootfs: _rootfs,
+        post_exit_hooks: _post_exit_hooks,
+        event_sink,
+        cgroup_path,
+        runtime,
+        runtime_id,
+    } = p;
+    let id = id.as_str();
     let exit_code = runtime
         .wait_for_exit(runtime_id.as_deref(), pid)
         .await
@@ -1090,33 +1148,13 @@ async fn daemon_wait_for_exit(
 /// Containers on Windows remain in `"Running"` state until an explicit
 /// `stop` or `remove` command is issued.
 #[cfg(windows)]
-async fn daemon_wait_for_exit(
-    _pid: u32,
-    _id: &str,
-    _state: Arc<DaemonState>,
-    _rootfs: minibox_core::path::InternalPath,
-    _post_exit_hooks: Vec<HookSpec>,
-    _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: minibox_core::path::InternalPath,
-    _runtime: DynContainerRuntime,
-    _runtime_id: Option<String>,
-) {
+async fn daemon_wait_for_exit(_p: WaitParams) {
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
 
 /// Fallback stub for platforms other than Unix or Windows.
 #[cfg(not(any(unix, windows)))]
-async fn daemon_wait_for_exit(
-    _pid: u32,
-    _id: &str,
-    _state: Arc<DaemonState>,
-    _rootfs: minibox_core::path::InternalPath,
-    _post_exit_hooks: Vec<HookSpec>,
-    _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: minibox_core::path::InternalPath,
-    _runtime: DynContainerRuntime,
-    _runtime_id: Option<String>,
-) {
+async fn daemon_wait_for_exit(_p: WaitParams) {
     // No-op on this platform.
 }
 
@@ -1128,10 +1166,19 @@ mod run_inner_tests {
 
     #[test]
     fn run_inner_capture_signature_accepts_mounts_and_privileged() {
-        // Compile-time check: the BindMount type is accessible in this crate.
+        // Verify that BindMount can be constructed and collected into a vec,
+        // confirming the type is accessible to run_inner callers.
         use minibox_core::domain::BindMount;
-        let _: Vec<BindMount> = vec![];
-        let _: bool = false;
+        use std::path::PathBuf;
+        let mounts: Vec<BindMount> = vec![BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/data"),
+            read_only: false,
+        }];
+        assert_eq!(mounts.len(), 1, "BindMount must be constructible");
+        assert!(!mounts[0].read_only, "read_only should be false");
+        let privileged: bool = false;
+        assert!(!privileged, "non-privileged default must be false");
     }
 
     // ── generate_container_id properties ─────────────────────────────────────

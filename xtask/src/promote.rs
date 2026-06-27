@@ -6,6 +6,11 @@
 //!   1. Optionally verifies CI is green on the source branch via `gh run list`.
 //!   2. Checks out the target branch.
 //!   3. Runs `git merge --no-ff <source>`.
+//!
+// TODO: consider squash-merging chain branches during integration to eliminate
+// duplicate commit messages. Currently 13/100 recent commits are duplicates
+// because chain branches are cherry-picked then merged without squash. Each
+// chain tag appears exactly 2x in history. See patterns_2026_06_16.md.
 //!   4. Reports result; stops on failure.
 
 use anyhow::{Context, Result, bail};

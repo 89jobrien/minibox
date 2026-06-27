@@ -60,7 +60,7 @@ pub fn probe() -> HostCapabilities {
 /// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
 /// whether it meets the requirement for running minibox containers.
 #[cfg(test)]
-pub fn format_report(caps: &HostCapabilities) -> String {
+pub(crate) fn format_report(caps: &HostCapabilities) -> String {
     let mut lines = Vec::new();
     lines.push("Minibox Host Capabilities".to_string());
     lines.push("=".repeat(40));
@@ -148,7 +148,7 @@ fn probe_kernel_version() -> (u32, u32, u32) {
 ///
 /// Any non-numeric suffix after the patch component (e.g. `-18-amd64`) is ignored.
 /// Individual components that fail to parse are treated as `0`.
-fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
+pub fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
     let parts: Vec<&str> = s.split('.').collect();
     let major = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
     let minor = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);

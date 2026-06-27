@@ -8,6 +8,7 @@
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use minibox::daemon::handler;
+use minibox::daemon::handler::run::RunParams;
 use minibox::daemon::state::{CgroupFreezeChecker, ProcessChecker};
 use minibox::testing::helpers::{
     make_mock_deps, make_mock_state, make_mock_state_with_n_containers,
@@ -249,24 +250,24 @@ fn bench_handler_run_dispatch(c: &mut Criterion) {
         b.iter(|| {
             rt.block_on(async {
                 let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
-                handler::handle_run(
-                    "alpine".to_string(),
-                    None,
-                    vec!["/bin/sh".to_string()],
-                    None,
-                    None,
-                    false,
-                    None,
-                    vec![],
-                    false,
-                    vec![],
-                    None,
-                    None,
-                    state.clone(),
-                    deps.clone(),
-                    tx,
-                )
-                .await;
+                let params = RunParams {
+                    image: "alpine".to_string(),
+                    tag: None,
+                    command: vec!["/bin/sh".to_string()],
+                    memory_limit_bytes: None,
+                    cpu_weight: None,
+                    ephemeral: false,
+                    network: None,
+                    mounts: vec![],
+                    privileged: false,
+                    env: vec![],
+                    name: None,
+                    platform: None,
+                    cgroup_parent: None,
+                    priority: None,
+                    policy_override: None,
+                };
+                handler::handle_run(params, state.clone(), deps.clone(), tx).await;
                 black_box(rx.recv().await)
             })
         });

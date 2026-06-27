@@ -593,13 +593,15 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
                 extra_mounts.push(mount);
             }
             commands::sandbox::execute(
-                script,
-                image,
-                tag,
-                memory_mb,
-                timeout,
-                extra_mounts,
-                network,
+                commands::sandbox::SandboxExecParams {
+                    script,
+                    image,
+                    tag,
+                    memory_mb,
+                    timeout_secs: timeout,
+                    extra_mounts,
+                    network,
+                },
                 socket_path,
             )
             .await

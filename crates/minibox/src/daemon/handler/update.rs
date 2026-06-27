@@ -13,6 +13,14 @@ use super::run::run_from_params;
 use super::stop::stop_inner;
 use super::{HandlerDependencies, send_error};
 
+/// Bundled user-supplied parameters for an image update request.
+pub struct UpdateParams {
+    pub images: Vec<String>,
+    pub all: bool,
+    pub containers: bool,
+    pub restart: bool,
+}
+
 /// Resolve the list of image refs to update based on `all`, `containers`, or
 /// explicit `images` list.
 async fn resolve_update_targets(
@@ -62,14 +70,17 @@ async fn resolve_update_targets(
 /// was updated are stopped and re-run from their stored `creation_params`.
 // qual:allow(iosp) reason: "handler orchestration — resolve images, pull, restart"
 pub async fn handle_update(
-    images: Vec<String>,
-    all: bool,
-    containers: bool,
-    restart: bool,
+    p: UpdateParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let UpdateParams {
+        images,
+        all,
+        containers,
+        restart,
+    } = p;
     // ── Step 1: resolve the list of image refs to update ─────────────────────
     let target_refs = match resolve_update_targets(images, all, containers, &state, &deps).await {
         Ok(refs) => refs,

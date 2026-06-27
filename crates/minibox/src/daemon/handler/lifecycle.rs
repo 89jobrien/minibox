@@ -11,7 +11,30 @@ use crate::daemon::state::{ContainerState, DaemonState};
 use super::super::network_lifecycle::NetworkLifecycle;
 use super::HandlerDependencies;
 
+/// Record the container op counter and return the status label.
+fn record_remove_op(deps: &HandlerDependencies, ok: bool) {
+    let status = if ok { "ok" } else { "error" };
+    deps.events.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", "remove"), ("adapter", "daemon"), ("status", status)],
+    );
+}
+
 // ─── Pause / Resume ─────────────────────────────────────────────────────────
+
+/// Whether to freeze or unfreeze a container's cgroup.
+enum FreezeAction {
+    Pause,
+    Resume,
+}
+
+/// Bundled parameters for `toggle_freeze`, avoiding the 12-argument signature.
+struct FreezeParams {
+    id: String,
+    state: Arc<DaemonState>,
+    event_sink: Arc<dyn EventSink>,
+    action: FreezeAction,
+}
 
 /// Look up a container by `id`, verify its state matches `expected_state`, and
 /// return the `cgroup.freeze` path. Returns `Err(DaemonResponse::Error)` if
@@ -41,6 +64,66 @@ async fn freeze_path_for(
     Ok(record.cgroup_path.join("cgroup.freeze"))
 }
 
+/// Shared inner for pause/resume: write the freeze value to the cgroup.freeze
+/// path, update state, emit an event, and return the appropriate response.
+async fn toggle_freeze(params: FreezeParams) -> DaemonResponse {
+    let FreezeParams {
+        id,
+        state,
+        event_sink,
+        action,
+    } = params;
+    let is_pause = matches!(action, FreezeAction::Pause);
+    let (expected_state, expected_verb, freeze_value, op_name, new_state, warn_msg, log_msg) =
+        if is_pause {
+            (
+                ContainerState::Running,
+                "running",
+                "1\n",
+                "pause",
+                ContainerState::Paused,
+                "state: failed to mark paused",
+                "container: paused",
+            )
+        } else {
+            (
+                ContainerState::Paused,
+                "paused",
+                "0\n",
+                "resume",
+                ContainerState::Running,
+                "state: failed to mark running after resume",
+                "container: resumed",
+            )
+        };
+    let freeze_path = match freeze_path_for(&id, &state, expected_state, expected_verb).await {
+        Ok(p) => p,
+        Err(resp) => return resp,
+    };
+    if let Err(e) = tokio::fs::write(&freeze_path, freeze_value).await {
+        return DaemonResponse::Error {
+            message: format!("{op_name} failed: {e}"),
+        };
+    }
+    if let Err(e) = state.update_container_state(&id, new_state).await {
+        warn!(container_id = %id, error = %e, "{warn_msg}");
+    }
+    info!(container_id = %id, "{log_msg}");
+    if is_pause {
+        event_sink.emit(ContainerEvent::Paused {
+            id: id.clone(),
+            timestamp: std::time::SystemTime::now(),
+        });
+        DaemonResponse::ContainerPaused { id }
+    } else {
+        event_sink.emit(ContainerEvent::Resumed {
+            id: id.clone(),
+            timestamp: std::time::SystemTime::now(),
+        });
+        DaemonResponse::ContainerResumed { id }
+    }
+}
+
 /// Freeze a running container by writing `1` to its `cgroup.freeze` file.
 ///
 /// Returns `DaemonResponse::ContainerPaused` on success, `DaemonResponse::Error`
@@ -50,27 +133,13 @@ pub async fn handle_pause(
     state: Arc<DaemonState>,
     event_sink: Arc<dyn EventSink>,
 ) -> DaemonResponse {
-    let freeze_path = match freeze_path_for(&id, &state, ContainerState::Running, "running").await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
-    if let Err(e) = tokio::fs::write(&freeze_path, "1\n").await {
-        return DaemonResponse::Error {
-            message: format!("pause failed: {e}"),
-        };
-    }
-    if let Err(e) = state
-        .update_container_state(&id, ContainerState::Paused)
-        .await
-    {
-        warn!(container_id = %id, error = %e, "state: failed to mark paused");
-    }
-    info!(container_id = %id, "container: paused");
-    event_sink.emit(ContainerEvent::Paused {
-        id: id.clone(),
-        timestamp: std::time::SystemTime::now(),
-    });
-    DaemonResponse::ContainerPaused { id }
+    toggle_freeze(FreezeParams {
+        id,
+        state,
+        event_sink,
+        action: FreezeAction::Pause,
+    })
+    .await
 }
 
 /// Unfreeze a paused container by writing `0` to its `cgroup.freeze` file.
@@ -82,27 +151,13 @@ pub async fn handle_resume(
     state: Arc<DaemonState>,
     event_sink: Arc<dyn EventSink>,
 ) -> DaemonResponse {
-    let freeze_path = match freeze_path_for(&id, &state, ContainerState::Paused, "paused").await {
-        Ok(p) => p,
-        Err(resp) => return resp,
-    };
-    if let Err(e) = tokio::fs::write(&freeze_path, "0\n").await {
-        return DaemonResponse::Error {
-            message: format!("resume failed: {e}"),
-        };
-    }
-    if let Err(e) = state
-        .update_container_state(&id, ContainerState::Running)
-        .await
-    {
-        warn!(container_id = %id, error = %e, "state: failed to mark running after resume");
-    }
-    info!(container_id = %id, "container: resumed");
-    event_sink.emit(ContainerEvent::Resumed {
-        id: id.clone(),
-        timestamp: std::time::SystemTime::now(),
-    });
-    DaemonResponse::ContainerResumed { id }
+    toggle_freeze(FreezeParams {
+        id,
+        state,
+        event_sink,
+        action: FreezeAction::Resume,
+    })
+    .await
 }
 
 // ─── Remove ─────────────────────────────────────────────────────────────────
@@ -123,11 +178,7 @@ pub async fn handle_remove(
     };
 
     let result = remove_inner(&id, &state, &deps).await;
-    let status = if result.is_ok() { "ok" } else { "error" };
-    deps.events.metrics.increment_counter(
-        "minibox_container_ops_total",
-        &[("op", "remove"), ("adapter", "daemon"), ("status", status)],
-    );
+    record_remove_op(&deps, result.is_ok());
 
     match result {
         Ok(()) => {

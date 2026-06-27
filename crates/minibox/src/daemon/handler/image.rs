@@ -14,6 +14,21 @@ use crate::daemon::state::DaemonState;
 
 use super::{HandlerDependencies, send_error};
 
+// ─── Metrics helpers ─────────────────────────────────────────────────────────
+
+/// Record operation counter + duration histogram for a timed image operation.
+fn record_timed_op(deps: &HandlerDependencies, op: &str, status: &str, elapsed_secs: f64) {
+    deps.events.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", op), ("adapter", "daemon"), ("status", status)],
+    );
+    deps.events.metrics.record_histogram(
+        "minibox_container_op_duration_seconds",
+        elapsed_secs,
+        &[("op", op), ("adapter", "daemon")],
+    );
+}
+
 // ─── Platform registry resolution ────────────────────────────────────────────
 
 /// Apply a per-request platform override to whichever registry the router selected.
@@ -121,16 +136,7 @@ pub async fn handle_pull(
         }
     };
 
-    deps.events.metrics.increment_counter(
-        "minibox_container_ops_total",
-        &[("op", "pull"), ("adapter", "daemon"), ("status", status)],
-    );
-    deps.events.metrics.record_histogram(
-        "minibox_container_op_duration_seconds",
-        start.elapsed().as_secs_f64(),
-        &[("op", "pull"), ("adapter", "daemon")],
-    );
-
+    record_timed_op(&deps, "pull", status, start.elapsed().as_secs_f64());
     response
 }
 
@@ -176,19 +182,7 @@ pub async fn handle_load_image(
             )
         }
     };
-    deps.events.metrics.increment_counter(
-        "minibox_container_ops_total",
-        &[
-            ("op", "load_image"),
-            ("adapter", "daemon"),
-            ("status", status),
-        ],
-    );
-    deps.events.metrics.record_histogram(
-        "minibox_container_op_duration_seconds",
-        start.elapsed().as_secs_f64(),
-        &[("op", "load_image"), ("adapter", "daemon")],
-    );
+    record_timed_op(&deps, "load_image", status, start.elapsed().as_secs_f64());
     response
 }
 

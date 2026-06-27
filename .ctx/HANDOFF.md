@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-06-15)
+# Handoff — minibox (2026-06-27)
 
 **Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
@@ -31,8 +31,9 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (2 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (27 files) |
+| chain-e-4 | P2 | blocked | Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items |
 
 ## Log
 
-- 20260614.110932: done=76 running=0 pending=46 blocked=0
+- 20260615.055217: done=102 running=0 pending=19 blocked=1

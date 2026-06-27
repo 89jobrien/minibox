@@ -51,11 +51,13 @@ pub(crate) use self::image::{handle_list_images, handle_prune, handle_remove_ima
 pub use self::lifecycle::{handle_list, handle_pause, handle_remove, handle_resume};
 pub use self::logs::handle_logs;
 pub use self::manifest::{handle_get_manifest, handle_verify_manifest};
-pub use self::pipeline::{handle_list_pipelines, handle_pipeline, handle_show_pipeline};
+pub use self::pipeline::{
+    PipelineParams, handle_list_pipelines, handle_pipeline, handle_show_pipeline,
+};
 pub use self::run::{RunParams, handle_run};
 pub use self::snapshot::{handle_list_snapshots, handle_restore_snapshot, handle_save_snapshot};
 pub use self::stop::handle_stop;
-pub use self::update::handle_update;
+pub use self::update::{UpdateParams, handle_update};
 
 // ─── Shared imports ──────────────────────────────────────────────────────────
 
@@ -811,22 +813,28 @@ mod pub_crate_handler_tests {
 
     #[test]
     fn test_env_flag_present_true() {
+        // SAFETY: Rust 2024 requires unsafe for set_var/remove_var. Each test
+        // uses a unique env var name, avoiding races with other parallel tests.
         unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_TRUE", "true") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_TRUE");
+        // SAFETY: same unique var; restoring to absent state.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_TRUE") };
         assert!(result, "env_flag must return true for 'true'");
     }
 
     #[test]
     fn test_env_flag_present_one() {
+        // SAFETY: unique env var name; no other test reads MINIBOX_TEST_ENV_FLAG_ONE.
         unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_ONE", "1") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_ONE");
+        // SAFETY: same unique var; restoring to absent state.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_ONE") };
         assert!(result, "env_flag must return true for '1'");
     }
 
     #[test]
     fn test_env_flag_missing_returns_false() {
+        // SAFETY: unique env var name; remove_var on an absent key is a no-op.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_MISSING") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_MISSING");
         assert!(!result, "env_flag must return false when var is absent");
@@ -834,8 +842,10 @@ mod pub_crate_handler_tests {
 
     #[test]
     fn test_env_flag_false_value_returns_false() {
+        // SAFETY: unique env var name; no other test reads MINIBOX_TEST_ENV_FLAG_FALSE.
         unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_FALSE", "false") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_FALSE");
+        // SAFETY: same unique var; restoring to absent state.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_FALSE") };
         assert!(!result, "env_flag must return false for 'false'");
     }

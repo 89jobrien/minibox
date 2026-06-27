@@ -1,23 +1,89 @@
 project: minibox
 id: minibox
-updated: 2026-06-15
+updated: 2026-06-27
 items:
+- id: chain-e-4
+  doob_uuid: null
+  name: chain-e--136---clarify-stability-checklist-md--mandatory-gates-vs-advisory-items
+  priority: P2
+  status: blocked
+  title: 'Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items'
+  description: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
+  files: []
+  completed: null
+  extra:
+  - date: 2026-06-15
+    type: blocker
+    field: null
+    value: null
+    reviewed: null
+    note: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
 - id: uncommitted-work
   doob_uuid: null
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (2 files)
+  title: Uncommitted changes (27 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
+    docs/PLATFORM_SUPPORT.md
+    docs/core/CRATE_TIERS.mbx.md
+    docs/core/FEATURE_MATRIX.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/SECURITY_INVARIANTS.mbx.md
+    docs/core/STABILITY_CHECKLIST.mbx.md
+    docs/core/STATE_MODEL.mbx.md
+    docs/core/SUPPORT_TIERS.mbx.md
+    docs/notes/minibox-in-minibox.local.md
+    .capsec-baseline.json
+    .ctx/HANDOFF.agentbox.minibox.state.yaml
+    .ctx/HANDOFF.linuxbox.minibox.state.yaml
+    .ctx/HANDOFF.macbox.minibox.state.yaml
+    .ctx/HANDOFF.mbx.minibox.state.yaml
+    .ctx/HANDOFF.minibox-core.minibox.state.yaml
+    .ctx/HANDOFF.minibox-macros.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.state.yaml
+    .ctx/HANDOFF.miniboxd.minibox.state.yaml
+    .ctx/HANDOFF.winbox.minibox.state.yaml
+    .ctx/HANDOFF.xtask.minibox.state.yaml
+    .kgx/
+    .minibox/
+    book/
+    xtask/docs-audit-report.json
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
+  - docs/PLATFORM_SUPPORT.md
+  - docs/core/CRATE_TIERS.mbx.md
+  - docs/core/FEATURE_MATRIX.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/SECURITY_INVARIANTS.mbx.md
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+  - docs/core/STATE_MODEL.mbx.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/notes/minibox-in-minibox.local.md
+  - .capsec-baseline.json
+  - .ctx/HANDOFF.agentbox.minibox.state.yaml
+  - .ctx/HANDOFF.linuxbox.minibox.state.yaml
+  - .ctx/HANDOFF.macbox.minibox.state.yaml
+  - .ctx/HANDOFF.mbx.minibox.state.yaml
+  - .ctx/HANDOFF.minibox-core.minibox.state.yaml
+  - .ctx/HANDOFF.minibox-macros.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.state.yaml
+  - .ctx/HANDOFF.miniboxd.minibox.state.yaml
+  - .ctx/HANDOFF.winbox.minibox.state.yaml
+  - .ctx/HANDOFF.xtask.minibox.state.yaml
+  - .kgx/
+  - .minibox/
+  - book/
+  - xtask/docs-audit-report.json
   completed: null
   extra: []
 log:
-- date: '20260614.110932'
-  summary: done=76 running=0 pending=46 blocked=0
+- date: '20260615.055217'
+  summary: done=102 running=0 pending=19 blocked=1
   commits: []

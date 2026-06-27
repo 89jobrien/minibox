@@ -8,7 +8,7 @@ watches:
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-06-15
+Last updated: 2026-06-27
 
 ---
 

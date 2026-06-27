@@ -38,6 +38,7 @@ struct ContainerState {
 ///
 /// Maintains an in-memory registry of containers keyed by UUID.
 /// Thread-safe via interior `Arc<Mutex<>>`.
+#[derive(Clone)]
 pub struct KrunRuntime {
     containers: Arc<Mutex<HashMap<String, ContainerState>>>,
 }

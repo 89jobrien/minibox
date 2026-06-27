@@ -16,6 +16,13 @@ pub struct SmolvmStatus {
     pub path: Option<std::path::PathBuf>,
 }
 
+impl From<SmolvmStatus> for bool {
+    /// Returns `true` if the smolvm binary was found on PATH.
+    fn from(s: SmolvmStatus) -> Self {
+        s.found
+    }
+}
+
 /// Check whether `smolvm` is available on PATH and query its version.
 ///
 /// Returns a [`SmolvmStatus`] describing what was found. Never errors --

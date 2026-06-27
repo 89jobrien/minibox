@@ -674,8 +674,19 @@ async fn dispatch(
             env,
             ..
         } => {
-            handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
-                .await;
+            handler::handle_pipeline(
+                handler::PipelineParams {
+                    pipeline_path,
+                    input,
+                    image,
+                    budget,
+                    env,
+                },
+                state,
+                deps,
+                tx,
+            )
+            .await;
         }
         DaemonRequest::ListPipelines { limit, pipeline } => {
             let response = handler::handle_list_pipelines(limit, pipeline, state).await;
@@ -692,10 +703,12 @@ async fn dispatch(
             restart,
         } => {
             tokio::spawn(handler::handle_update(
-                images,
-                all,
-                containers,
-                restart,
+                handler::UpdateParams {
+                    images,
+                    all,
+                    containers,
+                    restart,
+                },
                 Arc::clone(&state),
                 Arc::clone(&deps),
                 tx,

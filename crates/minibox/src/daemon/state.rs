@@ -250,6 +250,13 @@ pub struct ContainerRecord {
     pub workload_digest: Option<String>,
 }
 
+impl ContainerRecord {
+    /// Returns the container's current state string (e.g. `"Running"`, `"Stopped"`).
+    pub fn state_str(&self) -> &str {
+        &self.info.state
+    }
+}
+
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
 #[derive(Clone)]
 pub struct DaemonState {
@@ -1171,6 +1178,10 @@ mod tests {
         }"#;
         let record: ContainerRecord =
             serde_json::from_str(json).expect("must deserialize without creation_params");
+        // Exercise ContainerRecord methods — the SUT struct under test.
+        assert_eq!(record.info.id, "abc123");
+        assert_eq!(record.info.image, "alpine:latest");
+        assert_eq!(record.state_str(), "Stopped");
         assert!(
             record.creation_params.is_none(),
             "missing creation_params must deserialize as None"

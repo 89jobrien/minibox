@@ -425,8 +425,11 @@ mod tests {
 
     #[test]
     fn noop_limiter_default() {
-        let limiter = NoopLimiter;
-        let _ = limiter;
+        let limiter = NoopLimiter::new();
+        // Verify that the noop cgroup path is derived from the container ID.
+        let result = limiter.create("test-container", &Default::default());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "noop:test-container");
     }
 
     // -- CopyFilesystem tests -----------------------------------------------
@@ -553,8 +556,13 @@ mod tests {
 
     #[test]
     fn copy_filesystem_default() {
-        let fs = CopyFilesystem;
-        let _ = fs;
+        let fs = CopyFilesystem::new();
+        // Verify that setup_rootfs creates the merged directory when given no layers.
+        let dir = tempfile::TempDir::new().unwrap();
+        let container_dir = dir.path().join("container");
+        std::fs::create_dir_all(&container_dir).unwrap();
+        let result = minibox_core::domain::RootfsSetup::setup_rootfs(&fs, &[], &container_dir);
+        assert!(result.is_ok(), "setup_rootfs with no layers must succeed");
     }
 
     // -- ProotRuntime tests -------------------------------------------------

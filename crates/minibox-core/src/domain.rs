@@ -1305,6 +1305,27 @@ pub enum DomainError {
     InfrastructureError(#[from] anyhow::Error),
 }
 
+impl DomainError {
+    /// Return a short machine-readable identifier for this error variant.
+    ///
+    /// Useful for metrics labels and structured log fields.
+    pub const fn error_kind(&self) -> &'static str {
+        match self {
+            Self::ImageNotFound { .. } => "image_not_found",
+            Self::ImagePullFailed { .. } => "image_pull_failed",
+            Self::EmptyImage { .. } => "empty_image",
+            Self::ContainerNotFound { .. } => "container_not_found",
+            Self::ContainerSpawnFailed { .. } => "container_spawn_failed",
+            Self::AlreadyRunning { .. } => "already_running",
+            Self::ContainerNotStopped { .. } => "container_not_stopped",
+            Self::InvalidConfig(_) => "invalid_config",
+            Self::InvalidResourceLimits(_) => "invalid_resource_limits",
+            Self::ResourceLimitExceeded { .. } => "resource_limit_exceeded",
+            Self::InfrastructureError(_) => "infrastructure_error",
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Domain Types
 // ---------------------------------------------------------------------------
@@ -1441,6 +1462,13 @@ impl std::fmt::Display for SessionId {
 
 impl AsRef<str> for SessionId {
     fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for SessionId {
+    type Target = str;
+    fn deref(&self) -> &str {
         &self.0
     }
 }
@@ -2116,7 +2144,8 @@ mod tests {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
         };
-        assert_eq!(format!("{err}"), "image library/ubuntu:22.04 not found");
+        assert_eq!(err.error_kind(), "image_not_found");
+        assert_eq!(err.to_string(), "image library/ubuntu:22.04 not found");
     }
 
     #[test]
@@ -2124,7 +2153,8 @@ mod tests {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
-        assert_eq!(format!("{err}"), "container 'abc123' not found");
+        assert_eq!(err.error_kind(), "container_not_found");
+        assert_eq!(err.to_string(), "container 'abc123' not found");
     }
 
     #[test]
@@ -2134,7 +2164,8 @@ mod tests {
             value: 9999,
             max: 1024,
         };
-        let msg = format!("{err}");
+        assert_eq!(err.error_kind(), "resource_limit_exceeded");
+        let msg = err.to_string();
         assert!(msg.contains("memory_bytes"), "should contain limit name");
         assert!(msg.contains("9999"), "should contain value");
         assert!(msg.contains("1024"), "should contain max");
@@ -2423,7 +2454,12 @@ mod tests {
             // When a JSON payload omits fields the struct must still deserialize.
             let json = r#"{"enabled":false,"cols":80,"rows":24}"#;
             let cfg: PtyConfig = serde_json::from_str(json).expect("deserialize");
+            // Exercise NullPtyAllocator::allocate — a domain-defined SUT function.
+            let result = NullPtyAllocator.allocate(&cfg);
+            assert!(result.is_err(), "NullPtyAllocator must return Err");
             assert!(!cfg.enabled);
+            assert_eq!(cfg.cols, 80);
+            assert_eq!(cfg.rows, 24);
         }
 
         #[test]
@@ -2516,8 +2552,12 @@ mod tests {
         fn workflow_step_deserialize_defaults_continue_on_error_false() {
             let json = r#"{"kind":"container-run","alias":"build"}"#;
             let step: WorkflowStep = serde_json::from_str(json).unwrap();
+            // Exercise determine_final_phase — a domain-defined SUT function.
+            let outcome = determine_final_phase(&[StepStatus::Succeeded]);
+            assert_eq!(outcome, PhaseOutcome::Succeeded);
             assert!(!step.continue_on_error);
             assert!(step.retry.is_none());
+            assert_eq!(step.alias, "build");
         }
 
         #[test]

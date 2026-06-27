@@ -194,7 +194,6 @@ pub fn setup_overlay_or_tmpfs(
 ///
 /// This is a degraded-mode fallback for nested containers where overlay-on-overlay
 /// is unsupported. Writes inside the container are lost on unmount.
-// qual:allow(iosp) reason: "I/O boundary — tmpfs mount, copy layers, fallback setup"
 fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::Result<PathBuf> {
     let merged = container_dir.join("merged");
     fs::create_dir_all(&merged).map_err(|source| FilesystemError::CreateDir {
@@ -800,6 +799,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_mounts_directory() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -827,6 +828,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_read_only() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -900,6 +903,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_creates_target_dir() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }

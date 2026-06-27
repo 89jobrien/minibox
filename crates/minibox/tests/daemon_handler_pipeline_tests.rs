@@ -24,11 +24,13 @@ async fn test_handle_pipeline_rejects_relative_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
 
     handler::handle_pipeline(
-        "relative/path.crux".to_string(),
-        None,
-        None,
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: "relative/path.crux".to_string(),
+            input: None,
+            image: None,
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -70,11 +72,13 @@ async fn test_handle_pipeline_pull_failure_returns_error() {
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
-        pipeline_file.to_str().expect("unwrap in test").to_string(),
-        None,
-        Some("crux-runtime:latest".to_string()),
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: None,
+            image: Some("crux-runtime:latest".to_string()),
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -102,11 +106,13 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
-        pipeline_file.to_str().expect("unwrap in test").to_string(),
-        None,
-        None,
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: None,
+            image: None,
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -184,11 +190,13 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
     // dir structure — if it does not, trace falls back to {"steps":[]}.
     // We assert either the planted trace OR the fallback are returned.
     handler::handle_pipeline(
-        pipeline_file.to_str().expect("unwrap in test").to_string(),
-        Some(serde_json::json!({"prompt": "hello"})),
-        None,
-        None,
-        vec![("CRUX_LOG".to_string(), "debug".to_string())],
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: Some(serde_json::json!({"prompt": "hello"})),
+            image: None,
+            budget: None,
+            env: vec![("CRUX_LOG".to_string(), "debug".to_string())],
+        },
         state,
         deps,
         tx,

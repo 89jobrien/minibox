@@ -2,7 +2,7 @@
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-06-15
+Last updated: 2026-06-27
 
 See also: `docs/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/FEATURE_MATRIX.mbx.md`
 (per-adapter capability breakdown).

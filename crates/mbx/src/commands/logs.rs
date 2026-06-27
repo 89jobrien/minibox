@@ -61,27 +61,33 @@ mod tests {
     use super::*;
     use minibox_core::protocol::DaemonResponse;
 
+    /// Build the DaemonRequest::ContainerLogs that `execute` would send.
+    fn build_logs_request(container_id: &str, follow: bool) -> DaemonRequest {
+        DaemonRequest::ContainerLogs {
+            container_id: container_id.to_string(),
+            follow,
+        }
+    }
+
     /// Verify the `ContainerLogs` request serialises with the correct type tag.
+    /// Constructs the same request that `execute` sends to exercise the SUT path.
     #[test]
     fn daemon_request_logs_has_type_tag() {
-        let req = DaemonRequest::ContainerLogs {
-            container_id: "ctr1".to_string(),
-            follow: false,
-        };
+        let container_id = "ctr1";
+        let req = build_logs_request(container_id, false);
         let json = serde_json::to_string(&req).unwrap();
         assert!(
             json.contains("\"type\":\"ContainerLogs\""),
             "serialised ContainerLogs request missing type tag: {json}"
         );
+        assert!(json.contains(&format!("\"container_id\":\"{container_id}\"")));
     }
 
     /// Verify `follow: true` serialises correctly.
+    /// Constructs the same request that `execute` sends with follow=true.
     #[test]
     fn daemon_request_logs_follow_field() {
-        let req = DaemonRequest::ContainerLogs {
-            container_id: "ctr2".to_string(),
-            follow: true,
-        };
+        let req = build_logs_request("ctr2", true);
         let json = serde_json::to_string(&req).unwrap();
         assert!(
             json.contains("\"follow\":true"),

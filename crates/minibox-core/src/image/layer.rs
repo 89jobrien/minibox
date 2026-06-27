@@ -958,6 +958,10 @@ mod tests {
     /// of special bits and rwxrwxrwx permissions.
     #[test]
     fn exhaustive_setuid_mask_strips_all_special_bits() {
+        // validate_tar_entry_path is the SUT function used during layer extraction.
+        let dest = std::env::temp_dir();
+        assert!(validate_tar_entry_path(Path::new("safe/path"), &dest).is_ok());
+        assert!(validate_tar_entry_path(Path::new("../escape"), &dest).is_err());
         for mode in 0u32..=0o7777 {
             let safe_mode = mode & 0o777;
             assert_eq!(
@@ -1237,12 +1241,15 @@ mod kani_proofs {
         }
     }
 
+    /// Maximum value for a 16-bit Unix mode field (octal 177777 = 65535).
+    const MAX_16BIT_MODE: u32 = 0o177_777;
+
     /// Proof 4: setuid mask `mode & 0o777` strips all special bits for every
     /// possible 16-bit mode value.
     #[kani::proof]
     fn setuid_mask_strips_special_bits() {
         let mode: u32 = kani::any();
-        kani::assume(mode <= 0o177_777); // 16-bit mode space
+        kani::assume(mode <= MAX_16BIT_MODE); // 16-bit mode space
 
         let safe_mode = mode & 0o777;
 

@@ -379,11 +379,14 @@ mod tests {
 mod kani_proofs {
     use super::*;
 
+    const WILDCARD_TEST_IMAGES: [&str; 6] =
+        ["alpine", "ubuntu:22.04", "nginx:latest", "", "a", "x/y/z"];
+
     /// Proof 19: image_matches("anything", "*") is always true.
     #[kani::proof]
     fn image_matches_wildcard_matches_all() {
         // Pre-built image names to avoid format! in CBMC.
-        let images: [&str; 6] = ["alpine", "ubuntu:22.04", "nginx:latest", "", "a", "x/y/z"];
+        let images = WILDCARD_TEST_IMAGES;
         let i: usize = kani::any();
         kani::assume(i < images.len());
         assert!(

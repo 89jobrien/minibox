@@ -981,6 +981,9 @@ mod tests {
         let prev_colima = std::env::var("COLIMA_HOME").ok();
         let prev_home = std::env::var("HOME").ok();
 
+        // SAFETY: ENV_MUTEX is held for the duration of this block, serialising
+        // all environment mutations across tests. Rust 2024 requires unsafe for
+        // set_var/remove_var; no other thread can observe a partially-mutated env.
         unsafe {
             std::env::remove_var("LIMA_HOME");
             std::env::remove_var("COLIMA_HOME");
@@ -989,6 +992,8 @@ mod tests {
 
         let result = lima_home();
 
+        // SAFETY: Same ENV_MUTEX guard as above; restoring the previous values
+        // while still holding the lock.
         unsafe {
             match prev_lima {
                 Some(v) => std::env::set_var("LIMA_HOME", v),

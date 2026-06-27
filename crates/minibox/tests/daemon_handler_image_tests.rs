@@ -1486,10 +1486,12 @@ async fn test_handle_update_explicit_images_sends_progress_then_success() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        false,
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: false,
+        },
         state,
         deps,
         tx,
@@ -1544,7 +1546,18 @@ async fn test_handle_update_all_empty_store_sends_zero_progress() {
 
     // With an empty image store, all=true means 0 images → terminal Success "0/0"
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
-    handler::handle_update(vec![], true, false, false, state, deps, tx).await;
+    handler::handle_update(
+        handler::UpdateParams {
+            images: vec![],
+            all: true,
+            containers: false,
+            restart: false,
+        },
+        state,
+        deps,
+        tx,
+    )
+    .await;
 
     let response = rx.recv().await.expect("handler sent no response");
     match response {
@@ -1608,7 +1621,18 @@ async fn test_handle_update_containers_collects_source_image_refs() {
     state.add_container(record).await;
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
-    handler::handle_update(vec![], false, true, false, Arc::clone(&state), deps, tx).await;
+    handler::handle_update(
+        handler::UpdateParams {
+            images: vec![],
+            all: false,
+            containers: true,
+            restart: false,
+        },
+        Arc::clone(&state),
+        deps,
+        tx,
+    )
+    .await;
 
     // Should get one UpdateProgress for alpine:latest
     let first = rx.recv().await.expect("handler sent no response");
@@ -1684,10 +1708,12 @@ async fn test_handle_update_restart_stops_running_containers() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        true, // restart = true
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: true,
+        },
         Arc::clone(&state),
         deps,
         tx,

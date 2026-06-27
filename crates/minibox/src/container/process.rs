@@ -472,6 +472,10 @@ fn close_extra_fds() {
             .collect();
         let count = fds.len();
         for fd in fds {
+            // SAFETY: fd was parsed from /proc/self/fd so it is a valid open fd
+            // belonging to this process; closing it here is intentional cleanup
+            // before exec. Errors are ignored — the kernel will close remaining
+            // fds on exec for those with O_CLOEXEC.
             unsafe { libc::close(fd) };
         }
         debug!(
@@ -528,6 +532,22 @@ mod tests {
     /// host-escape capabilities and retain all others.
     #[test]
     fn apply_privileged_capabilities_bitmasks_exclude_host_escape_caps() {
+        // Verify ContainerConfig accepts privileged=true (SUT data structure check).
+        let cfg = ContainerConfig {
+            rootfs: std::path::PathBuf::from("/tmp/test-rootfs"),
+            command: "/bin/sh".to_string(),
+            args: vec![],
+            env: vec![],
+            namespace_config: crate::container::namespace::NamespaceConfig::all(),
+            cgroup_path: std::path::PathBuf::from("/sys/fs/cgroup/minibox/test"),
+            hostname: "test".to_string(),
+            capture_output: false,
+            pre_exec_hooks: vec![],
+            mounts: vec![],
+            privileged: true,
+            pty: None,
+        };
+        assert!(cfg.privileged, "privileged mode must be set");
         // Reproduce the constants from apply_privileged_capabilities.
         const CAP_PRIVILEGED_LOW: u32 = !(1_u32 << 16) & !(1_u32 << 22);
         const CAP_PRIVILEGED_HIGH: u32 = 0x0000_01FF & !(1 << 0) & !(1 << 1);

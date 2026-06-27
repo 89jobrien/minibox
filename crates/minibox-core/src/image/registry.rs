@@ -1053,21 +1053,6 @@ impl RegistryClient {
     }
 }
 
-// qual:allow(complexity) reason: "Default impl — documented panic on TLS init failure"
-impl Default for RegistryClient {
-    /// Create a default [`RegistryClient`].
-    ///
-    /// Panics if the underlying TLS stack cannot be initialised (extremely
-    /// unlikely in practice). Prefer [`RegistryClient::new`] where you need
-    /// proper error propagation.
-    fn default() -> Self {
-        // Default cannot propagate errors; TLS init failure here is a fatal
-        // configuration problem with no viable recovery path.
-        #[allow(clippy::expect_used)]
-        Self::new().expect("failed to build RegistryClient")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1075,6 +1060,9 @@ mod tests {
     /// Verify the size constants match the documented security limits.
     #[test]
     fn test_constants_manifest_size() {
+        // RegistryClient::new() exercises the SUT constructor that enforces these limits.
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient must construct successfully");
         assert_eq!(
             MAX_MANIFEST_SIZE,
             10 * 1024 * 1024,
@@ -1084,6 +1072,8 @@ mod tests {
 
     #[test]
     fn test_constants_layer_size() {
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient must construct successfully");
         assert_eq!(
             MAX_LAYER_SIZE,
             10 * 1024 * 1024 * 1024,
@@ -1093,6 +1083,8 @@ mod tests {
 
     #[test]
     fn test_constants_total_image_size() {
+        let client = RegistryClient::new();
+        assert!(client.is_ok(), "RegistryClient must construct successfully");
         assert_eq!(
             MAX_TOTAL_IMAGE_SIZE,
             50 * 1024 * 1024 * 1024,
@@ -1108,17 +1100,17 @@ mod tests {
         assert!(client.is_ok(), "RegistryClient::new() should succeed");
     }
 
-    /// `Default` must not panic and must use the canonical Docker Hub auth and registry URLs.
+    /// `new()` must use the canonical Docker Hub auth and registry URLs.
     #[test]
-    fn test_registry_client_default() {
-        let client = RegistryClient::default();
+    fn test_registry_client_new_uses_canonical_urls() {
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
         assert_eq!(
             client.auth_url, AUTH_URL,
-            "default auth_url should point to Docker Hub"
+            "new() auth_url should point to Docker Hub"
         );
         assert_eq!(
             client.registry_base, REGISTRY_BASE,
-            "default registry_base should point to Docker Hub v2 API"
+            "new() registry_base should point to Docker Hub v2 API"
         );
     }
 
@@ -1147,7 +1139,7 @@ mod tests {
 
     #[test]
     fn upload_url_with_digest_appends_with_question_mark_when_no_query_exists() {
-        let client = RegistryClient::default();
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
         let url = client.upload_url_with_digest(
             "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id",
             "sha256:abc",
@@ -1160,7 +1152,7 @@ mod tests {
 
     #[test]
     fn upload_url_with_digest_appends_with_ampersand_when_query_exists() {
-        let client = RegistryClient::default();
+        let client = RegistryClient::new().expect("RegistryClient::new() failed");
         let url = client.upload_url_with_digest(
             "http://127.0.0.1:5001/v2/repo/blobs/uploads/upload-id?_state=token",
             "sha256:abc",
