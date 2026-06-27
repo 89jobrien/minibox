@@ -154,6 +154,7 @@ docs/archive/
 .ctx/HANDOFF.*.state.json
 .ctx/HANDOFF.*.*.state.json
 .ctx/HANDOFF.hj.hj.state.json
+.ctx/HANDOFF.*.minibox.state.yaml
 .ctx/.initialized
 # handoff-end
 .claude/skills/whatidid/cache/
