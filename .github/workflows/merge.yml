@@ -317,6 +317,50 @@ jobs:
           done
           echo "All jobs passed or were skipped"
 
+  promote-next:
+    name: promote develop -> next
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    needs: [ci-ok]
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: check if next is already up-to-date
+        id: check
+        run: |
+          git fetch origin next
+          BEHIND=$(git log --oneline origin/next..origin/develop | wc -l | tr -d ' ')
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" = "0" ]; then
+            echo "next is already up-to-date with develop"
+          else
+            echo "$BEHIND commit(s) to promote"
+          fi
+      - name: create or update develop -> next PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for develop -> next"
+          else
+            gh pr create \
+              --base next \
+              --head develop \
+              --title "promote(develop->next): auto-promote after CI passed" \
+              --body "Automated promotion from develop. CI passed on develop branch." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
+          fi
+
   promote-staging:
     name: promote next -> staging
     runs-on: ubuntu-latest
@@ -329,18 +373,39 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: configure git
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-      - name: merge next into staging
+      - name: check if staging is already up-to-date
+        id: check
         run: |
           git fetch origin staging
-          git checkout staging
-          git merge --ff-only origin/next || git merge origin/next -m "Merge branch 'next' into staging"
-          git push origin staging
+          BEHIND=$(git log --oneline origin/staging..origin/next | wc -l | tr -d ' ')
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" = "0" ]; then
+            echo "staging is already up-to-date with next"
+          else
+            echo "$BEHIND commit(s) to promote"
+          fi
+      - name: create or update next -> staging PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for next -> staging"
+          else
+            gh pr create \
+              --base staging \
+              --head next \
+              --title "promote(next->staging): auto-promote after CI passed" \
+              --body "Automated promotion from next. CI passed on next branch." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
+          fi
       - name: create or update staging -> main PR
+        if: steps.check.outputs.behind != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -351,8 +416,13 @@ jobs:
             gh pr create \
               --base main \
               --head staging \
-              --title "Promote staging -> main" \
-              --body "Automated promotion from staging. Status checks must pass before merge."
+              --title "promote(staging->main): auto-promote after CI passed" \
+              --body "Automated promotion from staging. Status checks must pass before merge." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
           fi
 
   cleanup-linux:
