@@ -256,7 +256,7 @@ pub fn run_hooks(
 fn apply_privileged_capabilities() -> anyhow::Result<()> {
     // LINUX_CAPABILITY_VERSION_3: supports 64-bit capability sets as two
     // 32-bit words (low bits 0-31, high bits 32-40).
-    const LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
+    const LINUX_CAPABILITY_VERSION_3: u32 = 0x2008_0522;
     // Low caps (0-31) minus CAP_SYS_MODULE (16) and CAP_SYS_BOOT (22).
     const CAP_PRIVILEGED_LOW: u32 = !(1_u32 << 16) & !(1_u32 << 22);
     // High caps (32-40) minus CAP_MAC_OVERRIDE (bit 0) and CAP_MAC_ADMIN (bit 1).

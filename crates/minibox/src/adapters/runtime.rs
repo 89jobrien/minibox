@@ -80,7 +80,7 @@ use tracing::debug;
 ///     Ok(())
 /// }
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct LinuxNamespaceRuntime;
 
 impl LinuxNamespaceRuntime {
