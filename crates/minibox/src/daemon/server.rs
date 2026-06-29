@@ -76,8 +76,8 @@ pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
             fd,
             nix::libc::SOL_SOCKET,
             nix::libc::SO_PEERCRED,
-            &mut cred as *mut _ as *mut nix::libc::c_void,
-            &mut len,
+            (&raw mut cred).cast::<nix::libc::c_void>(),
+            &raw mut len,
         )
     };
     if ret == 0 {

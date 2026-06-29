@@ -107,7 +107,7 @@ impl PrometheusMetricsRecorder {
 fn to_labels(labels: &[(&str, &str)]) -> Labels {
     labels
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
         .collect()
 }
 

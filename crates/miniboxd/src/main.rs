@@ -578,7 +578,7 @@ async fn build_handler_deps(
     let deps = match suite {
         #[cfg(target_os = "linux")]
         AdapterSuite::Native => {
-            let native_network = resolve_native_network().await?;
+            let native_network = resolve_native_network()?;
             build_native_handler_dependencies(
                 Arc::clone(&state),
                 &paths.data_dir,
@@ -642,7 +642,7 @@ async fn build_handler_deps(
 
 #[cfg(target_os = "linux")]
 // qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
-async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
+fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
@@ -1010,12 +1010,11 @@ fn migrate_to_supervisor_cgroup() {
         }
     };
 
-    let cgroup_path = match cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
-        Some(p) => p.trim().to_string(),
-        None => {
-            warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
-            return;
-        }
+    let cgroup_path = if let Some(p) = cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
+        p.trim().to_string()
+    } else {
+        warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
+        return;
     };
 
     if cgroup_path.ends_with("/supervisor") {

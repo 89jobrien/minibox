@@ -3,7 +3,7 @@
 //! The [`preflight`] function probes for Windows Containers (HCS) and WSL2
 //! independently and returns a [`WinboxStatus`] reflecting what is available.
 //! The injectable [`Executor`] type lets tests substitute fake subprocess
-//! results without running PowerShell or `wsl.exe`.
+//! results without running `PowerShell` or `wsl.exe`.
 
 use anyhow::Result;
 
@@ -53,7 +53,7 @@ pub fn default_executor() -> Executor {
 /// Runs `powershell -Command "Get-WindowsOptionalFeature -Online
 /// -FeatureName Containers | Select-Object -ExpandProperty State"` and checks
 /// whether the trimmed output equals `"Enabled"`. Returns `false` on any
-/// executor error (e.g., PowerShell not found, feature not present).
+/// executor error (e.g., `PowerShell` not found, feature not present).
 fn check_hcs(exec: &Executor) -> bool {
     exec(&[
         "powershell",
