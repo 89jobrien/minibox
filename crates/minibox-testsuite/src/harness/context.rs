@@ -5,6 +5,9 @@
 
 use std::fmt::Debug;
 
+use minibox_core::adapters::conformance::BackendDescriptor;
+use minibox_core::domain::BackendCapability;
+
 use super::traits::TestResult;
 
 /// Structured log entry captured during a test run.
@@ -29,25 +32,51 @@ pub enum LogKind {
 ///
 /// Collects assertion failures and structured log output. At the end of a test,
 /// call `ctx.result()` to obtain the aggregate `TestResult`.
-pub struct TestContext {
+pub struct TestContext<'d> {
     failures: Vec<String>,
     log: Vec<LogEntry>,
+    descriptor: Option<&'d BackendDescriptor>,
 }
 
-impl Default for TestContext {
+impl Default for TestContext<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TestContext {
+impl<'d> TestContext<'d> {
     /// Create a fresh context with no recorded state.
     #[must_use]
     pub const fn new() -> Self {
         Self {
             failures: Vec::new(),
             log: Vec::new(),
+            descriptor: None,
         }
+    }
+
+    /// Create a context bound to a backend descriptor.
+    #[must_use]
+    pub const fn with_descriptor(descriptor: &'d BackendDescriptor) -> Self {
+        Self {
+            failures: Vec::new(),
+            log: Vec::new(),
+            descriptor: Some(descriptor),
+        }
+    }
+
+    /// Check if the backend supports a capability.
+    /// Returns `false` if no descriptor is set.
+    #[must_use]
+    pub fn supports(&self, cap: BackendCapability) -> bool {
+        self.descriptor
+            .is_some_and(|d| d.capabilities.supports(cap))
+    }
+
+    /// Access the backend descriptor, if set.
+    #[must_use]
+    pub const fn descriptor(&self) -> Option<&BackendDescriptor> {
+        self.descriptor
     }
 
     // -----------------------------------------------------------------------
@@ -165,7 +194,7 @@ impl TestContext {
 
     /// Assert a `Result` is `Err`. Records a failure if `Ok`.
     pub fn assert_err<T, E>(&mut self, result: Result<T, E>, label: &str) -> bool {
-        if let Err(_) = result {
+        if result.is_err() {
             true
         } else {
             self.record_failure(format!("{label}: expected Err, got Ok"));

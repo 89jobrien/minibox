@@ -1392,6 +1392,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1742,6 +1751,7 @@ dependencies = [
  "futures",
  "hex",
  "insta",
+ "inventory",
  "libc",
  "miette",
  "minibox-core",
@@ -1787,8 +1797,10 @@ name = "minibox-testsuite"
 version = "0.30.0"
 dependencies = [
  "chrono",
+ "inventory",
  "minibox",
  "minibox-core",
+ "paste",
  "serde",
  "serde_json",
  "slashcrux",
@@ -2046,6 +2058,12 @@ dependencies = [
  "smallvec",
  "windows-link",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "percent-encoding"

@@ -6,8 +6,6 @@ use minibox::testing::mocks::image_loader::MockImageLoader;
 use minibox_core::domain::ImageLoader;
 use std::path::PathBuf;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -21,22 +19,15 @@ fn tarball() -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// `load_image` succeeds and increments the call count.
-pub struct LoadImageSucceedsAndIncrementsCount;
-impl ConformanceTest for LoadImageSucceedsAndIncrementsCount {
-    fn name(&self) -> &'static str {
-        "load_image_succeeds_and_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "image_loader"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "load_image_succeeds_and_increments_count",
+    adapter: "image_loader",
+    capability: ImageLoader,
+    category: Unit,
+    |ctx| {
         let mock = MockImageLoader::new();
         let result = rt().block_on(mock.load_image(&tarball(), "alpine", "3.18"));
         ctx.assert_ok(result, "load_image should succeed");
@@ -45,19 +36,12 @@ impl ConformanceTest for LoadImageSucceedsAndIncrementsCount {
     }
 }
 
-/// `load_image` accumulates the count across multiple calls.
-pub struct LoadImageCountAccumulates;
-impl ConformanceTest for LoadImageCountAccumulates {
-    fn name(&self) -> &'static str {
-        "load_image_count_accumulates"
-    }
-    fn adapter(&self) -> &'static str {
-        "image_loader"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "load_image_count_accumulates",
+    adapter: "image_loader",
+    capability: ImageLoader,
+    category: Unit,
+    |ctx| {
         let mock = MockImageLoader::new();
         for i in 0..3_u32 {
             rt().block_on(mock.load_image(&tarball(), &format!("img{i}"), "latest"))
@@ -68,19 +52,12 @@ impl ConformanceTest for LoadImageCountAccumulates {
     }
 }
 
-/// `load_image` returns Err when configured to fail.
-pub struct LoadImageFailureReturnsErr;
-impl ConformanceTest for LoadImageFailureReturnsErr {
-    fn name(&self) -> &'static str {
-        "load_image_failure_returns_err"
-    }
-    fn adapter(&self) -> &'static str {
-        "image_loader"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "load_image_failure_returns_err",
+    adapter: "image_loader",
+    capability: ImageLoader,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockImageLoader::failing();
         let result = rt().block_on(mock.load_image(&tarball(), "alpine", "3.18"));
         ctx.assert_err(result, "load_image with failure configured must return Err");
@@ -88,19 +65,12 @@ impl ConformanceTest for LoadImageFailureReturnsErr {
     }
 }
 
-/// `load_image` failure still increments call count.
-pub struct LoadImageFailureIncrementsCount;
-impl ConformanceTest for LoadImageFailureIncrementsCount {
-    fn name(&self) -> &'static str {
-        "load_image_failure_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "image_loader"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "load_image_failure_increments_count",
+    adapter: "image_loader",
+    capability: ImageLoader,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockImageLoader::failing();
         let _ = rt().block_on(mock.load_image(&tarball(), "alpine", "3.18"));
         ctx.assert_eq(
@@ -110,15 +80,4 @@ impl ConformanceTest for LoadImageFailureIncrementsCount {
         );
         ctx.result()
     }
-}
-
-/// Return all `image_loader` conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(LoadImageSucceedsAndIncrementsCount),
-        Box::new(LoadImageCountAccumulates),
-        Box::new(LoadImageFailureReturnsErr),
-        Box::new(LoadImageFailureIncrementsCount),
-    ]
 }

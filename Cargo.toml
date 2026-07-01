@@ -91,6 +91,8 @@ proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 turmoil = "0.7"     # dev-only: deterministic network simulation tests
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
+inventory = "0.3"
+paste = "1"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

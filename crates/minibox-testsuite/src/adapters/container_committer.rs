@@ -5,8 +5,6 @@
 use minibox::testing::mocks::commit::MockContainerCommitter;
 use minibox_core::domain::{CommitConfig, ContainerCommitter, ContainerId};
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -29,22 +27,15 @@ const fn commit_config() -> CommitConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// commit succeeds and returns `ImageMetadata` with correct name/tag.
-pub struct CommitReturnsImageMetadata;
-impl ConformanceTest for CommitReturnsImageMetadata {
-    fn name(&self) -> &'static str {
-        "commit_returns_image_metadata"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_committer"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "commit_returns_image_metadata",
+    adapter: "container_committer",
+    capability: Commit,
+    category: Unit,
+    |ctx| {
         let mock = MockContainerCommitter::new();
         let result = rt().block_on(mock.commit(&container_id(), "myimage:v1", &commit_config()));
         if let Some(meta) = ctx.assert_ok(result, "commit should succeed") {
@@ -55,19 +46,12 @@ impl ConformanceTest for CommitReturnsImageMetadata {
     }
 }
 
-/// commit increments the call count.
-pub struct CommitIncrementsCount;
-impl ConformanceTest for CommitIncrementsCount {
-    fn name(&self) -> &'static str {
-        "commit_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_committer"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "commit_increments_count",
+    adapter: "container_committer",
+    capability: Commit,
+    category: Unit,
+    |ctx| {
         let mock = MockContainerCommitter::new();
         rt().block_on(mock.commit(&container_id(), "img:tag", &commit_config()))
             .expect("commit");
@@ -76,19 +60,12 @@ impl ConformanceTest for CommitIncrementsCount {
     }
 }
 
-/// commit defaults to "latest" tag when no colon is present in target ref.
-pub struct CommitDefaultsToLatestTag;
-impl ConformanceTest for CommitDefaultsToLatestTag {
-    fn name(&self) -> &'static str {
-        "commit_defaults_to_latest_tag"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_committer"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "commit_defaults_to_latest_tag",
+    adapter: "container_committer",
+    capability: Commit,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockContainerCommitter::new();
         let result = rt().block_on(mock.commit(&container_id(), "myimage", &commit_config()));
         if let Some(meta) = ctx.assert_ok(result, "commit with no tag should succeed") {
@@ -102,33 +79,15 @@ impl ConformanceTest for CommitDefaultsToLatestTag {
     }
 }
 
-/// commit returns Err when configured to fail.
-pub struct CommitFailureReturnsErr;
-impl ConformanceTest for CommitFailureReturnsErr {
-    fn name(&self) -> &'static str {
-        "commit_failure_returns_err"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_committer"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "commit_failure_returns_err",
+    adapter: "container_committer",
+    capability: Commit,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockContainerCommitter::new().with_failure();
         let result = rt().block_on(mock.commit(&container_id(), "img:tag", &commit_config()));
         ctx.assert_err(result, "commit with failure configured must return Err");
         ctx.result()
     }
-}
-
-/// Return all `container_committer` conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(CommitReturnsImageMetadata),
-        Box::new(CommitIncrementsCount),
-        Box::new(CommitDefaultsToLatestTag),
-        Box::new(CommitFailureReturnsErr),
-    ]
 }

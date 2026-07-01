@@ -10,8 +10,6 @@
 use minibox::testing::mocks::pty::MockPtyAllocator;
 use minibox_core::domain::{PtyAllocator, PtyConfig};
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -25,22 +23,16 @@ const fn default_config() -> PtyConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// allocate succeeds and returns a `PtyHandle` with non-negative fds.
-pub struct AllocateReturnsHandle;
-impl ConformanceTest for AllocateReturnsHandle {
-    fn name(&self) -> &'static str {
-        "allocate_returns_handle"
-    }
-    fn adapter(&self) -> &'static str {
-        "pty"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// allocate succeeds and returns a `PtyHandle` with non-negative fds.
+crate::conformance_test! {
+    name: "allocate_returns_handle",
+    adapter: "pty",
+    capability: Pty,
+    category: Unit,
+    |ctx| {
         let mock = MockPtyAllocator::new();
         let result = mock.allocate(&default_config());
         if let Some(handle) = ctx.assert_ok(result, "allocate should succeed") {
@@ -51,19 +43,13 @@ impl ConformanceTest for AllocateReturnsHandle {
     }
 }
 
-/// allocate increments the call count.
-pub struct AllocateIncrementsCount;
-impl ConformanceTest for AllocateIncrementsCount {
-    fn name(&self) -> &'static str {
-        "allocate_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "pty"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// allocate increments the call count.
+crate::conformance_test! {
+    name: "allocate_increments_count",
+    adapter: "pty",
+    capability: Pty,
+    category: Unit,
+    |ctx| {
         let mock = MockPtyAllocator::new();
         let _ = mock.allocate(&default_config());
         ctx.assert_eq(1, mock.allocate_count(), "allocate_count after one call");
@@ -73,19 +59,13 @@ impl ConformanceTest for AllocateIncrementsCount {
     }
 }
 
-/// allocate returns Err when configured to fail.
-pub struct AllocateFailureReturnsErr;
-impl ConformanceTest for AllocateFailureReturnsErr {
-    fn name(&self) -> &'static str {
-        "allocate_failure_returns_err"
-    }
-    fn adapter(&self) -> &'static str {
-        "pty"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// allocate returns Err when configured to fail.
+crate::conformance_test! {
+    name: "allocate_failure_returns_err",
+    adapter: "pty",
+    capability: Pty,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockPtyAllocator::failing();
         let result = mock.allocate(&default_config());
         ctx.assert_err(result, "allocate with failure configured must return Err");
@@ -93,19 +73,13 @@ impl ConformanceTest for AllocateFailureReturnsErr {
     }
 }
 
-/// allocate with disabled PTY config still calls through.
-pub struct AllocateWithDisabledConfig;
-impl ConformanceTest for AllocateWithDisabledConfig {
-    fn name(&self) -> &'static str {
-        "allocate_with_disabled_config"
-    }
-    fn adapter(&self) -> &'static str {
-        "pty"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// allocate with disabled PTY config still calls through.
+crate::conformance_test! {
+    name: "allocate_with_disabled_config",
+    adapter: "pty",
+    capability: Pty,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockPtyAllocator::new();
         let cfg = PtyConfig {
             enabled: false,
@@ -118,15 +92,4 @@ impl ConformanceTest for AllocateWithDisabledConfig {
         ctx.assert_ok(result, "allocate with disabled config should not panic");
         ctx.result()
     }
-}
-
-/// Return all pty conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(AllocateReturnsHandle),
-        Box::new(AllocateIncrementsCount),
-        Box::new(AllocateFailureReturnsErr),
-        Box::new(AllocateWithDisabledConfig),
-    ]
 }

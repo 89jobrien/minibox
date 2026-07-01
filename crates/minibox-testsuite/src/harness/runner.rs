@@ -9,7 +9,10 @@ use std::time::Instant;
 
 use serde::Serialize;
 
+use minibox_core::adapters::conformance::BackendDescriptor;
+
 use super::context::TestContext;
+use super::macros::ConformanceTestEntry;
 use super::traits::{ConformanceTest, TestCategory, TestResult};
 
 /// Result of a single test execution.
@@ -71,6 +74,7 @@ pub struct RunnerFilter {
 pub struct TestRunner {
     tests: Vec<Box<dyn ConformanceTest>>,
     filter: RunnerFilter,
+    descriptor: Option<BackendDescriptor>,
 }
 
 impl Default for TestRunner {
@@ -85,7 +89,29 @@ impl TestRunner {
         Self {
             tests: Vec::new(),
             filter: RunnerFilter::default(),
+            descriptor: None,
         }
+    }
+
+    /// Collect all tests registered via `inventory`.
+    #[must_use]
+    pub fn collect_inventory() -> Self {
+        let tests: Vec<Box<dyn ConformanceTest>> = inventory::iter::<ConformanceTestEntry>
+            .into_iter()
+            .map(|entry| (entry.make)())
+            .collect();
+        Self {
+            tests,
+            filter: RunnerFilter::default(),
+            descriptor: None,
+        }
+    }
+
+    /// Set the backend descriptor for capability-based auto-skip.
+    #[must_use]
+    pub fn with_descriptor(mut self, desc: BackendDescriptor) -> Self {
+        self.descriptor = Some(desc);
+        self
     }
 
     /// Register a single test.
@@ -164,8 +190,31 @@ impl TestRunner {
                 continue;
             }
 
+            // Auto-skip if required capability is not supported.
+            if let Some(cap) = test.required_capability() {
+                if let Some(ref desc) = self.descriptor {
+                    if !desc.capabilities.supports(cap) {
+                        results.push(TestRunResult {
+                            id: test.id(),
+                            name: test.name().to_string(),
+                            adapter: test.adapter().to_string(),
+                            category: test.category(),
+                            result: TestResult::Skipped {
+                                reason: format!("backend does not support {cap:?}"),
+                            },
+                            duration_ms: 0,
+                            failures: Vec::new(),
+                        });
+                        continue;
+                    }
+                }
+            }
+
             let start = Instant::now();
-            let mut ctx = TestContext::new();
+            let mut ctx = match &self.descriptor {
+                Some(desc) => TestContext::with_descriptor(desc),
+                None => TestContext::new(),
+            };
             let result = test.run_sync(&mut ctx);
             let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -215,7 +264,7 @@ mod tests {
         fn category(&self) -> TestCategory {
             TestCategory::Unit
         }
-        fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult {
             ctx.assert_eq(1, 1, "always");
             ctx.result()
         }
@@ -232,7 +281,7 @@ mod tests {
         fn category(&self) -> TestCategory {
             TestCategory::Unit
         }
-        fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult {
             ctx.assert_eq(1, 2, "mismatch");
             ctx.result()
         }

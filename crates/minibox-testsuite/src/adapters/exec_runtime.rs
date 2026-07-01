@@ -5,8 +5,6 @@
 use minibox::testing::mocks::exec::MockExecRuntime;
 use minibox_core::domain::{ContainerId, ExecRuntime, ExecSpec};
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -29,22 +27,16 @@ fn basic_spec() -> ExecSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// `run_in_container` succeeds and returns a handle.
-pub struct RunInContainerReturnsHandle;
-impl ConformanceTest for RunInContainerReturnsHandle {
-    fn name(&self) -> &'static str {
-        "run_in_container_returns_handle"
-    }
-    fn adapter(&self) -> &'static str {
-        "exec_runtime"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// `run_in_container` succeeds and returns a handle.
+crate::conformance_test! {
+    name: "run_in_container_returns_handle",
+    adapter: "exec_runtime",
+    capability: Exec,
+    category: Unit,
+    |ctx| {
         let mock = MockExecRuntime::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let result = rt().block_on(mock.run_in_container(
@@ -57,19 +49,13 @@ impl ConformanceTest for RunInContainerReturnsHandle {
     }
 }
 
-/// `run_in_container` increments the call count.
-pub struct RunInContainerIncrementsCount;
-impl ConformanceTest for RunInContainerIncrementsCount {
-    fn name(&self) -> &'static str {
-        "run_in_container_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "exec_runtime"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// `run_in_container` increments the call count.
+crate::conformance_test! {
+    name: "run_in_container_increments_count",
+    adapter: "exec_runtime",
+    capability: Exec,
+    category: Unit,
+    |ctx| {
         let mock = MockExecRuntime::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let _ = rt().block_on(mock.run_in_container(
@@ -82,19 +68,13 @@ impl ConformanceTest for RunInContainerIncrementsCount {
     }
 }
 
-/// `run_in_container` records the last spec.
-pub struct RunInContainerRecordsSpec;
-impl ConformanceTest for RunInContainerRecordsSpec {
-    fn name(&self) -> &'static str {
-        "run_in_container_records_spec"
-    }
-    fn adapter(&self) -> &'static str {
-        "exec_runtime"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// `run_in_container` records the last spec.
+crate::conformance_test! {
+    name: "run_in_container_records_spec",
+    adapter: "exec_runtime",
+    capability: Exec,
+    category: Unit,
+    |ctx| {
         let mock = MockExecRuntime::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let spec = ExecSpec {
@@ -118,19 +98,13 @@ impl ConformanceTest for RunInContainerRecordsSpec {
     }
 }
 
-/// `run_in_container` returns Err when configured to fail.
-pub struct RunInContainerFailureReturnsErr;
-impl ConformanceTest for RunInContainerFailureReturnsErr {
-    fn name(&self) -> &'static str {
-        "run_in_container_failure_returns_err"
-    }
-    fn adapter(&self) -> &'static str {
-        "exec_runtime"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// `run_in_container` returns Err when configured to fail.
+crate::conformance_test! {
+    name: "run_in_container_failure_returns_err",
+    adapter: "exec_runtime",
+    capability: Exec,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockExecRuntime::new().with_failure();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let result = rt().block_on(mock.run_in_container(
@@ -144,15 +118,4 @@ impl ConformanceTest for RunInContainerFailureReturnsErr {
         );
         ctx.result()
     }
-}
-
-/// Return all `exec_runtime` conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(RunInContainerReturnsHandle),
-        Box::new(RunInContainerIncrementsCount),
-        Box::new(RunInContainerRecordsSpec),
-        Box::new(RunInContainerFailureReturnsErr),
-    ]
 }

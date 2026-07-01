@@ -1,12 +1,10 @@
 //! Conformance tests for the `ImageRegistry` trait contract.
 //!
-//! All tests use `MockRegistry` — no network calls are made.
+//! All tests use `MockRegistry` -- no network calls are made.
 
 use minibox::testing::mocks::registry::MockRegistry;
 use minibox_core::domain::ImageRegistry;
 use minibox_core::image::reference::ImageRef;
-
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
 
 fn alpine() -> ImageRef {
     ImageRef::parse("alpine:3.18").expect("parse alpine ref")
@@ -16,22 +14,11 @@ fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("build Tokio runtime")
 }
 
-// ---------------------------------------------------------------------------
-// Test structs
-// ---------------------------------------------------------------------------
-
-pub struct PullIncrementsCount;
-impl ConformanceTest for PullIncrementsCount {
-    fn name(&self) -> &'static str {
-        "pull_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "registry"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "pull_increments_count",
+    adapter: "registry",
+    category: Unit,
+    |ctx| {
         let registry = MockRegistry::new();
         rt().block_on(registry.pull_image(&alpine())).expect("pull");
         ctx.assert_eq(1, registry.pull_count(), "pull_count after one pull");
@@ -39,18 +26,11 @@ impl ConformanceTest for PullIncrementsCount {
     }
 }
 
-pub struct MultiplePullsIncrementCount;
-impl ConformanceTest for MultiplePullsIncrementCount {
-    fn name(&self) -> &'static str {
-        "multiple_pulls_increment_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "registry"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "multiple_pulls_increment_count",
+    adapter: "registry",
+    category: Unit,
+    |ctx| {
         let registry = MockRegistry::new();
         let image = alpine();
         for _ in 0..4 {
@@ -61,22 +41,14 @@ impl ConformanceTest for MultiplePullsIncrementCount {
     }
 }
 
-pub struct HasImageAfterPull;
-impl ConformanceTest for HasImageAfterPull {
-    fn name(&self) -> &'static str {
-        "has_image_after_pull"
-    }
-    fn adapter(&self) -> &'static str {
-        "registry"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "has_image_after_pull",
+    adapter: "registry",
+    category: Unit,
+    |ctx| {
         let registry = MockRegistry::new();
         let r = alpine();
         rt().block_on(registry.pull_image(&r)).expect("pull");
-        // has_image uses the cache_name() and tag stored by pull_image.
         ctx.assert_true(
             rt().block_on(registry.has_image(&r.cache_name(), &r.tag)),
             "has_image after pull",
@@ -85,18 +57,11 @@ impl ConformanceTest for HasImageAfterPull {
     }
 }
 
-pub struct FreshRegistryHasNoImages;
-impl ConformanceTest for FreshRegistryHasNoImages {
-    fn name(&self) -> &'static str {
-        "fresh_registry_has_no_images"
-    }
-    fn adapter(&self) -> &'static str {
-        "registry"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "fresh_registry_has_no_images",
+    adapter: "registry",
+    category: EdgeCase,
+    |ctx| {
         let registry = MockRegistry::new();
         ctx.assert_false(
             rt().block_on(registry.has_image("alpine", "3.18")),
@@ -107,18 +72,11 @@ impl ConformanceTest for FreshRegistryHasNoImages {
     }
 }
 
-pub struct PullFailureRegistryReturnsErr;
-impl ConformanceTest for PullFailureRegistryReturnsErr {
-    fn name(&self) -> &'static str {
-        "pull_failure_registry_returns_err"
-    }
-    fn adapter(&self) -> &'static str {
-        "registry"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "pull_failure_registry_returns_err",
+    adapter: "registry",
+    category: EdgeCase,
+    |ctx| {
         let registry = MockRegistry::new().with_pull_failure();
         let result = rt().block_on(registry.pull_image(&alpine()));
         ctx.assert_err(result, "pull_failure registry must return Err");
@@ -126,20 +84,11 @@ impl ConformanceTest for PullFailureRegistryReturnsErr {
     }
 }
 
-pub struct PullCountIncrementedOnFailure;
-impl ConformanceTest for PullCountIncrementedOnFailure {
-    fn name(&self) -> &'static str {
-        "pull_count_incremented_on_failure"
-    }
-    fn adapter(&self) -> &'static str {
-        "registry"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
-        // The mock increments pull_count before checking pull_should_succeed,
-        // so failed attempts are counted — this is the documented contract.
+crate::conformance_test! {
+    name: "pull_count_incremented_on_failure",
+    adapter: "registry",
+    category: EdgeCase,
+    |ctx| {
         let registry = MockRegistry::new().with_pull_failure();
         let _ = rt().block_on(registry.pull_image(&alpine()));
         ctx.assert_eq(
@@ -149,17 +98,4 @@ impl ConformanceTest for PullCountIncrementedOnFailure {
         );
         ctx.result()
     }
-}
-
-/// Return all registry conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(PullIncrementsCount),
-        Box::new(MultiplePullsIncrementCount),
-        Box::new(HasImageAfterPull),
-        Box::new(FreshRegistryHasNoImages),
-        Box::new(PullFailureRegistryReturnsErr),
-        Box::new(PullCountIncrementedOnFailure),
-    ]
 }

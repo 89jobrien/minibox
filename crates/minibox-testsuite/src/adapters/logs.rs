@@ -6,8 +6,6 @@ use minibox_core::protocol::DaemonResponse;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -19,21 +17,11 @@ fn rt() -> tokio::runtime::Runtime {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// `handle_logs` for a container ID that does not exist must return
-/// `DaemonResponse::Error`.
-pub struct LogsUnknownContainerReturnsError;
-
-impl ConformanceTest for LogsUnknownContainerReturnsError {
-    fn name(&self) -> &'static str {
-        "logs_unknown_container_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "logs"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "logs_unknown_container_returns_error",
+    adapter: "logs",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -66,22 +54,11 @@ impl ConformanceTest for LogsUnknownContainerReturnsError {
     }
 }
 
-/// `handle_logs` for a stopped container with no log files must return either
-/// zero `LogLine` responses followed by `Success`, or an `Error` — both are
-/// conformant.  It must NOT block indefinitely.
-pub struct LogsStoppedContainerReturnsEmptyOrError;
-
-impl ConformanceTest for LogsStoppedContainerReturnsEmptyOrError {
-    fn name(&self) -> &'static str {
-        "logs_stopped_container_returns_empty_or_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "logs"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "logs_stopped_container_returns_empty_or_error",
+    adapter: "logs",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -125,22 +102,11 @@ impl ConformanceTest for LogsStoppedContainerReturnsEmptyOrError {
     }
 }
 
-/// With `follow = false`, `handle_logs` must close the channel (terminate the
-/// stream) after sending any available output.  The tx is dropped by the
-/// handler, causing the rx to return `None` from `recv()`.
-pub struct LogsFollowFalseTerminates;
-
-impl ConformanceTest for LogsFollowFalseTerminates {
-    fn name(&self) -> &'static str {
-        "logs_follow_false_terminates"
-    }
-    fn adapter(&self) -> &'static str {
-        "logs"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "logs_follow_false_terminates",
+    adapter: "logs",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -175,22 +141,11 @@ impl ConformanceTest for LogsFollowFalseTerminates {
     }
 }
 
-/// `handle_logs` for a container registered with state="running" must not
-/// return an `Error` — it must terminate with `Success` after draining available
-/// log output (which may be empty when no log files are present).
-pub struct LogsRunningContainerTerminatesWithSuccess;
-
-impl ConformanceTest for LogsRunningContainerTerminatesWithSuccess {
-    fn name(&self) -> &'static str {
-        "logs_running_container_terminates_with_success"
-    }
-    fn adapter(&self) -> &'static str {
-        "logs"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "logs_running_container_terminates_with_success",
+    adapter: "logs",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -238,21 +193,11 @@ impl ConformanceTest for LogsRunningContainerTerminatesWithSuccess {
     }
 }
 
-/// When a container exists but has no log files on disk, `handle_logs` must
-/// emit zero `LogLine` responses and then terminate with `Success`.
-pub struct LogsEmptyOutputHasNoLogLines;
-
-impl ConformanceTest for LogsEmptyOutputHasNoLogLines {
-    fn name(&self) -> &'static str {
-        "logs_empty_output_has_no_log_lines"
-    }
-    fn adapter(&self) -> &'static str {
-        "logs"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "logs_empty_output_has_no_log_lines",
+    adapter: "logs",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -301,21 +246,11 @@ impl ConformanceTest for LogsEmptyOutputHasNoLogLines {
     }
 }
 
-/// `handle_logs` with a stdout.log file containing known lines must emit one
-/// `LogLine` per line, in order, followed by `Success`.
-pub struct LogsWithStdoutFileEmitsLogLines;
-
-impl ConformanceTest for LogsWithStdoutFileEmitsLogLines {
-    fn name(&self) -> &'static str {
-        "logs_with_stdout_file_emits_log_lines"
-    }
-    fn adapter(&self) -> &'static str {
-        "logs"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "logs_with_stdout_file_emits_log_lines",
+    adapter: "logs",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -377,17 +312,4 @@ impl ConformanceTest for LogsWithStdoutFileEmitsLogLines {
         );
         ctx.result()
     }
-}
-
-/// Return all logs conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(LogsUnknownContainerReturnsError),
-        Box::new(LogsStoppedContainerReturnsEmptyOrError),
-        Box::new(LogsFollowFalseTerminates),
-        Box::new(LogsRunningContainerTerminatesWithSuccess),
-        Box::new(LogsEmptyOutputHasNoLogLines),
-        Box::new(LogsWithStdoutFileEmitsLogLines),
-    ]
 }

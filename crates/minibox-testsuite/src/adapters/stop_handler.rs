@@ -9,8 +9,6 @@ use minibox::testing::helpers::daemon::{make_mock_deps, make_mock_state, make_st
 use minibox_core::protocol::DaemonResponse;
 use tempfile::TempDir;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -22,20 +20,11 @@ fn rt() -> tokio::runtime::Runtime {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// `handle_stop` with an unknown container ID returns `DaemonResponse::Error`.
-pub struct StopUnknownContainerReturnsError;
-
-impl ConformanceTest for StopUnknownContainerReturnsError {
-    fn name(&self) -> &str {
-        "stop_unknown_container_returns_error"
-    }
-    fn adapter(&self) -> &str {
-        "stop_handler"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "stop_unknown_container_returns_error",
+    adapter: "stop_handler",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -56,23 +45,11 @@ impl ConformanceTest for StopUnknownContainerReturnsError {
     }
 }
 
-/// `handle_stop` with a container that has no PID returns `DaemonResponse::Error`.
-///
-/// A container in `Created` state has no PID set. Attempting to stop it should
-/// fail cleanly rather than panic.
-pub struct StopNoPidContainerReturnsError;
-
-impl ConformanceTest for StopNoPidContainerReturnsError {
-    fn name(&self) -> &str {
-        "stop_no_pid_container_returns_error"
-    }
-    fn adapter(&self) -> &str {
-        "stop_handler"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "stop_no_pid_container_returns_error",
+    adapter: "stop_handler",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -84,7 +61,7 @@ impl ConformanceTest for StopNoPidContainerReturnsError {
 
         rt().block_on(state.add_container(record));
 
-        let resp = rt().block_on(handle_stop(id.clone(), state.clone(), deps));
+        let resp = rt().block_on(handle_stop(id, state, deps));
 
         // Container has no PID — stop_inner returns an error on Unix.
         ctx.assert_true(
@@ -96,20 +73,11 @@ impl ConformanceTest for StopNoPidContainerReturnsError {
     }
 }
 
-/// `handle_stop` resolves containers by name as well as by ID.
-pub struct StopUnknownNameReturnsError;
-
-impl ConformanceTest for StopUnknownNameReturnsError {
-    fn name(&self) -> &str {
-        "stop_unknown_name_returns_error"
-    }
-    fn adapter(&self) -> &str {
-        "stop_handler"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "stop_unknown_name_returns_error",
+    adapter: "stop_handler",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -123,13 +91,4 @@ impl ConformanceTest for StopUnknownNameReturnsError {
         );
         ctx.result()
     }
-}
-
-/// Return all stop handler conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(StopUnknownContainerReturnsError),
-        Box::new(StopNoPidContainerReturnsError),
-        Box::new(StopUnknownNameReturnsError),
-    ]
 }
