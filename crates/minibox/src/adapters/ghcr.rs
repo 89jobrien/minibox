@@ -595,6 +595,30 @@ mod tests {
         unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
     }
 
+    // Executable mirrors of kani proof 36 (allowlist_slash_boundary) — pure
+    // function, no env mutation. A failure here is a real prefix-squatting
+    // vulnerability, not a test bug.
+    #[test]
+    fn allowlist_rejects_prefix_squatting() {
+        // "org" must not permit "orgevil/image" — slash-bounded prefix only.
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("org", "org"));
+    }
+
+    #[test]
+    fn allowlist_entry_with_repo_component_is_exact_or_slash_bounded() {
+        assert!(allowlist_permits(
+            "myorg/private-image",
+            "myorg/private-image"
+        ));
+        assert!(!allowlist_permits(
+            "myorg/private-image-extra",
+            "myorg/private-image"
+        ));
+    }
+
     #[test]
     fn ghcr_registry_constructs() {
         let dir = tempfile::TempDir::new().unwrap();

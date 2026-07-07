@@ -6,9 +6,12 @@
 //!
 //! Run with: `cargo bench --bench trait_overhead`
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+// Bench setup code: panicking on setup failure is the correct behaviour.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use minibox::daemon::handler;
-use minibox::daemon::handler::run::RunParams;
+use minibox::daemon::handler::RunParams;
 use minibox::daemon::state::{CgroupFreezeChecker, ProcessChecker};
 use minibox::testing::helpers::{
     make_mock_deps, make_mock_state, make_mock_state_with_n_containers,
@@ -21,6 +24,7 @@ use minibox_core::domain::{
 use minibox_core::events::NoopEventSink;
 use minibox_core::path::InternalPath;
 use minibox_core::protocol::DaemonResponse;
+use std::hint::black_box;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -203,8 +207,8 @@ fn bench_state_reconcile(c: &mut Criterion) {
             b.iter(|| {
                 rt.block_on(async {
                     state.reconcile_on_startup(&AlwaysDead, &NeverFrozen).await;
-                    black_box(())
-                })
+                    black_box(());
+                });
             });
         });
         // Keep tmp alive until after bench_with_input completes.
@@ -276,7 +280,7 @@ fn bench_handler_run_dispatch(c: &mut Criterion) {
 
 /// Benchmark `handle_pause` on a non-existent container (fast-path error return).
 ///
-/// Measures: async RwLock acquire + HashMap lookup + channel-less response.
+/// Measures: async `RwLock` acquire + `HashMap` lookup + channel-less response.
 fn bench_handler_pause_not_found(c: &mut Criterion) {
     let tmp = TempDir::new().expect("temp dir");
     let state = make_mock_state(tmp.path());

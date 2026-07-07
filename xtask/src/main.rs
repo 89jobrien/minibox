@@ -51,7 +51,8 @@ mod utils;
 mod xconfig;
 
 fn main() -> Result<()> {
-    let task = env::args().nth(1);
+    let argv: Vec<String> = env::args().collect();
+    let task = argv.get(1).cloned();
 
     let sh = Shell::new()?;
     let root = sh.current_dir();
@@ -66,9 +67,9 @@ fn main() -> Result<()> {
     match task.as_deref() {
         // ── Subcommand groups ────────────────────────────────────────
         Some("test") => cmd_test(&sh, root),
-        Some("check") => cmd_check(&sh, root),
+        Some("check") => cmd_check(&sh, root, &argv[2..]),
         Some("docs") => cmd_docs(&sh, root),
-        Some("info") => cmd_info(&sh, root),
+        Some("info") => cmd_info(&sh, root, &argv[2..]),
 
         // ── Quality gates (top-level) ────────────────────────────────
         Some("verify") => gates::verify(&sh, root),
@@ -237,7 +238,6 @@ fn main() -> Result<()> {
             let overlay_dir = cas::default_overlay_dir();
             cas::cas_check(&overlay_dir)
         }
-        Some("check-protocol-sites") => check_protocol_sites::run(root),
         Some("lint-paths") => lint_paths::run(root),
         Some("run") => {
             let script_name = env::args()
@@ -282,7 +282,7 @@ fn main() -> Result<()> {
         Some(cmd) if is_check_alias(cmd) => {
             let sub = check_alias_to_sub(cmd);
             eprintln!("note: `cargo xtask {cmd}` is deprecated, use `cargo xtask check {sub}`");
-            dispatch_check(&sh, root, &sub)
+            dispatch_check(&sh, root, &sub, &argv[2..])
         }
         Some(cmd) if is_docs_alias(cmd) => {
             let sub = docs_alias_to_sub(cmd);
@@ -292,7 +292,7 @@ fn main() -> Result<()> {
         Some(cmd) if is_info_alias(cmd) => {
             let sub = info_alias_to_sub(cmd);
             eprintln!("note: `cargo xtask {cmd}` is deprecated, use `cargo xtask info {sub}`");
-            dispatch_info(&sh, root, &sub)
+            dispatch_info(&sh, root, &sub, &argv[2..])
         }
 
         Some(other) => bail!("unknown task: {other}"),
@@ -369,10 +369,9 @@ fn is_test_alias(cmd: &str) -> bool {
 
 // ── check subcommand ─────────────────────────────────────────────────────────
 
-fn cmd_check(sh: &Shell, root: &std::path::Path) -> Result<()> {
-    let sub = env::args().nth(2);
-    if let Some(s) = sub.as_deref() {
-        dispatch_check(sh, root, s)
+fn cmd_check(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> {
+    if let Some(s) = rest.first() {
+        dispatch_check(sh, root, s, &rest[1..])
     } else {
         eprintln!("Usage: cargo xtask check <target>");
         eprintln!();
@@ -384,6 +383,9 @@ fn cmd_check(sh: &Shell, root: &std::path::Path) -> Result<()> {
         eprintln!(
             "  protocol-sites     verify HandlerDependencies construction site count [<file>] [--expected N] [--warn-only]"
         );
+        eprintln!(
+            "  protocol-variants  scan for DaemonRequest/DaemonResponse variants with no handler sites"
+        );
         eprintln!("  adapter-coverage   verify each adapter has integration test files");
         eprintln!("  no-unwrap          scan production code for .unwrap() [--strict]");
         eprintln!("  repo-clean         warn if generated artifacts are tracked by git");
@@ -391,37 +393,30 @@ fn cmd_check(sh: &Shell, root: &std::path::Path) -> Result<()> {
     }
 }
 
-fn dispatch_check(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
+fn dispatch_check(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]) -> Result<()> {
     match sub {
         "stale-names" => stale_names::check_stale_names(root),
         "protocol-drift" => {
-            let args: Vec<String> = env::args().skip(3).collect();
-            let update = args.iter().any(|a| a == "--update");
-            let warn_only = args.iter().any(|a| a == "--warn-only");
-            let hook = args.iter().any(|a| a == "--hook");
-            let sarif_path = args
-                .windows(2)
-                .find(|w| w[0] == "--sarif")
-                .map(|w| std::path::PathBuf::from(&w[1]));
-            protocol_drift::run(root, update, warn_only, hook, sarif_path.as_deref())
+            let args = parse_protocol_drift_args(rest);
+            protocol_drift::run(
+                root,
+                args.update,
+                args.warn_only,
+                args.hook,
+                args.sarif.as_deref(),
+            )
         }
         "protocol-sites" => {
-            let file = env::args().nth(3).map_or_else(
-                || root.join("crates/miniboxd/src/main.rs"),
-                std::path::PathBuf::from,
-            );
-            let args_vec: Vec<String> = env::args().collect();
-            let expected: usize = args_vec
-                .windows(2)
-                .find(|w| w[0] == "--expected")
-                .and_then(|w| w[1].parse().ok())
-                .unwrap_or(4);
-            let warn_only = env::args().any(|a| a == "--warn-only");
-            protocol_sites::check_protocol_sites(&file, expected, warn_only)
+            let args = parse_protocol_sites_args(rest);
+            let file = args
+                .file
+                .unwrap_or_else(|| root.join("crates/miniboxd/src/main.rs"));
+            protocol_sites::check_protocol_sites(&file, args.expected, args.warn_only)
         }
+        "protocol-variants" => check_protocol_sites::run(root),
         "adapter-coverage" => gates::check_adapter_coverage(sh),
         "no-unwrap" => {
-            let strict = env::args().any(|a| a == "--strict");
+            let strict = rest.iter().any(|a| a == "--strict");
             gates::check_no_unwrap(sh, strict)
         }
         "repo-clean" => {
@@ -429,6 +424,49 @@ fn dispatch_check(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
             Ok(())
         }
         other => bail!("unknown check target: {other}"),
+    }
+}
+
+struct ProtocolSitesArgs {
+    file: Option<std::path::PathBuf>,
+    expected: usize,
+    warn_only: bool,
+}
+
+fn parse_protocol_sites_args(rest: &[String]) -> ProtocolSitesArgs {
+    let file = rest
+        .first()
+        .filter(|a| !a.starts_with("--"))
+        .map(std::path::PathBuf::from);
+    let expected = rest
+        .windows(2)
+        .find(|w| w[0] == "--expected")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(4);
+    let warn_only = rest.iter().any(|a| a == "--warn-only");
+    ProtocolSitesArgs {
+        file,
+        expected,
+        warn_only,
+    }
+}
+
+struct ProtocolDriftArgs {
+    update: bool,
+    warn_only: bool,
+    hook: bool,
+    sarif: Option<std::path::PathBuf>,
+}
+
+fn parse_protocol_drift_args(rest: &[String]) -> ProtocolDriftArgs {
+    ProtocolDriftArgs {
+        update: rest.iter().any(|a| a == "--update"),
+        warn_only: rest.iter().any(|a| a == "--warn-only"),
+        hook: rest.iter().any(|a| a == "--hook"),
+        sarif: rest
+            .windows(2)
+            .find(|w| w[0] == "--sarif")
+            .map(|w| std::path::PathBuf::from(&w[1])),
     }
 }
 
@@ -510,10 +548,9 @@ fn docs_alias_to_sub(cmd: &str) -> String {
 
 // ── info subcommand ──────────────────────────────────────────────────────────
 
-fn cmd_info(sh: &Shell, root: &std::path::Path) -> Result<()> {
-    let sub = env::args().nth(2);
-    if let Some(s) = sub.as_deref() {
-        dispatch_info(sh, root, s)
+fn cmd_info(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> {
+    if let Some(s) = rest.first() {
+        dispatch_info(sh, root, s, &rest[1..])
     } else {
         eprintln!("Usage: cargo xtask info <target>");
         eprintln!();
@@ -525,22 +562,29 @@ fn cmd_info(sh: &Shell, root: &std::path::Path) -> Result<()> {
     }
 }
 
-fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
+fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]) -> Result<()> {
     match sub {
         "metrics" => {
-            let save = env::args().any(|a| a == "--save");
+            let save = rest.iter().any(|a| a == "--save");
             collect_metrics::collect_metrics(root, save)
         }
         "context" => {
-            let save = env::args().any(|a| a == "--save");
+            let save = rest.iter().any(|a| a == "--save");
             context::context(sh, root, save)
         }
         "changes" => {
-            let base_ref = env::args().nth(3).unwrap_or_else(|| "HEAD^".to_string());
+            let base_ref = changes_base_ref(rest);
             detect_changes::run(root, &base_ref)
         }
         other => bail!("unknown info target: {other}"),
     }
+}
+
+fn changes_base_ref(rest: &[String]) -> String {
+    rest.first()
+        .filter(|a| !a.starts_with("--"))
+        .cloned()
+        .unwrap_or_else(|| "HEAD^".to_string())
 }
 
 fn is_info_alias(cmd: &str) -> bool {
@@ -605,4 +649,77 @@ fn print_help() -> Result<()> {
     eprintln!("  cas-check          verify overlay refs match CAS objects");
     eprintln!("  run <script>       run scripts/<script>.nu");
     Ok(())
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod dispatch_args_tests {
+    use super::*;
+
+    #[test]
+    fn protocol_sites_args_from_alias_form() {
+        // argv after slicing: alias `xtask check-protocol-sites <file> --expected 4`
+        // must yield rest = ["crates/miniboxd/src/main.rs", "--expected", "4"]
+        let rest = vec![
+            "crates/miniboxd/src/main.rs".to_string(),
+            "--expected".to_string(),
+            "4".to_string(),
+        ];
+        let parsed = parse_protocol_sites_args(&rest);
+        assert_eq!(
+            parsed.file.as_deref(),
+            Some(std::path::Path::new("crates/miniboxd/src/main.rs"))
+        );
+        assert_eq!(parsed.expected, 4);
+        assert!(!parsed.warn_only);
+    }
+
+    #[test]
+    fn protocol_sites_args_default_file_when_flag_first() {
+        let rest = vec!["--expected".to_string(), "4".to_string()];
+        let parsed = parse_protocol_sites_args(&rest);
+        assert!(
+            parsed.file.is_none(),
+            "flag must not be mistaken for the file path"
+        );
+        assert_eq!(parsed.expected, 4);
+    }
+
+    #[test]
+    fn protocol_drift_args_sarif_first_flag() {
+        // alias `xtask check-protocol-drift --sarif protocol-drift.sarif`
+        let rest = vec!["--sarif".to_string(), "protocol-drift.sarif".to_string()];
+        let parsed = parse_protocol_drift_args(&rest);
+        assert_eq!(
+            parsed.sarif.as_deref(),
+            Some(std::path::Path::new("protocol-drift.sarif"))
+        );
+        assert!(!parsed.update && !parsed.warn_only && !parsed.hook);
+    }
+
+    #[test]
+    fn protocol_drift_args_hook_warn_only() {
+        let rest = vec!["--hook".to_string(), "--warn-only".to_string()];
+        let parsed = parse_protocol_drift_args(&rest);
+        assert!(parsed.hook);
+        assert!(parsed.warn_only);
+        assert!(parsed.sarif.is_none());
+    }
+
+    #[test]
+    fn info_changes_base_ref_from_alias_form() {
+        // alias `xtask detect-changes origin/main`
+        let rest = vec!["origin/main".to_string()];
+        assert_eq!(changes_base_ref(&rest), "origin/main");
+        assert_eq!(changes_base_ref(&[]), "HEAD^");
+    }
+
+    #[test]
+    fn check_alias_maps_protocol_sites_to_site_count_guard() {
+        // The alias must map to the `check protocol-sites` sub, and no top-level
+        // command may shadow it.
+        assert!(is_check_alias("check-protocol-sites"));
+        assert_eq!(check_alias_to_sub("check-protocol-sites"), "protocol-sites");
+    }
 }

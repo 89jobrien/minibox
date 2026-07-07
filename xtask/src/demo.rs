@@ -106,15 +106,27 @@ mod tests {
 
     #[test]
     fn find_mbx_prefers_path_binary_over_built() {
-        // If PATH has no `mbx` and the workspace debug build doesn't exist,
-        // find_mbx must return None rather than a dangling path.
+        // With a nonexistent workspace, target/debug/mbx cannot exist, so the
+        // result depends only on PATH: if `mbx` is installed (dev machines),
+        // find_mbx must return that binary; otherwise (CI) it must return
+        // None rather than a dangling path.
         let root = Path::new("/nonexistent/workspace");
         let result = find_mbx(root);
-        // target/debug/mbx under /nonexistent/workspace does not exist.
-        assert!(
-            result.is_none(),
-            "expected None for nonexistent workspace, got {result:?}"
-        );
+        let on_path = Command::new("which")
+            .arg("mbx")
+            .output()
+            .is_ok_and(|out| out.status.success());
+        if on_path {
+            assert!(result.is_some(), "mbx is on PATH, find_mbx must return it");
+            if let Some(found) = result {
+                assert!(found.exists(), "returned path must exist: {found:?}");
+            }
+        } else {
+            assert!(
+                result.is_none(),
+                "expected None for nonexistent workspace, got {result:?}"
+            );
+        }
     }
 
     #[test]

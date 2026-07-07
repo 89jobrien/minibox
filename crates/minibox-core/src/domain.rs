@@ -3669,6 +3669,31 @@ mod kani_proofs {
 }
 
 // ---------------------------------------------------------------------------
+// BindMount parse tests — executable mirrors of kani proofs 29-31. A failure
+// here is a real path-traversal vulnerability, not a test bug.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod bind_mount_tests {
+    use super::*;
+
+    #[test]
+    fn parse_volume_rejects_parent_dir_traversal() {
+        assert!(BindMount::parse_volume("/tmp/../etc:/mnt").is_err());
+    }
+
+    #[test]
+    fn parse_mount_rejects_parent_dir_traversal() {
+        assert!(BindMount::parse_mount("type=bind,src=/tmp/../etc,dst=/mnt").is_err());
+    }
+
+    #[test]
+    fn parse_mount_rejects_relative_src() {
+        assert!(BindMount::parse_mount("type=bind,src=tmp/data,dst=/mnt").is_err());
+    }
+}
+
+// ---------------------------------------------------------------------------
 // evaluate_if_guard tests
 // ---------------------------------------------------------------------------
 

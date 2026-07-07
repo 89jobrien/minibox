@@ -492,6 +492,13 @@ mod pub_crate_handler_tests {
         })
     }
 
+    /// Like [`make_deps`] but with a caller-supplied `ContainerPolicy`.
+    fn make_deps_with_policy(tmp: &TempDir, policy: ContainerPolicy) -> Arc<HandlerDependencies> {
+        let mut deps = (*make_deps(tmp)).clone();
+        deps.policy = policy;
+        Arc::new(deps)
+    }
+
     // ── handle_list_images ────────────────────────────────────────────────────
 
     #[tokio::test]
@@ -1014,6 +1021,71 @@ mod pub_crate_handler_tests {
         let effective = base.with_overrides(&PolicyOverride::default());
         assert!(effective.allow_bind_mounts);
         assert!(effective.allow_privileged);
+    }
+
+    // ── handle_run policy_override consumption ──────────────────────────
+
+    #[tokio::test]
+    async fn handle_run_policy_override_permits_bind_mount_under_deny_policy() {
+        // Default policy denies bind mounts; the override (as used by
+        // handle_pipeline) must widen it for this run only.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps_with_policy(&tmp, ContainerPolicy::default());
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let params = RunParams {
+            image: "alpine".to_string(),
+            mounts: vec![minibox_core::domain::BindMount {
+                host_path: tmp.path().to_path_buf(),
+                container_path: "/pipeline.crux".into(),
+                read_only: true,
+            }],
+            policy_override: Some(PolicyOverride {
+                allow_bind_mounts: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        handle_run(params, state, deps, tx).await;
+
+        let first = rx.recv().await.expect("response");
+        if let DaemonResponse::Error { message } = &first {
+            assert!(
+                !message.contains("policy violation"),
+                "run must pass the policy gate with an override, got: {message}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_run_without_override_rejects_bind_mount_under_deny_policy() {
+        // No override: the default deny policy must still reject bind mounts.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps_with_policy(&tmp, ContainerPolicy::default());
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let params = RunParams {
+            image: "alpine".to_string(),
+            mounts: vec![minibox_core::domain::BindMount {
+                host_path: tmp.path().to_path_buf(),
+                container_path: "/pipeline.crux".into(),
+                read_only: true,
+            }],
+            policy_override: None,
+            ..Default::default()
+        };
+        handle_run(params, state, deps, tx).await;
+
+        let first = rx.recv().await.expect("response");
+        match &first {
+            DaemonResponse::Error { message } => assert!(
+                message.contains("policy violation"),
+                "expected policy violation error, got: {message}"
+            ),
+            other => panic!("expected policy violation Error, got: {other:?}"),
+        }
     }
 
     // ── handle_load_image error path ──────────────────────────────────────
