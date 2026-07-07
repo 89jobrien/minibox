@@ -2,9 +2,13 @@
 
 **Current focus:**
 
-Codebase cleanup and doc accuracy on `develop` branch. All Python code
-removed from scripts/. 14 docs/core/ files fixed against code truth.
-Workspace at v0.30.0, 10 crates (smolbox added for smolvm/krun adapters).
+MoA review HIGH fixes and benchmark redesign landed on `develop` (2026-07-07,
+5 unpushed commits). Workspace at v0.31.0, 13 members: crates/ail and
+crates/minibox-bench registered. minibox-bench owns all benchmarks (8 targets
+incl. layer_extract, image_pull, linux_rootfs/cgroup/spawn); `cargo xtask
+bench --check` does per-env baseline regression checking; nightly CI bench
+job prefers the self-hosted runner and falls back to GH-hosted (needs
+ACTIONS_RUNNER_READ_TOKEN secret for the preference to work).
 
 **In progress:**
 

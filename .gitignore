@@ -16,6 +16,7 @@
 !docs/handoff-*.md
 !docs/conformance.md
 !docs/plans/*.md
+!docs/designs/*.md
 !docs/specs/*.md
 !docs/diagrams/
 !docs/archive/*.md
