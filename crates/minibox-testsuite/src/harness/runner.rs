@@ -315,6 +315,20 @@ mod tests {
     }
 
     #[test]
+    fn inventory_collects_expected_test_count() {
+        // Pin the floor so a dropped adapter module or a stripped inventory
+        // ctor section cannot silently zero the suite. Update EXPECTED_MIN
+        // when adding or removing conformance suites.
+        const EXPECTED_MIN: usize = 123;
+        let runner = TestRunner::collect_inventory();
+        assert!(
+            runner.count() >= EXPECTED_MIN,
+            "conformance inventory collapsed: {} tests (expected >= {EXPECTED_MIN})",
+            runner.count()
+        );
+    }
+
+    #[test]
     fn filter_by_name_works() {
         let mut runner = TestRunner::new();
         runner.add(PassTest);

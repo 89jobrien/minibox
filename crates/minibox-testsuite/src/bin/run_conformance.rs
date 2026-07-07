@@ -15,11 +15,27 @@ fn main() {
 
     let runner = TestRunner::collect_inventory();
 
+    if runner.count() == 0 {
+        eprintln!(
+            "error: conformance runner collected 0 tests -- inventory registration is broken \
+             (dropped adapter module or stripped linker section)"
+        );
+        std::process::exit(1);
+    }
+
     let runner = if let Some(ref name) = adapter_filter {
         runner.filter_adapter(name)
     } else {
         runner
     };
+
+    if runner.filtered_count() == 0 {
+        eprintln!(
+            "error: conformance runner matched 0 tests after filtering (CONFORMANCE_ADAPTER={})",
+            adapter_filter.as_deref().unwrap_or("<unset>")
+        );
+        std::process::exit(1);
+    }
 
     eprintln!("Running {} conformance tests...", runner.filtered_count());
 

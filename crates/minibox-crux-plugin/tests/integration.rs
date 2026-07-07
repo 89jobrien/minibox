@@ -304,6 +304,39 @@ async fn daemon_unreachable_returns_invoke_err() {
     h.shutdown().await;
 }
 
+#[tokio::test]
+async fn daemon_closing_without_response_returns_invoke_err() {
+    // A daemon that accepts the connection, reads the request, and closes
+    // without writing anything must surface as an InvokeErr mentioning
+    // "no response" — not a hang or a silent success.
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept mock connection");
+        let (read_half, write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("read request line");
+        // Drop both halves without writing a response.
+        drop(reader);
+        drop(write_half);
+    });
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h.invoke("minibox::container::ps", json!({})).await;
+    assert_eq!(resp["status"], "InvokeErr");
+    let err = resp["data"]["error"].as_str().expect("error string");
+    assert!(
+        err.contains("no response"),
+        "error must mention 'no response', got: {err}"
+    );
+
+    h.shutdown().await;
+}
+
 // -- Tests: single-response handlers ------------------------------------------
 
 #[tokio::test]

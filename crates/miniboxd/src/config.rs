@@ -126,19 +126,25 @@ impl DaemonConfig {
             self.images_dir = Some(PathBuf::from(v));
         }
         if let Ok(v) = std::env::var("MINIBOX_ALLOW_PRIVILEGED")
-            && let Ok(b) = v.parse::<bool>()
+            && let Some(b) = parse_policy_bool("MINIBOX_ALLOW_PRIVILEGED", &v)
         {
             self.policy.allow_privileged = Some(b);
         }
         if let Ok(v) = std::env::var("MINIBOX_ALLOW_BIND_MOUNTS")
-            && let Ok(b) = v.parse::<bool>()
+            && let Some(b) = parse_policy_bool("MINIBOX_ALLOW_BIND_MOUNTS", &v)
         {
             self.policy.allow_bind_mounts = Some(b);
         }
-        if let Ok(v) = std::env::var("MINIBOX_MAX_IMAGE_SIZE_MB")
-            && let Ok(n) = v.parse::<u64>()
-        {
-            self.policy.max_image_size_mb = Some(n);
+        if let Ok(v) = std::env::var("MINIBOX_MAX_IMAGE_SIZE_MB") {
+            if let Ok(n) = v.parse::<u64>() {
+                self.policy.max_image_size_mb = Some(n);
+            } else {
+                tracing::warn!(
+                    var = "MINIBOX_MAX_IMAGE_SIZE_MB",
+                    value = %v,
+                    "config: unrecognised integer value ignored"
+                );
+            }
         }
         self
     }
@@ -165,6 +171,25 @@ impl DaemonConfig {
                     .max_image_size_mb
                     .or(self.policy.max_image_size_mb),
             },
+        }
+    }
+}
+
+/// Parse a boolean-ish policy env value. Accepts `1|true|yes` /
+/// `0|false|no` (case-insensitive, trimmed). Unrecognised values are
+/// rejected with a warning — never silently ignored on a
+/// security-policy variable. Consistent with `ContainerPolicy::from_env`.
+fn parse_policy_bool(name: &str, v: &str) -> Option<bool> {
+    match v.trim().to_lowercase().as_str() {
+        "1" | "true" | "yes" => Some(true),
+        "0" | "false" | "no" => Some(false),
+        other => {
+            tracing::warn!(
+                var = name,
+                value = other,
+                "config: unrecognised boolean value ignored"
+            );
+            None
         }
     }
 }
@@ -254,12 +279,13 @@ mod tests {
         assert_eq!(merged.log_level.as_deref(), Some("warn"));
     }
 
+    /// Serializes tests that mutate `MINIBOX_*` env vars.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn env_overrides_policy_fields() {
         use minibox_macros::{unsafe_remove_var, unsafe_set_var};
-        use std::sync::Mutex;
 
-        static ENV_MUTEX: Mutex<()> = Mutex::new(());
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
 
         unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "true");
@@ -276,6 +302,93 @@ mod tests {
         assert_eq!(cfg.policy.allow_privileged, Some(true));
         assert_eq!(cfg.policy.allow_bind_mounts, Some(false));
         assert_eq!(cfg.policy.max_image_size_mb, Some(512));
+    }
+
+    #[test]
+    fn env_override_accepts_yes_and_one() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "yes");
+        unsafe_set_var!("MINIBOX_ALLOW_BIND_MOUNTS", "1");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+        unsafe_remove_var!("MINIBOX_ALLOW_BIND_MOUNTS");
+
+        assert_eq!(
+            cfg.policy.allow_privileged,
+            Some(true),
+            "'yes' must parse as true, consistent with ContainerPolicy::from_env"
+        );
+        assert_eq!(
+            cfg.policy.allow_bind_mounts,
+            Some(true),
+            "'1' must parse as true"
+        );
+    }
+
+    #[test]
+    fn env_override_accepts_no_and_zero() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "no");
+        unsafe_set_var!("MINIBOX_ALLOW_BIND_MOUNTS", "0");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+        unsafe_remove_var!("MINIBOX_ALLOW_BIND_MOUNTS");
+
+        assert_eq!(
+            cfg.policy.allow_privileged,
+            Some(false),
+            "'no' must parse as false"
+        );
+        assert_eq!(
+            cfg.policy.allow_bind_mounts,
+            Some(false),
+            "'0' must parse as false"
+        );
+    }
+
+    #[test]
+    fn env_override_warns_and_ignores_garbage_bool() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "banana");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+
+        assert_eq!(
+            cfg.policy.allow_privileged, None,
+            "garbage boolean must be rejected, not coerced"
+        );
+    }
+
+    #[test]
+    fn env_override_invalid_u64_leaves_max_image_size_unset() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_MAX_IMAGE_SIZE_MB", "lots");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_MAX_IMAGE_SIZE_MB");
+
+        assert_eq!(cfg.policy.max_image_size_mb, None);
+    }
+
+    #[test]
+    fn parse_policy_bool_is_case_insensitive_and_trims() {
+        assert_eq!(parse_policy_bool("X", " TRUE "), Some(true));
+        assert_eq!(parse_policy_bool("X", "Yes"), Some(true));
+        assert_eq!(parse_policy_bool("X", "FALSE"), Some(false));
+        assert_eq!(parse_policy_bool("X", "No"), Some(false));
+        assert_eq!(parse_policy_bool("X", "banana"), None);
+        assert_eq!(parse_policy_bool("X", ""), None);
     }
 
     #[test]

@@ -372,6 +372,29 @@ mod tests {
     }
 
     #[test]
+    fn build_request_run_maps_privileged_true() {
+        let req = build_request(
+            "minibox::container::run",
+            &json!({"image": "alpine", "privileged": true}),
+        )
+        .expect("build_request");
+        let DaemonRequest::Run { privileged, .. } = req else {
+            panic!("expected Run");
+        };
+        assert!(privileged, "privileged: true must pass through to Run");
+    }
+
+    #[test]
+    fn build_request_run_defaults_privileged_false() {
+        let req = build_request("minibox::container::run", &json!({"image": "alpine"}))
+            .expect("build_request");
+        let DaemonRequest::Run { privileged, .. } = req else {
+            panic!("expected Run");
+        };
+        assert!(!privileged, "privileged must default to false when absent");
+    }
+
+    #[test]
     fn build_request_container_stop() {
         let input = json!({"id": "abc123"});
         let req = build_request("minibox::container::stop", &input).unwrap();

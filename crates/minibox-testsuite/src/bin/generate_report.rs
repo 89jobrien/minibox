@@ -22,6 +22,14 @@ fn main() {
 
     let runner = TestRunner::collect_inventory();
 
+    if runner.count() == 0 {
+        eprintln!(
+            "error: conformance runner collected 0 tests -- inventory registration is broken \
+             (dropped adapter module or stripped linker section)"
+        );
+        std::process::exit(1);
+    }
+
     eprintln!("Running {} conformance tests...", runner.count());
     let summary = runner.run();
 
