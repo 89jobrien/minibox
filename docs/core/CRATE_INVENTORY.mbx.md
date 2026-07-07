@@ -14,6 +14,8 @@
 | mbx                 | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests          |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
+| minibox-bench       | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                        |
+| ail                 | bin        | ~4     | 1            | 0                       | --                        |
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
 **Estimated total:** ~79k lines of Rust across 345 source files. All crates at
@@ -61,7 +63,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 **Features:** `test-utils` (mocks + fixtures + conformance), `metrics`
 (Prometheus endpoint), `otel` (OTLP trace export).
 
-**Benchmarks:** `trait_overhead`, `protocol_codec` (criterion).
+**Benchmarks:** none — all criterion benches live in `crates/minibox-bench`.
 
 ---
 
@@ -152,6 +154,30 @@ internally by `cargo xtask test-conformance`.
 **Binaries:** `run-conformance`, `generate-report`.
 
 **Depends on:** minibox, minibox-core.
+
+---
+
+## minibox-bench
+
+Dedicated benchmark crate. Leaf crate owning all criterion targets and fixtures; the only
+place where the `test-utils` features of the lib crates are enabled. Run via `just bench` /
+`just bench-check` / `just bench-baseline` (`cargo xtask bench` underneath). Results land in
+`bench/results/` (gitignored); per-env baselines are tracked at
+`bench/baseline.{local,selfhosted,hosted}.json`.
+
+**Bench targets:** `protocol_codec`, `daemon_dispatch`, `trait_dispatch`, `layer_extract`,
+`image_pull`, plus root-gated Linux benches `linux_rootfs`, `linux_cgroup`, `linux_spawn`.
+
+**Fixtures:** `LayerSpec`/`build_layer_tar_gz` (deterministic OCI layers), `BenchRegistry`
+(wiremock-backed OCI registry).
+
+**Depends on:** minibox, minibox-core (both with `test-utils`), criterion.
+
+---
+
+## ail
+
+Placeholder binary for the agent-improvement loop. No implementation yet.
 
 ---
 

@@ -218,3 +218,72 @@ jobs:
           TAG="nightly/$(date -u +%Y%m%d)"
           git tag "$TAG"
           git push origin "$TAG"
+
+  # --- Bench pipeline: prefer the self-hosted `minibox` runner when online, else fall
+  # --- back to GitHub-hosted ubuntu-latest. ---
+
+  bench-runner-check:
+    name: bench runner check
+    runs-on: ubuntu-latest
+    outputs:
+      selfhosted: ${{ steps.probe.outputs.selfhosted }}
+    steps:
+      # ACTIONS_RUNNER_READ_TOKEN is a fine-grained PAT with Administration: read
+      # (GITHUB_TOKEN cannot read runner status). If the secret is missing or the
+      # API call fails, selfhosted=false and bench always falls back to the
+      # GitHub-hosted runner.
+      - name: probe self-hosted runner
+        id: probe
+        env:
+          RUNNER_TOKEN: ${{ secrets.ACTIONS_RUNNER_READ_TOKEN }}
+        run: |
+          ok=false
+          if [ -n "$RUNNER_TOKEN" ]; then
+            online=$(curl -sf -H "Authorization: Bearer $RUNNER_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runners" \
+              | jq '[.runners[] | select(.status == "online") | select(any(.labels[]; .name == "minibox"))] | length' \
+              || echo 0)
+            if [ "${online:-0}" -gt 0 ]; then
+              ok=true
+            fi
+          fi
+          echo "selfhosted=$ok" >> "$GITHUB_OUTPUT"
+
+  bench-selfhosted:
+    name: bench check (self-hosted)
+    runs-on: [self-hosted, minibox]
+    continue-on-error: true
+    needs: bench-runner-check
+    if: needs.bench-runner-check.outputs.selfhosted == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      # mise is not on the runner service's default PATH; the full path is required.
+      - name: cargo xtask bench --check (selfhosted)
+        run: ~/.local/bin/mise exec -- cargo xtask bench --check --env selfhosted
+      - name: upload bench results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-selfhosted
+          path: bench/results/
+          retention-days: 30
+
+  bench-hosted:
+    name: bench check (hosted fallback)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: bench-runner-check
+    if: needs.bench-runner-check.outputs.selfhosted != 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo xtask bench --check (hosted)
+        run: cargo xtask bench --check --env hosted
+      - name: upload bench results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-hosted
+          path: bench/results/
+          retention-days: 30

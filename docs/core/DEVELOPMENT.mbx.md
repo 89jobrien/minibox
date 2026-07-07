@@ -222,11 +222,17 @@ just test-all                # nuke state -> doctor -> unit + integration + e2e 
 
 ## Benchmarks
 
+All criterion benchmarks live in `crates/minibox-bench`. Results are written to
+`bench/results/` (gitignored); tracked per-env baselines live at
+`bench/baseline.{local,selfhosted,hosted}.json`. The nightly CI bench job produces the
+canonical numbers.
+
 ```bash
-cargo xtask bench            # run locally, save to bench/results/
-just bench-sync              # sync VPS results to local jsonl
-just flamegraph [suite]      # profile with samply/flamegraph
-just bench-agent report      # AI bench analysis
+just bench                       # run benches, save to bench/results/
+just bench-check                 # run benches, compare against the per-env baseline
+just bench-baseline              # run benches, save results as the new baseline
+cargo xtask bench --skip-bench   # re-parse existing criterion output without re-running
+nu scripts/bench-agent.nu report # AI bench analysis
 ```
 
 ## CI Gates
@@ -341,10 +347,10 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 | Task                                  | Command                            | When to use                              |
 | ------------------------------------- | ---------------------------------- | ---------------------------------------- |
-| Run criterion benchmarks              | `cargo xtask bench`                | Save results to bench/results/           |
-| Sync VPS bench results locally        | `just bench-sync`                  | Pull jsonl from remote                   |
-| Profile with samply/flamegraph        | `just flamegraph [suite]`          | macOS: samply; Linux: cargo-flamegraph   |
-| AI bench analysis                     | `just bench-agent report`          | Summarise bench/results/ with AI         |
+| Run criterion benchmarks              | `just bench`                       | Targets in crates/minibox-bench          |
+| Check against per-env baseline        | `just bench-check`                 | Compares vs bench/baseline.{env}.json    |
+| Save new per-env baseline             | `just bench-baseline`              | Writes bench/baseline.{env}.json         |
+| AI bench analysis                     | `nu scripts/bench-agent.nu report` | Summarise bench/results/ with AI         |
 
 ---
 

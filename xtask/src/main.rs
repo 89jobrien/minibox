@@ -199,7 +199,7 @@ fn main() -> Result<()> {
         }
 
         // ── Misc standalone ──────────────────────────────────────────
-        Some("bench") => bench::bench(&sh, root),
+        Some("bench") => bench::bench(&sh, root, &bench::parse_bench_args(&argv[2..])),
         Some("fuzz") => fuzz::fuzz(&sh, root),
         Some("demo") => {
             let args: Vec<String> = env::args().collect();
