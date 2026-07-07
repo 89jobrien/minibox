@@ -42,3 +42,15 @@ harness = false
 [[bench]]
 name = "image_pull"
 harness = false
+
+[[bench]]
+name = "linux_rootfs"
+harness = false
+
+[[bench]]
+name = "linux_cgroup"
+harness = false
+
+[[bench]]
+name = "linux_spawn"
+harness = false
