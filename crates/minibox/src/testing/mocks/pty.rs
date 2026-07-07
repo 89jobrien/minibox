@@ -19,7 +19,7 @@ pub struct MockPtyAllocator {
 
 impl MockPtyAllocator {
     /// Create a mock that succeeds on every call.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             allocate_count: AtomicUsize::new(0),
             should_fail: false,
@@ -27,7 +27,7 @@ impl MockPtyAllocator {
     }
 
     /// Create a mock that fails on every call.
-    pub fn failing() -> Self {
+    pub const fn failing() -> Self {
         Self {
             allocate_count: AtomicUsize::new(0),
             should_fail: true,

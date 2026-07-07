@@ -12,6 +12,7 @@ members = [
     "crates/minibox-testsuite",
     "crates/smolbox",
     "crates/ail",
+    "crates/minibox-bench",
     "xtask",
 ]
 

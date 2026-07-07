@@ -169,3 +169,4 @@ docs/archive/
 # handoff-end
 .claude/skills/whatidid/cache/
 .capsec-baseline.json
+bench/results/

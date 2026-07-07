@@ -388,11 +388,12 @@ impl RegistryClient {
         Ok(client)
     }
 
-    /// Create a client with custom base URLs for testing against a mock server.
+    /// Create a client with custom base URLs for testing or benchmarking
+    /// against a mock server.
     ///
     /// Does not enforce HTTPS — the test server runs on plain HTTP.
-    #[cfg(test)]
-    pub(crate) fn for_test(auth_url: &str, registry_base: &str) -> anyhow::Result<Self> {
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn for_test(auth_url: &str, registry_base: &str) -> anyhow::Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
@@ -417,6 +418,20 @@ impl RegistryClient {
     #[must_use]
     pub const fn with_max_total_image_size(mut self, limit: u64) -> Self {
         self.max_total_image_size = limit;
+        self
+    }
+
+    /// Pin the platform used for manifest selection.
+    ///
+    /// Test/bench-only: external harnesses (e.g. `minibox-bench`) cannot set
+    /// the private `platform` field the way in-crate tests do.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use]
+    pub fn with_pinned_platform(
+        mut self,
+        platform: crate::image::manifest::TargetPlatform,
+    ) -> Self {
+        self.platform = platform;
         self
     }
 

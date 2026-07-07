@@ -1706,7 +1706,6 @@ dependencies = [
  "base64",
  "bytes",
  "chrono",
- "criterion",
  "dashmap",
  "flate2",
  "futures",
@@ -1740,6 +1739,24 @@ dependencies = [
  "turmoil",
  "uuid",
  "walkdir",
+ "wiremock",
+]
+
+[[package]]
+name = "minibox-bench"
+version = "0.31.0"
+dependencies = [
+ "anyhow",
+ "criterion",
+ "flate2",
+ "minibox",
+ "minibox-core",
+ "minibox-macros",
+ "nix",
+ "sha2",
+ "tar",
+ "tempfile",
+ "tokio",
  "wiremock",
 ]
 

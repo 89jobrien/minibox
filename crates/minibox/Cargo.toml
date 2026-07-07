@@ -63,7 +63,6 @@ otel = [
 libc = { workspace = true }
 
 [dev-dependencies]
-criterion = { workspace = true }
 proptest = "1"
 wiremock = { workspace = true }
 serde_json = { workspace = true }
@@ -79,12 +78,3 @@ shuttle = "0.9"
 # Enable conformance test infrastructure from minibox-core.
 minibox-core = { workspace = true, features = ["test-utils"] }
 turmoil = { workspace = true }
-
-[[bench]]
-name = "trait_overhead"
-harness = false
-required-features = ["test-utils"]
-
-[[bench]]
-name = "protocol_codec"
-harness = false
