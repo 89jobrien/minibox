@@ -18,17 +18,17 @@ impl RawModeGuard {
         let fd = io::stdin().as_raw_fd();
         let mut saved: libc::termios = unsafe { std::mem::zeroed() };
         // SAFETY: tcgetattr reads termios for fd; fd is always-open stdin.
-        if unsafe { libc::tcgetattr(fd, &mut saved) } != 0 {
+        if unsafe { libc::tcgetattr(fd, &raw mut saved) } != 0 {
             return Err(io::Error::last_os_error());
         }
         let mut raw = saved;
         // SAFETY: cfmakeraw sets raw mode on the in-memory struct; no syscall yet.
-        unsafe { libc::cfmakeraw(&mut raw) };
+        unsafe { libc::cfmakeraw(&raw mut raw) };
         // SAFETY: tcsetattr applies new settings immediately (TCSANOW).
-        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &raw) } != 0 {
+        if unsafe { libc::tcsetattr(fd, libc::TCSANOW, &raw const raw) } != 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(RawModeGuard { fd, saved })
+        Ok(Self { fd, saved })
     }
 }
 
@@ -36,7 +36,7 @@ impl RawModeGuard {
 impl Drop for RawModeGuard {
     fn drop(&mut self) {
         // SAFETY: restoring saved termios; fd (stdin) is still valid.
-        unsafe { libc::tcsetattr(self.fd, libc::TCSANOW, &self.saved) };
+        unsafe { libc::tcsetattr(self.fd, libc::TCSANOW, &raw const self.saved) };
     }
 }
 

@@ -75,7 +75,7 @@ pub fn validate_cgroup_parent(path: &str) -> anyhow::Result<()> {
     }
     // Reject `..` components before canonicalization to prevent traversal.
     for component in p.components() {
-        if let std::path::Component::ParentDir = component {
+        if component == std::path::Component::ParentDir {
             anyhow::bail!("--cgroup-parent must not contain '..': {path:?}");
         }
     }
@@ -138,11 +138,7 @@ impl CgroupManager {
         if let Some(mem) = self.config.memory_limit_bytes {
             // SECURITY: Validate minimum memory (kernel minimum is typically 4KB)
             if mem < MIN_MEMORY_BYTES {
-                anyhow::bail!(
-                    "memory limit must be >= {} bytes, got {}",
-                    MIN_MEMORY_BYTES,
-                    mem
-                );
+                anyhow::bail!("memory limit must be >= {MIN_MEMORY_BYTES} bytes, got {mem}");
             }
             self.write_file("memory.max", &mem.to_string())?;
             debug!(memory_max = mem, "cgroup: set memory.max");
@@ -153,7 +149,7 @@ impl CgroupManager {
         if let Some(cpu) = self.config.cpu_weight {
             // SECURITY: Validate range (kernel range is 1-10000)
             if !(1..=MAX_CPU_WEIGHT).contains(&cpu) {
-                anyhow::bail!("cpu_weight must be 1-{MAX_CPU_WEIGHT}, got {}", cpu);
+                anyhow::bail!("cpu_weight must be 1-{MAX_CPU_WEIGHT}, got {cpu}");
             }
             self.write_file("cpu.weight", &cpu.to_string())?;
             debug!(cpu_weight = cpu, "cgroup: set cpu.weight");
@@ -172,7 +168,7 @@ impl CgroupManager {
             // on VMs using virtio (vda/253:0) as well as bare-metal (sda/8:0).
             match find_first_block_device() {
                 Some(dev) => {
-                    let io_max_line = format!("{} rbps={} wbps={}", dev, io_limit, io_limit);
+                    let io_max_line = format!("{dev} rbps={io_limit} wbps={io_limit}");
                     self.write_file("io.max", &io_max_line)?;
                     debug!(io_max_bytes_per_sec = io_limit, device = %dev, "cgroup: set io.max");
                 }
@@ -197,7 +193,7 @@ impl CgroupManager {
         }
         debug!(pid = pid, cgroup_path = %self.cgroup_path.display(), "cgroup: adding process");
         let path = self.cgroup_path.join("cgroup.procs");
-        fs::write(&path, format!("{}\n", pid)).map_err(|source| CgroupError::AddProcessFailed {
+        fs::write(&path, format!("{pid}\n")).map_err(|source| CgroupError::AddProcessFailed {
             pid,
             path: path.display().to_string(),
             source,

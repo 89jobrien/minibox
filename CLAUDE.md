@@ -8,7 +8,7 @@ Guidance for Claude Code when working in this repository.
 
 Minibox is a Rust 2024 Docker-like container runtime with a daemon/CLI split, OCI image support, Linux namespace/cgroup isolation, overlay filesystems, and macOS adapter backends.
 
-Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `krun` when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
+Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
 
 ## Read First
 
@@ -53,7 +53,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: fmt, clippy fixes/checks with warnings denied, release build.
-- `cargo xtask prepush` — broader Linux-oriented gate: nextest and coverage.
+- `cargo xtask prepush` — broader Linux-oriented gate: nextest (use `cargo xtask coverage` separately for coverage reports).
 - `cargo xtask test-unit` — cross-platform unit and conformance subset.
 - `cargo xtask test-property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
@@ -62,7 +62,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask build-vm-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
   to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
-- `cargo bench -p minibox` — local criterion benches.
+- `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
 
 `scripts/*.py` Claude Agent SDK scripts require an interactive foreground terminal and fail when run through background/non-interactive execution.
 
@@ -103,6 +103,16 @@ Branches follow the stability pipeline:
 - Do not promote `staging` to `main` without confirming `staging` CI is green.
 - Do not commit unless explicitly asked.
 - `.ctx/HANDOFF.*.*.yaml` is gitignored by default; use `git add -f` only when intentionally tracking it.
+
+### Branch Protection
+
+- `main` is protected via GitHub rulesets. All changes land via PR
+  with required status checks. Branch must be up-to-date before merge.
+- `next` and `staging` block force pushes and deletions; require
+  `CI passed` status check.
+- `staging` -> `main` promotion creates a PR automatically via CI.
+- Required status checks on `main`: `CI passed`, stability gates,
+  `actionlint`.
 
 ## Hook Notes
 
@@ -211,20 +221,27 @@ Before responding in any phase, check if a godmode skill applies.
 
 ## Task graph
 
-Tasks live in `.ctx/GODMODE.tasks.yaml`. Use `godmode task` CLI for
+Tasks live in @.ctx/GODMODE.tasks.yaml. Use `Bash(godmode task)` CLI for
 state transitions. Independent chains can run in parallel via
-`godmode:parallel-agents`. A task is runnable when all `depends_on`
+`Skill(godmode:parallel-agents)`. A task is runnable when all `depends_on`
 items are `done`.
 
 ## Memory bank
 
-Persistent context lives in `.ctx/memory-bank/`. Read before
-substantive work; update `activeContext` and `progress` after
-milestones. See `AGENTS.md` for the full file list.
+- Persistent context lives in @.ctx/memory-bank/
+- Read before substantive work: !`ls .ctx/memory-bank/`
+- update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md
+- See @AGENTS.md for the full file list
+
+## Context Graph
+
+- Wiki root: `Read(.kgx/wiki/index.md)`
+- Query the graph: !`kgx query <entity>`
+-
 
 ## Agent-specific guidance
 
 For subagent conventions, Codex integration, and memory-bank file
-inventory, see `AGENTS.md`.
+inventory, see @AGENTS.md.
 
 <!-- godmode-workflow:end -->

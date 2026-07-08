@@ -9,6 +9,11 @@ use std::sync::OnceLock;
 /// Default maximum nesting depth.
 pub const DEFAULT_MAX_NEST_DEPTH: u32 = 4;
 
+/// Environment variable for current nesting depth.
+pub const ENV_NEST_DEPTH: &str = "MINIBOX_NEST_DEPTH";
+/// Environment variable for maximum nesting depth.
+pub const ENV_MAX_NEST_DEPTH: &str = "MINIBOX_MAX_NEST_DEPTH";
+
 static NESTED_OVERLAY_SUPPORT: OnceLock<bool> = OnceLock::new();
 
 /// Check whether the kernel supports overlay-on-overlay mounts.
@@ -55,31 +60,33 @@ fn probe_nested_overlay() -> bool {
         }
         fs::write(base.join("lower1/probe.txt"), "probe")?;
 
+        let opts1 = format!(
+            "lowerdir={lower},upperdir={upper},workdir={work}",
+            lower = base.join("lower1").display(),
+            upper = base.join("upper1").display(),
+            work = base.join("work1").display(),
+        );
         mount(
             Some("overlay"),
             &base.join("merged1"),
             Some("overlay"),
             MsFlags::empty(),
-            Some(&format!(
-                "lowerdir={lower},upperdir={upper},workdir={work}",
-                lower = base.join("lower1").display(),
-                upper = base.join("upper1").display(),
-                work = base.join("work1").display(),
-            )),
+            Some(opts1.as_str()),
         )?;
 
         // Second overlay: use merged1 as lowerdir
+        let opts2 = format!(
+            "lowerdir={lower},upperdir={upper},workdir={work}",
+            lower = base.join("merged1").display(),
+            upper = base.join("upper2").display(),
+            work = base.join("work2").display(),
+        );
         let nested_ok = mount(
             Some("overlay"),
             &base.join("merged2"),
             Some("overlay"),
             MsFlags::empty(),
-            Some(&format!(
-                "lowerdir={lower},upperdir={upper},workdir={work}",
-                lower = base.join("merged1").display(),
-                upper = base.join("upper2").display(),
-                work = base.join("work2").display(),
-            )),
+            Some(opts2.as_str()),
         )
         .is_ok();
 
@@ -95,7 +102,7 @@ fn probe_nested_overlay() -> bool {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn probe_nested_overlay() -> bool {
+const fn probe_nested_overlay() -> bool {
     false
 }
 
@@ -110,6 +117,7 @@ pub struct NestingContext {
 
 impl NestingContext {
     /// Build from optional env values. `None` depth means host (0).
+    #[must_use]
     pub fn new(depth: Option<u32>, max_depth: Option<u32>) -> Self {
         Self {
             depth: depth.unwrap_or(0),
@@ -118,26 +126,28 @@ impl NestingContext {
     }
 
     /// Read nesting context from the current process environment.
+    #[must_use]
     pub fn from_env() -> Self {
-        let depth = std::env::var("MINIBOX_NEST_DEPTH")
+        let depth = std::env::var(ENV_NEST_DEPTH)
             .ok()
             .and_then(|v| v.parse().ok());
-        let max = std::env::var("MINIBOX_MAX_NEST_DEPTH")
+        let max = std::env::var(ENV_MAX_NEST_DEPTH)
             .ok()
             .and_then(|v| v.parse().ok());
         Self::new(depth, max)
     }
 
     /// The depth value to set for a child container.
-    pub fn child_depth(&self) -> u32 {
-        self.depth + 1
+    #[must_use]
+    pub const fn child_depth(&self) -> u32 {
+        self.depth.saturating_add(1)
     }
 
     /// Fail if current depth has reached or exceeded the limit.
     pub fn check_depth(&self) -> anyhow::Result<()> {
         if self.depth >= self.max_depth {
             anyhow::bail!(
-                "nesting depth {} exceeds maximum (MINIBOX_MAX_NEST_DEPTH={})",
+                "nesting depth {} exceeds maximum ({ENV_MAX_NEST_DEPTH}={})",
                 self.depth,
                 self.max_depth
             );
@@ -146,10 +156,11 @@ impl NestingContext {
     }
 
     /// Environment variables to inject into child containers.
+    #[must_use]
     pub fn child_env_vars(&self) -> Vec<String> {
         vec![
-            format!("MINIBOX_NEST_DEPTH={}", self.child_depth()),
-            format!("MINIBOX_MAX_NEST_DEPTH={}", self.max_depth),
+            format!("{ENV_NEST_DEPTH}={}", self.child_depth()),
+            format!("{ENV_MAX_NEST_DEPTH}={}", self.max_depth),
         ]
     }
 }
@@ -215,5 +226,23 @@ mod tests {
         let vars = ctx.child_env_vars();
         assert!(vars.contains(&"MINIBOX_NEST_DEPTH=2".to_string()));
         assert!(vars.contains(&"MINIBOX_MAX_NEST_DEPTH=8".to_string()));
+    }
+
+    #[test]
+    fn child_depth_saturates_at_u32_max() {
+        let ctx = NestingContext::new(Some(u32::MAX), Some(u32::MAX));
+        assert_eq!(ctx.child_depth(), u32::MAX);
+    }
+
+    #[test]
+    fn check_depth_zero_max_zero_fails() {
+        let ctx = NestingContext::new(Some(0), Some(0));
+        assert!(ctx.check_depth().is_err());
+    }
+
+    #[test]
+    fn check_depth_zero_max_one_ok() {
+        let ctx = NestingContext::new(Some(0), Some(1));
+        assert!(ctx.check_depth().is_ok());
     }
 }

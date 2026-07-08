@@ -1,0 +1,10 @@
+# rustqual config for minibox-macros
+# Proc-macro crate: tests invoke macros (not functions), so rustqual
+# cannot trace the call graph. Suppress TQ_NO_SUT false positives.
+
+ignore_functions = ["test_*"]
+
+[test_quality]
+# Macro invocations are invisible to call-graph tracing.
+# All tests exercise the macros directly but rustqual can't see it.
+enabled = false

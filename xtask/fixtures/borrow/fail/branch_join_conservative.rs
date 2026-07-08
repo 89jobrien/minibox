@@ -1,7 +1,9 @@
 // expect: E0502
 
+const BRANCH_COUNT: usize = 6;
+
 fn main() {
-    let mut m = 6;
+    let mut m = BRANCH_COUNT as i32;
     let n = 5;
     let mut x = &n;
 

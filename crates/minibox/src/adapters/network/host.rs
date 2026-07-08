@@ -19,7 +19,8 @@ pub struct HostNetwork;
 
 impl HostNetwork {
     /// Create a new host network adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

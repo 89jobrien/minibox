@@ -9,8 +9,6 @@ use minibox::testing::mocks::registry_router::MockRegistryRouter;
 use minibox_core::domain::RegistryRouter;
 use minibox_core::image::reference::ImageRef;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -24,22 +22,16 @@ fn ghcr_ref() -> ImageRef {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// route returns the backing registry without panicking.
-pub struct RouteReturnsBacking;
-impl ConformanceTest for RouteReturnsBacking {
-    fn name(&self) -> &str {
-        "route_returns_backing"
-    }
-    fn adapter(&self) -> &str {
-        "registry_router"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// route returns the backing registry without panicking.
+crate::conformance_test! {
+    name: "route_returns_backing",
+    adapter: "registry_router",
+    capability: RegistryRouter,
+    category: Unit,
+    |ctx| {
         let reg = Arc::new(MockRegistry::new());
         let router = MockRegistryRouter::new(reg);
         // Calling route must not panic and must return a registry reference.
@@ -49,19 +41,13 @@ impl ConformanceTest for RouteReturnsBacking {
     }
 }
 
-/// route always returns the same registry regardless of image ref.
-pub struct RouteAlwaysReturnsSameRegistry;
-impl ConformanceTest for RouteAlwaysReturnsSameRegistry {
-    fn name(&self) -> &str {
-        "route_always_returns_same_registry"
-    }
-    fn adapter(&self) -> &str {
-        "registry_router"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// route always returns the same registry regardless of image ref.
+crate::conformance_test! {
+    name: "route_always_returns_same_registry",
+    adapter: "registry_router",
+    capability: RegistryRouter,
+    category: Unit,
+    |ctx| {
         let reg = Arc::new(MockRegistry::new().with_cached_image("alpine", "3.18"));
         let router = MockRegistryRouter::new(reg);
         // Both different refs route to the same backing — use has_image_sync to verify.
@@ -73,12 +59,4 @@ impl ConformanceTest for RouteAlwaysReturnsSameRegistry {
         ctx.assert_true(true, "route called for two refs without panic");
         ctx.result()
     }
-}
-
-/// Return all registry_router conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(RouteReturnsBacking),
-        Box::new(RouteAlwaysReturnsSameRegistry),
-    ]
 }

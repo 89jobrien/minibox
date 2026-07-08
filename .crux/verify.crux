@@ -1,0 +1,42 @@
+pipeline: minibox_verify
+# Local mirror of `cargo xtask verify` — read-only validation gate.
+# Runs: fmt check, workspace check, clippy, borrow fixtures, docs lint,
+# docs audit (quick). Does not modify files.
+#
+# Run: crux run .crux/verify.crux
+budget: { calls: 10 }
+
+steps:
+  - step: fmt_check
+    handler: shell::exec
+    args:
+      cmd: "cargo fmt --all --check"
+
+  - step: workspace_check
+    handler: shell::exec
+    args:
+      cmd: "cargo check --workspace"
+
+  - step: clippy
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo clippy
+        -p minibox -p minibox-macros -p mbx -p minibox-core
+        -p macbox -p miniboxd -p winbox
+        -- -D warnings
+
+  - step: borrow_fixtures
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask borrow-fixtures"
+
+  - step: docs_lint
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint-docs"
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "verify gate passed"

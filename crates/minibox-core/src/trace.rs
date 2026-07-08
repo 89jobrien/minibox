@@ -42,6 +42,9 @@ pub struct TraceFilter {
 /// Implementations must be `Send + Sync` for use in the async daemon.
 pub trait TraceStore: Send + Sync {
     /// Persist a trace. The `id` is used as the storage key.
+    /// # Errors
+    ///
+    /// Returns an error if the trace cannot be persisted.
     fn store(
         &self,
         id: &str,
@@ -51,9 +54,15 @@ pub trait TraceStore: Send + Sync {
     ) -> Result<()>;
 
     /// List traces matching the given filter, ordered newest-first.
+    /// # Errors
+    ///
+    /// Returns an error if the trace store cannot be read.
     fn list(&self, filter: &TraceFilter) -> Result<Vec<TraceSummary>>;
 
     /// Load a trace by ID. Returns `None` if not found.
+    /// # Errors
+    ///
+    /// Returns an error if the trace file cannot be read or parsed.
     fn load(&self, id: &str) -> Result<Option<serde_json::Value>>;
 }
 
@@ -82,6 +91,9 @@ pub struct FileTraceStore {
 
 impl FileTraceStore {
     /// Create a new store backed by `base_dir`, creating it if necessary.
+    /// # Errors
+    ///
+    /// Returns an error if the base directory cannot be created.
     pub fn new(base_dir: impl AsRef<Path>) -> Result<Self> {
         let base_dir = base_dir.as_ref().to_path_buf();
         std::fs::create_dir_all(&base_dir)
@@ -149,9 +161,8 @@ impl TraceStore for FileTraceStore {
             if path.extension().and_then(|e| e.to_str()) != Some("json") {
                 continue;
             }
-            let data = match std::fs::read_to_string(&path) {
-                Ok(d) => d,
-                Err(_) => continue,
+            let Ok(data) = std::fs::read_to_string(&path) else {
+                continue;
             };
             let record: TraceRecord = match serde_json::from_str(&data) {
                 Ok(r) => r,
@@ -174,8 +185,7 @@ impl TraceStore for FileTraceStore {
                 .trace
                 .get("steps")
                 .and_then(|s| s.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0);
+                .map_or(0, std::vec::Vec::len);
 
             summaries.push(TraceSummary {
                 id: record.id,

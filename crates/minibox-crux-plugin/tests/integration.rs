@@ -175,6 +175,44 @@ fn bind_mock(tmp: &TempDir) -> (UnixListener, PathBuf) {
     (listener, socket_path)
 }
 
+// -- Test macros (reduce duplicate setup/teardown) ----------------------------
+
+/// Invoke a handler against a mock daemon returning `$response`,
+/// assert the plugin returns InvokeOk.
+macro_rules! assert_invoke_ok {
+    ($handler:expr, $input:expr, $response:expr) => {{
+        let tmp = TempDir::new().expect("tempdir");
+        let (listener, socket_path) = bind_mock(&tmp);
+        tokio::spawn(mock_daemon_once(listener, $response));
+        let mut h = PluginHarness::spawn(&socket_path);
+
+        let resp = h.invoke($handler, $input).await;
+        assert_eq!(resp["status"], "InvokeOk");
+
+        h.shutdown().await;
+    }};
+}
+
+/// Invoke a handler, assert InvokeOk, capture the daemon request,
+/// and run `$assert` with the captured `DaemonRequest`.
+macro_rules! assert_invoke_ok_and_verify {
+    ($handler:expr, $input:expr, $response:expr, |$req:ident| $assert:expr) => {{
+        let tmp = TempDir::new().expect("tempdir");
+        let (listener, socket_path) = bind_mock(&tmp);
+        let (tx, rx) = oneshot::channel();
+        tokio::spawn(mock_daemon_verify(listener, $response, tx));
+        let mut h = PluginHarness::spawn(&socket_path);
+
+        let resp = h.invoke($handler, $input).await;
+        assert_eq!(resp["status"], "InvokeOk");
+
+        let $req = rx.await.expect("request captured");
+        $assert
+
+        h.shutdown().await;
+    }};
+}
+
 // -- Tests: protocol basics ---------------------------------------------------
 
 #[tokio::test]
@@ -266,138 +304,112 @@ async fn daemon_unreachable_returns_invoke_err() {
     h.shutdown().await;
 }
 
+#[tokio::test]
+async fn daemon_closing_without_response_returns_invoke_err() {
+    // A daemon that accepts the connection, reads the request, and closes
+    // without writing anything must surface as an InvokeErr mentioning
+    // "no response" — not a hang or a silent success.
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.expect("accept mock connection");
+        let (read_half, write_half) = tokio::io::split(stream);
+        let mut reader = BufReader::new(read_half);
+        let mut line = String::new();
+        reader
+            .read_line(&mut line)
+            .await
+            .expect("read request line");
+        // Drop both halves without writing a response.
+        drop(reader);
+        drop(write_half);
+    });
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h.invoke("minibox::container::ps", json!({})).await;
+    assert_eq!(resp["status"], "InvokeErr");
+    let err = resp["data"]["error"].as_str().expect("error string");
+    assert!(
+        err.contains("no response"),
+        "error must mention 'no response', got: {err}"
+    );
+
+    h.shutdown().await;
+}
+
 // -- Tests: single-response handlers ------------------------------------------
 
 #[tokio::test]
 async fn invoke_ps_returns_container_list() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
-        DaemonResponse::ContainerList { containers: vec![] },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h.invoke("minibox::container::ps", json!({})).await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+    assert_invoke_ok!(
+        "minibox::container::ps",
+        json!({}),
+        DaemonResponse::ContainerList { containers: vec![] }
+    );
 }
 
 #[tokio::test]
 async fn invoke_pull_returns_success() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
+    assert_invoke_ok!(
+        "minibox::image::pull",
+        json!({"image": "alpine"}),
         DaemonResponse::Success {
-            message: "pulled".into(),
-        },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h
-        .invoke("minibox::image::pull", json!({"image": "alpine"}))
-        .await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+            message: "pulled".into()
+        }
+    );
 }
 
 #[tokio::test]
 async fn invoke_stop_returns_success() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
+    assert_invoke_ok!(
+        "minibox::container::stop",
+        json!({"id": "abc123"}),
         DaemonResponse::Success {
-            message: "stopped".into(),
-        },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h
-        .invoke("minibox::container::stop", json!({"id": "abc123"}))
-        .await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+            message: "stopped".into()
+        }
+    );
 }
 
 #[tokio::test]
 async fn invoke_container_pause_sends_correct_request() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
+    assert_invoke_ok!(
+        "minibox::container::pause",
+        json!({"id": "abc123"}),
         DaemonResponse::ContainerPaused {
-            id: "abc123".into(),
-        },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h
-        .invoke("minibox::container::pause", json!({"id": "abc123"}))
-        .await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+            id: "abc123".into()
+        }
+    );
 }
 
 #[tokio::test]
 async fn invoke_container_resume_sends_correct_request() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
+    assert_invoke_ok!(
+        "minibox::container::resume",
+        json!({"id": "abc123"}),
         DaemonResponse::ContainerResumed {
-            id: "abc123".into(),
-        },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h
-        .invoke("minibox::container::resume", json!({"id": "abc123"}))
-        .await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+            id: "abc123".into()
+        }
+    );
 }
 
 #[tokio::test]
 async fn invoke_image_ls_sends_correct_request() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
-        DaemonResponse::ImageList { images: vec![] },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h.invoke("minibox::image::ls", json!({})).await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+    assert_invoke_ok!(
+        "minibox::image::ls",
+        json!({}),
+        DaemonResponse::ImageList { images: vec![] }
+    );
 }
 
 #[tokio::test]
 async fn invoke_image_rm_sends_correct_request() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    tokio::spawn(mock_daemon_once(
-        listener,
+    assert_invoke_ok!(
+        "minibox::image::rm",
+        json!({"image_ref": "alpine:latest"}),
         DaemonResponse::Success {
-            message: "removed".into(),
-        },
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h
-        .invoke("minibox::image::rm", json!({"image_ref": "alpine:latest"}))
-        .await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    h.shutdown().await;
+            message: "removed".into()
+        }
+    );
 }
 
 // -- Tests: multi-request sequence --------------------------------------------
@@ -471,54 +483,34 @@ async fn multiple_requests_in_sequence() {
 
 #[tokio::test]
 async fn invoke_ps_sends_list_request() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(mock_daemon_verify(
-        listener,
+    assert_invoke_ok_and_verify!(
+        "minibox::container::ps",
+        json!({}),
         DaemonResponse::ContainerList { containers: vec![] },
-        tx,
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h.invoke("minibox::container::ps", json!({})).await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    let req = rx.await.expect("request captured");
-    assert!(
-        matches!(req, DaemonRequest::List),
-        "expected List, got: {req:?}"
+        |req| {
+            assert!(
+                matches!(req, DaemonRequest::List),
+                "expected List, got: {req:?}"
+            );
+        }
     );
-
-    h.shutdown().await;
 }
 
 #[tokio::test]
 async fn invoke_stop_sends_correct_id() {
-    let tmp = TempDir::new().expect("tempdir");
-    let (listener, socket_path) = bind_mock(&tmp);
-    let (tx, rx) = oneshot::channel();
-    tokio::spawn(mock_daemon_verify(
-        listener,
+    assert_invoke_ok_and_verify!(
+        "minibox::container::stop",
+        json!({"id": "xyz789"}),
         DaemonResponse::Success {
-            message: "stopped".into(),
+            message: "stopped".into()
         },
-        tx,
-    ));
-    let mut h = PluginHarness::spawn(&socket_path);
-
-    let resp = h
-        .invoke("minibox::container::stop", json!({"id": "xyz789"}))
-        .await;
-    assert_eq!(resp["status"], "InvokeOk");
-
-    let req = rx.await.expect("request captured");
-    assert!(
-        matches!(req, DaemonRequest::Stop { ref id } if id == "xyz789"),
-        "expected Stop{{id: xyz789}}, got: {req:?}"
+        |req| {
+            assert!(
+                matches!(req, DaemonRequest::Stop { ref id } if id == "xyz789"),
+                "expected Stop{{id: xyz789}}, got: {req:?}"
+            );
+        }
     );
-
-    h.shutdown().await;
 }
 
 // -- Tests: mount round-trip (#339) -------------------------------------------
@@ -625,10 +617,6 @@ async fn invoke_build_returns_streaming_output() {
                 image_id: "sha256:abc123".into(),
                 tag: "test:latest".into(),
             },
-            // BuildComplete is NOT terminal in dispatch(); Success is needed.
-            DaemonResponse::Success {
-                message: "build complete".into(),
-            },
         ],
     ));
     let mut h = PluginHarness::spawn(&socket_path);
@@ -643,7 +631,100 @@ async fn invoke_build_returns_streaming_output() {
     let output = &resp["data"]["output"];
     assert!(output.is_array(), "streaming output must be array");
     let arr = output.as_array().expect("array");
-    assert_eq!(arr.len(), 3, "BuildOutput + BuildComplete + Success");
+    assert_eq!(arr.len(), 2, "BuildOutput + BuildComplete");
+
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn invoke_run_completes_on_stream_close_after_container_created() {
+    // `ContainerCreated` is non-terminal per the protocol contract: for
+    // non-ephemeral runs the daemon sends it and then drops its sender, so the
+    // plugin must complete when the stream closes after the single response.
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(mock_daemon_multi(
+        listener,
+        vec![DaemonResponse::ContainerCreated {
+            id: "abc123".into(),
+        }],
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke("minibox::container::run", json!({"image": "alpine"}))
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+    let output = &resp["data"]["output"];
+    assert_eq!(
+        output["type"], "ContainerCreated",
+        "single ContainerCreated response expected, got: {output}"
+    );
+
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn invoke_stops_reading_at_terminal_pipeline_complete() {
+    // PipelineComplete is terminal: the trailing Success must NOT be read.
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(mock_daemon_multi(
+        listener,
+        vec![
+            DaemonResponse::PipelineComplete {
+                trace: json!({"steps": []}),
+                container_id: "abc123".into(),
+                exit_code: 0,
+            },
+            DaemonResponse::Success {
+                message: "must not be read".into(),
+            },
+        ],
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke("minibox::container::run", json!({"image": "alpine"}))
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+    let output = &resp["data"]["output"];
+    assert_eq!(
+        output["type"], "PipelineComplete",
+        "PipelineComplete must be the single terminal response, got: {output}"
+    );
+
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn invoke_stops_reading_at_terminal_workflow_complete() {
+    // WorkflowComplete is terminal: the trailing Success must NOT be read.
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(mock_daemon_multi(
+        listener,
+        vec![
+            DaemonResponse::WorkflowComplete {
+                final_phase: minibox_core::domain::PhaseOutcome::Succeeded,
+            },
+            DaemonResponse::Success {
+                message: "must not be read".into(),
+            },
+        ],
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke("minibox::container::run", json!({"image": "alpine"}))
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+    let output = &resp["data"]["output"];
+    assert_eq!(
+        output["type"], "WorkflowComplete",
+        "WorkflowComplete must be the single terminal response without \
+         reading the trailing Success, got: {output}"
+    );
 
     h.shutdown().await;
 }

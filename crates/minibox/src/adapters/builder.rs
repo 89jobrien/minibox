@@ -11,14 +11,13 @@ use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
     BuildConfig, BuildContext, BuildProgress, CommitConfig, ContainerHooks, ContainerSpawnConfig,
-    DynContainerRuntime, DynFilesystemProvider, DynImageBuilder, DynRegistryRouter, ImageBuilder,
-    ImageMetadata,
+    DynContainerRuntime, DynFilesystemProvider, DynImageBuilder, DynProgressSink,
+    DynRegistryRouter, ImageBuilder, ImageMetadata, ProgressSink,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -57,7 +56,7 @@ fn instr_display(instr: &Instruction) -> String {
     match instr {
         Instruction::From { image, tag, .. } => format!("FROM {image}:{tag}"),
         Instruction::Run(ShellOrExec::Shell(s)) => format!("RUN {s}"),
-        Instruction::Run(ShellOrExec::Exec(args)) => format!("RUN {:?}", args),
+        Instruction::Run(ShellOrExec::Exec(args)) => format!("RUN {args:?}"),
         Instruction::Copy { dest, .. } => format!("COPY -> {}", dest.display()),
         Instruction::Add { dest, .. } => format!("ADD -> {}", dest.display()),
         Instruction::Env(pairs) => format!("ENV {} pairs", pairs.len()),
@@ -97,10 +96,11 @@ struct RunStepContext<'a> {
 /// stream output, wait for exit, clean up, and commit the resulting layer.
 ///
 /// Returns the updated layer stack on success.
+// qual:allow(iosp) reason: "build step orchestration — rootfs, spawn, stream, commit"
 async fn execute_run_step(
     builder: &MiniboxImageBuilder,
     ctx: RunStepContext<'_>,
-    progress_tx: &mpsc::Sender<BuildProgress>,
+    progress_tx: &dyn ProgressSink<BuildProgress>,
     total: u32,
     config_tag: &str,
 ) -> Result<(Vec<PathBuf>, ImageMetadata)> {
@@ -192,11 +192,10 @@ async fn execute_run_step(
     let image_store = Arc::clone(&builder.image_store);
     let step_tag = format!("{config_tag}:build-step-{}", ctx.run_step);
     let step_tag_for_lookup = step_tag.clone();
-    let upper_dir = layout
-        .rootfs_metadata
-        .as_ref()
-        .map(|m| m.overlay_upper_dir().clone())
-        .unwrap_or_else(|| layout.merged_dir.clone());
+    let upper_dir = layout.rootfs_metadata.as_ref().map_or_else(
+        || layout.merged_dir.clone(),
+        |m| m.overlay_upper_dir().clone(),
+    );
     let step_meta = tokio::task::spawn_blocking(move || {
         commit_upper_dir_to_image(
             image_store,
@@ -239,7 +238,7 @@ async fn execute_run_step(
 #[cfg(unix)]
 async fn stream_run_output(
     reader_fd: std::os::fd::OwnedFd,
-    progress_tx: &mpsc::Sender<BuildProgress>,
+    progress_tx: &dyn ProgressSink<BuildProgress>,
     step_num: u32,
     total: u32,
 ) {
@@ -270,11 +269,12 @@ async fn stream_run_output(
 
 #[async_trait]
 impl ImageBuilder for MiniboxImageBuilder {
+    // qual:allow(iosp) reason: "build orchestration — parse Dockerfile, execute steps, commit"
     async fn build_image(
         &self,
         context: &BuildContext,
         config: &BuildConfig,
-        progress_tx: mpsc::Sender<BuildProgress>,
+        progress_tx: DynProgressSink<BuildProgress>,
     ) -> Result<ImageMetadata> {
         let dockerfile_path = context.directory.join(&context.dockerfile);
         let dockerfile_content = tokio::fs::read_to_string(&dockerfile_path)
@@ -361,7 +361,7 @@ impl ImageBuilder for MiniboxImageBuilder {
                         shell_or_exec,
                     };
                     let (new_stack, _step_meta) =
-                        execute_run_step(self, ctx, &progress_tx, total, &config.tag).await?;
+                        execute_run_step(self, ctx, &*progress_tx, total, &config.tag).await?;
                     layer_stack = new_stack;
                 }
 

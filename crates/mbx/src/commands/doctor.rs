@@ -28,11 +28,6 @@ fn adapter_entries() -> Vec<AdapterEntry> {
             available: cfg!(target_os = "linux"),
         },
         AdapterEntry {
-            name: "colima",
-            description: "Colima/Lima VM via limactl + nerdctl",
-            available: cfg!(unix),
-        },
-        AdapterEntry {
             name: "smolvm",
             description: "SmolVM lightweight Linux VMs with subsecond boot",
             available: cfg!(unix),
@@ -165,12 +160,13 @@ mod tests {
     fn selected_adapter_respects_env_var() {
         // SAFETY: serialized by process-level isolation in unit tests
         unsafe {
-            std::env::set_var("MINIBOX_ADAPTER", "colima");
+            std::env::set_var("MINIBOX_ADAPTER", "krun");
         }
         let adapter = selected_adapter();
+        // SAFETY: same unique env var set above; remove_var restores the absent state.
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
         }
-        assert_eq!(adapter, "colima");
+        assert_eq!(adapter, "krun");
     }
 }

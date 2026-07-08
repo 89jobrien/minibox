@@ -1,11 +1,11 @@
-//! test_linux — hexagonal architecture for `cargo xtask test-linux`.
+//! `test_linux` — hexagonal architecture for `cargo xtask test-linux`.
 //!
 //! Three port traits define the pipeline:
 //!   Compiler         — cross-compile test binaries to musl
-//!   InitramfsBuilder — assemble gzip cpio initramfs from a rootfs directory
-//!   VmRunner         — boot VM or run container, stream output, detect sentinel
+//!   `InitramfsBuilder` — assemble gzip cpio initramfs from a rootfs directory
+//!   `VmRunner`         — boot VM or run container, stream output, detect sentinel
 //!
-//! Real adapters: ZigbuildCompiler, CpioInitramfsBuilder, SmolvmRunner.
+//! Real adapters: `ZigbuildCompiler`, `CpioInitramfsBuilder`, `SmolvmRunner`.
 
 use anyhow::{Context, Result, bail};
 use std::path::Path;
@@ -40,7 +40,7 @@ pub trait VmRunner {
 
 /// Compile via `cargo zigbuild`, falling back to `cargo build` with
 /// `CC_<target>` / `CARGO_TARGET_<target>_LINKER` env vars pointing at
-/// `aarch64-linux-musl-gcc` (or the x86_64 equivalent).
+/// `aarch64-linux-musl-gcc` (or the `x86_64` equivalent).
 pub struct ZigbuildCompiler {
     /// Crate packages to build as binaries (e.g. `["miniboxd", "mbx"]`).
     pub bin_packages: Vec<String>,
@@ -49,7 +49,7 @@ pub struct ZigbuildCompiler {
 }
 
 impl ZigbuildCompiler {
-    pub fn new(bin_packages: Vec<String>, test_packages: Vec<String>) -> Self {
+    pub const fn new(bin_packages: Vec<String>, test_packages: Vec<String>) -> Self {
         Self {
             bin_packages,
             test_packages,
@@ -62,7 +62,7 @@ impl ZigbuildCompiler {
             .status()
             .context("spawning cargo zigbuild")?;
         if !status.success() {
-            bail!("cargo zigbuild {:?} failed", args);
+            bail!("cargo zigbuild {args:?} failed");
         }
         Ok(())
     }
@@ -82,7 +82,7 @@ impl ZigbuildCompiler {
             .status()
             .context("spawning cargo build")?;
         if !status.success() {
-            bail!("cargo build {:?} failed", args);
+            bail!("cargo build {args:?} failed");
         }
         Ok(())
     }
@@ -111,12 +111,9 @@ impl Compiler for ZigbuildCompiler {
         for pkg in &self.bin_packages {
             println!("  compiling  {pkg} → {target}");
             if use_zigbuild {
-                ZigbuildCompiler::run_cargo_zigbuild(&["zigbuild", "-p", pkg, "--target", target])?;
+                Self::run_cargo_zigbuild(&["zigbuild", "-p", pkg, "--target", target])?;
             } else {
-                ZigbuildCompiler::run_cargo_with_musl_gcc(
-                    &["build", "-p", pkg, "--target", target],
-                    target,
-                )?;
+                Self::run_cargo_with_musl_gcc(&["build", "-p", pkg, "--target", target], target)?;
             }
         }
 
@@ -124,11 +121,9 @@ impl Compiler for ZigbuildCompiler {
         for pkg in &self.test_packages {
             println!("  compiling tests {pkg} → {target}");
             if use_zigbuild {
-                ZigbuildCompiler::run_cargo_zigbuild(&[
-                    "zigbuild", "--tests", "-p", pkg, "--target", target,
-                ])?;
+                Self::run_cargo_zigbuild(&["zigbuild", "--tests", "-p", pkg, "--target", target])?;
             } else {
-                ZigbuildCompiler::run_cargo_with_musl_gcc(
+                Self::run_cargo_with_musl_gcc(
                     &["test", "--no-run", "-p", pkg, "--target", target],
                     target,
                 )?;

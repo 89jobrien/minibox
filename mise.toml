@@ -55,3 +55,32 @@ run = "cargo xtask run bench-agent"
 [tasks.ai-review]
 description = "Security + correctness review of staged changes"
 run = "cargo xtask run ai-review"
+
+[tasks.kani]
+description = "Run Kani formal verification proofs across the workspace"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+PACKAGES=("minibox-core" "minibox" "miniboxd")
+FAILED=0
+
+for pkg in "${PACKAGES[@]}"; do
+  echo "=== kani: $pkg ==="
+  if ! cargo kani --package "$pkg" "$@"; then
+    FAILED=1
+    echo "FAIL: $pkg"
+  fi
+done
+
+if [ "$FAILED" -eq 0 ]; then
+  echo "All Kani proofs passed."
+else
+  echo "Some Kani proofs failed."
+  exit 1
+fi
+"""
+
+[tasks.kani-quick]
+description = "Run fast Kani proofs only (skips slow parse_volume harnesses)"
+run = "scripts/kani-quick.sh"

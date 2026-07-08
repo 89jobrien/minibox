@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: A-Series Advanced Testing Surfaces (#368--#372)
 
 ## Goal

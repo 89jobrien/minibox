@@ -26,74 +26,17 @@ use minibox_core::client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};
+#[cfg(test)]
 use std::path::PathBuf;
 
 /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
 pub fn parse_volume(s: &str) -> anyhow::Result<BindMount> {
-    let parts: Vec<&str> = s.splitn(3, ':').collect();
-    if parts.len() < 2 {
-        anyhow::bail!(
-            "invalid volume format {:?}: expected src:dst or src:dst:ro",
-            s
-        );
-    }
-    let host_path = PathBuf::from(parts[0]);
-    let container_path = PathBuf::from(parts[1]);
-    if !container_path.is_absolute() {
-        anyhow::bail!(
-            "container path {:?} must be absolute (start with /)",
-            container_path
-        );
-    }
-    let read_only = parts.get(2).map(|f| *f == "ro").unwrap_or(false);
-    Ok(BindMount {
-        host_path,
-        container_path,
-        read_only,
-    })
+    BindMount::parse_volume(s)
 }
 
 /// Parse a `--mount type=bind,src=PATH,dst=PATH[,readonly]` spec into a `BindMount`.
 pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
-    let mut mount_type = None::<String>;
-    let mut src = None::<PathBuf>;
-    let mut dst = None::<PathBuf>;
-    let mut read_only = false;
-
-    for kv in s.split(',') {
-        if kv == "readonly" || kv == "ro" {
-            read_only = true;
-            continue;
-        }
-        let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
-        match k {
-            "type" => mount_type = Some(v.to_string()),
-            "src" | "source" => src = Some(PathBuf::from(v)),
-            "dst" | "target" | "destination" => dst = Some(PathBuf::from(v)),
-            // Unknown keys are silently ignored by design — forward-compatible parsing.
-            _ => {}
-        }
-    }
-
-    match mount_type.as_deref() {
-        Some("bind") | None => {}
-        Some(t) => anyhow::bail!("unsupported mount type {:?}: only 'bind' is supported", t),
-    }
-
-    let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
-    let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
-    if !container_path.is_absolute() {
-        anyhow::bail!(
-            "container path {:?} must be absolute (start with /)",
-            container_path
-        );
-    }
-
-    Ok(BindMount {
-        host_path,
-        container_path,
-        read_only,
-    })
+    BindMount::parse_mount(s)
 }
 
 /// Options for the `run` subcommand, bundled to avoid a long parameter list.
@@ -155,11 +98,11 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
     // Parse -v shorthand mounts.
     let mut mounts: Vec<BindMount> = Vec::new();
     for v in &volumes {
-        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {:?}", v))?);
+        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {v:?}"))?);
     }
     // Parse --mount long-form mounts.
     for m in &mount_specs {
-        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {:?}", m))?);
+        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {m:?}"))?);
     }
 
     let tty = tty && std::io::stdout().is_terminal();
@@ -419,7 +362,7 @@ mod tests {
 
     /// Verify that a base64-encoded stdout chunk round-trips correctly.
     #[test]
-    fn decode_output_chunk() {
+    fn daemon_response_decode_output_chunk() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(b"hello world\n");
         let response = DaemonResponse::ContainerOutput {
             stream: OutputStreamKind::Stdout,
@@ -560,7 +503,7 @@ mod tests {
     /// Verify that a base64-encoded stderr chunk round-trips and retains the
     /// correct stream kind discriminant.
     #[test]
-    fn decode_stderr_chunk() {
+    fn daemon_response_decode_stderr_chunk() {
         let encoded =
             base64::engine::general_purpose::STANDARD.encode(b"error: something went wrong\n");
         let response = DaemonResponse::ContainerOutput {

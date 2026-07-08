@@ -1,3 +1,7 @@
+---
+status: partial
+---
+
 # Plan: Workspace Refactoring — Domain Nix Cleanup, Fixture Consolidation, Handler Split
 
 ## Goal

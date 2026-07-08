@@ -8,30 +8,40 @@ pub struct ValidatedPath {
 }
 
 impl ValidatedPath {
+    /// Create a validated path relative to `base_dir`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - `path` is absolute
+    /// - `path` contains `..` components
+    /// - canonicalization of `base_dir` fails
+    /// - the resolved path escapes `base_dir`
     pub fn new(path: &Path, base_dir: &Path) -> Result<Self> {
         if path.is_absolute() {
             bail!(
-                "path validation failed: absolute path \
-                 not allowed: {path:?}"
+                "path validation failed: absolute path not allowed: {}",
+                path.display()
             );
         }
         if has_parent_component(path) {
             bail!(
-                "path validation failed: '..' component \
-                 not allowed: {path:?}"
+                "path validation failed: '..' component not allowed: {}",
+                path.display()
             );
         }
         let full = base_dir.join(path);
         let canonical_base = base_dir
             .canonicalize()
-            .with_context(|| format!("canonicalize base {base_dir:?}"))?;
+            .with_context(|| format!("canonicalize base {}", base_dir.display()))?;
         if let Some(parent) = full.parent() {
             if parent.exists() {
                 let canonical = parent.canonicalize()?;
                 if !canonical.starts_with(&canonical_base) {
                     bail!(
-                        "path validation failed: {path:?} \
-                         resolves outside base {base_dir:?}"
+                        "path validation failed: {} resolves outside base {}",
+                        path.display(),
+                        base_dir.display()
                     );
                 }
             }
@@ -40,8 +50,9 @@ impl ValidatedPath {
             let canonical = full.canonicalize()?;
             if !canonical.starts_with(&canonical_base) {
                 bail!(
-                    "path validation failed: {path:?} \
-                     resolves outside base {base_dir:?}"
+                    "path validation failed: {} resolves outside base {}",
+                    path.display(),
+                    base_dir.display()
                 );
             }
             // Store the canonical path to eliminate TOCTOU window between
@@ -62,14 +73,15 @@ impl ValidatedPath {
     pub fn from_absolute(abs_path: &Path, base_dir: &Path) -> Result<Self> {
         let canonical_base = base_dir
             .canonicalize()
-            .with_context(|| format!("canonicalize base {base_dir:?}"))?;
+            .with_context(|| format!("canonicalize base {}", base_dir.display()))?;
         let canonical = abs_path
             .canonicalize()
-            .with_context(|| format!("canonicalize path {abs_path:?}"))?;
+            .with_context(|| format!("canonicalize path {}", abs_path.display()))?;
         if !canonical.starts_with(&canonical_base) {
             bail!(
-                "path validation failed: {abs_path:?} \
-                 is outside base {base_dir:?}"
+                "path validation failed: {} is outside base {}",
+                abs_path.display(),
+                base_dir.display()
             );
         }
         Ok(Self {
@@ -78,10 +90,12 @@ impl ValidatedPath {
         })
     }
 
+    #[must_use]
     pub fn as_path(&self) -> &Path {
         &self.inner
     }
 
+    #[must_use]
     pub fn base_dir(&self) -> &Path {
         &self.base
     }
@@ -90,14 +104,14 @@ impl ValidatedPath {
     pub fn join_validated(&self, component: &Path) -> Result<Self> {
         if component.is_absolute() {
             bail!(
-                "join_validated: component must be \
-                 relative: {component:?}"
+                "join_validated: component must be relative: {}",
+                component.display()
             );
         }
         if has_parent_component(component) {
             bail!(
-                "join_validated: '..' not allowed \
-                 in component: {component:?}"
+                "join_validated: '..' not allowed in component: {}",
+                component.display()
             );
         }
         let joined = self.inner.join(component);
@@ -105,9 +119,9 @@ impl ValidatedPath {
             let canonical = joined.canonicalize()?;
             if !canonical.starts_with(&self.base) {
                 bail!(
-                    "join_validated: {component:?} \
-                     escapes base {:?}",
-                    self.base
+                    "join_validated: {} escapes base {}",
+                    component.display(),
+                    self.base.display()
                 );
             }
         }
@@ -134,10 +148,12 @@ impl std::fmt::Display for ValidatedPath {
 pub struct InternalPath(PathBuf);
 
 impl InternalPath {
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self(path)
     }
 
+    #[must_use]
     pub fn into_inner(self) -> PathBuf {
         self.0
     }

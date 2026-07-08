@@ -16,16 +16,19 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 dirs = { workspace = true }
 libc = "0.2"
-which = "6"
+which = "8"
 uuid = { workspace = true }
 [dev-dependencies]
 minibox-macros = { workspace = true }
 tempfile = { workspace = true }
 base64 = { workspace = true }
-hostname = "0.4"
+nix = { workspace = true }
 
 [[test]]
 name = "krun_conformance_tests"
 
 [[test]]
 name = "krun_adapter_conformance"
+
+[lints]
+workspace = true
