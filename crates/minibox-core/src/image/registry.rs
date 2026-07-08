@@ -354,14 +354,21 @@ impl RegistryClient {
     /// Returns an error if the HTTP client cannot be built.
     pub fn new() -> anyhow::Result<Self> {
         const MAX_REDIRECTS: usize = 10;
+        // from_mins is MSRV 1.91; workspace MSRV is 1.85 — use from_secs(120).
+        #[allow(clippy::duration_suboptimal_units)]
         let http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true) // SECURITY: Reject HTTP, require HTTPS
             .min_tls_version(reqwest::tls::Version::TLS_1_2) // SECURITY: Minimum TLS 1.2
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(RegistryError::Network)?;
+        #[allow(clippy::duration_suboptimal_units)]
         let insecure_http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(RegistryError::Network)?;
         Ok(Self {

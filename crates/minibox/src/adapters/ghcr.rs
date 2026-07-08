@@ -127,10 +127,14 @@ impl GhcrRegistry {
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let token = std::env::var("GHCR_TOKEN").ok();
+        // from_mins is MSRV 1.91; workspace MSRV is 1.85 — use from_secs(120).
+        #[allow(clippy::duration_suboptimal_units)]
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true)
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
             .build()?;
         Ok(Self {
             store,
