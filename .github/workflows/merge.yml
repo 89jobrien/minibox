@@ -237,7 +237,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # ubuntu-latest excluded: native adapter requires root, GH-hosted runner is
+        # unprivileged. Linux coverage is provided by test-protocol-e2e-linux (self-hosted).
+        os: [macos-latest]
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
