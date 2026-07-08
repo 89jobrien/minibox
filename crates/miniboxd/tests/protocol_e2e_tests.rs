@@ -44,9 +44,9 @@ impl ProtocolFixture {
             .env("MINIBOX_RUN_DIR", run_dir.path())
             .env("MINIBOX_SOCKET_PATH", &socket_path)
             .env("MINIBOX_METRICS_ADDR", "127.0.0.1:0")
-            .env("RUST_LOG", "miniboxd=debug")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .env("RUST_LOG", "miniboxd=warn")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to start miniboxd at {daemon_bin:?}: {e}"));
 
