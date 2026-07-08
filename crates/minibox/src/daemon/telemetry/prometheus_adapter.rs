@@ -1,5 +1,5 @@
 //! Prometheus metrics adapter implementing the `MetricsRecorder` domain port.
-// Mutex poison and Default-trait constraints make .unwrap()/.expect() unavoidable here.
+// Mutex poison and Default-trait constraints make fallible unwraps unavoidable here.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 //!
 //! Uses the `prometheus-client` crate (official Prometheus Rust client) directly.

@@ -1,5 +1,5 @@
 //! `minibox-testsuite` — conformance test harness for minibox adapter contracts.
-// Test infrastructure: .expect()/.unwrap() are appropriate for assertion failures.
+// Test infrastructure: expect/unwrap calls are appropriate for assertion failures.
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //!
 //! # Structure

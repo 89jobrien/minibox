@@ -40,7 +40,7 @@ items:
     docs/notes/minibox-in-minibox.local.md
     .capsec-baseline.json
     .ctx/HANDOFF.agentbox.minibox.state.yaml
-    .ctx/HANDOFF.linuxbox.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.state.yaml
     .ctx/HANDOFF.macbox.minibox.state.yaml
     .ctx/HANDOFF.mbx.minibox.state.yaml
     .ctx/HANDOFF.minibox-core.minibox.state.yaml
@@ -68,7 +68,7 @@ items:
   - docs/notes/minibox-in-minibox.local.md
   - .capsec-baseline.json
   - .ctx/HANDOFF.agentbox.minibox.state.yaml
-  - .ctx/HANDOFF.linuxbox.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.state.yaml
   - .ctx/HANDOFF.macbox.minibox.state.yaml
   - .ctx/HANDOFF.mbx.minibox.state.yaml
   - .ctx/HANDOFF.minibox-core.minibox.state.yaml
