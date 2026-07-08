@@ -364,7 +364,7 @@ impl RegistryClient {
             .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(RegistryError::Network)?;
-        #[allow(clippy::duration_suboptimal_units)]
+        #[allow(unknown_lints, clippy::duration_suboptimal_units)]
         let insecure_http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .connect_timeout(std::time::Duration::from_secs(10))
