@@ -12,6 +12,7 @@
 //!   and `MINIBOX_ALLOW_PRIVILEGED=1`
 
 use anyhow::{Context, Result, bail};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -458,7 +459,7 @@ fn build_test_script(
 
     // Set bin dir for e2e tests that need miniboxd/minibox binaries
     let bin_dir = format!("/mnt/tests/{target}/debug");
-    script.push_str(&format!("export MINIBOX_TEST_BIN_DIR={bin_dir}\n\n"));
+    let _ = write!(script, "export MINIBOX_TEST_BIN_DIR={bin_dir}\n\n");
 
     script.push_str("PASS=0\nFAIL=0\n\n");
 
@@ -469,10 +470,11 @@ fn build_test_script(
         } else {
             ""
         };
-        script.push_str(&format!("echo '=== {suite} ==='\n"));
-        script.push_str(&format!(
+        let _ = writeln!(script, "echo '=== {suite} ==='");
+        let _ = write!(
+            script,
             "if {bin_path} --test-threads=1{ignored_flag}{extra}; then\n  PASS=$((PASS + 1))\nelse\n  FAIL=$((FAIL + 1))\nfi\n\n"
-        ));
+        );
     }
 
     script.push_str("echo \"\"\n");

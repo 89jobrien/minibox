@@ -280,7 +280,7 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
         let code = report_output
             .status
             .code()
-            .map_or("signal".to_string(), |c| c.to_string());
+            .map_or_else(|| "signal".to_string(), |c| c.to_string());
         let stderr = String::from_utf8_lossy(&report_output.stderr);
         let stdout = String::from_utf8_lossy(&report_output.stdout);
         anyhow::bail!("generate-report exited with {code}\nstderr: {stderr}\nstdout: {stdout}");
@@ -1071,6 +1071,7 @@ fn fail_fast_flag() -> Vec<&'static str> {
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) differ between
 /// HEAD and the upstream tracking branch. Falls back to `true` when upstream is absent
 /// (new branch) so tests always run in that case.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn pushed_rust_files(sh: &Shell) -> Result<bool> {
     let range = "@{u}..HEAD";
     let out = cmd!(sh, "git diff --name-only {range}").output();
@@ -1097,6 +1098,7 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn staged_rust_files(sh: &Shell) -> Result<bool> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
@@ -1114,6 +1116,7 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
 ///
 /// After bumping, re-stages `Cargo.toml` so the version change is included
 /// in the commit.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn auto_bump(sh: &Shell) -> Result<()> {
     if workspace_version_already_staged(sh)? {
         eprintln!("[minibox] workspace version already staged — skipping auto bump");

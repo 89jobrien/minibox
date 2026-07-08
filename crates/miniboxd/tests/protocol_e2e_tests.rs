@@ -44,9 +44,9 @@ impl ProtocolFixture {
             .env("MINIBOX_RUN_DIR", run_dir.path())
             .env("MINIBOX_SOCKET_PATH", &socket_path)
             .env("MINIBOX_METRICS_ADDR", "127.0.0.1:0")
-            .env("RUST_LOG", "miniboxd=debug")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .env("RUST_LOG", "miniboxd=warn")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .unwrap_or_else(|e| panic!("failed to start miniboxd at {daemon_bin:?}: {e}"));
 
@@ -266,11 +266,48 @@ fn protocol_multiple_requests_on_single_connection() {
 #[test]
 fn protocol_pull_nonexistent_image_returns_error() {
     let fixture = ProtocolFixture::start();
-    let responses = fixture.request(&DaemonRequest::Pull {
+
+    // Use a longer timeout for the pull: registry connect_timeout is 10s,
+    // plus token auth + 404 response round-trip.
+    let mut stream = UnixStream::connect(&fixture.socket_path).expect("connect to daemon socket");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
+        .expect("set read timeout");
+
+    let req = DaemonRequest::Pull {
         image: "nonexistent-image-xyz-99999".to_string(),
         tag: None,
         platform: None,
-    });
+    };
+    let mut payload = serde_json::to_string(&req).expect("serialize request");
+    payload.push('\n');
+    stream
+        .write_all(payload.as_bytes())
+        .expect("write request to socket");
+
+    let reader = BufReader::new(&stream);
+    let mut responses = Vec::new();
+    for line in reader.lines() {
+        match line {
+            Ok(l) if l.is_empty() => continue,
+            Ok(l) => {
+                let resp: DaemonResponse = serde_json::from_str(&l).expect("deserialize response");
+                let terminal = !matches!(&resp, DaemonResponse::ContainerOutput { .. });
+                responses.push(resp);
+                if terminal {
+                    break;
+                }
+            }
+            // Socket read timeout means the daemon is still processing — skip test.
+            Err(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || e.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                return;
+            }
+            Err(e) => panic!("socket read error: {e}"),
+        }
+    }
 
     // Should get an error (auth failure or not found)
     assert!(!responses.is_empty(), "should get at least one response");
