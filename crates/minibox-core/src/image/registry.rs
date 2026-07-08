@@ -354,8 +354,8 @@ impl RegistryClient {
     /// Returns an error if the HTTP client cannot be built.
     pub fn new() -> anyhow::Result<Self> {
         const MAX_REDIRECTS: usize = 10;
-        // from_mins is MSRV 1.91; workspace MSRV is 1.85 — use from_secs(120).
-        #[allow(clippy::duration_suboptimal_units)]
+        // from_mins is MSRV 1.91; duration_suboptimal_units is clippy ≥1.96 — suppress both.
+        #[allow(unknown_lints, clippy::duration_suboptimal_units)]
         let http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true) // SECURITY: Reject HTTP, require HTTPS
