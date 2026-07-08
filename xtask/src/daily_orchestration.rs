@@ -187,12 +187,10 @@ impl RunConfig {
 
 impl CiConfig {
     fn prompt(&self) -> String {
-        let branch = self
-            .branch
-            .as_deref()
-            .map_or("the current checked-out ref".to_string(), |branch| {
-                format!("the `{branch}` ref")
-            });
+        let branch = self.branch.as_deref().map_or_else(
+            || "the current checked-out ref".to_string(),
+            |branch| format!("the `{branch}` ref"),
+        );
         let issue_policy = if self.create_issues {
             "Create or update GitHub issues for concrete P0/P1 findings when useful."
         } else {

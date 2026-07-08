@@ -10,6 +10,10 @@ homepage.workspace = true
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+# inventory is re-exported via the test-utils feature for minibox-testsuite consumers
+ignored = ["inventory"]
 [features]
 # Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use in
 # dev-dependencies of other crates without cfg(test) restrictions.
