@@ -22,9 +22,43 @@
 mod commands;
 pub(crate) mod terminal;
 
-use anyhow::{Context as _, Result};
+use anyhow::Context as _;
 use clap::{Parser, Subcommand};
+use miette::Diagnostic;
 use std::path::Path;
+use thiserror::Error;
+
+/// CLI-level error that wraps command errors with miette diagnostic rendering.
+///
+/// This bridges the `anyhow::Result` returned by command handlers into
+/// `miette::Result` for the CLI entry point, enabling graphical error
+/// rendering with codes and help text when the underlying error implements
+/// [`Diagnostic`].
+#[derive(Debug, Error, Diagnostic)]
+pub(crate) enum CliError {
+    /// The daemon returned an explicit error response.
+    #[error("{message}")]
+    #[diagnostic(
+        code(mbx::daemon_error),
+        help("check that miniboxd is running: systemctl status miniboxd")
+    )]
+    DaemonError { message: String },
+
+    /// A command handler returned an error.
+    #[error(transparent)]
+    Command(anyhow::Error),
+}
+
+impl From<anyhow::Error> for CliError {
+    fn from(err: anyhow::Error) -> Self {
+        Self::Command(err)
+    }
+}
+
+/// Convert an `anyhow::Result` to `Result<T, CliError>`.
+fn into_cli<T>(result: anyhow::Result<T>) -> Result<T, CliError> {
+    result.map_err(CliError::from)
+}
 
 /// Top-level CLI argument parser.  Delegates to [`Commands`] for subcommand
 /// dispatch.
@@ -423,7 +457,7 @@ fn split_image_tag(image: String, default_tag: String) -> (String, String) {
 ///
 /// Separated from `main` so dispatch logic is testable without tracing setup
 /// and so `main` contains only I/O setup (IOSP).
-async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
+async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
     match cli.command {
         Commands::Run {
             image,
@@ -446,35 +480,37 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             cgroup_parent,
         } => {
             let (image, tag) = split_image_tag(image, tag);
-            commands::run::execute(
-                commands::run::RunOpts {
-                    image,
-                    tag,
-                    command,
-                    memory_limit_bytes: memory,
-                    cpu_weight,
-                    network,
-                    privileged,
-                    volumes,
-                    mount_specs: mounts,
-                    name,
-                    tty: tty || interactive,
-                    env,
-                    entrypoint,
-                    user,
-                    auto_remove: rm,
-                    platform,
-                    cgroup_parent,
-                },
-                socket_path,
+            into_cli(
+                commands::run::execute(
+                    commands::run::RunOpts {
+                        image,
+                        tag,
+                        command,
+                        memory_limit_bytes: memory,
+                        cpu_weight,
+                        network,
+                        privileged,
+                        volumes,
+                        mount_specs: mounts,
+                        name,
+                        tty: tty || interactive,
+                        env,
+                        entrypoint,
+                        user,
+                        auto_remove: rm,
+                        platform,
+                        cgroup_parent,
+                    },
+                    socket_path,
+                )
+                .await,
             )
-            .await
         }
 
-        Commands::Ps => commands::ps::execute(socket_path).await,
+        Commands::Ps => into_cli(commands::ps::execute(socket_path).await),
 
         Commands::Diagnose { container_id } => {
-            commands::diagnose::execute(&container_id, socket_path).await
+            into_cli(commands::diagnose::execute(&container_id, socket_path).await)
         }
 
         Commands::Exec {
@@ -483,24 +519,25 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             tty,
             interactive,
             user,
-        } => {
-            commands::exec::execute(container_id, cmd, tty || interactive, user, socket_path).await
-        }
+        } => into_cli(
+            commands::exec::execute(container_id, cmd, tty || interactive, user, socket_path).await,
+        ),
 
-        Commands::Stop { id } => commands::stop::execute(id, socket_path).await,
+        Commands::Stop { id } => into_cli(commands::stop::execute(id, socket_path).await),
 
-        Commands::Pause { id } => commands::pause::execute(id, socket_path).await,
+        Commands::Pause { id } => into_cli(commands::pause::execute(id, socket_path).await),
 
-        Commands::Resume { id } => commands::resume::execute(id, socket_path).await,
+        Commands::Resume { id } => into_cli(commands::resume::execute(id, socket_path).await),
 
         Commands::Rm { id, all } => {
             if all {
-                commands::rm::execute_all(socket_path).await
+                into_cli(commands::rm::execute_all(socket_path).await)
             } else if let Some(id) = id {
-                commands::rm::execute(id, socket_path).await
+                into_cli(commands::rm::execute(id, socket_path).await)
             } else {
-                eprintln!("error: provide a container ID or use --all");
-                std::process::exit(1);
+                Err(CliError::DaemonError {
+                    message: "provide a container ID or use --all".to_string(),
+                })
             }
         }
 
@@ -509,7 +546,9 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             all,
             containers,
             restart,
-        } => commands::update::execute(images, all, containers, restart, socket_path).await,
+        } => {
+            into_cli(commands::update::execute(images, all, containers, restart, socket_path).await)
+        }
 
         Commands::Pull {
             image,
@@ -517,31 +556,37 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
             platform,
         } => {
             let (image, tag) = split_image_tag(image, tag);
-            commands::pull::execute(image, tag, platform, socket_path).await
+            into_cli(commands::pull::execute(image, tag, platform, socket_path).await)
         }
 
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
-            commands::load::execute(path, name, tag, socket_path).await
+            into_cli(commands::load::execute(path, name, tag, socket_path).await)
         }
 
-        Commands::Logs { id, follow } => commands::logs::execute(id, follow, socket_path).await,
+        Commands::Logs { id, follow } => {
+            into_cli(commands::logs::execute(id, follow, socket_path).await)
+        }
 
-        Commands::Events => commands::events::execute(socket_path).await,
+        Commands::Events => into_cli(commands::events::execute(socket_path).await),
 
-        Commands::Prune { dry_run } => commands::prune::execute(dry_run, socket_path).await,
+        Commands::Prune { dry_run } => {
+            into_cli(commands::prune::execute(dry_run, socket_path).await)
+        }
 
-        Commands::Rmi { image_ref } => commands::rmi::execute(image_ref, socket_path).await,
+        Commands::Rmi { image_ref } => {
+            into_cli(commands::rmi::execute(image_ref, socket_path).await)
+        }
 
         Commands::Snapshot(sub) => match sub {
             SnapshotCommands::Save { id, name } => {
-                commands::snapshot::execute_save(id, name, socket_path).await
+                into_cli(commands::snapshot::execute_save(id, name, socket_path).await)
             }
             SnapshotCommands::Restore { id, name } => {
-                commands::snapshot::execute_restore(id, name, socket_path).await
+                into_cli(commands::snapshot::execute_restore(id, name, socket_path).await)
             }
             SnapshotCommands::List { id } => {
-                commands::snapshot::execute_list(id, socket_path).await
+                into_cli(commands::snapshot::execute_list(id, socket_path).await)
             }
         },
 
@@ -550,25 +595,27 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
                 pipeline_path,
                 input,
                 image,
-            } => commands::pipeline::execute_run(pipeline_path, input, image, socket_path).await,
+            } => into_cli(
+                commands::pipeline::execute_run(pipeline_path, input, image, socket_path).await,
+            ),
             PipelineCommands::List { limit, pipeline } => {
-                commands::pipeline::execute_list(limit, pipeline, socket_path).await
+                into_cli(commands::pipeline::execute_list(limit, pipeline, socket_path).await)
             }
             PipelineCommands::Show { id } => {
-                commands::pipeline::execute_show(id, socket_path).await
+                into_cli(commands::pipeline::execute_show(id, socket_path).await)
             }
         },
 
-        Commands::Doctor => commands::doctor::execute(),
+        Commands::Doctor => into_cli(commands::doctor::execute()),
 
-        Commands::Manifest { id } => commands::manifest::execute(id, socket_path).await,
+        Commands::Manifest { id } => into_cli(commands::manifest::execute(id, socket_path).await),
 
         Commands::Verify { id, policy } => {
-            commands::manifest::verify(id, policy, socket_path).await
+            into_cli(commands::manifest::verify(id, policy, socket_path).await)
         }
 
         Commands::Upgrade { dry_run, version } => {
-            commands::upgrade::execute(dry_run, version).await
+            into_cli(commands::upgrade::execute(dry_run, version).await)
         }
 
         Commands::Sandbox {
@@ -592,19 +639,21 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
                 })?;
                 extra_mounts.push(mount);
             }
-            commands::sandbox::execute(
-                commands::sandbox::SandboxExecParams {
-                    script,
-                    image,
-                    tag,
-                    memory_mb,
-                    timeout_secs: timeout,
-                    extra_mounts,
-                    network,
-                },
-                socket_path,
+            into_cli(
+                commands::sandbox::execute(
+                    commands::sandbox::SandboxExecParams {
+                        script,
+                        image,
+                        tag,
+                        memory_mb,
+                        timeout_secs: timeout,
+                        extra_mounts,
+                        network,
+                    },
+                    socket_path,
+                )
+                .await,
             )
-            .await
         }
     }
 }
@@ -612,14 +661,15 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<()> {
 /// Entry point. Initialises tracing, parses arguments, then delegates to
 /// [`run`] which owns all dispatch logic.
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> miette::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
     let cli = Cli::parse();
     let socket_path = minibox_core::client::default_socket_path();
-    run(cli, &socket_path).await
+    run(cli, &socket_path).await?;
+    Ok(())
 }
 
 /// Test-only helpers that expose parser internals for unit tests in submodules.

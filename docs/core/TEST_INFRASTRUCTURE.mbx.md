@@ -116,7 +116,7 @@ and root-required tests add more on top.
 | `test-e2e-suite`        | daemon+CLI e2e (Linux+root)                              |
 | `test-sandbox`          | sandbox tests (Linux+root)                               |
 | `coverage-check`        | handler.rs fn coverage >= 80% gate                       |
-| `bench`                 | criterion benchmarks (trait_overhead + protocol_codec)   |
+| `bench`                 | criterion benchmarks in crates/minibox-bench (8 targets) |
 | `check-stale-names`     | audit workspace for banned old crate/binary names        |
 | `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
 

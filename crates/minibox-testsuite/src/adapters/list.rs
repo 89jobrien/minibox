@@ -14,8 +14,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("build Tokio runtime")
 }
@@ -60,18 +58,11 @@ fn make_record(id: &str, image: &str, state_str: &str) -> ContainerRecord {
 // Test structs
 // ---------------------------------------------------------------------------
 
-pub struct ListEmptyReturnsEmptyVec;
-impl ConformanceTest for ListEmptyReturnsEmptyVec {
-    fn name(&self) -> &'static str {
-        "list_empty_returns_empty_vec"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_empty_returns_empty_vec",
+    adapter: "list",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         let containers = rt().block_on(state.list_containers());
@@ -80,18 +71,11 @@ impl ConformanceTest for ListEmptyReturnsEmptyVec {
     }
 }
 
-pub struct ListAfterRunShowsContainer;
-impl ConformanceTest for ListAfterRunShowsContainer {
-    fn name(&self) -> &'static str {
-        "list_after_run_shows_container"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_after_run_shows_container",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record(
@@ -112,18 +96,11 @@ impl ConformanceTest for ListAfterRunShowsContainer {
     }
 }
 
-pub struct ListShowsCorrectState;
-impl ConformanceTest for ListShowsCorrectState {
-    fn name(&self) -> &'static str {
-        "list_shows_correct_state"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_shows_correct_state",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record(
@@ -146,18 +123,11 @@ impl ConformanceTest for ListShowsCorrectState {
     }
 }
 
-pub struct ListMultipleContainers;
-impl ConformanceTest for ListMultipleContainers {
-    fn name(&self) -> &'static str {
-        "list_multiple_containers"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_multiple_containers",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record(
@@ -185,18 +155,11 @@ impl ConformanceTest for ListMultipleContainers {
     }
 }
 
-pub struct ListAfterRemoveExcludesContainer;
-impl ConformanceTest for ListAfterRemoveExcludesContainer {
-    fn name(&self) -> &'static str {
-        "list_after_remove_excludes_container"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_after_remove_excludes_container",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record(
@@ -227,19 +190,11 @@ impl ConformanceTest for ListAfterRemoveExcludesContainer {
 // handle_list handler conformance tests
 // ---------------------------------------------------------------------------
 
-/// `handle_list` on an empty daemon returns `ContainerList` with no entries.
-pub struct HandleListEmptyReturnsContainerList;
-impl ConformanceTest for HandleListEmptyReturnsContainerList {
-    fn name(&self) -> &'static str {
-        "handle_list_empty_returns_container_list"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "handle_list_empty_returns_container_list",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_arc_state(&tmp);
         let resp = rt().block_on(handle_list(state));
@@ -254,19 +209,11 @@ impl ConformanceTest for HandleListEmptyReturnsContainerList {
     }
 }
 
-/// `handle_list` with a single Running container returns it in the list.
-pub struct HandleListWithRunningContainer;
-impl ConformanceTest for HandleListWithRunningContainer {
-    fn name(&self) -> &'static str {
-        "handle_list_with_running_container"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "handle_list_with_running_container",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_arc_state(&tmp);
         let id = "hlrunning01aabb1";
@@ -293,19 +240,11 @@ impl ConformanceTest for HandleListWithRunningContainer {
     }
 }
 
-/// `handle_list` with a single Stopped container returns it in the list.
-pub struct HandleListWithStoppedContainer;
-impl ConformanceTest for HandleListWithStoppedContainer {
-    fn name(&self) -> &'static str {
-        "handle_list_with_stopped_container"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "handle_list_with_stopped_container",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_arc_state(&tmp);
         let id = "hlstopped01aabb1";
@@ -331,19 +270,11 @@ impl ConformanceTest for HandleListWithStoppedContainer {
     }
 }
 
-/// `handle_list` with mixed Running and Stopped containers returns all of them.
-pub struct HandleListWithMixedStates;
-impl ConformanceTest for HandleListWithMixedStates {
-    fn name(&self) -> &'static str {
-        "handle_list_with_mixed_states"
-    }
-    fn adapter(&self) -> &'static str {
-        "list"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "handle_list_with_mixed_states",
+    adapter: "list",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_arc_state(&tmp);
 
@@ -383,20 +314,4 @@ impl ConformanceTest for HandleListWithMixedStates {
         }
         ctx.result()
     }
-}
-
-/// Return all list conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(ListEmptyReturnsEmptyVec),
-        Box::new(ListAfterRunShowsContainer),
-        Box::new(ListShowsCorrectState),
-        Box::new(ListMultipleContainers),
-        Box::new(ListAfterRemoveExcludesContainer),
-        Box::new(HandleListEmptyReturnsContainerList),
-        Box::new(HandleListWithRunningContainer),
-        Box::new(HandleListWithStoppedContainer),
-        Box::new(HandleListWithMixedStates),
-    ]
 }

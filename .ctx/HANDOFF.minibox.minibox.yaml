@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-06-27
+updated: 2026-07-07
 items:
 - id: chain-e-4
   doob_uuid: null
@@ -40,7 +40,7 @@ items:
     docs/notes/minibox-in-minibox.local.md
     .capsec-baseline.json
     .ctx/HANDOFF.agentbox.minibox.state.yaml
-    .ctx/HANDOFF.linuxbox.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.state.yaml
     .ctx/HANDOFF.macbox.minibox.state.yaml
     .ctx/HANDOFF.mbx.minibox.state.yaml
     .ctx/HANDOFF.minibox-core.minibox.state.yaml
@@ -68,7 +68,7 @@ items:
   - docs/notes/minibox-in-minibox.local.md
   - .capsec-baseline.json
   - .ctx/HANDOFF.agentbox.minibox.state.yaml
-  - .ctx/HANDOFF.linuxbox.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.state.yaml
   - .ctx/HANDOFF.macbox.minibox.state.yaml
   - .ctx/HANDOFF.mbx.minibox.state.yaml
   - .ctx/HANDOFF.minibox-core.minibox.state.yaml
@@ -84,6 +84,13 @@ items:
   completed: null
   extra: []
 log:
+- date: 20260701::000000
+  summary: |-
+    Commit: feat(errors): add miette diagnostics for rich CLI error rendering
+    Status: develop branch in sync with origin/develop
+    Build: cargo check clean
+  commits: []
+  session: development
 - date: '20260615.055217'
   summary: done=102 running=0 pending=19 blocked=1
   commits: []

@@ -47,6 +47,9 @@ pub struct MockAdapterSet {
 ///
 /// All failure modes default to `false` (i.e. success). Use the `with_*`
 /// methods to inject specific failures before calling [`build`](Self::build).
+// Independent failure toggles, not a state machine — an enum would force
+// callers to enumerate combinations.
+#[allow(clippy::struct_excessive_bools)]
 pub struct MockAdapterBuilder {
     fail_setup: bool,
     fail_create: bool,
@@ -57,7 +60,7 @@ pub struct MockAdapterBuilder {
 
 impl MockAdapterBuilder {
     /// Create a new builder with all adapters configured to succeed.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             fail_setup: false,
             fail_create: false,
@@ -68,25 +71,25 @@ impl MockAdapterBuilder {
     }
 
     /// Cause `FilesystemProvider::setup_rootfs` to return an error.
-    pub fn with_setup_failure(mut self) -> Self {
+    pub const fn with_setup_failure(mut self) -> Self {
         self.fail_setup = true;
         self
     }
 
     /// Cause `ResourceLimiter::create` to return an error.
-    pub fn with_create_failure(mut self) -> Self {
+    pub const fn with_create_failure(mut self) -> Self {
         self.fail_create = true;
         self
     }
 
     /// Cause `ImageRegistry::pull_image` to return an error.
-    pub fn with_pull_failure(mut self) -> Self {
+    pub const fn with_pull_failure(mut self) -> Self {
         self.fail_pull = true;
         self
     }
 
     /// Cause `ContainerRuntime::spawn_process` to return an error.
-    pub fn with_spawn_failure(mut self) -> Self {
+    pub const fn with_spawn_failure(mut self) -> Self {
         self.fail_spawn = true;
         self
     }

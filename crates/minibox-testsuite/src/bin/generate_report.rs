@@ -1,4 +1,4 @@
-//! `generate-report` — run all conformance tests and write JSON + `JUnit` XML reports.
+//! `generate-report` -- run all conformance tests and write JSON + `JUnit` XML reports.
 #![allow(clippy::expect_used)]
 //!
 //! Reports are written to `artifacts/conformance/` (created if absent).
@@ -12,7 +12,6 @@
 use std::fs;
 use std::path::PathBuf;
 
-use minibox_testsuite::adapters;
 use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
 
 fn main() {
@@ -21,8 +20,15 @@ fn main() {
 
     fs::create_dir_all(&artifact_dir).expect("create artifact dir");
 
-    let mut runner = TestRunner::new();
-    runner.add_all(adapters::all());
+    let runner = TestRunner::collect_inventory();
+
+    if runner.count() == 0 {
+        eprintln!(
+            "error: conformance runner collected 0 tests -- inventory registration is broken \
+             (dropped adapter module or stripped linker section)"
+        );
+        std::process::exit(1);
+    }
 
     eprintln!("Running {} conformance tests...", runner.count());
     let summary = runner.run();
@@ -57,7 +63,7 @@ fn main() {
 
     println!(
         "conformance:summary {}/{} passed, {} failed, {} skipped in {}ms",
-        summary.passed, summary.total, summary.failed, summary.skipped, summary.duration_ms
+        summary.passed, summary.total, summary.failed, summary.skipped, summary.duration_ms,
     );
 
     if !summary.is_success() {

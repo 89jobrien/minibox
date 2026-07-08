@@ -68,7 +68,7 @@ impl TestResult {
 ///     fn adapter(&self) -> &str { "registry" }
 ///     fn category(&self) -> TestCategory { TestCategory::Unit }
 ///
-///     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+///     fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult {
 ///         use minibox::testing::mocks::registry::MockRegistry;
 ///         use minibox_core::domain::ImageRegistry;
 ///
@@ -98,7 +98,13 @@ pub trait ConformanceTest: Send + Sync {
     ///
     /// Implementations call `ctx.assert_*` methods to record pass/fail, then return
     /// `ctx.result()` at the end.
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult;
+    /// Optional: declare required capability for auto-skip.
+    /// Default: `None` (always runs).
+    fn required_capability(&self) -> Option<minibox_core::domain::BackendCapability> {
+        None
+    }
+
+    fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult;
 
     /// Fully-qualified test id: `"<adapter>::<name>"`.
     fn id(&self) -> String {

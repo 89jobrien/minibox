@@ -148,11 +148,16 @@ pub async fn handle_run(
     }
 
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
+    // Internal callers (pipeline runs) may widen the policy via `policy_override`.
+    let effective_policy = params
+        .policy_override
+        .as_ref()
+        .map_or_else(|| deps.policy.clone(), |ov| deps.policy.with_overrides(ov));
     if let Err(msg) = super::validate_policy(
         &params.mounts,
         params.privileged,
         params.priority,
-        &deps.policy,
+        &effective_policy,
     ) {
         warn!(message = %msg, "handle_run: policy violation");
         if tx

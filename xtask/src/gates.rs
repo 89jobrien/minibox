@@ -35,7 +35,7 @@ pub fn lint(sh: &Shell) -> Result<()> {
             .context("cargo fmt --check failed")?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
         )
         .run()
         .context("cargo clippy failed")?;
@@ -67,7 +67,7 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
         eprintln!("--- verify: clippy ---");
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -- -D warnings"
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
         )
         .run()
         .context("cargo clippy failed")?;
@@ -102,7 +102,7 @@ pub fn fix(sh: &Shell) -> Result<()> {
         auto_bump(sh)?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd --fix --allow-dirty --allow-staged"
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail --fix --allow-dirty --allow-staged"
         )
         .run()
         .context("clippy --fix failed")?;
@@ -130,7 +130,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
             .context("git add -u after fmt failed")?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -- -D warnings"
+            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
         )
         .run()
         .context("clippy failed")?;

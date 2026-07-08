@@ -330,6 +330,12 @@ pub struct RegistryClient {
     insecure_http: Client,
     auth_url: String,
     registry_base: String,
+    /// Aggregate byte budget across all layers in a single pull.
+    ///
+    /// Defaults to [`MAX_TOTAL_IMAGE_SIZE`]; injectable in tests via
+    /// [`Self::with_max_total_image_size`] so the over-limit bail path can be
+    /// exercised with small fixtures.
+    max_total_image_size: u64,
     /// Target platform for multi-arch manifest selection.
     pub platform: crate::image::manifest::TargetPlatform,
 }
@@ -363,6 +369,7 @@ impl RegistryClient {
             insecure_http,
             auth_url: AUTH_URL.to_owned(),
             registry_base: REGISTRY_BASE.to_owned(),
+            max_total_image_size: MAX_TOTAL_IMAGE_SIZE,
             platform: crate::image::manifest::TargetPlatform::default(),
         })
     }
@@ -381,11 +388,12 @@ impl RegistryClient {
         Ok(client)
     }
 
-    /// Create a client with custom base URLs for testing against a mock server.
+    /// Create a client with custom base URLs for testing or benchmarking
+    /// against a mock server.
     ///
     /// Does not enforce HTTPS — the test server runs on plain HTTP.
-    #[cfg(test)]
-    pub(crate) fn for_test(auth_url: &str, registry_base: &str) -> anyhow::Result<Self> {
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn for_test(auth_url: &str, registry_base: &str) -> anyhow::Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let http = Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
@@ -396,8 +404,35 @@ impl RegistryClient {
             http,
             auth_url: auth_url.to_owned(),
             registry_base: registry_base.to_owned(),
+            max_total_image_size: MAX_TOTAL_IMAGE_SIZE,
             platform: crate::image::manifest::TargetPlatform::default(),
         })
+    }
+
+    /// Override the aggregate image-size limit.
+    ///
+    /// Test-only: production callers always use [`MAX_TOTAL_IMAGE_SIZE`].
+    /// Exists so tests can exercise the over-limit bail path with small
+    /// fixtures instead of multi-gigabyte layers.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use]
+    pub const fn with_max_total_image_size(mut self, limit: u64) -> Self {
+        self.max_total_image_size = limit;
+        self
+    }
+
+    /// Pin the platform used for manifest selection.
+    ///
+    /// Test/bench-only: external harnesses (e.g. `minibox-bench`) cannot set
+    /// the private `platform` field the way in-crate tests do.
+    #[cfg(any(test, feature = "test-utils"))]
+    #[must_use]
+    pub fn with_pinned_platform(
+        mut self,
+        platform: crate::image::manifest::TargetPlatform,
+    ) -> Self {
+        self.platform = platform;
+        self
     }
 
     // -----------------------------------------------------------------------
@@ -704,11 +739,12 @@ impl RegistryClient {
         );
 
         // 2b. Pre-pull aggregate size check.
+        let max_total_image_size = self.max_total_image_size;
         let declared_total: u64 = manifest.layers.iter().map(|l| l.size).sum();
-        if declared_total > MAX_TOTAL_IMAGE_SIZE {
+        if declared_total > max_total_image_size {
             anyhow::bail!(
                 "image exceeds total size limit: {declared_total} bytes declared \
-                 across {} layers (max {MAX_TOTAL_IMAGE_SIZE})",
+                 across {} layers (max {max_total_image_size})",
                 manifest.layers.len()
             );
         }
@@ -804,10 +840,10 @@ impl RegistryClient {
                     // downloaded, not declared manifest sizes (which a
                     // malicious registry could understate).
                     let prev = agg_counter.fetch_add(actual_bytes, Ordering::AcqRel);
-                    if prev + actual_bytes > MAX_TOTAL_IMAGE_SIZE {
+                    if prev + actual_bytes > max_total_image_size {
                         anyhow::bail!(
                             "image exceeds total size limit: downloaded {} bytes \
-                             after layer {} (max {MAX_TOTAL_IMAGE_SIZE})",
+                             after layer {} (max {max_total_image_size})",
                             prev + actual_bytes,
                             layer_desc.digest,
                         );
@@ -1083,12 +1119,15 @@ mod tests {
 
     #[test]
     fn test_constants_total_image_size() {
-        let client = RegistryClient::new();
-        assert!(client.is_ok(), "RegistryClient must construct successfully");
+        let client = RegistryClient::new().expect("RegistryClient must construct successfully");
         assert_eq!(
             MAX_TOTAL_IMAGE_SIZE,
             50 * 1024 * 1024 * 1024,
             "MAX_TOTAL_IMAGE_SIZE should be 50 GiB"
+        );
+        assert_eq!(
+            client.max_total_image_size, MAX_TOTAL_IMAGE_SIZE,
+            "default aggregate limit must be the MAX_TOTAL_IMAGE_SIZE const"
         );
     }
 
@@ -1633,6 +1672,122 @@ mod tests {
             assert!(
                 msg.contains("exceeds total size limit"),
                 "expected aggregate size error, got: {msg}"
+            );
+        }
+
+        /// A registry that *understates* layer sizes in the manifest must
+        /// still be rejected when the actual downloaded bytes exceed the
+        /// aggregate limit. This pins the runtime (download-counter) check,
+        /// not the declared pre-pull check — the manifest here declares
+        /// 1 byte per layer, so only the actual-bytes path can catch it.
+        #[tokio::test]
+        async fn pull_rejects_when_actual_bytes_exceed_total_limit() {
+            let server = MockServer::start().await;
+            let tmp = TempDir::new().unwrap();
+            let store = ImageStore::new(tmp.path().join("images")).unwrap();
+
+            let (layer1_bytes, layer1_digest) = make_test_layer();
+
+            // Build a second distinct layer with different content.
+            let data2 = b"aggregate limit second distinct layer content";
+            let mut header2 = tar::Header::new_gnu();
+            header2.set_path("layer2.txt").unwrap();
+            header2.set_size(data2.len() as u64);
+            header2.set_mode(0o644);
+            header2.set_cksum();
+            let mut tar_buf2 = Vec::new();
+            {
+                let mut builder = tar::Builder::new(&mut tar_buf2);
+                builder.append(&header2, data2.as_ref()).unwrap();
+                builder.finish().unwrap();
+            }
+            let mut gz2 = GzEncoder::new(Vec::new(), Compression::fast());
+            gz2.write_all(&tar_buf2).unwrap();
+            let layer2_bytes = gz2.finish().unwrap();
+            let layer2_digest = format!("sha256:{}", hex::encode(Sha256::digest(&layer2_bytes)));
+
+            // Each layer fits individually; the two together do not.
+            let limit = layer1_bytes.len().max(layer2_bytes.len()) as u64 + 1;
+
+            Mock::given(method("GET"))
+                .and(path("/token"))
+                .respond_with(
+                    ResponseTemplate::new(200).set_body_json(json!({"token": "testtoken"})),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path("/v2/library/sneaky/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .set_body_json(json!({
+                            "schemaVersion": 2,
+                            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                            "config": {
+                                "mediaType": "application/vnd.oci.image.config.v1+json",
+                                "size": 10,
+                                "digest": "sha256:config"
+                            },
+                            "layers": [
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": 1,
+                                    "digest": layer1_digest
+                                },
+                                {
+                                    "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+                                    "size": 1,
+                                    "digest": layer2_digest
+                                }
+                            ]
+                        })),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(format!(
+                    r"/blobs/{}",
+                    layer1_digest.replace(':', "%3A|:")
+                )))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer1_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(format!(
+                    r"/blobs/{}",
+                    layer2_digest.replace(':', "%3A|:")
+                )))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(layer2_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .with_max_total_image_size(limit)
+                .pull_image("library/sneaky", "latest", &store)
+                .await
+                .unwrap_err();
+
+            let msg = format!("{err:#}");
+            assert!(
+                msg.contains("total size limit"),
+                "expected aggregate size error, got: {msg}"
+            );
+            assert!(
+                msg.contains("downloaded"),
+                "must trip the actual-bytes (downloaded) check, not the declared \
+                 pre-pull check, got: {msg}"
             );
         }
 

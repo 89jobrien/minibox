@@ -15,8 +15,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -59,22 +57,14 @@ fn make_record(id: &str, state_str: &str, cgroup_path: PathBuf) -> ContainerReco
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// Pausing a Running container writes `cgroup.freeze` and transitions to Paused.
-pub struct PauseRunningContainerTransitionsToPaused;
-impl ConformanceTest for PauseRunningContainerTransitionsToPaused {
-    fn name(&self) -> &'static str {
-        "pause_running_container_transitions_to_paused"
-    }
-    fn adapter(&self) -> &'static str {
-        "pause_resume"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Integration
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "pause_running_container_transitions_to_paused",
+    adapter: "pause_resume",
+    category: Integration,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         // Pre-create cgroup.freeze so the handler write succeeds.
         let cgroup_dir = tmp.path().join("cgroup");
@@ -111,19 +101,11 @@ impl ConformanceTest for PauseRunningContainerTransitionsToPaused {
     }
 }
 
-/// Resuming a Paused container writes `cgroup.freeze` and transitions to Running.
-pub struct ResumePausedContainerTransitionsToRunning;
-impl ConformanceTest for ResumePausedContainerTransitionsToRunning {
-    fn name(&self) -> &'static str {
-        "resume_paused_container_transitions_to_running"
-    }
-    fn adapter(&self) -> &'static str {
-        "pause_resume"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Integration
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "resume_paused_container_transitions_to_running",
+    adapter: "pause_resume",
+    category: Integration,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let cgroup_dir = tmp.path().join("cgroup");
         std::fs::create_dir_all(&cgroup_dir).expect("create cgroup dir");
@@ -159,19 +141,11 @@ impl ConformanceTest for ResumePausedContainerTransitionsToRunning {
     }
 }
 
-/// Pausing an already-Paused container returns an error.
-pub struct PauseAlreadyPausedReturnsError;
-impl ConformanceTest for PauseAlreadyPausedReturnsError {
-    fn name(&self) -> &'static str {
-        "pause_already_paused_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "pause_resume"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "pause_already_paused_returns_error",
+    adapter: "pause_resume",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         let id = "pausepaused00001".to_string();
@@ -199,19 +173,11 @@ impl ConformanceTest for PauseAlreadyPausedReturnsError {
     }
 }
 
-/// Resuming a Running (non-paused) container returns an error.
-pub struct ResumeRunningContainerReturnsNotPausedError;
-impl ConformanceTest for ResumeRunningContainerReturnsNotPausedError {
-    fn name(&self) -> &'static str {
-        "resume_running_container_returns_not_paused_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "pause_resume"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "resume_running_container_returns_not_paused_error",
+    adapter: "pause_resume",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
         let id = "resumerunning001".to_string();
@@ -238,19 +204,11 @@ impl ConformanceTest for ResumeRunningContainerReturnsNotPausedError {
     }
 }
 
-/// Pausing an unknown container returns an error.
-pub struct PauseUnknownContainerReturnsError;
-impl ConformanceTest for PauseUnknownContainerReturnsError {
-    fn name(&self) -> &'static str {
-        "pause_unknown_container_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "pause_resume"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "pause_unknown_container_returns_error",
+    adapter: "pause_resume",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
 
@@ -275,25 +233,17 @@ impl ConformanceTest for PauseUnknownContainerReturnsError {
     }
 }
 
-/// Resuming an unknown container returns an error.
-pub struct ResumeUnknownContainerReturnsError;
-impl ConformanceTest for ResumeUnknownContainerReturnsError {
-    fn name(&self) -> &str {
-        "resume_unknown_container_returns_error"
-    }
-    fn adapter(&self) -> &str {
-        "pause_resume"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "resume_unknown_container_returns_error",
+    adapter: "pause_resume",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_state(&tmp);
 
         let resp = rt().block_on(handler::handle_resume(
             "doesnotexist0002".to_string(),
-            state.clone(),
+            state,
             Arc::new(NoopEventSink),
         ));
 
@@ -310,17 +260,4 @@ impl ConformanceTest for ResumeUnknownContainerReturnsError {
 
         ctx.result()
     }
-}
-
-/// Return all pause/resume conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(PauseRunningContainerTransitionsToPaused),
-        Box::new(ResumePausedContainerTransitionsToRunning),
-        Box::new(PauseAlreadyPausedReturnsError),
-        Box::new(ResumeRunningContainerReturnsNotPausedError),
-        Box::new(PauseUnknownContainerReturnsError),
-        Box::new(ResumeUnknownContainerReturnsError),
-    ]
 }

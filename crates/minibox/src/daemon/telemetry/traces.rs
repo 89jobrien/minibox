@@ -29,7 +29,13 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
     // on top of an already-layered Layered<EnvFilter, Registry>.
     let mut layers: Vec<Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>> = vec![
         tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("miniboxd=info".parse().unwrap())
+            .add_directive({
+                #[allow(clippy::expect_used)]
+                // SAFETY: static string is a valid directive
+                "miniboxd=info"
+                    .parse()
+                    .expect("static directive string is valid")
+            })
             .boxed(),
         tracing_subscriber::fmt::layer().boxed(),
     ];

@@ -1,5 +1,5 @@
 //! Prometheus metrics adapter implementing the `MetricsRecorder` domain port.
-// Mutex poison and Default-trait constraints make .unwrap()/.expect() unavoidable here.
+// Mutex poison and Default-trait constraints make fallible unwraps unavoidable here.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 //!
 //! Uses the `prometheus-client` crate (official Prometheus Rust client) directly.
@@ -107,7 +107,7 @@ impl PrometheusMetricsRecorder {
 fn to_labels(labels: &[(&str, &str)]) -> Labels {
     labels
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
         .collect()
 }
 

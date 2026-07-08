@@ -16,6 +16,7 @@
 !docs/handoff-*.md
 !docs/conformance.md
 !docs/plans/*.md
+!docs/designs/*.md
 !docs/specs/*.md
 !docs/diagrams/
 !docs/archive/*.md
@@ -164,7 +165,9 @@ docs/archive/
 !.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.*.*.state.json
 .ctx/HANDOFF.hj.hj.state.json
+.ctx/HANDOFF.*.minibox.state.yaml
 .ctx/.initialized
 # handoff-end
 .claude/skills/whatidid/cache/
 .capsec-baseline.json
+bench/results/

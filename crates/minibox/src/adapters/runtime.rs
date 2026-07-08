@@ -1,4 +1,4 @@
-//! Linux namespace container runtime adapter implementing the ContainerRuntime trait.
+//! Linux namespace container runtime adapter implementing the `ContainerRuntime` trait.
 //!
 //! This adapter wraps the existing container process spawning logic from
 //! [`crate::container::process`] to implement the domain's
@@ -80,14 +80,14 @@ use tracing::debug;
 ///     Ok(())
 /// }
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LinuxNamespaceRuntime;
 
 impl LinuxNamespaceRuntime {
     /// Create a new Linux namespace container runtime adapter.
     ///
     /// This is a zero-sized type, so construction is trivial.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }

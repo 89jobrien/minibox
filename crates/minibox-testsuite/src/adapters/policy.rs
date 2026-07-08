@@ -5,8 +5,6 @@
 use minibox::daemon::handler::{ContainerPolicy, PolicyOverride, validate_policy};
 use minibox_core::domain::BindMount;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn a_bind_mount() -> BindMount {
     BindMount {
         host_path: std::path::PathBuf::from("/host/data"),
@@ -19,18 +17,11 @@ fn a_bind_mount() -> BindMount {
 // Test structs
 // ---------------------------------------------------------------------------
 
-pub struct RunWithBindMountWhenDeniedReturnsError;
-impl ConformanceTest for RunWithBindMountWhenDeniedReturnsError {
-    fn name(&self) -> &'static str {
-        "run_with_bind_mount_when_denied_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "run_with_bind_mount_when_denied_returns_error",
+    adapter: "policy",
+    category: EdgeCase,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
@@ -43,18 +34,11 @@ impl ConformanceTest for RunWithBindMountWhenDeniedReturnsError {
     }
 }
 
-pub struct RunPrivilegedWhenDeniedReturnsError;
-impl ConformanceTest for RunPrivilegedWhenDeniedReturnsError {
-    fn name(&self) -> &'static str {
-        "run_privileged_when_denied_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "run_privileged_when_denied_returns_error",
+    adapter: "policy",
+    category: EdgeCase,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
@@ -66,18 +50,11 @@ impl ConformanceTest for RunPrivilegedWhenDeniedReturnsError {
     }
 }
 
-pub struct RunWithBindMountWhenAllowedSucceeds;
-impl ConformanceTest for RunWithBindMountWhenAllowedSucceeds {
-    fn name(&self) -> &'static str {
-        "run_with_bind_mount_when_allowed_succeeds"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "run_with_bind_mount_when_allowed_succeeds",
+    adapter: "policy",
+    category: Unit,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
@@ -90,18 +67,11 @@ impl ConformanceTest for RunWithBindMountWhenAllowedSucceeds {
     }
 }
 
-pub struct RunPrivilegedWhenAllowedSucceeds;
-impl ConformanceTest for RunPrivilegedWhenAllowedSucceeds {
-    fn name(&self) -> &'static str {
-        "run_privileged_when_allowed_succeeds"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "run_privileged_when_allowed_succeeds",
+    adapter: "policy",
+    category: Unit,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: true,
@@ -113,18 +83,11 @@ impl ConformanceTest for RunPrivilegedWhenAllowedSucceeds {
     }
 }
 
-pub struct DefaultPolicyDeniesBothCapabilities;
-impl ConformanceTest for DefaultPolicyDeniesBothCapabilities {
-    fn name(&self) -> &'static str {
-        "default_policy_denies_bind_mounts"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "default_policy_denies_bind_mounts",
+    adapter: "policy",
+    category: Unit,
+    |ctx| {
         let policy = ContainerPolicy::default();
         ctx.assert_false(policy.allow_bind_mounts, "default denies bind mounts");
         ctx.assert_false(policy.allow_privileged, "default denies privileged mode");
@@ -141,18 +104,11 @@ impl ConformanceTest for DefaultPolicyDeniesBothCapabilities {
     }
 }
 
-pub struct PriorityBelowMinimumReturnsError;
-impl ConformanceTest for PriorityBelowMinimumReturnsError {
-    fn name(&self) -> &'static str {
-        "priority_below_minimum_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "priority_below_minimum_returns_error",
+    adapter: "policy",
+    category: EdgeCase,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
@@ -165,18 +121,11 @@ impl ConformanceTest for PriorityBelowMinimumReturnsError {
     }
 }
 
-pub struct NoPriorityWhenMinimumRequiredReturnsError;
-impl ConformanceTest for NoPriorityWhenMinimumRequiredReturnsError {
-    fn name(&self) -> &'static str {
-        "no_priority_when_minimum_required_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "no_priority_when_minimum_required_returns_error",
+    adapter: "policy",
+    category: EdgeCase,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
@@ -192,18 +141,11 @@ impl ConformanceTest for NoPriorityWhenMinimumRequiredReturnsError {
     }
 }
 
-pub struct PriorityMeetingMinimumSucceeds;
-impl ConformanceTest for PriorityMeetingMinimumSucceeds {
-    fn name(&self) -> &'static str {
-        "priority_meeting_minimum_succeeds"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "priority_meeting_minimum_succeeds",
+    adapter: "policy",
+    category: Unit,
+    |ctx| {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
@@ -216,18 +158,11 @@ impl ConformanceTest for PriorityMeetingMinimumSucceeds {
     }
 }
 
-pub struct PolicyOverrideLoosensBindMountDeny;
-impl ConformanceTest for PolicyOverrideLoosensBindMountDeny {
-    fn name(&self) -> &'static str {
-        "policy_override_loosens_bind_mount_deny"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "policy_override_loosens_bind_mount_deny",
+    adapter: "policy",
+    category: Unit,
+    |ctx| {
         let base = ContainerPolicy::default(); // allow_bind_mounts=false
         let override_ = PolicyOverride {
             allow_bind_mounts: Some(true),
@@ -248,18 +183,11 @@ impl ConformanceTest for PolicyOverrideLoosensBindMountDeny {
     }
 }
 
-pub struct BothViolationsRejectedOnFirstMatch;
-impl ConformanceTest for BothViolationsRejectedOnFirstMatch {
-    fn name(&self) -> &'static str {
-        "both_violations_rejected_on_first_match"
-    }
-    fn adapter(&self) -> &'static str {
-        "policy"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "both_violations_rejected_on_first_match",
+    adapter: "policy",
+    category: EdgeCase,
+    |ctx| {
         let policy = ContainerPolicy::default(); // denies both
         let mounts = vec![a_bind_mount()];
         // Both bind mount and privileged are requested — validate_policy returns
@@ -271,21 +199,4 @@ impl ConformanceTest for BothViolationsRejectedOnFirstMatch {
         );
         ctx.result()
     }
-}
-
-/// Return all policy conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(RunWithBindMountWhenDeniedReturnsError),
-        Box::new(RunPrivilegedWhenDeniedReturnsError),
-        Box::new(RunWithBindMountWhenAllowedSucceeds),
-        Box::new(RunPrivilegedWhenAllowedSucceeds),
-        Box::new(DefaultPolicyDeniesBothCapabilities),
-        Box::new(PriorityBelowMinimumReturnsError),
-        Box::new(NoPriorityWhenMinimumRequiredReturnsError),
-        Box::new(PriorityMeetingMinimumSucceeds),
-        Box::new(PolicyOverrideLoosensBindMountDeny),
-        Box::new(BothViolationsRejectedOnFirstMatch),
-    ]
 }

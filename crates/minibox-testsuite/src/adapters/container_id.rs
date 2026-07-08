@@ -15,8 +15,6 @@ use minibox_core::events::NoopEventSink;
 use minibox_core::protocol::DaemonResponse;
 use tempfile::TempDir;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -32,18 +30,11 @@ const fn is_error(resp: &DaemonResponse) -> bool {
 // Test structs
 // ---------------------------------------------------------------------------
 
-pub struct StopEmptyIdReturnsError;
-impl ConformanceTest for StopEmptyIdReturnsError {
-    fn name(&self) -> &'static str {
-        "stop_empty_id_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "stop_empty_id_returns_error",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("tempdir");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -53,18 +44,11 @@ impl ConformanceTest for StopEmptyIdReturnsError {
     }
 }
 
-pub struct RemoveUnknownIdReturnsError;
-impl ConformanceTest for RemoveUnknownIdReturnsError {
-    fn name(&self) -> &'static str {
-        "remove_unknown_id_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_unknown_id_returns_error",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("tempdir");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -81,18 +65,11 @@ impl ConformanceTest for RemoveUnknownIdReturnsError {
     }
 }
 
-pub struct PauseUnknownIdReturnsError;
-impl ConformanceTest for PauseUnknownIdReturnsError {
-    fn name(&self) -> &'static str {
-        "pause_unknown_id_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "pause_unknown_id_returns_error",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("tempdir");
         let state = make_mock_state(tmp.path());
         let event_sink = Arc::new(NoopEventSink) as Arc<dyn minibox_core::events::EventSink>;
@@ -109,18 +86,11 @@ impl ConformanceTest for PauseUnknownIdReturnsError {
     }
 }
 
-pub struct ResumeUnknownIdReturnsError;
-impl ConformanceTest for ResumeUnknownIdReturnsError {
-    fn name(&self) -> &'static str {
-        "resume_unknown_id_returns_error"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "resume_unknown_id_returns_error",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("tempdir");
         let state = make_mock_state(tmp.path());
         let event_sink = Arc::new(NoopEventSink) as Arc<dyn minibox_core::events::EventSink>;
@@ -137,18 +107,11 @@ impl ConformanceTest for ResumeUnknownIdReturnsError {
     }
 }
 
-pub struct IdsAreCaseSensitive;
-impl ConformanceTest for IdsAreCaseSensitive {
-    fn name(&self) -> &'static str {
-        "ids_are_case_sensitive"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "ids_are_case_sensitive",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("tempdir");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -175,54 +138,33 @@ impl ConformanceTest for IdsAreCaseSensitive {
 // ContainerId::new — domain-type validation tests
 // ---------------------------------------------------------------------------
 
-pub struct ContainerIdEmptyStringRejected;
-impl ConformanceTest for ContainerIdEmptyStringRejected {
-    fn name(&self) -> &'static str {
-        "container_id_empty_string_rejected"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "container_id_empty_string_rejected",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let result = ContainerId::new(String::new());
         ctx.assert_err(result, "ContainerId::new rejects empty string");
         ctx.result()
     }
 }
 
-pub struct ContainerIdWhitespaceOnlyRejected;
-impl ConformanceTest for ContainerIdWhitespaceOnlyRejected {
-    fn name(&self) -> &'static str {
-        "container_id_whitespace_only_rejected"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "container_id_whitespace_only_rejected",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let result = ContainerId::new("   ".to_string());
         ctx.assert_err(result, "ContainerId::new rejects whitespace-only string");
         ctx.result()
     }
 }
 
-pub struct ContainerIdTooLongRejected;
-impl ConformanceTest for ContainerIdTooLongRejected {
-    fn name(&self) -> &'static str {
-        "container_id_too_long_rejected"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "container_id_too_long_rejected",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         // 65 alphanumeric characters — one over the 64-char limit.
         let long_id = "a".repeat(65);
         let result = ContainerId::new(long_id);
@@ -231,18 +173,11 @@ impl ConformanceTest for ContainerIdTooLongRejected {
     }
 }
 
-pub struct ContainerIdAtMaxLengthAccepted;
-impl ConformanceTest for ContainerIdAtMaxLengthAccepted {
-    fn name(&self) -> &'static str {
-        "container_id_at_max_length_accepted"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "container_id_at_max_length_accepted",
+    adapter: "container_id",
+    category: Unit,
+    |ctx| {
         // Exactly 64 alphanumeric characters — at the limit.
         let max_id = "a".repeat(64);
         let result = ContainerId::new(max_id);
@@ -251,18 +186,11 @@ impl ConformanceTest for ContainerIdAtMaxLengthAccepted {
     }
 }
 
-pub struct ContainerIdSpecialCharsRejected;
-impl ConformanceTest for ContainerIdSpecialCharsRejected {
-    fn name(&self) -> &'static str {
-        "container_id_special_chars_rejected"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "container_id_special_chars_rejected",
+    adapter: "container_id",
+    category: EdgeCase,
+    |ctx| {
         let cases = [
             "abc-123",     // hyphen
             "abc_123",     // underscore
@@ -282,18 +210,11 @@ impl ConformanceTest for ContainerIdSpecialCharsRejected {
     }
 }
 
-pub struct ContainerIdValidAlphanumericAccepted;
-impl ConformanceTest for ContainerIdValidAlphanumericAccepted {
-    fn name(&self) -> &'static str {
-        "container_id_valid_alphanumeric_accepted"
-    }
-    fn adapter(&self) -> &'static str {
-        "container_id"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "container_id_valid_alphanumeric_accepted",
+    adapter: "container_id",
+    category: Unit,
+    |ctx| {
         let cases = [
             "abc123",
             "ABC123",
@@ -310,22 +231,4 @@ impl ConformanceTest for ContainerIdValidAlphanumericAccepted {
         }
         ctx.result()
     }
-}
-
-/// Return all container-ID edge case conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(StopEmptyIdReturnsError),
-        Box::new(RemoveUnknownIdReturnsError),
-        Box::new(PauseUnknownIdReturnsError),
-        Box::new(ResumeUnknownIdReturnsError),
-        Box::new(IdsAreCaseSensitive),
-        Box::new(ContainerIdEmptyStringRejected),
-        Box::new(ContainerIdWhitespaceOnlyRejected),
-        Box::new(ContainerIdTooLongRejected),
-        Box::new(ContainerIdAtMaxLengthAccepted),
-        Box::new(ContainerIdSpecialCharsRejected),
-        Box::new(ContainerIdValidAlphanumericAccepted),
-    ]
 }

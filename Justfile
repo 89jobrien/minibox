@@ -49,7 +49,7 @@ build-linux:
 pre-commit:
     cargo xtask pre-commit
 
-# nextest + coverage + flamegraph
+# release build + nextest
 prepush:
     cargo xtask prepush
 
@@ -128,18 +128,17 @@ test-all: nuke-test-state doctor test-unit test-integration test-system nuke-tes
 bench:
     cargo xtask bench
 
+# Run benches and compare against the tracked per-env baseline
+bench-check:
+    cargo xtask bench --check
+
+# Run benches and save results as the new per-env baseline
+bench-baseline:
+    cargo xtask bench --save-baseline
+
 # Machine-readable repo context snapshot (JSON to stdout)
 context:
     cargo xtask context
-
-# Sync VPS bench results into local bench/results/bench.jsonl
-bench-sync:
-    cargo xtask bench-sync
-
-# Profile bench binary with samply (macOS) or cargo-flamegraph (Linux)
-# Usage: just flamegraph [suite]   (default suite: codec)
-flamegraph suite="codec":
-    cargo xtask flamegraph --suite {{suite}}
 
 # ── Daemon ──────────────────────────────────────────────────────────────────
 

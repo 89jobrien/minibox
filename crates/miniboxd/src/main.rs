@@ -175,7 +175,7 @@ use minibox::adapters::{
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 #[cfg(unix)]
-use minibox::daemon::state::DaemonState;
+use minibox::daemon::state::{DaemonState, FsCgroupFreezeChecker, KillProcessChecker};
 #[cfg(unix)]
 use minibox_core::adapters::HostnameRegistryRouter;
 #[cfg(unix)]
@@ -310,6 +310,25 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
     }
 }
 
+// ── State load + startup reconciliation ──────────────────────────────────
+
+/// Build the shared daemon state: create the image store, load persisted
+/// container records, and reconcile stale `Running`/`Paused` records against
+/// live host processes (dead or unmonitored PIDs become `Orphaned`).
+///
+/// Extracted from `run_daemon` so the init path is unit-testable; keep the
+/// two in sync — `run_daemon` must obtain its state through this helper.
+#[cfg(unix)]
+async fn load_state(paths: &DaemonPaths) -> Result<Arc<DaemonState>> {
+    let image_store = ImageStore::new(&paths.images_dir).context("creating image store")?;
+    let state = Arc::new(DaemonState::new(image_store, &paths.data_dir));
+    state.load_from_disk().await;
+    state
+        .reconcile_on_startup(&KillProcessChecker, &FsCgroupFreezeChecker)
+        .await;
+    Ok(state)
+}
+
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
@@ -395,10 +414,8 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     }
 
     // ── Shared state ─────────────────────────────────────────────────────
-    let image_store = ImageStore::new(&paths.images_dir).context("creating image store")?;
-    let state = Arc::new(DaemonState::new(image_store, &paths.data_dir));
-    state.load_from_disk().await;
-    info!("state loaded from disk");
+    let state = load_state(&paths).await?;
+    info!("state loaded from disk and reconciled");
 
     // ── Image GC ─────────────────────────────────────────────────────────
     let leases_path = paths.data_dir.join("leases.json");
@@ -578,7 +595,7 @@ async fn build_handler_deps(
     let deps = match suite {
         #[cfg(target_os = "linux")]
         AdapterSuite::Native => {
-            let native_network = resolve_native_network().await?;
+            let native_network = resolve_native_network()?;
             build_native_handler_dependencies(
                 Arc::clone(&state),
                 &paths.data_dir,
@@ -642,7 +659,7 @@ async fn build_handler_deps(
 
 #[cfg(target_os = "linux")]
 // qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
-async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
+fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
@@ -1010,12 +1027,11 @@ fn migrate_to_supervisor_cgroup() {
         }
     };
 
-    let cgroup_path = match cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
-        Some(p) => p.trim().to_string(),
-        None => {
-            warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
-            return;
-        }
+    let cgroup_path = if let Some(p) = cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
+        p.trim().to_string()
+    } else {
+        warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
+        return;
     };
 
     if cgroup_path.ends_with("/supervisor") {
@@ -1141,6 +1157,90 @@ mod tests {
         assert!(
             paths.data_dir.to_string_lossy().contains("minibox"),
             "macOS data_dir should contain minibox"
+        );
+    }
+
+    /// PID far above any platform pid_max (Linux default 4194304, macOS
+    /// ~99999) so `kill(pid, 0)` deterministically reports ESRCH.
+    #[cfg(unix)]
+    const DEAD_PID: u32 = 999_999_999;
+
+    /// Minimal persisted state.json with one container record.
+    #[cfg(unix)]
+    fn write_state_json(data_dir: &std::path::Path, id: &str, state: &str, pid: u32) {
+        let json = format!(
+            r#"{{
+  "{id}": {{
+    "info": {{
+      "id": "{id}",
+      "image": "alpine:latest",
+      "command": "/bin/sh",
+      "state": "{state}",
+      "created_at": "2026-01-01T00:00:00Z",
+      "pid": {pid}
+    }},
+    "pid": {pid},
+    "rootfs_path": "/mock/rootfs",
+    "cgroup_path": "/mock/cgroup",
+    "post_exit_hooks": []
+  }}
+}}"#
+        );
+        std::fs::write(data_dir.join("state.json"), json).expect("write state.json");
+    }
+
+    #[cfg(unix)]
+    fn test_paths(root: &std::path::Path) -> DaemonPaths {
+        DaemonPaths {
+            data_dir: root.to_path_buf(),
+            run_dir: root.join("run"),
+            socket_path: root.join("run/miniboxd.sock"),
+            images_dir: root.join("images"),
+            containers_dir: root.join("containers"),
+            run_containers_dir: root.join("run/containers"),
+        }
+    }
+
+    /// The daemon init path (`load_state`) must reconcile a persisted
+    /// "Running" record whose PID is gone into "Orphaned" — the MoA H6
+    /// regression was that `run_daemon` loaded state but never called
+    /// `reconcile_on_startup`.
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn load_state_reconciles_running_record_with_dead_pid() {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        write_state_json(tmp.path(), "run-dead", "Running", DEAD_PID);
+
+        let state = load_state(&test_paths(tmp.path()))
+            .await
+            .expect("load_state");
+
+        let containers = state.list_containers().await;
+        assert_eq!(containers.len(), 1, "expected one loaded record");
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "dead-PID Running record must be reconciled to Orphaned"
+        );
+        assert_eq!(containers[0].pid, None, "stale PID must be cleared");
+    }
+
+    /// A persisted "Paused" record with a dead PID must also be orphaned by
+    /// the init path.
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn load_state_reconciles_paused_record_with_dead_pid() {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        write_state_json(tmp.path(), "run-paused", "Paused", DEAD_PID);
+
+        let state = load_state(&test_paths(tmp.path()))
+            .await
+            .expect("load_state");
+
+        let containers = state.list_containers().await;
+        assert_eq!(containers.len(), 1, "expected one loaded record");
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "dead-PID Paused record must be reconciled to Orphaned"
         );
     }
 

@@ -44,9 +44,15 @@
 use crate::domain::{
     BackendCapability, BackendCapabilitySet, DynContainerCommitter, DynImageBuilder, DynImagePusher,
 };
+use std::any::Any;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+
+/// Type-erased capability factory map for capabilities beyond the 3
+/// named fields.
+pub type CapabilityExtras = HashMap<BackendCapability, Box<dyn Any + Send + Sync>>;
 
 // ---------------------------------------------------------------------------
 // BackendDescriptor
@@ -85,6 +91,10 @@ pub struct BackendDescriptor {
     /// Factory for a fresh [`DynImagePusher`], or `None` when
     /// `BackendCapability::PushToRegistry` is absent.
     pub make_pusher: Option<Box<dyn Fn() -> DynImagePusher + Send + Sync>>,
+
+    /// Type-erased factories for capabilities not covered by the
+    /// named `make_*` fields. See [`with_extra`](Self::with_extra).
+    pub extras: CapabilityExtras,
 }
 
 impl BackendDescriptor {
@@ -97,6 +107,7 @@ impl BackendDescriptor {
             make_committer: None,
             make_builder: None,
             make_pusher: None,
+            extras: HashMap::new(),
         }
     }
 
@@ -137,6 +148,19 @@ impl BackendDescriptor {
     {
         self.capabilities = self.capabilities.with(BackendCapability::PushToRegistry);
         self.make_pusher = Some(Box::new(f));
+        self
+    }
+
+    /// Register a type-erased factory for any capability.
+    /// Also adds the capability flag.
+    #[must_use]
+    pub fn with_extra<T: Send + Sync + 'static>(
+        mut self,
+        cap: BackendCapability,
+        factory: Box<dyn Fn() -> T + Send + Sync>,
+    ) -> Self {
+        self.capabilities = self.capabilities.with(cap);
+        self.extras.insert(cap, Box::new(factory));
         self
     }
 }

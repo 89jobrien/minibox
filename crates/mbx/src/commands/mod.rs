@@ -5,8 +5,29 @@
 //! connection and protocol formatting.
 
 use anyhow::Context as _;
+use miette::Diagnostic;
 use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
+use thiserror::Error;
+
+/// Errors returned when a daemon request produces an unexpected or error response.
+#[derive(Debug, Error, Diagnostic)]
+pub enum RequestError {
+    #[error("{message}")]
+    #[diagnostic(code(mbx::daemon_error), help("check container state with: mbx ps"))]
+    DaemonError { message: String },
+
+    #[error("unexpected response from daemon: {response}")]
+    #[diagnostic(code(mbx::unexpected_response))]
+    UnexpectedResponse { response: String },
+
+    #[error("no response from daemon")]
+    #[diagnostic(
+        code(mbx::no_response),
+        help("check that miniboxd is running: systemctl status miniboxd")
+    )]
+    NoResponse,
+}
 
 /// Send a single request to the daemon and handle the standard
 /// `Success / Error / unexpected / no-response` response pattern.
@@ -29,18 +50,14 @@ pub async fn send_request(
                 println!("{message}");
                 Ok(())
             }
-            DaemonResponse::Error { message } => {
-                eprintln!("error: {message}");
-                std::process::exit(1);
+            DaemonResponse::Error { message } => Err(RequestError::DaemonError { message }.into()),
+            other => Err(RequestError::UnexpectedResponse {
+                response: format!("{other:?}"),
             }
-            other => {
-                eprintln!("unexpected response: {other:?}");
-                std::process::exit(1);
-            }
+            .into()),
         }
     } else {
-        eprintln!("no response from daemon");
-        std::process::exit(1);
+        Err(RequestError::NoResponse.into())
     }
 }
 

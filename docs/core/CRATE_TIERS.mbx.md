@@ -4,7 +4,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-06-27
+Last updated: 2026-07-07
 
 ---
 
@@ -72,10 +72,11 @@ workspace and are no longer members of this workspace.
 Unstable crates. APIs may change or crates may be merged, split, or removed. Do not
 take a public dependency on these crates from outside the workspace.
 
-No crates are currently in this tier. The six former experimental crates
-(`minibox-agent`, `minibox-llm`, `minibox-secrets`, `mbxctl`, `dashbox`,
-`minibox-bench`) were removed during the consolidation in sessions 29-31
-(2026-04-21 to 2026-04-26) to reduce maintenance surface.
+No crates are currently in this tier. Several former experimental crates
+(`minibox-agent`, `minibox-secrets`, `mbxctl`) were removed during the
+consolidation in sessions 29-31 (2026-04-21 to 2026-04-26) to reduce
+maintenance surface. `minibox-bench` was re-added as a benchmarking crate
+in v0.31.0.
 
 **Stability expectations for Experimental crates:**
 

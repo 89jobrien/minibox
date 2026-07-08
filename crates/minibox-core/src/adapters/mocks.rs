@@ -923,7 +923,7 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
         let owned_labels: Vec<(String, String)> = labels
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         self.state
             .lock()
@@ -935,7 +935,7 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
     fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
         let owned_labels: Vec<(String, String)> = labels
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         self.state
             .lock()
@@ -947,7 +947,7 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
     fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
         let owned_labels: Vec<(String, String)> = labels
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         self.state
             .lock()

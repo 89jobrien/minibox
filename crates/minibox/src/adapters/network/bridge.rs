@@ -111,7 +111,7 @@ impl BridgeNetwork {
             let gw = self
                 .ip_alloc
                 .lock()
-                .expect("bridge: ip_alloc lock poisoned")
+                .map_err(|_| anyhow::anyhow!("bridge: ip_alloc lock poisoned"))?
                 .gateway()
                 .to_string();
             let gw_cidr = format!("{}/{}", gw, self.subnet.prefix_len());
@@ -218,7 +218,7 @@ impl BridgeNetwork {
         // veth interface names must be ≤15 chars; "veth-" + 8 = 13, safe.
         container_id
             .chars()
-            .filter(|c| c.is_ascii_alphanumeric())
+            .filter(char::is_ascii_alphanumeric)
             .take(8)
             .collect::<String>()
             .to_lowercase()
@@ -267,7 +267,7 @@ impl NetworkProvider for BridgeNetwork {
         let container_ip = self
             .ip_alloc
             .lock()
-            .expect("bridge: ip_alloc lock poisoned")
+            .map_err(|_| anyhow::anyhow!("bridge: ip_alloc lock poisoned"))?
             .allocate()
             .ok_or_else(|| anyhow::anyhow!("bridge: IP pool exhausted"))?;
 
@@ -285,7 +285,7 @@ impl NetworkProvider for BridgeNetwork {
         let gateway = self
             .ip_alloc
             .lock()
-            .expect("bridge: ip_alloc lock poisoned")
+            .map_err(|_| anyhow::anyhow!("bridge: ip_alloc lock poisoned"))?
             .gateway()
             .to_string();
         let prefix_len = self.subnet.prefix_len();
@@ -364,7 +364,7 @@ impl NetworkProvider for BridgeNetwork {
             .as_array()
             .unwrap_or(&vec![])
             .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
 
         let pid_str = pid.to_string();
@@ -449,7 +449,7 @@ impl NetworkProvider for BridgeNetwork {
                 {
                     self.ip_alloc
                         .lock()
-                        .expect("bridge: ip_alloc lock poisoned")
+                        .map_err(|_| anyhow::anyhow!("bridge: ip_alloc lock poisoned"))?
                         .release(ip_str);
                 }
                 // Remove port mapping rules.
@@ -506,7 +506,7 @@ impl NetworkProvider for BridgeNetwork {
         let veth = if let Ok(ctx_raw) = std::fs::read_to_string(&ctx_path) {
             serde_json::from_str::<serde_json::Value>(&ctx_raw)
                 .ok()
-                .and_then(|v| v["veth"].as_str().map(|s| s.to_string()))
+                .and_then(|v| v["veth"].as_str().map(str::to_string))
         } else {
             None
         };

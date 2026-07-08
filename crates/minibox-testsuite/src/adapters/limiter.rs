@@ -5,8 +5,6 @@
 use minibox::testing::mocks::limiter::MockLimiter;
 use minibox_core::domain::{ResourceConfig, ResourceLimiter};
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 const fn default_config() -> ResourceConfig {
     ResourceConfig {
         memory_limit_bytes: Some(128 * 1024 * 1024),
@@ -17,21 +15,14 @@ const fn default_config() -> ResourceConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-pub struct CreateReturnsCgroupPath;
-impl ConformanceTest for CreateReturnsCgroupPath {
-    fn name(&self) -> &'static str {
-        "create_returns_cgroup_path"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "create_returns_cgroup_path",
+    adapter: "limiter",
+    category: Unit,
+    |ctx| {
         let limiter = MockLimiter::new();
         let path = ctx.assert_ok(
             limiter.create("testcontainer01", &default_config()),
@@ -44,18 +35,11 @@ impl ConformanceTest for CreateReturnsCgroupPath {
     }
 }
 
-pub struct CreateIncrementsCount;
-impl ConformanceTest for CreateIncrementsCount {
-    fn name(&self) -> &'static str {
-        "create_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "create_increments_count",
+    adapter: "limiter",
+    category: Unit,
+    |ctx| {
         let limiter = MockLimiter::new();
         limiter
             .create("counttest01", &default_config())
@@ -65,18 +49,11 @@ impl ConformanceTest for CreateIncrementsCount {
     }
 }
 
-pub struct CreateFailureReturnsErr;
-impl ConformanceTest for CreateFailureReturnsErr {
-    fn name(&self) -> &'static str {
-        "create_failure_returns_err"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "create_failure_returns_err",
+    adapter: "limiter",
+    category: EdgeCase,
+    |ctx| {
         let limiter = MockLimiter::new().with_create_failure();
         ctx.assert_err(
             limiter.create("failtest01", &default_config()),
@@ -86,18 +63,11 @@ impl ConformanceTest for CreateFailureReturnsErr {
     }
 }
 
-pub struct CreateFailureIncrementsCount;
-impl ConformanceTest for CreateFailureIncrementsCount {
-    fn name(&self) -> &'static str {
-        "create_failure_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "create_failure_increments_count",
+    adapter: "limiter",
+    category: EdgeCase,
+    |ctx| {
         let limiter = MockLimiter::new().with_create_failure();
         let _ = limiter.create("failtest02", &default_config());
         ctx.assert_eq(1, limiter.create_count(), "failed create still counted");
@@ -105,18 +75,11 @@ impl ConformanceTest for CreateFailureIncrementsCount {
     }
 }
 
-pub struct AddProcessSucceedsByDefault;
-impl ConformanceTest for AddProcessSucceedsByDefault {
-    fn name(&self) -> &'static str {
-        "add_process_succeeds_by_default"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "add_process_succeeds_by_default",
+    adapter: "limiter",
+    category: Unit,
+    |ctx| {
         let limiter = MockLimiter::new();
         ctx.assert_ok(
             limiter.add_process("aptest01", 12345),
@@ -126,18 +89,11 @@ impl ConformanceTest for AddProcessSucceedsByDefault {
     }
 }
 
-pub struct CleanupIncrementsCount;
-impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &'static str {
-        "cleanup_increments_count"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "cleanup_increments_count",
+    adapter: "limiter",
+    category: Unit,
+    |ctx| {
         let limiter = MockLimiter::new();
         limiter.cleanup("cleanuptest01").expect("cleanup");
         ctx.assert_eq(
@@ -149,18 +105,11 @@ impl ConformanceTest for CleanupIncrementsCount {
     }
 }
 
-pub struct CreateThenCleanupRoundTrip;
-impl ConformanceTest for CreateThenCleanupRoundTrip {
-    fn name(&self) -> &'static str {
-        "create_then_cleanup_round_trip"
-    }
-    fn adapter(&self) -> &'static str {
-        "limiter"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Integration
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "create_then_cleanup_round_trip",
+    adapter: "limiter",
+    category: Integration,
+    |ctx| {
         let limiter = MockLimiter::new();
         ctx.assert_ok(limiter.create("roundtrip01", &default_config()), "create");
         ctx.assert_ok(limiter.cleanup("roundtrip01"), "cleanup");
@@ -168,18 +117,4 @@ impl ConformanceTest for CreateThenCleanupRoundTrip {
         ctx.assert_eq(1, limiter.cleanup_count(), "cleanup_count == 1");
         ctx.result()
     }
-}
-
-/// Return all limiter conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(CreateReturnsCgroupPath),
-        Box::new(CreateIncrementsCount),
-        Box::new(CreateFailureReturnsErr),
-        Box::new(CreateFailureIncrementsCount),
-        Box::new(AddProcessSucceedsByDefault),
-        Box::new(CleanupIncrementsCount),
-        Box::new(CreateThenCleanupRoundTrip),
-    ]
 }

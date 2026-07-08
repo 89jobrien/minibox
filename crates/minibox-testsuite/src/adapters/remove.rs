@@ -8,8 +8,6 @@ use minibox::testing::helpers::daemon::{make_mock_deps, make_mock_state, make_st
 use minibox_core::protocol::DaemonResponse;
 use tempfile::TempDir;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -21,20 +19,11 @@ fn rt() -> tokio::runtime::Runtime {
 // Test structs
 // ---------------------------------------------------------------------------
 
-/// `handle_remove` with an unknown container ID must return `DaemonResponse::Error`.
-pub struct RemoveUnknownContainerReturnsError;
-
-impl ConformanceTest for RemoveUnknownContainerReturnsError {
-    fn name(&self) -> &str {
-        "remove_unknown_container_returns_error"
-    }
-    fn adapter(&self) -> &str {
-        "remove"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_unknown_container_returns_error",
+    adapter: "remove",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -55,20 +44,11 @@ impl ConformanceTest for RemoveUnknownContainerReturnsError {
     }
 }
 
-/// `handle_remove` on a stopped container returns `Success` and removes it from state.
-pub struct RemoveStoppedContainerSucceeds;
-
-impl ConformanceTest for RemoveStoppedContainerSucceeds {
-    fn name(&self) -> &str {
-        "remove_stopped_container_succeeds"
-    }
-    fn adapter(&self) -> &str {
-        "remove"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_stopped_container_succeeds",
+    adapter: "remove",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -94,20 +74,11 @@ impl ConformanceTest for RemoveStoppedContainerSucceeds {
     }
 }
 
-/// `handle_remove` on a running container must return `DaemonResponse::Error`.
-pub struct RemoveRunningContainerReturnsError;
-
-impl ConformanceTest for RemoveRunningContainerReturnsError {
-    fn name(&self) -> &str {
-        "remove_running_container_returns_error"
-    }
-    fn adapter(&self) -> &str {
-        "remove"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_running_container_returns_error",
+    adapter: "remove",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -137,20 +108,11 @@ impl ConformanceTest for RemoveRunningContainerReturnsError {
     }
 }
 
-/// After remove, `list_containers` no longer includes the removed container.
-pub struct RemoveReducesListCount;
-
-impl ConformanceTest for RemoveReducesListCount {
-    fn name(&self) -> &str {
-        "remove_reduces_list_count"
-    }
-    fn adapter(&self) -> &str {
-        "remove"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Integration
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_reduces_list_count",
+    adapter: "remove",
+    category: Integration,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -188,20 +150,11 @@ impl ConformanceTest for RemoveReducesListCount {
     }
 }
 
-/// `handle_remove` resolves containers by name as well as by ID.
-pub struct RemoveByNameSucceeds;
-
-impl ConformanceTest for RemoveByNameSucceeds {
-    fn name(&self) -> &str {
-        "remove_by_name_succeeds"
-    }
-    fn adapter(&self) -> &str {
-        "remove"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_by_name_succeeds",
+    adapter: "remove",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().expect("TempDir::new");
         let state = make_mock_state(tmp.path());
         let deps = make_mock_deps(&tmp);
@@ -233,15 +186,4 @@ impl ConformanceTest for RemoveByNameSucceeds {
 
         ctx.result()
     }
-}
-
-/// Return all remove conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(RemoveUnknownContainerReturnsError),
-        Box::new(RemoveStoppedContainerSucceeds),
-        Box::new(RemoveRunningContainerReturnsError),
-        Box::new(RemoveReducesListCount),
-        Box::new(RemoveByNameSucceeds),
-    ]
 }

@@ -1,6 +1,8 @@
+use minibox_core::adapters::conformance::CapabilityExtras;
 use minibox_core::domain::{
     BackendCapability, BackendCapabilitySet, DynContainerCommitter, DynImageBuilder, DynImagePusher,
 };
+use std::collections::HashMap;
 
 /// Describes a concrete backend under conformance test.
 ///
@@ -36,6 +38,10 @@ pub struct BackendDescriptor {
     /// Factory for a fresh [`DynImagePusher`], or `None` when
     /// `BackendCapability::PushToRegistry` is absent.
     pub make_pusher: Option<Box<dyn Fn() -> DynImagePusher + Send + Sync>>,
+
+    /// Type-erased factories for capabilities not covered by the
+    /// named `make_*` fields.
+    pub extras: CapabilityExtras,
 }
 
 impl BackendDescriptor {
@@ -47,6 +53,7 @@ impl BackendDescriptor {
             make_committer: None,
             make_builder: None,
             make_pusher: None,
+            extras: HashMap::new(),
         }
     }
 
@@ -83,6 +90,18 @@ impl BackendDescriptor {
     {
         self.capabilities = self.capabilities.with(BackendCapability::PushToRegistry);
         self.make_pusher = Some(Box::new(f));
+        self
+    }
+
+    /// Register a type-erased factory for any capability.
+    /// Also adds the capability flag.
+    pub fn with_extra<T: Send + Sync + 'static>(
+        mut self,
+        cap: BackendCapability,
+        factory: Box<dyn Fn() -> T + Send + Sync>,
+    ) -> Self {
+        self.capabilities = self.capabilities.with(cap);
+        self.extras.insert(cap, Box::new(factory));
         self
     }
 }

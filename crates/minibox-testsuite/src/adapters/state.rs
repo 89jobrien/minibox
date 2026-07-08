@@ -7,8 +7,6 @@ use minibox_core::protocol::ContainerInfo;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Runtime::new().expect("build Tokio runtime")
 }
@@ -46,21 +44,14 @@ fn make_record(id: &str, name: Option<&str>, image: &str) -> ContainerRecord {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-pub struct AddThenGetRoundTrip;
-impl ConformanceTest for AddThenGetRoundTrip {
-    fn name(&self) -> &'static str {
-        "add_then_get_round_trip"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "add_then_get_round_trip",
+    adapter: "state",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         let record = make_record("aabbccdd11223344", None, "alpine:latest");
@@ -74,18 +65,11 @@ impl ConformanceTest for AddThenGetRoundTrip {
     }
 }
 
-pub struct RemoveReturnsRecord;
-impl ConformanceTest for RemoveReturnsRecord {
-    fn name(&self) -> &'static str {
-        "remove_returns_record"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_returns_record",
+    adapter: "state",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record("rmtest001122334455", None, "alpine")));
@@ -95,18 +79,11 @@ impl ConformanceTest for RemoveReturnsRecord {
     }
 }
 
-pub struct RemoveNonExistentReturnsNone;
-impl ConformanceTest for RemoveNonExistentReturnsNone {
-    fn name(&self) -> &'static str {
-        "remove_nonexistent_returns_none"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "remove_nonexistent_returns_none",
+    adapter: "state",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         let result = rt().block_on(state.remove_container("doesnotexist"));
@@ -115,18 +92,11 @@ impl ConformanceTest for RemoveNonExistentReturnsNone {
     }
 }
 
-pub struct ListContainersReturnsAll;
-impl ConformanceTest for ListContainersReturnsAll {
-    fn name(&self) -> &'static str {
-        "list_containers_returns_all"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_containers_returns_all",
+    adapter: "state",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record("list01aabbccdd1122", None, "alpine")));
@@ -137,18 +107,11 @@ impl ConformanceTest for ListContainersReturnsAll {
     }
 }
 
-pub struct UpdateStateChangesStatus;
-impl ConformanceTest for UpdateStateChangesStatus {
-    fn name(&self) -> &'static str {
-        "update_state_changes_status"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "update_state_changes_status",
+    adapter: "state",
+    category: Unit,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record("stateupd01aabbcc11", None, "alpine")));
@@ -167,18 +130,11 @@ impl ConformanceTest for UpdateStateChangesStatus {
     }
 }
 
-pub struct PersistenceRoundTrip;
-impl ConformanceTest for PersistenceRoundTrip {
-    fn name(&self) -> &'static str {
-        "persistence_round_trip"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Integration
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "persistence_round_trip",
+    adapter: "state",
+    category: Integration,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         {
             let state = make_state(&tmp);
@@ -193,18 +149,11 @@ impl ConformanceTest for PersistenceRoundTrip {
     }
 }
 
-pub struct NameInUseDetectsCollision;
-impl ConformanceTest for NameInUseDetectsCollision {
-    fn name(&self) -> &'static str {
-        "name_in_use_detects_collision"
-    }
-    fn adapter(&self) -> &'static str {
-        "state"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "name_in_use_detects_collision",
+    adapter: "state",
+    category: EdgeCase,
+    |ctx| {
         let tmp = TempDir::new().unwrap();
         let state = make_state(&tmp);
         rt().block_on(state.add_container(make_record(
@@ -222,18 +171,4 @@ impl ConformanceTest for NameInUseDetectsCollision {
         );
         ctx.result()
     }
-}
-
-/// Return all state conformance tests.
-#[must_use]
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(AddThenGetRoundTrip),
-        Box::new(RemoveReturnsRecord),
-        Box::new(RemoveNonExistentReturnsNone),
-        Box::new(ListContainersReturnsAll),
-        Box::new(UpdateStateChangesStatus),
-        Box::new(PersistenceRoundTrip),
-        Box::new(NameInUseDetectsCollision),
-    ]
 }

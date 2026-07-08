@@ -19,13 +19,13 @@ impl SkipReason {
     /// Return a human-readable explanation.
     pub fn message(&self) -> String {
         match self {
-            SkipReason::CapabilityNotDeclared { capability } => {
+            Self::CapabilityNotDeclared { capability } => {
                 format!("backend does not declare {capability} capability")
             }
-            SkipReason::ExternalServiceUnavailable { service } => {
+            Self::ExternalServiceUnavailable { service } => {
                 format!("external service not available: {service}")
             }
-            SkipReason::PlatformUnsupported { platform } => {
+            Self::PlatformUnsupported { platform } => {
                 format!("platform not supported: {platform}")
             }
         }
@@ -140,7 +140,7 @@ impl ConformanceCapability for GcCapability {
     }
 }
 
-/// Capability: backend provides filesystem operations (RootfsSetup + ChildInit).
+/// Capability: backend provides filesystem operations (`RootfsSetup` + `ChildInit`).
 pub struct FilesystemCapability {
     pub supported: bool,
 }

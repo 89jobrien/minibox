@@ -188,7 +188,7 @@ fn parse_add(s: &str) -> Result<Instruction> {
     let srcs = parts[..parts.len() - 1]
         .iter()
         .map(|p| {
-            let s = p.to_string();
+            let s = (*p).to_string();
             if s.starts_with("http://") || s.starts_with("https://") {
                 AddSource::Url(s)
             } else {

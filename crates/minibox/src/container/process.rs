@@ -1,4 +1,4 @@
-//! Container init process: clone, setup, pivot_root, exec.
+//! Container init process: clone, setup, `pivot_root`, exec.
 //!
 //! [`spawn_container_process`] forks a child process with the requested Linux
 //! namespaces, sets up cgroups and the overlay rootfs, then `exec`s the user
@@ -38,7 +38,7 @@ pub struct ContainerConfig {
     pub capture_output: bool,
     /// Host-side commands to run before the container process is cloned.
     pub pre_exec_hooks: Vec<HookSpec>,
-    /// Bind mounts applied inside the container's mount namespace before pivot_root.
+    /// Bind mounts applied inside the container's mount namespace before `pivot_root`.
     pub mounts: Vec<minibox_core::domain::BindMount>,
     /// If `true`, call `capset(2)` with all capabilities set before `execvp`.
     pub privileged: bool,
@@ -242,10 +242,10 @@ pub fn run_hooks(
 ///
 /// | Capability        | Bit | Reason                                    |
 /// |-------------------|-----|-------------------------------------------|
-/// | CAP_SYS_MODULE    |  16 | Load/unload kernel modules                |
-/// | CAP_SYS_BOOT      |  22 | Reboot, shutdown, or kexec the host       |
-/// | CAP_MAC_OVERRIDE  |  32 | Bypass MAC (SELinux/AppArmor) enforcement |
-/// | CAP_MAC_ADMIN     |  33 | Modify/load MAC policies on the host      |
+/// | `CAP_SYS_MODULE`    |  16 | Load/unload kernel modules                |
+/// | `CAP_SYS_BOOT`      |  22 | Reboot, shutdown, or kexec the host       |
+/// | `CAP_MAC_OVERRIDE`  |  32 | Bypass MAC (SELinux/AppArmor) enforcement |
+/// | `CAP_MAC_ADMIN`     |  33 | Modify/load MAC policies on the host      |
 ///
 /// # Safety
 ///
@@ -256,7 +256,7 @@ pub fn run_hooks(
 fn apply_privileged_capabilities() -> anyhow::Result<()> {
     // LINUX_CAPABILITY_VERSION_3: supports 64-bit capability sets as two
     // 32-bit words (low bits 0-31, high bits 32-40).
-    const LINUX_CAPABILITY_VERSION_3: u32 = 0x20080522;
+    const LINUX_CAPABILITY_VERSION_3: u32 = 0x2008_0522;
     // Low caps (0-31) minus CAP_SYS_MODULE (16) and CAP_SYS_BOOT (22).
     const CAP_PRIVILEGED_LOW: u32 = !(1_u32 << 16) & !(1_u32 << 22);
     // High caps (32-40) minus CAP_MAC_OVERRIDE (bit 0) and CAP_MAC_ADMIN (bit 1).
@@ -297,8 +297,8 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
         let mut data = [full, full_high];
         let ret = libc::syscall(
             libc::SYS_capset,
-            &mut header as *mut CapHeader as *mut libc::c_void,
-            data.as_mut_ptr() as *mut libc::c_void,
+            (&raw mut header).cast::<libc::c_void>(),
+            data.as_mut_ptr().cast::<libc::c_void>(),
         );
         if ret != 0 {
             return Err(anyhow::anyhow!(

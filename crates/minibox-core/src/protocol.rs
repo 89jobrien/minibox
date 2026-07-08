@@ -738,6 +738,44 @@ pub enum DaemonResponse {
     },
 }
 
+impl DaemonResponse {
+    /// True for response variants that terminate a request/response exchange.
+    ///
+    /// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
+    /// first, followed by `ContainerOutput` chunks and a terminal
+    /// `ContainerStopped`. Non-ephemeral runs send it and then drop the sender.
+    ///
+    /// `ContainerOutput`, `LogLine`, `ContainerCreated`, `ExecStarted`,
+    /// `PushProgress`, `BuildOutput`, `Event`, and `UpdateProgress` are
+    /// non-terminal.
+    #[must_use]
+    pub const fn is_terminal(&self) -> bool {
+        matches!(
+            self,
+            Self::ContainerStopped { .. }
+                | Self::Error { .. }
+                | Self::Success { .. }
+                | Self::ContainerList { .. }
+                | Self::ImageLoaded { .. }
+                | Self::BuildComplete { .. }
+                | Self::ContainerPaused { .. }
+                | Self::ContainerResumed { .. }
+                | Self::Pruned { .. }
+                | Self::PipelineComplete { .. }
+                | Self::SnapshotSaved { .. }
+                | Self::SnapshotRestored { .. }
+                | Self::SnapshotList { .. }
+                | Self::ImageList { .. }
+                | Self::Manifest { .. }
+                | Self::VerifyResult { .. }
+                | Self::WorkflowStepComplete { .. }
+                | Self::WorkflowComplete { .. }
+                | Self::PipelineList { .. }
+                | Self::PipelineDetail { .. }
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Shared data types
 // ---------------------------------------------------------------------------
@@ -2097,6 +2135,249 @@ mod tests {
         ctx.set("", serde_json::Value::String("empty".into()));
         let env = super::execution_context_to_env(&ctx);
         assert_eq!(env, vec!["GOOD_KEY=ok"]);
+    }
+
+    // -------------------------------------------------------------------
+    // DaemonResponse::is_terminal
+    // -------------------------------------------------------------------
+
+    /// Exhaustive table over every `DaemonResponse` variant, mirroring the
+    /// canonical terminal-variant table formerly hand-rolled in
+    /// `minibox::daemon::server::is_terminal_response`.  The `match` guard at
+    /// the bottom has no wildcard arm, so adding a new variant fails to
+    /// compile until both this test and `is_terminal` are updated.
+    #[test]
+    fn is_terminal_matches_canonical_table() {
+        let variants: &[(DaemonResponse, bool)] = &[
+            (
+                DaemonResponse::ContainerCreated {
+                    id: "abc".to_string(),
+                },
+                false, // non-terminal: ephemeral runs follow with ContainerOutput chunks
+            ),
+            (
+                DaemonResponse::Success {
+                    message: "ok".to_string(),
+                },
+                true,
+            ),
+            (DaemonResponse::ContainerList { containers: vec![] }, true),
+            (
+                DaemonResponse::Error {
+                    message: "boom".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stdout,
+                    data: "dGVzdA==".to_string(),
+                },
+                false,
+            ),
+            (DaemonResponse::ContainerStopped { exit_code: 0 }, true),
+            (
+                DaemonResponse::ImageLoaded {
+                    image: "minibox-tester:latest".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ExecStarted {
+                    exec_id: "exec001".to_string(),
+                },
+                false, // non-terminal: output and ContainerStopped follow
+            ),
+            (
+                DaemonResponse::PushProgress {
+                    layer_digest: "sha256:abc".to_string(),
+                    bytes_uploaded: 100,
+                    total_bytes: 1000,
+                },
+                false,
+            ),
+            (
+                DaemonResponse::BuildOutput {
+                    step: 1,
+                    total_steps: 3,
+                    message: "Step 1/3: FROM alpine".to_string(),
+                },
+                false,
+            ),
+            (
+                DaemonResponse::BuildComplete {
+                    image_id: "sha256:deadbeef".to_string(),
+                    tag: "myapp:latest".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerPaused {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::ContainerResumed {
+                    id: "abc".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::Event {
+                    event: crate::events::ContainerEvent::Started {
+                        id: "abc".to_string(),
+                        pid: 1,
+                        timestamp: std::time::SystemTime::UNIX_EPOCH,
+                    },
+                },
+                false, // non-terminal: streaming
+            ),
+            (
+                DaemonResponse::Pruned {
+                    removed: vec![],
+                    freed_bytes: 0,
+                    dry_run: false,
+                },
+                true,
+            ),
+            (
+                DaemonResponse::LogLine {
+                    stream: OutputStreamKind::Stdout,
+                    line: "hello".to_string(),
+                },
+                false, // non-terminal: more lines may follow
+            ),
+            (
+                DaemonResponse::PipelineComplete {
+                    trace: serde_json::json!({"steps": [], "result": "ok"}),
+                    container_id: "abc123".to_string(),
+                    exit_code: 0,
+                },
+                true,
+            ),
+            (
+                DaemonResponse::UpdateProgress {
+                    image: "alpine:latest".to_string(),
+                    status: "updated".to_string(),
+                },
+                false, // non-terminal: one per image, Success/Error follows
+            ),
+            (
+                DaemonResponse::ImageList {
+                    images: vec!["alpine:latest".to_string()],
+                },
+                true,
+            ),
+            (
+                DaemonResponse::Manifest {
+                    manifest: serde_json::json!({}),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::VerifyResult {
+                    allowed: true,
+                    reason: None,
+                },
+                true,
+            ),
+            (DaemonResponse::PipelineList { pipelines: vec![] }, true),
+            (
+                DaemonResponse::PipelineDetail {
+                    id: "trace-1".to_string(),
+                    trace: serde_json::json!({}),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::SnapshotSaved {
+                    info: sample_snapshot_info(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::SnapshotRestored {
+                    id: "abc".to_string(),
+                    name: "snap1".to_string(),
+                },
+                true,
+            ),
+            (
+                DaemonResponse::SnapshotList {
+                    id: "abc".to_string(),
+                    snapshots: vec![],
+                },
+                true,
+            ),
+            (
+                DaemonResponse::WorkflowStepComplete {
+                    alias: "step1".to_string(),
+                    output: serde_json::json!({}),
+                    status: StepStatus::Succeeded,
+                },
+                true,
+            ),
+            (
+                DaemonResponse::WorkflowComplete {
+                    final_phase: PhaseOutcome::Succeeded,
+                },
+                true,
+            ),
+        ];
+
+        for (variant, expected_terminal) in variants {
+            assert_eq!(
+                variant.is_terminal(),
+                *expected_terminal,
+                "unexpected terminal status for variant: {variant:?}",
+            );
+
+            // Exhaustiveness guard: no wildcard arm.  A new DaemonResponse
+            // variant will not compile until it is added here AND in the
+            // `variants` slice above.
+            let _exhaustiveness_guard: bool = match variant {
+                DaemonResponse::ContainerCreated { .. } => false,
+                DaemonResponse::Success { .. } => true,
+                DaemonResponse::ContainerList { .. } => true,
+                DaemonResponse::Error { .. } => true,
+                DaemonResponse::ContainerOutput { .. } => false,
+                DaemonResponse::ContainerStopped { .. } => true,
+                DaemonResponse::ImageLoaded { .. } => true,
+                DaemonResponse::ExecStarted { .. } => false,
+                DaemonResponse::PushProgress { .. } => false,
+                DaemonResponse::BuildOutput { .. } => false,
+                DaemonResponse::BuildComplete { .. } => true,
+                DaemonResponse::ContainerPaused { .. } => true,
+                DaemonResponse::ContainerResumed { .. } => true,
+                DaemonResponse::Event { .. } => false,
+                DaemonResponse::Pruned { .. } => true,
+                DaemonResponse::LogLine { .. } => false,
+                DaemonResponse::PipelineComplete { .. } => true,
+                DaemonResponse::SnapshotSaved { .. } => true,
+                DaemonResponse::SnapshotRestored { .. } => true,
+                DaemonResponse::SnapshotList { .. } => true,
+                DaemonResponse::UpdateProgress { .. } => false,
+                DaemonResponse::ImageList { .. } => true,
+                DaemonResponse::Manifest { .. } => true,
+                DaemonResponse::VerifyResult { .. } => true,
+                DaemonResponse::WorkflowStepComplete { .. } => true,
+                DaemonResponse::WorkflowComplete { .. } => true,
+                DaemonResponse::PipelineList { .. } => true,
+                DaemonResponse::PipelineDetail { .. } => true,
+            };
+        }
+    }
+
+    fn sample_snapshot_info() -> crate::domain::SnapshotInfo {
+        crate::domain::SnapshotInfo {
+            container_id: "abc".to_string(),
+            name: "snap1".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            adapter: "native".to_string(),
+            image: "alpine:latest".to_string(),
+            size_bytes: 0,
+        }
     }
 }
 

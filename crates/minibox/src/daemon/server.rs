@@ -76,8 +76,8 @@ pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
             fd,
             nix::libc::SOL_SOCKET,
             nix::libc::SO_PEERCRED,
-            &mut cred as *mut _ as *mut nix::libc::c_void,
-            &mut len,
+            (&raw mut cred).cast::<nix::libc::c_void>(),
+            &raw mut len,
         )
     };
     if ret == 0 {
@@ -402,36 +402,13 @@ where
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
-/// as the first message, followed by `ContainerOutput` chunks and then
-/// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
-/// server loop exits naturally when `rx.recv()` returns `None`.
+/// Delegates to the canonical [`DaemonResponse::is_terminal`] predicate in
+/// `minibox-core`. `ContainerCreated` is intentionally non-terminal: ephemeral
+/// runs send it as the first message, followed by `ContainerOutput` chunks and
+/// then `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so
+/// the server loop exits naturally when `rx.recv()` returns `None`.
 const fn is_terminal_response(r: &DaemonResponse) -> bool {
-    matches!(
-        r,
-        DaemonResponse::ContainerStopped { .. }
-            | DaemonResponse::Error { .. }
-            | DaemonResponse::Success { .. }
-            | DaemonResponse::ContainerList { .. }
-            | DaemonResponse::ImageLoaded { .. }
-            | DaemonResponse::BuildComplete { .. }
-            | DaemonResponse::ContainerPaused { .. }
-            | DaemonResponse::ContainerResumed { .. }
-            | DaemonResponse::Pruned { .. }
-            | DaemonResponse::PipelineComplete { .. }
-            | DaemonResponse::SnapshotSaved { .. }
-            | DaemonResponse::SnapshotRestored { .. }
-            | DaemonResponse::SnapshotList { .. }
-            | DaemonResponse::ImageList { .. }
-            | DaemonResponse::Manifest { .. }
-            | DaemonResponse::VerifyResult { .. }
-            | DaemonResponse::WorkflowStepComplete { .. }
-            | DaemonResponse::WorkflowComplete { .. }
-            | DaemonResponse::PipelineList { .. }
-            | DaemonResponse::PipelineDetail { .. }
-    )
-    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
-    // Event, and UpdateProgress are non-terminal.
+    r.is_terminal()
 }
 
 /// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
