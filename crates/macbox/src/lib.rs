@@ -49,9 +49,7 @@ pub enum MacboxError {
     NoBackendAvailable,
 }
 
-// TODO(#161): centralize adapter registration — this function duplicates
-// `build_colima_handler_dependencies` in `crates/miniboxd/src/main.rs`.
-// Consolidate both into a shared builder module when refactoring adapters.
+// Issue #161: centralize adapter registration
 #[allow(clippy::too_many_arguments)]
 pub fn build_colima_handler_dependencies(
     state: Arc<DaemonState>,
@@ -320,9 +318,6 @@ pub async fn start() -> Result<()> {
 ///
 /// The krun backend delegates container execution to `smolvm` (a thin
 /// wrapper over libkrun) rather than Linux namespaces or Colima.
-// TODO: extract socket bind/chmod/stale-removal boilerplate shared by `start()` and
-// `start_krun()` (and any future adapter entrypoints) into a `bind_socket(path) -> Result<UnixListener>`
-// helper to eliminate 3x duplication (lines ~270-308, ~381-415).
 // qual:allow(iosp) reason: "daemon entrypoint — build krun deps, bind socket, run server"
 async fn start_krun(
     socket_path: std::path::PathBuf,

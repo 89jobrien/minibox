@@ -16,9 +16,6 @@
 //!    output or tab-completion.
 //! 4. [`validate_adapter_name`] wraps [`parse_adapter`] returning `anyhow::Result`,
 //!    suitable for early-startup validation in `main`.
-//
-// TODO(#307): evaluate making smolvm the unconditional default when smolvm binary
-// detection is reliable on all CI platforms.
 
 use std::fmt;
 
