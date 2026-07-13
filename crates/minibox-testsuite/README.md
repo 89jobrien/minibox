@@ -1,4 +1,4 @@
-# minibox-conformance
+# minibox-testsuite
 
 Conformance test harness for minibox adapter trait contracts.
 
@@ -13,13 +13,13 @@ from `minibox::testing::mocks` — no kernel interaction, network calls, or daem
 Run the full suite and print a pass/fail summary:
 
 ```
-cargo run -p minibox-conformance --bin run-conformance
+cargo run -p minibox-testsuite --bin run-conformance
 ```
 
 Generate JSON and JUnit XML reports in `artifacts/`:
 
 ```
-cargo run -p minibox-conformance --bin generate-report
+cargo run -p minibox-testsuite --bin generate-report
 ```
 
 Both binaries exit `0` on success and `1` on any test failure.
@@ -44,7 +44,7 @@ Categories used in the harness:
 ## Structure
 
 ```
-crates/minibox-conformance/
+crates/minibox-testsuite/
   src/
     harness/          ConformanceTest trait, TestContext, TestRunner, ReportGenerator
     adapters/         per-adapter test modules (registry, runtime, limiter, state)
@@ -80,7 +80,7 @@ impl ConformanceTest for MyNewTest {
 
 | Category          | Command                                        | Requires root/Linux |
 | ----------------- | ---------------------------------------------- | ------------------- |
-| Conformance       | `cargo run -p minibox-conformance --bin run-conformance` | No      |
+| Conformance       | `cargo run -p minibox-testsuite --bin run-conformance`   | No      |
 | Unit              | `cargo xtask test-unit`                        | No                  |
 | Integration       | `just test-integration`                        | Yes (cgroups)       |
 | E2E               | `just test-e2e`                                | Yes (daemon)        |

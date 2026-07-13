@@ -17,7 +17,7 @@ pub struct MockImageLoader {
 
 impl MockImageLoader {
     /// Create a mock that succeeds on every call.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             load_count: AtomicUsize::new(0),
             should_fail: false,
@@ -25,7 +25,7 @@ impl MockImageLoader {
     }
 
     /// Create a mock that returns an error on every call.
-    pub fn failing() -> Self {
+    pub const fn failing() -> Self {
         Self {
             load_count: AtomicUsize::new(0),
             should_fail: true,

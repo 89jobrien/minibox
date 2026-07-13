@@ -5,8 +5,6 @@
 use minibox::testing::mocks::network::MockNetwork;
 use minibox_core::domain::{NetworkConfig, NetworkProvider};
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -20,22 +18,16 @@ fn default_config() -> NetworkConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// setup returns a non-empty netns path.
-pub struct SetupReturnsNetnsPath;
-impl ConformanceTest for SetupReturnsNetnsPath {
-    fn name(&self) -> &str {
-        "setup_returns_netns_path"
-    }
-    fn adapter(&self) -> &str {
-        "network"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// setup returns a non-empty netns path.
+crate::conformance_test! {
+    name: "setup_returns_netns_path",
+    adapter: "network",
+    capability: Network,
+    category: Unit,
+    |ctx| {
         let mock = MockNetwork::new();
         let result = rt().block_on(mock.setup("ctr-net-001", &default_config()));
         if let Some(path) = ctx.assert_ok(result, "network setup should succeed") {
@@ -45,19 +37,13 @@ impl ConformanceTest for SetupReturnsNetnsPath {
     }
 }
 
-/// setup increments the call count.
-pub struct SetupIncrementsCount;
-impl ConformanceTest for SetupIncrementsCount {
-    fn name(&self) -> &str {
-        "setup_increments_count"
-    }
-    fn adapter(&self) -> &str {
-        "network"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// setup increments the call count.
+crate::conformance_test! {
+    name: "setup_increments_count",
+    adapter: "network",
+    capability: Network,
+    category: Unit,
+    |ctx| {
         let mock = MockNetwork::new();
         let _ = rt().block_on(mock.setup("ctr-net-002", &default_config()));
         ctx.assert_eq(1, mock.setup_count(), "setup_count after one call");
@@ -65,19 +51,13 @@ impl ConformanceTest for SetupIncrementsCount {
     }
 }
 
-/// cleanup increments the cleanup count.
-pub struct CleanupIncrementsCount;
-impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &str {
-        "cleanup_increments_count"
-    }
-    fn adapter(&self) -> &str {
-        "network"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// cleanup increments the cleanup count.
+crate::conformance_test! {
+    name: "cleanup_increments_count",
+    adapter: "network",
+    capability: Network,
+    category: Unit,
+    |ctx| {
         let mock = MockNetwork::new();
         let _ = rt().block_on(mock.cleanup("ctr-net-003"));
         ctx.assert_eq(1, mock.cleanup_count(), "cleanup_count after one call");
@@ -85,19 +65,13 @@ impl ConformanceTest for CleanupIncrementsCount {
     }
 }
 
-/// setup returns Err when configured to fail.
-pub struct SetupFailureReturnsErr;
-impl ConformanceTest for SetupFailureReturnsErr {
-    fn name(&self) -> &str {
-        "setup_failure_returns_err"
-    }
-    fn adapter(&self) -> &str {
-        "network"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// setup returns Err when configured to fail.
+crate::conformance_test! {
+    name: "setup_failure_returns_err",
+    adapter: "network",
+    capability: Network,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockNetwork::new().with_setup_failure();
         let result = rt().block_on(mock.setup("ctr-net-004", &default_config()));
         ctx.assert_err(
@@ -108,19 +82,13 @@ impl ConformanceTest for SetupFailureReturnsErr {
     }
 }
 
-/// cleanup returns Err when configured to fail.
-pub struct CleanupFailureReturnsErr;
-impl ConformanceTest for CleanupFailureReturnsErr {
-    fn name(&self) -> &str {
-        "cleanup_failure_returns_err"
-    }
-    fn adapter(&self) -> &str {
-        "network"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+// cleanup returns Err when configured to fail.
+crate::conformance_test! {
+    name: "cleanup_failure_returns_err",
+    adapter: "network",
+    capability: Network,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockNetwork::new().with_cleanup_failure();
         let result = rt().block_on(mock.cleanup("ctr-net-005"));
         ctx.assert_err(
@@ -129,15 +97,4 @@ impl ConformanceTest for CleanupFailureReturnsErr {
         );
         ctx.result()
     }
-}
-
-/// Return all network conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(SetupReturnsNetnsPath),
-        Box::new(SetupIncrementsCount),
-        Box::new(CleanupIncrementsCount),
-        Box::new(SetupFailureReturnsErr),
-        Box::new(CleanupFailureReturnsErr),
-    ]
 }

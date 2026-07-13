@@ -45,8 +45,7 @@ fn colima_home() -> PathBuf {
     }
 
     std::env::var("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("~"))
+        .map_or_else(|_| PathBuf::from("~"), PathBuf::from)
         .join(".colima")
 }
 
@@ -158,6 +157,7 @@ pub struct ColimaRegistry {
 
 impl ColimaRegistry {
     /// Create a new registry adapter targeting the default `"colima"` Lima instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             ctx: LimaContext::new(),
@@ -167,6 +167,7 @@ impl ColimaRegistry {
     /// Override the Lima instance name (default: `"colima"`).
     ///
     /// Useful when multiple Lima instances are running (e.g. `colima-arm`).
+    #[must_use]
     pub fn with_instance(mut self, instance: String) -> Self {
         self.ctx.instance = instance;
         self
@@ -222,8 +223,7 @@ impl ImageRegistry for ColimaRegistry {
                 &format!("reference={full_name}"),
                 "--quiet",
             ])
-            .map(|out| !out.trim().is_empty())
-            .unwrap_or(false)
+            .is_ok_and(|out| !out.trim().is_empty())
     }
 
     /// Pull the image via `nerdctl` inside the VM and return its metadata.
@@ -375,6 +375,7 @@ pub struct ColimaFilesystem {
 
 impl ColimaFilesystem {
     /// Create a new filesystem adapter targeting the default `"colima"` Lima instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             ctx: LimaContext::new(),
@@ -507,6 +508,7 @@ pub struct ColimaLimiter {
 
 impl ColimaLimiter {
     /// Create a new resource limiter adapter targeting the default `"colima"` Lima instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             ctx: LimaContext::new(),
@@ -518,7 +520,7 @@ impl ColimaLimiter {
     ///
     /// Block device detection is best-effort: if the probe fails or returns an
     /// unexpected format, `block_device` stays `None` and io.max writes are
-    /// silently skipped (matching GkeLimiter's best-effort behavior).
+    /// silently skipped (matching `GkeLimiter`'s best-effort behavior).
     pub fn with_executor(mut self, executor: LimaExecutor) -> Self {
         // Probe block device -- best-effort, io.max is optional.
         self.block_device = executor(&[
@@ -675,6 +677,7 @@ pub struct ColimaRuntime {
 
 impl ColimaRuntime {
     /// Create a new runtime adapter targeting the default `"colima"` Lima instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             ctx: LimaContext::new(),
@@ -715,9 +718,7 @@ impl ColimaRuntime {
 ///
 /// Lima shares `$HOME` and `/tmp` into the VM by default. Paths outside those
 /// prefixes are not visible and will cause silent mount failures.
-pub(crate) fn validate_lima_paths(
-    mounts: &[minibox_core::domain::BindMount],
-) -> anyhow::Result<()> {
+pub fn validate_lima_paths(mounts: &[minibox_core::domain::BindMount]) -> anyhow::Result<()> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
     let home_path = std::path::Path::new(&home);
 
@@ -727,10 +728,8 @@ pub(crate) fn validate_lima_paths(
         let in_tmp = p.starts_with("/tmp");
         if !in_home && !in_tmp {
             anyhow::bail!(
-                "bind mount source {:?} is not accessible inside the Lima VM.\n\
-                 hint: Lima shares $HOME ({}) and /tmp — move the source or add it to lima.yaml shared dirs.",
-                p,
-                home
+                "bind mount source {p:?} is not accessible inside the Lima VM.\n\
+                 hint: Lima shares $HOME ({home}) and /tmp — move the source or add it to lima.yaml shared dirs."
             );
         }
     }
@@ -746,7 +745,7 @@ pub(crate) fn validate_lima_paths(
 /// The exported rootfs is read-only at this stage, so the target must already
 /// exist in the image. Creating it lazily with `mkdir -p` fails for paths like
 /// `/workspace` and obscures the real problem.
-pub(crate) fn bind_mount_shell_snippet(
+pub fn bind_mount_shell_snippet(
     m: &minibox_core::domain::BindMount,
     rootfs: &std::path::Path,
 ) -> String {
@@ -925,7 +924,7 @@ struct NerdctlImageInspect {
     /// Total compressed image size in bytes as reported by nerdctl.
     #[serde(rename = "Size")]
     size: Option<i64>,
-    /// Layer digest list embedded in the RootFS section.
+    /// Layer digest list embedded in the `RootFS` section.
     #[serde(rename = "RootFS")]
     root_fs: Option<RootFs>,
 }
@@ -982,6 +981,9 @@ mod tests {
         let prev_colima = std::env::var("COLIMA_HOME").ok();
         let prev_home = std::env::var("HOME").ok();
 
+        // SAFETY: ENV_MUTEX is held for the duration of this block, serialising
+        // all environment mutations across tests. Rust 2024 requires unsafe for
+        // set_var/remove_var; no other thread can observe a partially-mutated env.
         unsafe {
             std::env::remove_var("LIMA_HOME");
             std::env::remove_var("COLIMA_HOME");
@@ -990,6 +992,8 @@ mod tests {
 
         let result = lima_home();
 
+        // SAFETY: Same ENV_MUTEX guard as above; restoring the previous values
+        // while still holding the lock.
         unsafe {
             match prev_lima {
                 Some(v) => std::env::set_var("LIMA_HOME", v),
@@ -1144,23 +1148,13 @@ mod tests {
         let prev_colima = std::env::var("COLIMA_HOME").ok();
         let prev_home = std::env::var("HOME").ok();
 
-        unsafe {
-            std::env::remove_var("COLIMA_HOME");
-            std::env::set_var("HOME", "/tmp/test-home");
-        }
+        minibox_macros::unsafe_remove_var!("COLIMA_HOME");
+        minibox_macros::unsafe_set_var!("HOME", "/tmp/test-home");
 
         let result = colima_home();
 
-        unsafe {
-            match prev_colima {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-            match prev_home {
-                Some(v) => std::env::set_var("HOME", v),
-                None => std::env::remove_var("HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev_colima);
+        minibox_macros::unsafe_restore_var!("HOME", prev_home);
 
         assert_eq!(result, PathBuf::from("/tmp/test-home").join(".colima"));
     }
@@ -1170,14 +1164,9 @@ mod tests {
         let _guard = ENV_MUTEX.lock().unwrap();
         let prev = std::env::var("COLIMA_HOME").ok();
 
-        unsafe { std::env::set_var("COLIMA_HOME", "/custom/colima") };
+        minibox_macros::unsafe_set_var!("COLIMA_HOME", "/custom/colima");
         let result = colima_home();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev);
 
         assert_eq!(result, PathBuf::from("/custom/colima"));
     }
@@ -1189,28 +1178,15 @@ mod tests {
         let prev_colima = std::env::var("COLIMA_HOME").ok();
         let prev_home = std::env::var("HOME").ok();
 
-        unsafe {
-            std::env::remove_var("LIMA_HOME");
-            std::env::remove_var("COLIMA_HOME");
-            std::env::set_var("HOME", "/tmp/test-home");
-        }
+        minibox_macros::unsafe_remove_var!("LIMA_HOME");
+        minibox_macros::unsafe_remove_var!("COLIMA_HOME");
+        minibox_macros::unsafe_set_var!("HOME", "/tmp/test-home");
 
         let result = lima_home();
 
-        unsafe {
-            match prev_lima {
-                Some(v) => std::env::set_var("LIMA_HOME", v),
-                None => std::env::remove_var("LIMA_HOME"),
-            }
-            match prev_colima {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-            match prev_home {
-                Some(v) => std::env::set_var("HOME", v),
-                None => std::env::remove_var("HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("LIMA_HOME", prev_lima);
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev_colima);
+        minibox_macros::unsafe_restore_var!("HOME", prev_home);
 
         assert_eq!(result, "/tmp/test-home/.colima/_lima");
     }
@@ -1220,14 +1196,9 @@ mod tests {
         let _guard = ENV_MUTEX.lock().unwrap();
         let prev = std::env::var("LIMA_HOME").ok();
 
-        unsafe { std::env::set_var("LIMA_HOME", "/custom/lima") };
+        minibox_macros::unsafe_set_var!("LIMA_HOME", "/custom/lima");
         let result = lima_home();
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("LIMA_HOME", v),
-                None => std::env::remove_var("LIMA_HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("LIMA_HOME", prev);
 
         assert_eq!(result, "/custom/lima");
     }
@@ -1238,24 +1209,14 @@ mod tests {
         let prev_lima = std::env::var("LIMA_HOME").ok();
         let prev_colima = std::env::var("COLIMA_HOME").ok();
 
-        unsafe {
-            std::env::remove_var("LIMA_HOME");
-            std::env::remove_var("COLIMA_HOME");
-        }
+        minibox_macros::unsafe_remove_var!("LIMA_HOME");
+        minibox_macros::unsafe_remove_var!("COLIMA_HOME");
 
         let cmd = limactl_command("limactl");
         let expected_lima_home = lima_home();
 
-        unsafe {
-            match prev_lima {
-                Some(v) => std::env::set_var("LIMA_HOME", v),
-                None => std::env::remove_var("LIMA_HOME"),
-            }
-            match prev_colima {
-                Some(v) => std::env::set_var("COLIMA_HOME", v),
-                None => std::env::remove_var("COLIMA_HOME"),
-            }
-        }
+        minibox_macros::unsafe_restore_var!("LIMA_HOME", prev_lima);
+        minibox_macros::unsafe_restore_var!("COLIMA_HOME", prev_colima);
 
         assert!(
             !expected_lima_home.is_empty(),

@@ -9,7 +9,10 @@ use std::time::Instant;
 
 use serde::Serialize;
 
+use minibox_core::adapters::conformance::BackendDescriptor;
+
 use super::context::TestContext;
+use super::macros::ConformanceTestEntry;
 use super::traits::{ConformanceTest, TestCategory, TestResult};
 
 /// Result of a single test execution.
@@ -40,11 +43,13 @@ pub struct TestSummary {
 }
 
 impl TestSummary {
-    pub fn is_success(&self) -> bool {
+    #[must_use]
+    pub const fn is_success(&self) -> bool {
         self.failed == 0
     }
 
     /// Results grouped by adapter name.
+    #[must_use]
     pub fn by_adapter(&self) -> HashMap<&str, Vec<&TestRunResult>> {
         let mut map: HashMap<&str, Vec<&TestRunResult>> = HashMap::new();
         for r in &self.results {
@@ -69,6 +74,7 @@ pub struct RunnerFilter {
 pub struct TestRunner {
     tests: Vec<Box<dyn ConformanceTest>>,
     filter: RunnerFilter,
+    descriptor: Option<BackendDescriptor>,
 }
 
 impl Default for TestRunner {
@@ -78,11 +84,34 @@ impl Default for TestRunner {
 }
 
 impl TestRunner {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             tests: Vec::new(),
             filter: RunnerFilter::default(),
+            descriptor: None,
         }
+    }
+
+    /// Collect all tests registered via `inventory`.
+    #[must_use]
+    pub fn collect_inventory() -> Self {
+        let tests: Vec<Box<dyn ConformanceTest>> = inventory::iter::<ConformanceTestEntry>
+            .into_iter()
+            .map(|entry| (entry.make)())
+            .collect();
+        Self {
+            tests,
+            filter: RunnerFilter::default(),
+            descriptor: None,
+        }
+    }
+
+    /// Set the backend descriptor for capability-based auto-skip.
+    #[must_use]
+    pub fn with_descriptor(mut self, desc: BackendDescriptor) -> Self {
+        self.descriptor = Some(desc);
+        self
     }
 
     /// Register a single test.
@@ -96,18 +125,21 @@ impl TestRunner {
     }
 
     /// Filter to a specific adapter.
+    #[must_use]
     pub fn filter_adapter(mut self, name: &str) -> Self {
         self.filter.adapter = Some(name.to_string());
         self
     }
 
     /// Filter to a specific category.
-    pub fn filter_category(mut self, cat: TestCategory) -> Self {
+    #[must_use]
+    pub const fn filter_category(mut self, cat: TestCategory) -> Self {
         self.filter.category = Some(cat);
         self
     }
 
     /// Filter by name substring.
+    #[must_use]
     pub fn filter_name(mut self, pattern: &str) -> Self {
         self.filter.name_pattern = Some(pattern.to_string());
         self
@@ -133,11 +165,13 @@ impl TestRunner {
     }
 
     /// Number of registered tests.
+    #[must_use]
     pub fn count(&self) -> usize {
         self.tests.len()
     }
 
     /// Number of tests that will execute after filtering.
+    #[must_use]
     pub fn filtered_count(&self) -> usize {
         self.tests
             .iter()
@@ -146,6 +180,7 @@ impl TestRunner {
     }
 
     /// Execute all (filtered) tests and return the summary.
+    #[must_use]
     pub fn run(&self) -> TestSummary {
         let suite_start = Instant::now();
         let mut results = Vec::new();
@@ -155,8 +190,31 @@ impl TestRunner {
                 continue;
             }
 
+            // Auto-skip if required capability is not supported.
+            if let Some(cap) = test.required_capability() {
+                if let Some(ref desc) = self.descriptor {
+                    if !desc.capabilities.supports(cap) {
+                        results.push(TestRunResult {
+                            id: test.id(),
+                            name: test.name().to_string(),
+                            adapter: test.adapter().to_string(),
+                            category: test.category(),
+                            result: TestResult::Skipped {
+                                reason: format!("backend does not support {cap:?}"),
+                            },
+                            duration_ms: 0,
+                            failures: Vec::new(),
+                        });
+                        continue;
+                    }
+                }
+            }
+
             let start = Instant::now();
-            let mut ctx = TestContext::new();
+            let mut ctx = match &self.descriptor {
+                Some(desc) => TestContext::with_descriptor(desc),
+                None => TestContext::new(),
+            };
             let result = test.run_sync(&mut ctx);
             let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -206,7 +264,7 @@ mod tests {
         fn category(&self) -> TestCategory {
             TestCategory::Unit
         }
-        fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult {
             ctx.assert_eq(1, 1, "always");
             ctx.result()
         }
@@ -223,7 +281,7 @@ mod tests {
         fn category(&self) -> TestCategory {
             TestCategory::Unit
         }
-        fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+        fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult {
             ctx.assert_eq(1, 2, "mismatch");
             ctx.result()
         }
@@ -254,6 +312,20 @@ mod tests {
         let summary = runner.run();
         assert_eq!(summary.failed, 1);
         assert!(!summary.is_success());
+    }
+
+    #[test]
+    fn inventory_collects_expected_test_count() {
+        // Pin the floor so a dropped adapter module or a stripped inventory
+        // ctor section cannot silently zero the suite. Update EXPECTED_MIN
+        // when adding or removing conformance suites.
+        const EXPECTED_MIN: usize = 123;
+        let runner = TestRunner::collect_inventory();
+        assert!(
+            runner.count() >= EXPECTED_MIN,
+            "conformance inventory collapsed: {} tests (expected >= {EXPECTED_MIN})",
+            runner.count()
+        );
     }
 
     #[test]

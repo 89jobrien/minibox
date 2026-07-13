@@ -109,6 +109,35 @@
 
 ## Recently completed
 
+- **minibox-bench crate** — dedicated Criterion benchmark crate with 8 hot-path
+  targets (layer_extract, image_pull, linux_rootfs, cgroup, spawn), Justfile,
+  `cargo xtask bench --check` regression gate, nightly CI job with self-hosted
+  runner preference (b9df139f, 2dd9d4ca, 1eee8706, 5fa390cb).
+- **MoA review HIGH fixes** — resolved F1-F8/D2 findings across two waves;
+  workspace bumped to v0.31.0; ail + minibox-bench crates registered (54510f59,
+  8b842b53).
+- **conformance_test! macro** — replaces ConformanceTest boilerplate in
+  minibox-testsuite; design doc at docs/designs/2026-07-01-conformance-macro-design.md
+  (4ce6ce9f).
+- **miette diagnostics** — rich CLI error rendering via miette; plan doc at
+  docs/plans/2026-07-07-structured-errors-miette.md (cf37b05a).
+- **PR-based auto-promote CI** — cascade develop->next->staging->main via PR
+  workflow (c1a16d8e).
+- **Workspace-wide clippy sweep** — 64 Linux-only warnings resolved (826a54ed).
+- **Rustqual SRP sweep** — workspace-wide SRP_PARAMS/FRAGMENT/BOILERPLATE/TQ
+  elimination (8212a9a4).
+- **Mistakes ledger** — .ctx/memory-bank/mistakes.md (30 recurring patterns).
+- **Python code removal** — removed all 15 Python files + uv.lock from scripts/.
+  ai-review.nu now calls ai-review.rs (rust-script). Gitea CI diagnose job
+  removed. No Python remains in the project.
+- **Dead script cleanup** — removed gen-class-diagrams.py, install-claude-skills.sh,
+  demo-smolvm.sh, agent_hello_world.py (no callers found).
+- **14-doc audit and fix** — verified all 20 docs/core/ files against code.
+  Fixed 19 critical errors and 10 stale references across 14 docs:
+  smolbox crate visibility, minibox-conformance->minibox-testsuite rename,
+  version 0.24.0->0.30.0, vz adapter removal, DoS limit corrections,
+  select_adapter->adapter_from_env, stable->staging, minibox-cli->mbx,
+  SO_PEERCRED/handler file attributions.
 - **Rustqual SRP sweep** — RunParams extraction, named constants in miniboxd,
   dead code removal, duplicate dedup (lima_exec, lifecycle handlers),
   long function extraction across core+minibox+miniboxd (791e81a..dd3e9a6)

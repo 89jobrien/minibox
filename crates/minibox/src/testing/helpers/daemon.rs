@@ -1,4 +1,5 @@
 //! Shared helpers for daemon conformance tests.
+#![allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
 
 use crate::daemon::handler::{
     BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
@@ -30,7 +31,7 @@ pub fn make_mock_deps(temp_dir: &TempDir) -> Arc<HandlerDependencies> {
 /// ```rust,ignore
 /// let deps = make_mock_deps_with_policy(
 ///     &tmp,
-///     ContainerPolicy { allow_bind_mounts: false, allow_privileged: false },
+///     ContainerPolicy { allow_bind_mounts: false, allow_privileged: false, ..Default::default() },
 /// );
 /// ```
 pub fn make_mock_deps_with_policy(
@@ -89,6 +90,7 @@ pub fn make_mock_deps_with_registry(
         policy: crate::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),

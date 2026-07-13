@@ -48,6 +48,7 @@ pub struct MockAdapterSet {
 ///
 /// All failure modes default to `false` (i.e. success). Use the `with_*`
 /// methods to inject specific failures before calling [`build`](Self::build).
+#[allow(clippy::struct_excessive_bools)]
 pub struct MockAdapterBuilder {
     fail_setup: bool,
     fail_create: bool,
@@ -58,7 +59,8 @@ pub struct MockAdapterBuilder {
 
 impl MockAdapterBuilder {
     /// Create a new builder with all adapters configured to succeed.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             fail_setup: false,
             fail_create: false,
@@ -69,36 +71,43 @@ impl MockAdapterBuilder {
     }
 
     /// Cause `FilesystemProvider::setup_rootfs` to return an error.
-    pub fn with_setup_failure(mut self) -> Self {
+    #[must_use]
+    pub const fn with_setup_failure(mut self) -> Self {
         self.fail_setup = true;
         self
     }
 
     /// Cause `ResourceLimiter::create` to return an error.
-    pub fn with_create_failure(mut self) -> Self {
+    #[must_use]
+    pub const fn with_create_failure(mut self) -> Self {
         self.fail_create = true;
         self
     }
 
     /// Cause `ImageRegistry::pull_image` to return an error.
-    pub fn with_pull_failure(mut self) -> Self {
+    #[must_use]
+    pub const fn with_pull_failure(mut self) -> Self {
         self.fail_pull = true;
         self
     }
 
     /// Cause `ContainerRuntime::spawn_process` to return an error.
-    pub fn with_spawn_failure(mut self) -> Self {
+    #[must_use]
+    pub const fn with_spawn_failure(mut self) -> Self {
         self.fail_spawn = true;
         self
     }
 
     /// Pre-populate the registry cache so `has_image` returns `true`.
+    #[must_use]
     pub fn with_cached_image(mut self, name: &str, tag: &str) -> Self {
         self.cached_images.push((name.to_string(), tag.to_string()));
         self
     }
 
     /// Construct a [`MockAdapterSet`] with the configured failure modes.
+    // qual:allow(iosp) reason: "builder pattern — assembles mocks from config"
+    #[must_use]
     pub fn build(self) -> MockAdapterSet {
         let mut registry = MockRegistry::new();
         for (name, tag) in &self.cached_images {
@@ -160,6 +169,11 @@ pub struct TempContainerFixture {
 impl TempContainerFixture {
     /// Create a new fixture, creating `images/` and `containers/` inside a
     /// fresh temporary directory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory or its subdirectories
+    /// cannot be created.
     pub fn new() -> std::io::Result<Self> {
         let dir = TempDir::new()?;
         let images_dir = dir.path().join("images");

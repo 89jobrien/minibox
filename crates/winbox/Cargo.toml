@@ -18,3 +18,6 @@ dirs = { workspace = true }
 [package.metadata.cargo-machete]
 # winbox is a Windows stub — deps reserved for planned implementation
 ignored = ["minibox", "minibox-core", "tokio", "tracing-subscriber"]
+
+[lints]
+workspace = true

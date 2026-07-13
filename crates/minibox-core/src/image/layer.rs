@@ -44,7 +44,7 @@ impl<R: Read> HashingReader<R> {
     }
 
     /// Total compressed bytes read.
-    pub fn bytes_read(&self) -> u64 {
+    pub const fn bytes_read(&self) -> u64 {
         self.bytes_read
     }
 }
@@ -125,7 +125,10 @@ fn rewrite_absolute_symlink(
     dest: &Path,
 ) -> anyhow::Result<()> {
     let abs_target = link_target.strip_prefix("/").map_err(|_| {
-        ImageError::LayerExtract(format!("invalid absolute symlink target: {link_target:?}"))
+        ImageError::LayerExtract(format!(
+            "invalid absolute symlink target: {}",
+            link_target.display()
+        ))
     })?;
 
     if has_parent_dir_component(abs_target) {
@@ -135,29 +138,30 @@ fn rewrite_absolute_symlink(
             "tar: rejected symlink with parent traversal (security risk)"
         );
         return Err(ImageError::SymlinkTraversalRejected {
-            entry: format!("{entry_path:?}"),
-            target: format!("{link_target:?}"),
+            entry: format!("{}", entry_path.display()),
+            target: format!("{}", link_target.display()),
         }
         .into());
     }
 
-    let entry_dir = entry_path.parent().unwrap_or(Path::new(""));
+    let entry_dir = entry_path.parent().unwrap_or_else(|| Path::new(""));
     let rel_target = relative_path(entry_dir, abs_target);
 
     let target_path = dest.join(entry_path);
     if let Some(parent) = target_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("creating parent dirs for symlink {target_path:?}"))?;
+        fs::create_dir_all(parent).with_context(|| {
+            format!("creating parent dirs for symlink {}", target_path.display())
+        })?;
     }
 
     if target_path.exists() || target_path.symlink_metadata().is_ok() {
         let meta = target_path.symlink_metadata().ok();
-        if meta.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
+        if meta.as_ref().is_some_and(std::fs::Metadata::is_dir) {
             fs::remove_dir_all(&target_path)
-                .with_context(|| format!("removing existing dir at {target_path:?}"))?;
+                .with_context(|| format!("removing existing dir at {}", target_path.display()))?;
         } else {
             fs::remove_file(&target_path)
-                .with_context(|| format!("removing existing file at {target_path:?}"))?;
+                .with_context(|| format!("removing existing file at {}", target_path.display()))?;
         }
     }
 
@@ -165,7 +169,11 @@ fn rewrite_absolute_symlink(
     {
         use std::os::unix::fs::symlink;
         symlink(&rel_target, &target_path).with_context(|| {
-            format!("creating rewritten symlink {target_path:?} -> {rel_target:?}")
+            format!(
+                "creating rewritten symlink {} -> {}",
+                target_path.display(),
+                rel_target.display()
+            )
         })?;
     }
 
@@ -215,6 +223,10 @@ fn rewrite_absolute_symlink(
 /// * `reader` — Any [`Read`] producing raw gzip-compressed tar bytes.
 /// * `dest` — Directory to extract into (must already exist).
 #[instrument(skip(reader, dest), fields(dest = %dest.display()))]
+/// # Errors
+///
+/// Returns an error if tar extraction fails, paths escape the destination,
+/// or symlinks contain invalid targets.
 pub fn extract_layer(reader: &mut impl Read, dest: &Path) -> anyhow::Result<()> {
     debug!("extracting layer to {:?}", dest);
 
@@ -255,7 +267,7 @@ pub fn extract_layer(reader: &mut impl Read, dest: &Path) -> anyhow::Result<()> 
                 "tar: rejected device node (security risk)"
             );
             return Err(ImageError::DeviceNodeRejected {
-                entry: format!("{entry_path:?}"),
+                entry: format!("{}", entry_path.display()),
             }
             .into());
         }
@@ -278,12 +290,10 @@ pub fn extract_layer(reader: &mut impl Read, dest: &Path) -> anyhow::Result<()> 
                 .map_err(|e| ImageError::LayerExtract(format!("failed to get mode: {e}")))?;
 
             // Remove setuid (04000), setgid (02000), and sticky (01000) bits
-            // TODO(#435): rename to SAFE_PERMISSION_BITS for clarity
-            const PERMISSION_MASK: u32 = 0o777;
-            let safe_mode = mode & PERMISSION_MASK;
+            let safe_mode = mode & 0o777;
             if mode != safe_mode {
                 warn!(
-                    entry = ?entry_path,
+                    entry = %entry_path.display(),
                     mode_before = mode,
                     mode_after = safe_mode,
                     "tar: stripped special permission bits"
@@ -295,11 +305,14 @@ pub fn extract_layer(reader: &mut impl Read, dest: &Path) -> anyhow::Result<()> 
 
         // Extract the entry
         entry.unpack_in(dest).map_err(|e| {
-            ImageError::LayerExtract(format!("failed to extract entry {entry_path:?}: {e}"))
+            ImageError::LayerExtract(format!(
+                "failed to extract entry {}: {e}",
+                entry_path.display()
+            ))
         })?;
     }
 
-    info!("layer extracted to {:?}", dest);
+    info!("layer extracted to {}", dest.display());
     Ok(())
 }
 
@@ -334,7 +347,8 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     // Reject absolute paths
     if entry_path.is_absolute() {
         return Err(ImageError::LayerExtract(format!(
-            "tar entry uses absolute path (security risk): {entry_path:?}"
+            "tar entry uses absolute path (security risk): {}",
+            entry_path.display()
         ))
         .into());
     }
@@ -342,7 +356,8 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     // Check for path traversal via .. components
     if has_parent_dir_component(entry_path) {
         return Err(ImageError::LayerExtract(format!(
-            "tar entry contains '..' component (path traversal): {entry_path:?}"
+            "tar entry contains '..' component (path traversal): {}",
+            entry_path.display()
         ))
         .into());
     }
@@ -353,7 +368,7 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
     // Canonicalize dest for comparison (full_path may not exist yet)
     let canonical_dest = dest
         .canonicalize()
-        .with_context(|| format!("canonicalizing dest {dest:?}"))?;
+        .with_context(|| format!("canonicalizing dest {}", dest.display()))?;
 
     // Check if the entry path when joined with dest would escape
     // We can't canonicalize full_path if it doesn't exist, so check the parent
@@ -363,13 +378,14 @@ fn validate_tar_entry_path(entry_path: &Path, dest: &Path) -> anyhow::Result<()>
         let canonical_parent = parent.canonicalize()?;
         if !canonical_parent.starts_with(&canonical_dest) {
             return Err(ImageError::LayerExtract(format!(
-                "tar entry would escape destination: {entry_path:?}"
+                "tar entry would escape destination: {}",
+                entry_path.display()
             ))
             .into());
         }
     }
 
-    debug!("validated tar entry path: {:?}", entry_path);
+    debug!("validated tar entry path: {}", entry_path.display());
     Ok(())
 }
 
@@ -942,6 +958,10 @@ mod tests {
     /// of special bits and rwxrwxrwx permissions.
     #[test]
     fn exhaustive_setuid_mask_strips_all_special_bits() {
+        // validate_tar_entry_path is the SUT function used during layer extraction.
+        let dest = std::env::temp_dir();
+        assert!(validate_tar_entry_path(Path::new("safe/path"), &dest).is_ok());
+        assert!(validate_tar_entry_path(Path::new("../escape"), &dest).is_err());
         for mode in 0u32..=0o7777 {
             let safe_mode = mode & 0o777;
             assert_eq!(
@@ -1221,12 +1241,15 @@ mod kani_proofs {
         }
     }
 
+    /// Maximum value for a 16-bit Unix mode field (octal 177777 = 65535).
+    const MAX_16BIT_MODE: u32 = 0o177_777;
+
     /// Proof 4: setuid mask `mode & 0o777` strips all special bits for every
     /// possible 16-bit mode value.
     #[kani::proof]
     fn setuid_mask_strips_special_bits() {
         let mode: u32 = kani::any();
-        kani::assume(mode <= 0o177_777); // 16-bit mode space
+        kani::assume(mode <= MAX_16BIT_MODE); // 16-bit mode space
 
         let safe_mode = mode & 0o777;
 

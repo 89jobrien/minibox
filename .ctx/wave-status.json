@@ -1,0 +1,25 @@
+{
+  "wave": 6,
+  "agents": {
+    "t11": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    },
+    "chain-f-4": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    },
+    "chain-g-5": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    },
+    "chain-d-4a": {
+      "status": "pending",
+      "branch": "",
+      "commits": []
+    }
+  }
+}

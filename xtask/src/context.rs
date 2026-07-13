@@ -144,7 +144,7 @@ fn crate_graph(sh: &Shell) -> Result<Vec<CrateInfo>> {
         let manifest_path = pkg["manifest_path"].as_str().unwrap_or("");
         let crate_dir = std::path::Path::new(manifest_path)
             .parent()
-            .unwrap_or(Path::new("."));
+            .unwrap_or_else(|| Path::new("."));
 
         let (src_files, lines) = count_source(crate_dir);
 
@@ -193,6 +193,7 @@ fn walkdir(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
     Ok(out)
 }
 
+// qual:allow(iosp) reason: "recursive fs traversal"
 fn walkdir_inner(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
     let entries = std::fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
     for entry in entries {
@@ -274,7 +275,8 @@ fn ci_workflows(root: &Path) -> Vec<String> {
     if let Ok(entries) = std::fs::read_dir(wf_dir) {
         for entry in entries.flatten() {
             if let Some(name) = entry.file_name().to_str()
-                && (name.ends_with(".yml") || name.ends_with(".yaml"))
+                && (name.to_ascii_lowercase().ends_with(".yml")
+                    || name.to_ascii_lowercase().ends_with(".yaml"))
             {
                 names.push(name.to_string());
             }
@@ -311,6 +313,7 @@ fn adapter_table() -> BTreeMap<String, AdapterInfo> {
 
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
+// qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
 pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let (commit, branch, timestamp) = git_info(sh)?;
     let workspace = workspace_version(sh)?;

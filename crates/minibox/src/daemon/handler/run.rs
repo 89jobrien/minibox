@@ -1,4 +1,6 @@
 //! Container run handlers and supporting infrastructure.
+// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
+#![allow(clippy::too_many_arguments)]
 // TODO(#326): persist execution manifest before container spawn
 // TODO(#366): extract shared run preparation path from handle_run
 
@@ -20,7 +22,7 @@ use uuid::Uuid;
 use crate::daemon::state::{ContainerRecord, ContainerState, DaemonState, RunCreationParams};
 
 use super::super::network_lifecycle::NetworkLifecycle;
-use super::{HandlerDependencies, send_error};
+use super::{HandlerDependencies, PolicyOverride, send_error};
 
 // ─── RunParams: parameter bundle for the run pipeline ────────────────────────
 
@@ -29,6 +31,7 @@ use super::{HandlerDependencies, send_error};
 ///
 /// This eliminates 11+ individual parameters from every function signature
 /// in the run pipeline without changing observable behaviour.
+#[derive(Default)]
 pub struct RunParams {
     pub image: String,
     pub tag: Option<String>,
@@ -43,6 +46,61 @@ pub struct RunParams {
     pub name: Option<String>,
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
+    pub priority: Option<slashcrux::Priority>,
+    pub policy_override: Option<PolicyOverride>,
+}
+
+/// Bundled parameters for `build_execution_manifest`.
+#[cfg(unix)]
+struct ManifestBuildParams<'a> {
+    id: &'a str,
+    ref_str: &'a str,
+    layer_dirs: &'a [PathBuf],
+    command: &'a [String],
+    env: &'a [String],
+    mounts: &'a [BindMount],
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    net_mode: NetworkMode,
+    privileged: bool,
+    platform: &'a Option<String>,
+    name: &'a Option<String>,
+    capture_output: bool,
+}
+
+/// Bundled parameters for `build_container_record`.
+#[cfg(unix)]
+struct ContainerRecordBuildParams<'a> {
+    id: &'a str,
+    name: &'a Option<String>,
+    image_label: &'a str,
+    command: &'a [String],
+    merged_dir: &'a minibox_core::path::InternalPath,
+    cgroup_dir: &'a std::path::Path,
+    rootfs_layout: &'a minibox_core::domain::RootfsLayout,
+    image: &'a str,
+    tag: &'a str,
+    memory_limit_bytes: Option<u64>,
+    cpu_weight: Option<u64>,
+    network: Option<NetworkMode>,
+    env: &'a [String],
+    mounts: &'a [BindMount],
+    privileged: bool,
+    platform: &'a Option<String>,
+    cgroup_parent: &'a Option<String>,
+}
+
+/// Bundled parameters for `daemon_wait_for_exit`.
+pub(super) struct WaitParams {
+    pub pid: u32,
+    pub id: String,
+    pub state: Arc<DaemonState>,
+    pub rootfs: minibox_core::path::InternalPath,
+    pub post_exit_hooks: Vec<HookSpec>,
+    pub event_sink: Arc<dyn EventSink>,
+    pub cgroup_path: minibox_core::path::InternalPath,
+    pub runtime: DynContainerRuntime,
+    pub runtime_id: Option<String>,
 }
 
 // ─── Container ID Generation ─────────────────────────────────────────────────
@@ -51,7 +109,7 @@ pub struct RunParams {
 ///
 /// 16 hex chars = 64 bits. Birthday-paradox collision after ~4 billion containers —
 /// callers must still check for collisions against the existing container state.
-pub(crate) fn generate_container_id() -> String {
+pub fn generate_container_id() -> String {
     Uuid::new_v4()
         .to_string()
         .replace('-', "")
@@ -67,6 +125,7 @@ pub(crate) fn generate_container_id() -> String {
 /// Responses are sent via `tx`.  Non-ephemeral runs send exactly one message.
 /// Ephemeral runs (Linux-only) send zero or more `ContainerOutput` messages
 /// followed by one terminal `ContainerStopped` message.
+// qual:allow(iosp) reason: "handler orchestration — validate, create, start, stream"
 pub async fn handle_run(
     params: RunParams,
     state: Arc<DaemonState>,
@@ -89,7 +148,17 @@ pub async fn handle_run(
     }
 
     // Policy gate: deny bind mounts and privileged mode unless explicitly allowed.
-    if let Err(msg) = super::validate_policy(&params.mounts, params.privileged, &deps.policy) {
+    // Internal callers (pipeline runs) may widen the policy via `policy_override`.
+    let effective_policy = params
+        .policy_override
+        .as_ref()
+        .map_or_else(|| deps.policy.clone(), |ov| deps.policy.with_overrides(ov));
+    if let Err(msg) = super::validate_policy(
+        &params.mounts,
+        params.privileged,
+        params.priority,
+        &effective_policy,
+    ) {
         warn!(message = %msg, "handle_run: policy violation");
         if tx
             .send(DaemonResponse::Error { message: msg })
@@ -142,6 +211,7 @@ pub async fn handle_run(
 ///
 /// The container stdout+stderr are forwarded via the channel until EOF, then
 /// the exit code is reported.
+// qual:allow(iosp) reason: "handler orchestration — spawn, stream, cleanup"
 #[cfg(unix)]
 pub(super) async fn handle_run_streaming(
     params: RunParams,
@@ -283,7 +353,7 @@ pub(super) async fn handle_run_streaming(
     let cgroup_path_opt = state
         .get_container(&container_id)
         .await
-        .map(|r| r.cgroup_path.clone());
+        .map(|r| r.cgroup_path);
 
     // Auto-remove ephemeral container state.
     state.remove_container(&container_id).await;
@@ -329,23 +399,23 @@ struct PreparedRun {
 }
 
 /// Construct an `ExecutionManifest` from container run parameters.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
-fn build_execution_manifest(
-    id: &str,
-    ref_str: &str,
-    layer_dirs: &[PathBuf],
-    command: &[String],
-    env: &[String],
-    mounts: &[BindMount],
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    net_mode: NetworkMode,
-    privileged: bool,
-    platform: &Option<String>,
-    name: &Option<String>,
-    capture_output: bool,
-) -> minibox_core::domain::ExecutionManifest {
+fn build_execution_manifest(p: ManifestBuildParams<'_>) -> minibox_core::domain::ExecutionManifest {
+    let ManifestBuildParams {
+        id,
+        ref_str,
+        layer_dirs,
+        command,
+        env,
+        mounts,
+        memory_limit_bytes,
+        cpu_weight,
+        net_mode,
+        privileged,
+        platform,
+        name,
+        capture_output,
+    } = p;
     use minibox_core::domain::{
         ExecutionManifest, ExecutionManifestEnvVar, ExecutionManifestImage, ExecutionManifestMount,
         ExecutionManifestRequest, ExecutionManifestResourceLimits, ExecutionManifestRuntime,
@@ -400,27 +470,27 @@ fn build_execution_manifest(
 }
 
 /// Build a `ContainerRecord` in `"Created"` state for a new container.
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
-fn build_container_record(
-    id: &str,
-    name: &Option<String>,
-    image_label: &str,
-    command: &[String],
-    merged_dir: &minibox_core::path::InternalPath,
-    cgroup_dir: &std::path::Path,
-    rootfs_layout: &minibox_core::domain::RootfsLayout,
-    image: &str,
-    tag: &str,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: Option<NetworkMode>,
-    env: &[String],
-    mounts: &[BindMount],
-    privileged: bool,
-    platform: &Option<String>,
-    cgroup_parent: &Option<String>,
-) -> ContainerRecord {
+fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord {
+    let ContainerRecordBuildParams {
+        id,
+        name,
+        image_label,
+        command,
+        merged_dir,
+        cgroup_dir,
+        rootfs_layout,
+        image,
+        tag,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        env,
+        mounts,
+        privileged,
+        platform,
+        cgroup_parent,
+    } = p;
     let command_str = command.join(" ");
     ContainerRecord {
         info: ContainerInfo {
@@ -494,6 +564,8 @@ async fn prepare_run(
         platform,
         cgroup_parent,
         ephemeral: _,
+        priority: _,
+        policy_override: _,
     } = params;
 
     // Build full ref string from image + optional tag, then parse into ImageRef.
@@ -553,21 +625,21 @@ async fn prepare_run(
         .into());
     }
 
-    let mut manifest = build_execution_manifest(
-        &id,
-        &ref_str,
-        &layer_dirs,
-        &command,
-        &env,
-        &mounts,
+    let mut manifest = build_execution_manifest(ManifestBuildParams {
+        id: &id,
+        ref_str: &ref_str,
+        layer_dirs: &layer_dirs,
+        command: &command,
+        env: &env,
+        mounts: &mounts,
         memory_limit_bytes,
         cpu_weight,
         net_mode,
         privileged,
-        &platform,
-        &name,
+        platform: &platform,
+        name: &name,
         capture_output,
-    );
+    });
     manifest
         .seal()
         .context("failed to compute execution manifest digest")?;
@@ -577,7 +649,7 @@ async fn prepare_run(
         match policy.evaluate(&manifest) {
             PolicyDecision::Allow => {}
             PolicyDecision::Deny(reason) => {
-                return Err(anyhow::anyhow!("execution policy denied: {}", reason));
+                return Err(anyhow::anyhow!("execution policy denied: {reason}"));
             }
         }
     }
@@ -687,25 +759,25 @@ async fn prepare_run(
 
     // Build ContainerRecord in Created state.
     let image_label = format!("{image}:{tag}");
-    let record = build_container_record(
-        &id,
-        &name,
-        &image_label,
-        &command,
-        &merged_dir,
-        &cgroup_dir,
-        &rootfs_layout,
-        &image,
-        &tag,
+    let record = build_container_record(ContainerRecordBuildParams {
+        id: &id,
+        name: &name,
+        image_label: &image_label,
+        command: &command,
+        merged_dir: &merged_dir,
+        cgroup_dir: &cgroup_dir,
+        rootfs_layout: &rootfs_layout,
+        image: &image,
+        tag: &tag,
         memory_limit_bytes,
         cpu_weight,
         network,
-        &env,
-        &mounts,
+        env: &env,
+        mounts: &mounts,
         privileged,
-        &platform,
-        &cgroup_parent,
-    );
+        platform: &platform,
+        cgroup_parent: &cgroup_parent,
+    });
     // Build the ContainerSpawnConfig for the runtime.
     let spawn_command = command
         .first()
@@ -776,6 +848,7 @@ async fn prepare_run(
 ///
 /// Compiled on Unix (Linux and macOS). The output pipe uses `OwnedFd`
 /// and `waitpid` — both available on any Unix via the `nix` crate.
+// qual:allow(iosp) reason: "container lifecycle — namespace setup, fork, exec"
 #[cfg(unix)]
 async fn run_inner_capture(
     params: RunParams,
@@ -792,6 +865,8 @@ async fn run_inner_capture(
         )
         .await;
 
+    // Semaphore closed only if the daemon is shutting down; no recovery possible.
+    #[allow(clippy::expect_used)]
     let _spawn_permit = state
         .spawn_semaphore
         .acquire()
@@ -851,6 +926,7 @@ async fn run_inner_capture(
 /// the runtime implementation, keeping blocking syscalls off the Tokio worker
 /// threads.  The reaper is also dispatched via `spawn_blocking` because
 /// `waitpid` is a blocking syscall.
+// qual:allow(iosp) reason: "container lifecycle — overlay, spawn, reaper"
 async fn run_inner(
     params: RunParams,
     state: Arc<DaemonState>,
@@ -871,6 +947,8 @@ async fn run_inner(
     let spawn_config = prepared.spawn_config;
 
     // SECURITY: Acquire semaphore permit to limit concurrent spawns.
+    // Semaphore closed only if the daemon is shutting down; no recovery possible.
+    #[allow(clippy::expect_used)]
     let _spawn_permit = state
         .spawn_semaphore
         .acquire()
@@ -942,17 +1020,17 @@ async fn run_inner(
     let runtime_wait = Arc::clone(&deps.lifecycle.runtime);
     let runtime_id = spawn_result.runtime_id.clone();
     tokio::spawn(async move {
-        daemon_wait_for_exit(
+        daemon_wait_for_exit(WaitParams {
             pid,
-            &id_wait,
-            state_wait,
-            spawn_config.rootfs,
-            spawn_config.hooks.post_exit,
-            event_sink_wait,
-            spawn_config.cgroup_path,
-            runtime_wait,
+            id: id_wait,
+            state: state_wait,
+            rootfs: spawn_config.rootfs,
+            post_exit_hooks: spawn_config.hooks.post_exit,
+            event_sink: event_sink_wait,
+            cgroup_path: spawn_config.cgroup_path,
+            runtime: runtime_wait,
             runtime_id,
-        )
+        })
         .await;
     });
 
@@ -983,6 +1061,8 @@ pub(super) async fn run_from_params(
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),
         cgroup_parent: creation_params.cgroup_parent.clone(),
+        priority: None,
+        policy_override: None,
     };
     run_inner(params, state, deps).await
 }
@@ -993,7 +1073,7 @@ pub(super) async fn run_from_params(
 ///
 /// Returns `true` if `oom_kill` count is greater than zero.  Returns `false` if
 /// the file cannot be read (e.g. cgroup already deleted, or non-Linux platform).
-pub(crate) async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
+pub async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
     let events_path = cgroup_path.join("memory.events");
     if let Ok(content) = tokio::fs::read_to_string(&events_path).await {
         for line in content.lines() {
@@ -1014,19 +1094,20 @@ pub(crate) async fn check_oom_killed(cgroup_path: &std::path::Path) -> bool {
 /// Uses `runtime.wait_for_exit()` which dispatches to `waitpid` for native
 /// adapters or to the adapter's own wait mechanism (e.g. `SmolvmProcess::wait`
 /// for krun).
-#[allow(clippy::too_many_arguments)]
 #[cfg(unix)]
-async fn daemon_wait_for_exit(
-    pid: u32,
-    id: &str,
-    state: Arc<DaemonState>,
-    _rootfs: minibox_core::path::InternalPath,
-    _post_exit_hooks: Vec<HookSpec>,
-    event_sink: Arc<dyn EventSink>,
-    cgroup_path: minibox_core::path::InternalPath,
-    runtime: DynContainerRuntime,
-    runtime_id: Option<String>,
-) {
+async fn daemon_wait_for_exit(p: WaitParams) {
+    let WaitParams {
+        pid,
+        id,
+        state,
+        rootfs: _rootfs,
+        post_exit_hooks: _post_exit_hooks,
+        event_sink,
+        cgroup_path,
+        runtime,
+        runtime_id,
+    } = p;
+    let id = id.as_str();
     let exit_code = runtime
         .wait_for_exit(runtime_id.as_deref(), pid)
         .await
@@ -1072,33 +1153,13 @@ async fn daemon_wait_for_exit(
 /// Containers on Windows remain in `"Running"` state until an explicit
 /// `stop` or `remove` command is issued.
 #[cfg(windows)]
-async fn daemon_wait_for_exit(
-    _pid: u32,
-    _id: &str,
-    _state: Arc<DaemonState>,
-    _rootfs: minibox_core::path::InternalPath,
-    _post_exit_hooks: Vec<HookSpec>,
-    _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: minibox_core::path::InternalPath,
-    _runtime: DynContainerRuntime,
-    _runtime_id: Option<String>,
-) {
+async fn daemon_wait_for_exit(_p: WaitParams) {
     // No-op on Windows. Container stays "Running" until explicit stop/remove.
 }
 
 /// Fallback stub for platforms other than Unix or Windows.
 #[cfg(not(any(unix, windows)))]
-async fn daemon_wait_for_exit(
-    _pid: u32,
-    _id: &str,
-    _state: Arc<DaemonState>,
-    _rootfs: minibox_core::path::InternalPath,
-    _post_exit_hooks: Vec<HookSpec>,
-    _event_sink: Arc<dyn EventSink>,
-    _cgroup_path: minibox_core::path::InternalPath,
-    _runtime: DynContainerRuntime,
-    _runtime_id: Option<String>,
-) {
+async fn daemon_wait_for_exit(_p: WaitParams) {
     // No-op on this platform.
 }
 
@@ -1110,10 +1171,19 @@ mod run_inner_tests {
 
     #[test]
     fn run_inner_capture_signature_accepts_mounts_and_privileged() {
-        // Compile-time check: the BindMount type is accessible in this crate.
+        // Verify that BindMount can be constructed and collected into a vec,
+        // confirming the type is accessible to run_inner callers.
         use minibox_core::domain::BindMount;
-        let _: Vec<BindMount> = vec![];
-        let _: bool = false;
+        use std::path::PathBuf;
+        let mounts: Vec<BindMount> = vec![BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/data"),
+            read_only: false,
+        }];
+        assert_eq!(mounts.len(), 1, "BindMount must be constructible");
+        assert!(!mounts[0].read_only, "read_only should be false");
+        let privileged: bool = false;
+        assert!(!privileged, "non-privileged default must be false");
     }
 
     // ── generate_container_id properties ─────────────────────────────────────

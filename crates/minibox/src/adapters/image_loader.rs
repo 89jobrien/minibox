@@ -1,4 +1,4 @@
-//! Native ImageLoader adapter — extracts a local OCI tarball into ImageStore.
+//! Native `ImageLoader` adapter — extracts a local OCI tarball into `ImageStore`.
 
 use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
@@ -13,7 +13,8 @@ pub struct NativeImageLoader {
 }
 
 impl NativeImageLoader {
-    pub fn new(store: Arc<ImageStore>) -> Self {
+    #[must_use]
+    pub const fn new(store: Arc<ImageStore>) -> Self {
         Self { store }
     }
 }

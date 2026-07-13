@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+    # paste is unmaintained; no maintained drop-in replacement available.
+    # Tracked for replacement in issue backlog.
+    "RUSTSEC-2024-0436",
+    # anyhow Error::downcast_mut() unsoundness; we do not call this method.
+    # Fix expected in an upstream anyhow release.
+    "RUSTSEC-2026-0190",
+]

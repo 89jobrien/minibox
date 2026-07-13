@@ -48,6 +48,7 @@ pub enum WinboxError {
 /// - Create a Named Pipe listener at [`paths::pipe_name`].
 /// - Select the appropriate adapter (HCS or WSL2) based on [`preflight`] output.
 /// - Run the `minibox::daemon::server::run_server` accept loop over the Named Pipe.
+#[allow(clippy::unused_async)]
 pub async fn start() -> Result<()> {
     info!("miniboxd (Windows) starting");
     // Phase 1 stub — full implementation in Phase 2

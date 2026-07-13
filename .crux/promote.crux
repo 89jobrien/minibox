@@ -1,0 +1,165 @@
+pipeline: minibox_promote
+# Cascade promotion through the stability pipeline:
+# develop -> next -> staging -> main.
+#
+# Each tier runs its gates, builds a release binary, smoke-tests it
+# in a smolvm container, then advances to the next branch.
+#
+# Tier gates:
+#   dev     : lint, test-unit
+#   testing : test-conformance, test-property, borrow-fixtures
+#   staging : prepush, coverage-check
+#   main    : check-protocol-drift, lint-docs
+#
+# Run: crux run .crux/promote.crux
+budget: { calls: 28 }
+
+steps:
+  # ============================================================
+  # Tier 1: Dev (develop)
+  # ============================================================
+  - step: gate_lint
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint"
+
+  - step: gate_test_unit
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-unit"
+
+  - step: build_release_dev
+    handler: shell::exec
+    args:
+      cmd: "cargo build --release -p miniboxd -p mbx"
+
+  - step: smoke_dev
+    handler: shell::exec
+    args:
+      cmd: |
+        echo "--- smoke test: dev tier ---"
+        MINIBOX_ADAPTER=smolvm target/release/miniboxd &
+        DAEMON_PID=$!
+        sleep 2
+        target/release/mbx pull alpine:latest
+        target/release/mbx run alpine:latest -- echo "dev-tier-ok"
+        target/release/mbx prune
+        kill $DAEMON_PID 2>/dev/null || true
+        wait $DAEMON_PID 2>/dev/null || true
+        echo "smoke test passed"
+
+  # Advance: develop -> next
+  - step: merge_develop_to_next
+    handler: shell::exec
+    args:
+      cmd: |
+        git fetch origin next
+        git checkout next
+        git merge --ff-only develop
+        git push origin next
+        git checkout develop
+        echo "advanced develop -> next"
+
+  # ============================================================
+  # Tier 2: Testing (next)
+  # ============================================================
+  - step: gate_test_conformance
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-conformance"
+
+  - step: gate_test_property
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-property"
+
+  - step: gate_borrow_fixtures
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask borrow-fixtures"
+
+  - step: smoke_testing
+    handler: shell::exec
+    args:
+      cmd: |
+        echo "--- smoke test: testing tier ---"
+        MINIBOX_ADAPTER=smolvm target/release/miniboxd &
+        DAEMON_PID=$!
+        sleep 2
+        target/release/mbx run alpine:latest -- sh -c 'echo testing-tier-ok && uname -r'
+        kill $DAEMON_PID 2>/dev/null || true
+        wait $DAEMON_PID 2>/dev/null || true
+        echo "smoke test passed"
+
+  # Advance: next -> staging
+  - step: merge_next_to_staging
+    handler: shell::exec
+    args:
+      cmd: |
+        git fetch origin staging
+        git checkout staging
+        git merge --ff-only next
+        git push origin staging
+        git checkout develop
+        echo "advanced next -> staging"
+
+  # ============================================================
+  # Tier 3: Staging
+  # ============================================================
+  - step: gate_prepush
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask prepush"
+
+  - step: gate_coverage_check
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask coverage-check"
+
+  - step: smoke_staging
+    handler: shell::exec
+    args:
+      cmd: |
+        echo "--- smoke test: staging tier ---"
+        MINIBOX_ADAPTER=smolvm target/release/miniboxd &
+        DAEMON_PID=$!
+        sleep 2
+        target/release/mbx pull alpine:latest
+        target/release/mbx run alpine:latest -- sh -c 'echo staging-ok && cat /etc/os-release'
+        target/release/mbx ps
+        target/release/mbx prune
+        kill $DAEMON_PID 2>/dev/null || true
+        wait $DAEMON_PID 2>/dev/null || true
+        echo "smoke test passed"
+
+  # ============================================================
+  # Tier 4: Main (PR only)
+  # ============================================================
+  - step: gate_check_protocol_drift
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask check-protocol-drift"
+
+  - step: gate_lint_docs
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint-docs"
+
+  # PR for protected main branch
+  - step: pr_staging_to_main
+    handler: shell::exec
+    args:
+      cmd: |
+        existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+        if [ -n "$existing" ]; then
+          echo "PR #$existing already open: staging -> main"
+        else
+          gh pr create --base main --head staging \
+            --title "Promote staging -> main" \
+            --body "Automated promotion. All tiered gates and smoke tests passed."
+        fi
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "Promotion complete: develop->next->staging pushed with smoke tests, staging->main PR created"

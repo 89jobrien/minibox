@@ -25,7 +25,7 @@ pub fn sha256_file(path: &Path) -> Result<String> {
     let mut file =
         std::fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 65536];
+    let mut buf = vec![0u8; 65536];
     loop {
         let n = file
             .read(&mut buf)
@@ -61,7 +61,7 @@ pub fn cas_add(overlay_dir: &Path, file_path: &Path, ref_name: Option<&str>) -> 
         let ref_path = refs_dir.join(name);
         std::fs::write(&ref_path, &hash)
             .with_context(|| format!("writing ref {}", ref_path.display()))?;
-        println!("ref: {} -> {}", name, hash);
+        println!("ref: {name} -> {hash}");
     }
 
     Ok(hash)
@@ -93,7 +93,7 @@ pub fn cas_check(overlay_dir: &Path) -> Result<()> {
 
         let cas_file = overlay_dir.join("cas").join(&expected_hash);
         if !cas_file.exists() {
-            println!("MISSING  {}  expected={}", name, expected_hash);
+            println!("MISSING  {name}  expected={expected_hash}");
             drift = true;
             continue;
         }
@@ -102,12 +102,9 @@ pub fn cas_check(overlay_dir: &Path) -> Result<()> {
             sha256_file(&cas_file).with_context(|| format!("hashing {}", cas_file.display()))?;
 
         if got_hash == expected_hash {
-            println!("OK  {}", name);
+            println!("OK  {name}");
         } else {
-            println!(
-                "DRIFT  {}  expected={}  got={}",
-                name, expected_hash, got_hash
-            );
+            println!("DRIFT  {name}  expected={expected_hash}  got={got_hash}");
             drift = true;
         }
     }

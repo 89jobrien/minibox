@@ -8,7 +8,7 @@ use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use predicates::prelude::*;
 
 #[test]
-fn conformance_cli_no_args_shows_help() {
+fn conformance_mbx_cli_no_args_shows_help() {
     Command::cargo_bin("mbx")
         .unwrap()
         .assert()
@@ -17,7 +17,7 @@ fn conformance_cli_no_args_shows_help() {
 }
 
 #[test]
-fn conformance_cli_help_flag() {
+fn conformance_mbx_cli_help_flag() {
     Command::cargo_bin("mbx")
         .unwrap()
         .arg("--help")
@@ -27,7 +27,7 @@ fn conformance_cli_help_flag() {
 }
 
 #[test]
-fn conformance_cli_version_flag() {
+fn conformance_mbx_cli_version_flag() {
     Command::cargo_bin("mbx")
         .unwrap()
         .arg("--version")
@@ -37,7 +37,7 @@ fn conformance_cli_version_flag() {
 }
 
 #[test]
-fn conformance_cli_unknown_subcommand_fails() {
+fn conformance_mbx_cli_unknown_subcommand_fails() {
     Command::cargo_bin("mbx")
         .unwrap()
         .arg("nonexistent-command")
@@ -46,7 +46,7 @@ fn conformance_cli_unknown_subcommand_fails() {
 }
 
 #[test]
-fn conformance_protocol_request_variants_serialize() {
+fn conformance_daemon_request_variants_serialize() {
     // Verify key request variants round-trip through serde.
     let requests = vec![
         DaemonRequest::List,
@@ -70,7 +70,7 @@ fn conformance_protocol_request_variants_serialize() {
 }
 
 #[test]
-fn conformance_protocol_response_variants_serialize() {
+fn conformance_daemon_response_variants_serialize() {
     let responses = vec![
         DaemonResponse::Success {
             message: "ok".to_string(),

@@ -42,11 +42,11 @@ pub enum ContainerState {
 impl std::fmt::Display for ContainerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ContainerState::Created => write!(f, "created"),
-            ContainerState::Running => write!(f, "running"),
-            ContainerState::Stopped => write!(f, "stopped"),
-            ContainerState::Removed => write!(f, "removed"),
-            ContainerState::Orphaned => write!(f, "orphaned"),
+            Self::Created => write!(f, "created"),
+            Self::Running => write!(f, "running"),
+            Self::Stopped => write!(f, "stopped"),
+            Self::Removed => write!(f, "removed"),
+            Self::Orphaned => write!(f, "orphaned"),
         }
     }
 }
@@ -142,7 +142,7 @@ impl Container {
         // 2. Mount overlay rootfs.
         let merged = setup_overlay(image_layers, base_dir)
             .with_context(|| format!("failed to set up overlay for container {}", self.id))?;
-        self.rootfs_path = merged.clone();
+        self.rootfs_path.clone_from(&merged);
 
         // 3. Spawn child process.
         let process_config = ContainerConfig {

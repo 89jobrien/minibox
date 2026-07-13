@@ -1,0 +1,168 @@
+[package]
+name = "minibox-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+tempfile = "3"
+toml = "0.8"
+
+[dependencies.minibox-core]
+path = "../crates/minibox-core"
+features = ["fuzzing"]
+
+[dependencies.minibox]
+path = "../crates/minibox"
+
+[dependencies.miniboxd]
+path = "../crates/miniboxd"
+
+[dependencies.minibox-crux-plugin]
+path = "../crates/minibox-crux-plugin"
+
+# ── minibox-core targets ────────────────────────────────────────────────────────
+
+[[bin]]
+name = "fuzz_decode_request"
+path = "fuzz_targets/fuzz_decode_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_decode_response"
+path = "fuzz_targets/fuzz_decode_response.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_extract_layer"
+path = "fuzz_targets/fuzz_extract_layer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_tar_path"
+path = "fuzz_targets/fuzz_validate_tar_path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_manifest"
+path = "fuzz_targets/fuzz_parse_manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_platform"
+path = "fuzz_targets/fuzz_parse_platform.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_image_ref"
+path = "fuzz_targets/fuzz_parse_image_ref.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_dockerfile"
+path = "fuzz_targets/fuzz_parse_dockerfile.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_www_authenticate"
+path = "fuzz_targets/fuzz_parse_www_authenticate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_cgroup_parent"
+path = "fuzz_targets/fuzz_validate_cgroup_parent.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_verify_digest"
+path = "fuzz_targets/fuzz_verify_digest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_daemon_config"
+path = "fuzz_targets/fuzz_parse_daemon_config.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_volume"
+path = "fuzz_targets/fuzz_parse_volume.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_mount"
+path = "fuzz_targets/fuzz_parse_mount.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_validate_path"
+path = "fuzz_targets/fuzz_validate_path.rs"
+test = false
+doc = false
+bench = false
+
+# ── minibox targets ────────────────────────────────────────────────────────────
+
+[[bin]]
+name = "fuzz_parse_network_config"
+path = "fuzz_targets/fuzz_parse_network_config.rs"
+test = false
+doc = false
+bench = false
+
+# ── minibox-crux-plugin targets ─────────────────────────────────────────────────
+
+[[bin]]
+name = "fuzz_build_request"
+path = "fuzz_targets/fuzz_build_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_request"
+path = "fuzz_targets/fuzz_parse_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_parse_mounts_json"
+path = "fuzz_targets/fuzz_parse_mounts_json.rs"
+test = false
+doc = false
+bench = false

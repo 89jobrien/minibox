@@ -17,22 +17,3 @@ jobs:
         run: ~/.local/bin/mise exec -- cargo deny check
       - name: audit
         run: ~/.local/bin/mise exec -- cargo audit
-
-  diagnose:
-    name: Diagnose Failures
-    runs-on: ubuntu-latest
-    needs: [lint]
-    if: failure()
-    steps:
-      - uses: actions/checkout@v4
-      - name: run diagnosis agent
-        env:
-          GITEA_URL: ${{ secrets.GITEA_URL }}
-          CI_AGENT_TOKEN: ${{ secrets.CI_AGENT_TOKEN }}
-          REPO: ${{ gitea.repository }}
-          RUN_ID: ${{ gitea.run_id }}
-          COMMIT_SHA: ${{ gitea.sha }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python3 -m scripts.ci_agent

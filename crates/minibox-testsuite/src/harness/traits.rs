@@ -20,11 +20,12 @@ pub enum TestCategory {
 }
 
 impl TestCategory {
-    pub fn as_str(self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
         match self {
-            TestCategory::Unit => "unit",
-            TestCategory::Integration => "integration",
-            TestCategory::EdgeCase => "edge_case",
+            Self::Unit => "unit",
+            Self::Integration => "integration",
+            Self::EdgeCase => "edge_case",
         }
     }
 }
@@ -39,14 +40,17 @@ pub enum TestResult {
 }
 
 impl TestResult {
-    pub fn is_pass(&self) -> bool {
-        matches!(self, TestResult::Pass)
+    #[must_use]
+    pub const fn is_pass(&self) -> bool {
+        matches!(self, Self::Pass)
     }
-    pub fn is_fail(&self) -> bool {
-        matches!(self, TestResult::Fail { .. })
+    #[must_use]
+    pub const fn is_fail(&self) -> bool {
+        matches!(self, Self::Fail { .. })
     }
-    pub fn is_skipped(&self) -> bool {
-        matches!(self, TestResult::Skipped { .. })
+    #[must_use]
+    pub const fn is_skipped(&self) -> bool {
+        matches!(self, Self::Skipped { .. })
     }
 }
 
@@ -64,7 +68,7 @@ impl TestResult {
 ///     fn adapter(&self) -> &str { "registry" }
 ///     fn category(&self) -> TestCategory { TestCategory::Unit }
 ///
-///     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+///     fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult {
 ///         use minibox::testing::mocks::registry::MockRegistry;
 ///         use minibox_core::domain::ImageRegistry;
 ///
@@ -81,7 +85,7 @@ impl TestResult {
 /// }
 /// ```
 pub trait ConformanceTest: Send + Sync {
-    /// Short snake_case identifier unique within the adapter scope.
+    /// Short `snake_case` identifier unique within the adapter scope.
     fn name(&self) -> &str;
 
     /// Which adapter this test exercises: `"registry"`, `"runtime"`, `"filesystem"`, etc.
@@ -94,7 +98,13 @@ pub trait ConformanceTest: Send + Sync {
     ///
     /// Implementations call `ctx.assert_*` methods to record pass/fail, then return
     /// `ctx.result()` at the end.
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult;
+    /// Optional: declare required capability for auto-skip.
+    /// Default: `None` (always runs).
+    fn required_capability(&self) -> Option<minibox_core::domain::BackendCapability> {
+        None
+    }
+
+    fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult;
 
     /// Fully-qualified test id: `"<adapter>::<name>"`.
     fn id(&self) -> String {

@@ -1,4 +1,6 @@
 //! Prometheus metrics adapter implementing the `MetricsRecorder` domain port.
+// Mutex poison and Default-trait constraints make fallible unwraps unavoidable here.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //!
 //! Uses the `prometheus-client` crate (official Prometheus Rust client) directly.
 //! OTEL SDK is NOT involved in metrics — it handles traces only.
@@ -11,6 +13,7 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::gauge::Gauge;
 use prometheus_client::metrics::histogram::{Histogram, exponential_buckets};
 use prometheus_client::registry::Registry;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 
 /// Label set type for dynamic string labels.
@@ -26,7 +29,7 @@ pub struct PrometheusMetricsRecorder {
     registry: Arc<Mutex<Registry>>,
     counters: DashMap<String, Family<Labels, Counter>>,
     histograms: DashMap<String, Family<Labels, Histogram>>,
-    gauges: DashMap<String, Family<Labels, Gauge>>,
+    gauges: DashMap<String, Family<Labels, Gauge<f64, AtomicU64>>>,
 }
 
 impl PrometheusMetricsRecorder {
@@ -86,11 +89,11 @@ impl PrometheusMetricsRecorder {
             .clone()
     }
 
-    fn get_or_create_gauge(&self, name: &str) -> Family<Labels, Gauge> {
+    fn get_or_create_gauge(&self, name: &str) -> Family<Labels, Gauge<f64, AtomicU64>> {
         self.gauges
             .entry(name.to_string())
             .or_insert_with(|| {
-                let family = Family::<Labels, Gauge>::default();
+                let family = Family::<Labels, Gauge<f64, AtomicU64>>::default();
                 self.registry
                     .lock()
                     .unwrap() // allow:unwrap — poisoned mutex is unrecoverable
@@ -104,7 +107,7 @@ impl PrometheusMetricsRecorder {
 fn to_labels(labels: &[(&str, &str)]) -> Labels {
     labels
         .iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
         .collect()
 }
 
@@ -121,10 +124,7 @@ impl MetricsRecorder for PrometheusMetricsRecorder {
 
     fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
         let family = self.get_or_create_gauge(name);
-        // prometheus-client 0.23 Gauge defaults to i64; cast from f64 is sufficient
-        // for our use cases (active container counts, queue depths, etc.).
-        #[allow(clippy::cast_possible_truncation)]
-        family.get_or_create(&to_labels(labels)).set(value as i64);
+        family.get_or_create(&to_labels(labels)).set(value);
     }
 }
 

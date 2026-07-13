@@ -123,13 +123,21 @@ impl DaemonFixture {
         let cli_bin = find_binary("mbx");
 
         // Create cgroup root and enable the controllers containers need.
-        std::fs::create_dir_all(&cgroup_root).ok();
-        // Enable memory, cpu, and pids subtree controllers so the daemon can
-        // apply resource limits to container cgroups created inside this slice.
-        let _ = std::fs::write(
-            cgroup_root.join("cgroup.subtree_control"),
-            "+memory +cpu +pids",
-        );
+        // No cfg gate on this module — .ok()/.unwrap_or on cgroup ops so macOS
+        // compiles without panicking (tests that need cgroups are Linux-only).
+        if cfg!(target_os = "linux") {
+            std::fs::create_dir_all(&cgroup_root)
+                .expect("test fixture: failed to create cgroup root");
+            if let Err(e) = std::fs::write(
+                cgroup_root.join("cgroup.subtree_control"),
+                "+memory +cpu +pids",
+            ) {
+                eprintln!(
+                    "warning: could not enable subtree controllers at {}: {e}",
+                    cgroup_root.display()
+                );
+            }
+        }
 
         let child = Command::new(&daemon_bin)
             .env("MINIBOX_DATA_DIR", data_dir.path())
@@ -357,7 +365,9 @@ impl Drop for DaemonFixture {
                         }
                     }
                 }
-                let _ = std::fs::remove_dir(dir);
+                if let Err(e) = std::fs::remove_dir(dir) {
+                    eprintln!("test teardown: failed to remove {}: {e}", dir.display());
+                }
             }
             remove_cgroup_tree(&self.cgroup_root);
         }

@@ -8,7 +8,8 @@ use minibox_core::domain::MetricsRecorder;
 pub struct NoOpMetricsRecorder;
 
 impl NoOpMetricsRecorder {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

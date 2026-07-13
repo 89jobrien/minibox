@@ -5,8 +5,6 @@
 use minibox::testing::mocks::filesystem::MockFilesystem;
 use minibox_core::domain::RootfsSetup;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -16,22 +14,15 @@ fn tmp() -> tempfile::TempDir {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// setup_rootfs succeeds with an empty layer list.
-pub struct SetupRootfsSucceedsWithNoLayers;
-impl ConformanceTest for SetupRootfsSucceedsWithNoLayers {
-    fn name(&self) -> &str {
-        "setup_rootfs_succeeds_with_no_layers"
-    }
-    fn adapter(&self) -> &str {
-        "filesystem"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "setup_rootfs_succeeds_with_no_layers",
+    adapter: "filesystem",
+    capability: Filesystem,
+    category: Unit,
+    |ctx| {
         let fs = MockFilesystem::new();
         let dir = tmp();
         let result = fs.setup_rootfs(&[], dir.path());
@@ -40,19 +31,12 @@ impl ConformanceTest for SetupRootfsSucceedsWithNoLayers {
     }
 }
 
-/// setup_rootfs increments the call count.
-pub struct SetupRootfsIncrementsCount;
-impl ConformanceTest for SetupRootfsIncrementsCount {
-    fn name(&self) -> &str {
-        "setup_rootfs_increments_count"
-    }
-    fn adapter(&self) -> &str {
-        "filesystem"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "setup_rootfs_increments_count",
+    adapter: "filesystem",
+    capability: Filesystem,
+    category: Unit,
+    |ctx| {
         let fs = MockFilesystem::new();
         let dir = tmp();
         let _ = fs.setup_rootfs(&[], dir.path());
@@ -63,19 +47,12 @@ impl ConformanceTest for SetupRootfsIncrementsCount {
     }
 }
 
-/// cleanup increments the cleanup call count.
-pub struct CleanupIncrementsCount;
-impl ConformanceTest for CleanupIncrementsCount {
-    fn name(&self) -> &str {
-        "cleanup_increments_count"
-    }
-    fn adapter(&self) -> &str {
-        "filesystem"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "cleanup_increments_count",
+    adapter: "filesystem",
+    capability: Filesystem,
+    category: Unit,
+    |ctx| {
         let fs = MockFilesystem::new();
         let dir = tmp();
         let _ = fs.cleanup(dir.path());
@@ -84,19 +61,12 @@ impl ConformanceTest for CleanupIncrementsCount {
     }
 }
 
-/// setup_rootfs returns Err when configured to fail.
-pub struct SetupRootfsFailureReturnsErr;
-impl ConformanceTest for SetupRootfsFailureReturnsErr {
-    fn name(&self) -> &str {
-        "setup_rootfs_failure_returns_err"
-    }
-    fn adapter(&self) -> &str {
-        "filesystem"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "setup_rootfs_failure_returns_err",
+    adapter: "filesystem",
+    capability: Filesystem,
+    category: EdgeCase,
+    |ctx| {
         let fs = MockFilesystem::new().with_setup_failure();
         let dir = tmp();
         let result = fs.setup_rootfs(&[], dir.path());
@@ -106,14 +76,4 @@ impl ConformanceTest for SetupRootfsFailureReturnsErr {
         );
         ctx.result()
     }
-}
-
-/// Return all filesystem conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(SetupRootfsSucceedsWithNoLayers),
-        Box::new(SetupRootfsIncrementsCount),
-        Box::new(CleanupIncrementsCount),
-        Box::new(SetupRootfsFailureReturnsErr),
-    ]
 }

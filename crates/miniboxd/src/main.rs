@@ -8,7 +8,7 @@
 //! The daemon supports multiple adapter suites selected via the
 //! `MINIBOX_ADAPTER` environment variable (default: `smolvm`, fallback: `krun`):
 //!
-//! - **smolvm** (default): SmolVM lightweight Linux VMs. Cross-platform. Falls back to krun
+//! - **smolvm** (default): `SmolVM` lightweight Linux VMs. Cross-platform. Falls back to krun
 //!   automatically when the `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 //! - **krun** (fallback): libkrun micro-VM (KVM on Linux, HVF on macOS). Cross-platform.
 //! - **native** (Linux only): Linux namespaces, overlay FS, cgroups v2. Requires root.
@@ -32,24 +32,37 @@ async fn main() -> anyhow::Result<()> {
 // ── Unix (Linux + macOS) ──────────────────────────────────────────────────
 #[cfg(unix)]
 fn main() {
-    // Parse --restart flag before building the tokio runtime.
+    // Parse CLI flags before building the tokio runtime.
     let args: Vec<String> = std::env::args().collect();
-    let restart = args.iter().any(|a| a == "--restart");
+    let cli = parse_cli_args(&args);
 
-    if restart {
+    if cli.restart {
         graceful_restart();
     }
 
     // Load config and bridge adapter into env before the runtime starts.
     // SAFETY: single-threaded — no tokio workers exist yet.
     let config = miniboxd::config::DaemonConfig::load();
-    if let Some(ref adapter) = config.adapter
+
+    // Priority: --adapter CLI flag > MINIBOX_ADAPTER env var > config.adapter > auto-detect.
+    if let Some(ref adapter_name) = cli.adapter {
+        // Validate early so we fail before spawning the runtime.
+        if let Err(e) = miniboxd::adapter_registry::validate_adapter_name(adapter_name.as_str()) {
+            eprintln!("miniboxd: --adapter: {e}");
+            std::process::exit(1);
+        }
+        // SAFETY: single-threaded — no tokio workers exist yet; CLI flag takes precedence.
+        unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter_name) };
+    } else if let Some(ref adapter) = config.adapter
         && std::env::var("MINIBOX_ADAPTER").is_err()
     {
+        // SAFETY: single-threaded — no tokio workers exist yet.
         unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
     }
 
     // Standard tokio runtime for all adapters.
+    // Runtime build failure is fatal with no recovery path.
+    #[allow(clippy::expect_used)]
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -93,14 +106,66 @@ fn graceful_restart() {
     }
 }
 
+// ── CLI argument parsing ──────────────────────────────────────────────────
+
+/// Parsed command-line arguments for miniboxd.
+#[cfg(unix)]
+struct CliArgs {
+    /// Whether `--restart` was passed: send SIGTERM to any running miniboxd first.
+    restart: bool,
+    /// Adapter name from `--adapter <name>`, if provided.
+    ///
+    /// When set, takes precedence over both the `MINIBOX_ADAPTER` environment variable
+    /// and the `adapter` field in the daemon config file.
+    adapter: Option<String>,
+}
+
+/// Parse miniboxd CLI flags from the raw argument list.
+///
+/// Recognised flags:
+/// - `--restart`            — graceful restart mode
+/// - `--adapter <name>`     — override adapter selection
+///
+/// Unknown flags are silently ignored so future flags can be added without
+/// breaking existing scripts that may pass extra arguments.
+#[cfg(unix)]
+fn parse_cli_args(args: &[String]) -> CliArgs {
+    let mut restart = false;
+    let mut adapter: Option<String> = None;
+
+    let mut i = 1usize; // skip argv[0]
+    while i < args.len() {
+        match args[i].as_str() {
+            "--restart" => {
+                restart = true;
+            }
+            "--adapter" => {
+                i += 1;
+                if i < args.len() {
+                    adapter = Some(args[i].clone());
+                } else {
+                    eprintln!("miniboxd: --adapter requires a value");
+                    std::process::exit(1);
+                }
+            }
+            _ => {
+                // Also handle `--adapter=<name>` form.
+                if let Some(val) = args[i].strip_prefix("--adapter=") {
+                    adapter = Some(val.to_string());
+                }
+                // Unknown flags are ignored.
+            }
+        }
+        i += 1;
+    }
+
+    CliArgs { restart, adapter }
+}
+
 // ── Imports (unix only) ───────────────────────────────────────────────────
 
 #[cfg(unix)]
 use anyhow::{Context, Result};
-#[cfg(unix)]
-use macbox::krun::{
-    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry, runtime::KrunRuntime,
-};
 #[cfg(unix)]
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
@@ -110,7 +175,7 @@ use minibox::adapters::{
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
 #[cfg(unix)]
-use minibox::daemon::state::DaemonState;
+use minibox::daemon::state::{DaemonState, FsCgroupFreezeChecker, KillProcessChecker};
 #[cfg(unix)]
 use minibox_core::adapters::HostnameRegistryRouter;
 #[cfg(unix)]
@@ -125,6 +190,10 @@ use minibox_core::image::lease::DiskLeaseService;
 use miniboxd::adapter_registry::{self, AdapterSuite};
 #[cfg(unix)]
 use miniboxd::listener::UnixServerListener;
+#[cfg(unix)]
+use smolbox::krun::{
+    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry, runtime::KrunRuntime,
+};
 #[cfg(unix)]
 use std::path::PathBuf;
 #[cfg(unix)]
@@ -172,16 +241,13 @@ struct DaemonPaths {
 #[cfg(unix)]
 fn resolve_paths() -> DaemonPaths {
     let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| resolve_default_data_dir());
+        .map_or_else(|_| resolve_default_data_dir(), PathBuf::from);
 
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| resolve_default_run_dir());
+    let run_dir =
+        std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| resolve_default_run_dir(), PathBuf::from);
 
     let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| run_dir.join("miniboxd.sock"));
+        .map_or_else(|_| run_dir.join("miniboxd.sock"), PathBuf::from);
 
     let images_dir = data_dir.join("images");
     let containers_dir = data_dir.join("containers");
@@ -237,15 +303,36 @@ fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
     if uid == 0 {
         PathBuf::from("/var/lib/minibox")
     } else {
-        std::env::var("HOME")
-            .map(|h| PathBuf::from(h).join(".minibox/cache"))
-            .unwrap_or_else(|_| PathBuf::from("/var/lib/minibox"))
+        std::env::var("HOME").map_or_else(
+            |_| PathBuf::from("/var/lib/minibox"),
+            |h| PathBuf::from(h).join(".minibox/cache"),
+        )
     }
+}
+
+// ── State load + startup reconciliation ──────────────────────────────────
+
+/// Build the shared daemon state: create the image store, load persisted
+/// container records, and reconcile stale `Running`/`Paused` records against
+/// live host processes (dead or unmonitored PIDs become `Orphaned`).
+///
+/// Extracted from `run_daemon` so the init path is unit-testable; keep the
+/// two in sync — `run_daemon` must obtain its state through this helper.
+#[cfg(unix)]
+async fn load_state(paths: &DaemonPaths) -> Result<Arc<DaemonState>> {
+    let image_store = ImageStore::new(&paths.images_dir).context("creating image store")?;
+    let state = Arc::new(DaemonState::new(image_store, &paths.data_dir));
+    state.load_from_disk().await;
+    state
+        .reconcile_on_startup(&KillProcessChecker, &FsCgroupFreezeChecker)
+        .await;
+    Ok(state)
 }
 
 // ── Unified daemon entry point ────────────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]
@@ -327,10 +414,8 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     }
 
     // ── Shared state ─────────────────────────────────────────────────────
-    let image_store = ImageStore::new(&paths.images_dir).context("creating image store")?;
-    let state = Arc::new(DaemonState::new(image_store, &paths.data_dir));
-    state.load_from_disk().await;
-    info!("state loaded from disk");
+    let state = load_state(&paths).await?;
+    info!("state loaded from disk and reconciled");
 
     // ── Image GC ─────────────────────────────────────────────────────────
     let leases_path = paths.data_dir.join("leases.json");
@@ -347,19 +432,25 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 
     // ── Metrics ──────────────────────────────────────────────────────────
     #[cfg(feature = "metrics")]
-    let metrics_recorder = {
+    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> = {
         const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
         let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
             .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
             .parse()
             .context("parsing MINIBOX_METRICS_ADDR")?;
         let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
-        let (_addr, _handle) =
-            minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
-                .await
-                .context("starting metrics server")?;
-        info!(addr = %_addr, "metrics server listening");
-        recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
+        match minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
+            .await
+        {
+            Ok((_addr, _handle)) => {
+                info!(addr = %_addr, "metrics server listening");
+                recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
+            }
+            Err(e) => {
+                tracing::warn!(addr = %metrics_addr, error = %e, "metrics server failed to bind; continuing without metrics");
+                Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new())
+            }
+        }
     };
     #[cfg(not(feature = "metrics"))]
     let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
@@ -380,6 +471,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
             .policy
             .allow_privileged
             .unwrap_or(env_policy.allow_privileged),
+        ..Default::default()
     };
     tracing::info!(
         allow_bind_mounts = policy.allow_bind_mounts,
@@ -428,15 +520,14 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         if let Ok(group_name) = std::env::var("MINIBOX_SOCKET_GROUP") {
             let group_name = group_name.trim();
             if !group_name.is_empty() {
-                match nix::unistd::Group::from_name(group_name)
+                if let Some(group) = nix::unistd::Group::from_name(group_name)
                     .with_context(|| format!("looking up group {group_name}"))?
                 {
-                    Some(group) => {
-                        nix::unistd::chown(sock_path, None, Some(group.gid))
-                            .with_context(|| format!("setting socket group to {group_name}"))?;
-                        info!("socket group set to {group_name}");
-                    }
-                    None => warn!("MINIBOX_SOCKET_GROUP={group_name} not found"),
+                    nix::unistd::chown(sock_path, None, Some(group.gid))
+                        .with_context(|| format!("setting socket group to {group_name}"))?;
+                    info!("socket group set to {group_name}");
+                } else {
+                    warn!("MINIBOX_SOCKET_GROUP={group_name} not found");
                 }
             }
         }
@@ -482,8 +573,22 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 }
 
 // ── Handler dependency builders (per adapter suite) ───────────────────────
+//
+// TODO: centralize adapter registration into a shared builder (#161)
+//
+// Each `build_*_handler_dependencies` function below constructs a
+// `HandlerDependencies` struct for one adapter suite.  A second copy of
+// `build_colima_handler_dependencies` lives in `crates/macbox/src/lib.rs`
+// for the legacy macOS-only daemon path.  To centralize:
+//   1. Move all `build_*_handler_dependencies` fns into a new crate or
+//      module (e.g. `minibox-adapters` or `miniboxd::adapter_builders`).
+//   2. Remove the duplicate in `macbox/src/lib.rs` and have it call the
+//      shared builder instead.
+//   3. Update `HandlerDependencies` construction sites in tests accordingly.
 
 #[cfg(unix)]
+#[allow(clippy::unused_async)]
+// qual:allow(srp) reason: "adapter suite dispatch — params are inherent wiring"
 async fn build_handler_deps(
     suite: AdapterSuite,
     state: Arc<DaemonState>,
@@ -496,7 +601,7 @@ async fn build_handler_deps(
     let deps = match suite {
         #[cfg(target_os = "linux")]
         AdapterSuite::Native => {
-            let native_network = resolve_native_network().await?;
+            let native_network = resolve_native_network()?;
             build_native_handler_dependencies(
                 Arc::clone(&state),
                 &paths.data_dir,
@@ -559,7 +664,8 @@ async fn build_handler_deps(
 // ── Native adapter (Linux only) ──────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
-async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
+// qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
+fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
@@ -589,6 +695,7 @@ async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::Networ
 
 #[cfg(target_os = "linux")]
 #[allow(clippy::too_many_arguments)]
+// qual:allow(srp) reason: "native adapter wiring — all params needed for HandlerDependencies"
 fn build_native_handler_dependencies(
     state: Arc<DaemonState>,
     data_dir: &Path,
@@ -670,6 +777,7 @@ fn build_native_handler_dependencies(
 // ── GKE adapter (Linux only) ─────────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
+// qual:allow(srp) reason: "GKE adapter wiring"
 fn build_gke_handler_dependencies(
     state: Arc<DaemonState>,
     containers_dir: PathBuf,
@@ -785,6 +893,7 @@ fn build_colima_handler_dependencies(
 // ── SmolVM adapter (cross-platform) ──────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(srp) reason: "smolvm adapter wiring"
 fn build_smolvm_handler_dependencies(
     state: Arc<DaemonState>,
     data_dir: PathBuf,
@@ -852,6 +961,7 @@ fn build_smolvm_handler_dependencies(
 // ── Krun adapter (cross-platform) ────────────────────────────────────────
 
 #[cfg(unix)]
+// qual:allow(srp) reason: "krun adapter wiring"
 fn build_krun_handler_dependencies(
     state: Arc<DaemonState>,
     containers_dir: PathBuf,
@@ -923,12 +1033,11 @@ fn migrate_to_supervisor_cgroup() {
         }
     };
 
-    let cgroup_path = match cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
-        Some(p) => p.trim().to_string(),
-        None => {
-            warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
-            return;
-        }
+    let cgroup_path = if let Some(p) = cgroup_entry.lines().find_map(|l| l.strip_prefix("0::")) {
+        p.trim().to_string()
+    } else {
+        warn!("no cgroup v2 entry in /proc/self/cgroup, skipping self-migration");
+        return;
     };
 
     if cgroup_path.ends_with("/supervisor") {
@@ -1054,6 +1163,90 @@ mod tests {
         assert!(
             paths.data_dir.to_string_lossy().contains("minibox"),
             "macOS data_dir should contain minibox"
+        );
+    }
+
+    /// PID far above any platform pid_max (Linux default 4194304, macOS
+    /// ~99999) so `kill(pid, 0)` deterministically reports ESRCH.
+    #[cfg(unix)]
+    const DEAD_PID: u32 = 999_999_999;
+
+    /// Minimal persisted state.json with one container record.
+    #[cfg(unix)]
+    fn write_state_json(data_dir: &std::path::Path, id: &str, state: &str, pid: u32) {
+        let json = format!(
+            r#"{{
+  "{id}": {{
+    "info": {{
+      "id": "{id}",
+      "image": "alpine:latest",
+      "command": "/bin/sh",
+      "state": "{state}",
+      "created_at": "2026-01-01T00:00:00Z",
+      "pid": {pid}
+    }},
+    "pid": {pid},
+    "rootfs_path": "/mock/rootfs",
+    "cgroup_path": "/mock/cgroup",
+    "post_exit_hooks": []
+  }}
+}}"#
+        );
+        std::fs::write(data_dir.join("state.json"), json).expect("write state.json");
+    }
+
+    #[cfg(unix)]
+    fn test_paths(root: &std::path::Path) -> DaemonPaths {
+        DaemonPaths {
+            data_dir: root.to_path_buf(),
+            run_dir: root.join("run"),
+            socket_path: root.join("run/miniboxd.sock"),
+            images_dir: root.join("images"),
+            containers_dir: root.join("containers"),
+            run_containers_dir: root.join("run/containers"),
+        }
+    }
+
+    /// The daemon init path (`load_state`) must reconcile a persisted
+    /// "Running" record whose PID is gone into "Orphaned" — the MoA H6
+    /// regression was that `run_daemon` loaded state but never called
+    /// `reconcile_on_startup`.
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn load_state_reconciles_running_record_with_dead_pid() {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        write_state_json(tmp.path(), "run-dead", "Running", DEAD_PID);
+
+        let state = load_state(&test_paths(tmp.path()))
+            .await
+            .expect("load_state");
+
+        let containers = state.list_containers().await;
+        assert_eq!(containers.len(), 1, "expected one loaded record");
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "dead-PID Running record must be reconciled to Orphaned"
+        );
+        assert_eq!(containers[0].pid, None, "stale PID must be cleared");
+    }
+
+    /// A persisted "Paused" record with a dead PID must also be orphaned by
+    /// the init path.
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn load_state_reconciles_paused_record_with_dead_pid() {
+        let tmp = tempfile::TempDir::new().expect("create temp dir");
+        write_state_json(tmp.path(), "run-paused", "Paused", DEAD_PID);
+
+        let state = load_state(&test_paths(tmp.path()))
+            .await
+            .expect("load_state");
+
+        let containers = state.list_containers().await;
+        assert_eq!(containers.len(), 1, "expected one loaded record");
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "dead-PID Paused record must be reconciled to Orphaned"
         );
     }
 
@@ -1220,5 +1413,59 @@ mod tests {
         assert!(deps.build.commit_adapter.is_none());
         // No image builder wired for GKE
         assert!(deps.build.image_builder.is_none());
+    }
+}
+
+// ── CLI argument parser tests ─────────────────────────────────────────────
+
+#[cfg(all(unix, test))]
+mod cli_args_tests {
+    use super::parse_cli_args;
+
+    fn args(v: &[&str]) -> Vec<String> {
+        std::iter::once("miniboxd")
+            .chain(v.iter().copied())
+            .map(String::from)
+            .collect()
+    }
+
+    #[test]
+    fn no_args_yields_defaults() {
+        let cli = parse_cli_args(&args(&[]));
+        assert!(!cli.restart);
+        assert!(cli.adapter.is_none());
+    }
+
+    #[test]
+    fn restart_flag_is_parsed() {
+        let cli = parse_cli_args(&args(&["--restart"]));
+        assert!(cli.restart);
+        assert!(cli.adapter.is_none());
+    }
+
+    #[test]
+    fn adapter_space_form_is_parsed() {
+        let cli = parse_cli_args(&args(&["--adapter", "krun"]));
+        assert!(!cli.restart);
+        assert_eq!(cli.adapter.as_deref(), Some("krun"));
+    }
+
+    #[test]
+    fn adapter_equals_form_is_parsed() {
+        let cli = parse_cli_args(&args(&["--adapter=smolvm"]));
+        assert_eq!(cli.adapter.as_deref(), Some("smolvm"));
+    }
+
+    #[test]
+    fn restart_and_adapter_together() {
+        let cli = parse_cli_args(&args(&["--restart", "--adapter", "krun"]));
+        assert!(cli.restart);
+        assert_eq!(cli.adapter.as_deref(), Some("krun"));
+    }
+
+    #[test]
+    fn unknown_flags_are_ignored() {
+        let cli = parse_cli_args(&args(&["--unknown-flag", "--adapter", "krun"]));
+        assert_eq!(cli.adapter.as_deref(), Some("krun"));
     }
 }

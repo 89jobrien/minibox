@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: Conformance Test Expansion
 
 ## Goal

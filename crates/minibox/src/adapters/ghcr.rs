@@ -1,4 +1,4 @@
-//! GitHub Container Registry (ghcr.io) adapter implementing the ImageRegistry trait.
+//! GitHub Container Registry (ghcr.io) adapter implementing the `ImageRegistry` trait.
 //!
 //! Authenticates via `WWW-Authenticate` Bearer challenge. Pass a personal access
 //! token (PAT) with `read:packages` scope as `GHCR_TOKEN` to access private images;
@@ -127,10 +127,14 @@ impl GhcrRegistry {
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let token = std::env::var("GHCR_TOKEN").ok();
+        // from_mins is MSRV 1.91; duration_suboptimal_units is clippy ≥1.96 — suppress both.
+        #[allow(unknown_lints, clippy::duration_suboptimal_units)]
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true)
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
             .build()?;
         Ok(Self {
             store,
@@ -350,16 +354,23 @@ impl GhcrRegistry {
 /// or starts with one followed by `/`.
 ///
 /// Example: `GHCR_ORG_ALLOWLIST=myorg,myorg/private-image`
+/// Pure matching kernel for GHCR org allowlist checks.
+///
+/// Returns `true` when `repo` exactly matches a list entry or starts with
+/// `entry/` (slash-bounded prefix). The slash boundary prevents `"org"` from
+/// matching `"orgmalicious/image"`.
+fn allowlist_permits(repo: &str, list: &str) -> bool {
+    list.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")))
+}
+
 fn check_ghcr_allowlist(repo: &str) -> Result<()> {
     let Ok(list) = std::env::var("GHCR_ORG_ALLOWLIST") else {
         return Ok(()); // no allowlist configured → allow all
     };
-    let permitted = list
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")));
-    if permitted {
+    if allowlist_permits(repo, &list) {
         Ok(())
     } else {
         anyhow::bail!(
@@ -383,6 +394,7 @@ impl ImageRegistry for GhcrRegistry {
         self.store.has_image(name, tag)
     }
 
+    // qual:allow(iosp) reason: "adapter I/O boundary — auth, fetch manifest, download layers"
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
@@ -467,6 +479,7 @@ impl ImageRegistry for GhcrRegistry {
 /// Parse a `WWW-Authenticate: Bearer ...` header into `(realm, service, scope)`.
 ///
 /// Returns empty strings for any missing fields.
+#[must_use]
 pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
     let mut realm = String::new();
     let mut service = String::new();
@@ -488,34 +501,26 @@ pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
         // Parse the (possibly quoted) value.
         let value = if remaining.starts_with('"') {
             remaining = &remaining[1..];
-            match remaining.find('"') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    if remaining.starts_with(',') {
-                        remaining = &remaining[1..];
-                    }
-                    val
+            if let Some(end) = remaining.find('"') {
+                let val = remaining[..end].to_owned();
+                remaining = &remaining[end + 1..];
+                if remaining.starts_with(',') {
+                    remaining = &remaining[1..];
                 }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
+                val
+            } else {
+                let val = remaining.to_owned();
+                remaining = "";
+                val
             }
+        } else if let Some(end) = remaining.find(',') {
+            let val = remaining[..end].to_owned();
+            remaining = &remaining[end + 1..];
+            val
         } else {
-            match remaining.find(',') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    val
-                }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
-            }
+            let val = remaining.to_owned();
+            remaining = "";
+            val
         };
 
         match key {
@@ -592,6 +597,30 @@ mod tests {
         unsafe { std::env::set_var("GHCR_ORG_ALLOWLIST", "allowedorg") };
         assert!(check_ghcr_allowlist("otherog/img").is_err());
         unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
+    }
+
+    // Executable mirrors of kani proof 36 (allowlist_slash_boundary) — pure
+    // function, no env mutation. A failure here is a real prefix-squatting
+    // vulnerability, not a test bug.
+    #[test]
+    fn allowlist_rejects_prefix_squatting() {
+        // "org" must not permit "orgevil/image" — slash-bounded prefix only.
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("org", "org"));
+    }
+
+    #[test]
+    fn allowlist_entry_with_repo_component_is_exact_or_slash_bounded() {
+        assert!(allowlist_permits(
+            "myorg/private-image",
+            "myorg/private-image"
+        ));
+        assert!(!allowlist_permits(
+            "myorg/private-image-extra",
+            "myorg/private-image"
+        ));
     }
 
     #[test]
@@ -1069,5 +1098,70 @@ mod tests {
             fn assert_impl<T: RegistryTransport>() {}
             assert_impl::<reqwest::Client>();
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 36: allowlist_permits requires a '/' boundary — a prefix "org"
+    /// must NOT match "orgmalicious/image". This is the critical security
+    /// invariant preventing org-squatting bypasses.
+    #[kani::proof]
+    fn allowlist_slash_boundary() {
+        // Pre-built repos avoid format! overhead in CBMC.
+        // "orgevil/image" must NOT match allowlist "org".
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("orgother/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+
+        // "org/image" MUST match allowlist "org".
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("myorg/image", "myorg"));
+        assert!(allowlist_permits("ab/image", "ab"));
+    }
+
+    /// Proof 37: allowlist_permits with exact match always returns true.
+    #[kani::proof]
+    #[kani::unwind(32)]
+    fn allowlist_exact_match() {
+        let repos: [&str; 3] = ["myorg", "other/image", "single"];
+        let i: usize = kani::any();
+        kani::assume(i < repos.len());
+        assert!(
+            allowlist_permits(repos[i], repos[i]),
+            "exact match must permit"
+        );
+    }
+
+    /// Proof 38: empty allowlist string permits nothing.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn allowlist_empty_permits_nothing() {
+        let repos: [&str; 3] = ["org/image", "anything", ""];
+        let i: usize = kani::any();
+        kani::assume(i < repos.len());
+        assert!(
+            !allowlist_permits(repos[i], ""),
+            "empty allowlist must deny all"
+        );
+    }
+
+    /// Proof 39: allowlist with only commas/whitespace permits nothing.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn allowlist_whitespace_only_permits_nothing() {
+        let lists: [&str; 3] = [",", " , , ", "  "];
+        let i: usize = kani::any();
+        kani::assume(i < lists.len());
+        assert!(
+            !allowlist_permits("org/image", lists[i]),
+            "whitespace-only allowlist must deny all"
+        );
     }
 }

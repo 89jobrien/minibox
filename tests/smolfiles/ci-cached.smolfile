@@ -1,0 +1,19 @@
+# Persistent CI VM — pre-provisioned with Rust toolchain.
+#
+# Created once via `cargo xtask setup-test-vm`, reused across test runs.
+# The overlay disk persists installed packages (rustup, cargo-nextest, apk deps).
+#
+# Usage:
+#   cargo xtask setup-test-vm          # create + provision (one-time)
+#   cargo xtask test-in-vm             # auto-detects and uses this machine
+#   smolvm machine stop --name minibox-ci
+#   smolvm machine delete minibox-ci   # tear down
+
+image = "alpine:3.20"
+cpus = 4
+memory = 8192
+net = true
+overlay = 4
+
+[health]
+exec = ["rustc", "--version"]

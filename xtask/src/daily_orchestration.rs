@@ -129,7 +129,7 @@ impl RunConfig {
         }))
     }
 
-    fn mode_name(&self) -> &'static str {
+    const fn mode_name(&self) -> &'static str {
         match self {
             Self::Local { .. } => "local",
             Self::Ci(_) => "ci",
@@ -187,12 +187,10 @@ impl RunConfig {
 
 impl CiConfig {
     fn prompt(&self) -> String {
-        let branch = self
-            .branch
-            .as_deref()
-            .map_or("the current checked-out ref".to_string(), |branch| {
-                format!("the `{branch}` ref")
-            });
+        let branch = self.branch.as_deref().map_or_else(
+            || "the current checked-out ref".to_string(),
+            |branch| format!("the `{branch}` ref"),
+        );
         let issue_policy = if self.create_issues {
             "Create or update GitHub issues for concrete P0/P1 findings when useful."
         } else {
@@ -248,7 +246,7 @@ Workflow:
 }
 
 impl CiOutput {
-    fn instruction(self) -> &'static str {
+    const fn instruction(self) -> &'static str {
         match self {
             Self::StepSummary => {
                 "the file named by `GITHUB_STEP_SUMMARY` when it is set; otherwise stdout"

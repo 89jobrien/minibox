@@ -1,6 +1,6 @@
-# Handoff — minibox (2026-05-26)
+# Handoff — minibox (2026-07-12)
 
-**Branch:** develop | **Build:** cargo check passed | **Tests:** cargo test passed
+**Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
@@ -31,12 +31,22 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| test-in-vm | P1 | open | cargo xtask test-in-vm — run Linux tests in ephemeral VM |
+| uncommitted-work | P1 | open | Uncommitted changes (27 files) |
+| chain-e-4 | P2 | blocked | Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items |
 
 ## Log
 
-- 20260525.183746: Resolved 3 P0 security issues (#428 env key validation,
-- 20260523.102700: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor
-- 20260521: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
-- 20260515.171405: done=23 running=0 pending=47 blocked=0
-- 20260515.131514: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues
+- 20260708::000000: Intensive CI stabilization session: 10 fix commits
+- Clippy lint suppression: duration_suboptimal_units, unknown_lints
+- Protocol e2e matrix narrowing: removed ubuntu (requires root for native adapter)
+- HTTP timeout hardening: connect/request timeouts on pull e2e test
+- Rustqual SARIF truncation fix
+- Protocol e2e pipe deadlock resolution
+- Reviewdog workflow removal
+- Stability gates failures on develop resolved
+Status: develop branch in sync with origin/develop
+Build: cargo check clean
+- 20260701::000000: Commit: feat(errors): add miette diagnostics for rich CLI error rendering
+Status: develop branch in sync with origin/develop
+Build: cargo check clean
+- 20260615.055217: done=102 running=0 pending=19 blocked=1

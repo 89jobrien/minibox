@@ -14,6 +14,7 @@ use std::path::PathBuf;
 /// `C:\minibox` if the platform data directory is unavailable.
 ///
 /// Would be overridden at runtime by `MINIBOX_DATA_DIR` in a full implementation.
+#[must_use]
 pub fn data_dir() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("C:\\minibox"))
@@ -29,6 +30,7 @@ pub fn data_dir() -> PathBuf {
 /// file), so this directory primarily holds PID files and ephemeral metadata.
 ///
 /// Would be overridden at runtime by `MINIBOX_RUN_DIR` in a full implementation.
+#[must_use]
 pub fn run_dir() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from("C:\\Temp"))
@@ -42,6 +44,7 @@ pub fn run_dir() -> PathBuf {
 /// the Unix socket used on Linux and macOS.
 ///
 /// This path is not currently used — `winbox::start()` is a Phase 1 stub.
+#[must_use]
 pub fn pipe_name() -> String {
     r"\\.\pipe\miniboxd".to_string()
 }

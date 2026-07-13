@@ -78,6 +78,7 @@ pub struct BroadcastEventBroker {
 }
 
 impl BroadcastEventBroker {
+    #[must_use]
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1024);
         Self { tx }

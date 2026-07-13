@@ -1,51 +1,110 @@
 project: minibox
 id: minibox
-updated: 2026-05-26
+updated: 2026-07-12
 items:
-- id: test-in-vm
+- id: chain-e-4
   doob_uuid: null
-  name: test-in-vm
-  priority: P1
-  status: open
-  title: cargo xtask test-in-vm — run Linux tests in ephemeral VM
-  description: |-
-    xtask/src/test_in_vm.rs implemented. Cross-compiles miniboxd+tests for
-    aarch64-unknown-linux-musl, boots smolvm VM (or minibox as backend),
-    mounts target dir at /mnt/tests, runs integration_tests + cgroup_tests.
-    Pull tests pass. cgroup_tests auto-skipped on unprivileged backends
-    (smolvm). smolvm drops CAP_SYS_ADMIN from bounding set.
-    Next: request smolvm --privileged flag, or pivot to Apple Containerization
-    (macOS 26) / QEMU for full kernel access.
-  files:
-  - xtask/src/test_in_vm.rs
-  - xtask/src/main.rs
-  - crates/minibox/src/adapters/smolvm.rs
+  name: chain-e--136---clarify-stability-checklist-md--mandatory-gates-vs-advisory-items
+  priority: P2
+  status: blocked
+  title: 'Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items'
+  description: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
+  files: []
   completed: null
   extra:
-  - date: null
+  - date: 2026-06-15
     type: blocker
     field: null
     value: null
     reviewed: null
-    note: smolvm drops CAP_SYS_ADMIN from bounding set — overlay/cgroup tests cannot pass until smolvm adds --privileged or alternative VM backend used
+    note: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
+- id: uncommitted-work
+  doob_uuid: null
+  name: uncommitted-work
+  priority: P1
+  status: open
+  title: Uncommitted changes (27 files)
+  description: |-
+    Working tree has uncommitted changes:
+    .ctx/HANDOFF.md
+    .ctx/HANDOFF.minibox.minibox.yaml
+    docs/PLATFORM_SUPPORT.md
+    docs/core/CRATE_TIERS.mbx.md
+    docs/core/FEATURE_MATRIX.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/SECURITY_INVARIANTS.mbx.md
+    docs/core/STABILITY_CHECKLIST.mbx.md
+    docs/core/STATE_MODEL.mbx.md
+    docs/core/SUPPORT_TIERS.mbx.md
+    docs/notes/minibox-in-minibox.local.md
+    .capsec-baseline.json
+    .ctx/HANDOFF.agentbox.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.state.yaml
+    .ctx/HANDOFF.macbox.minibox.state.yaml
+    .ctx/HANDOFF.mbx.minibox.state.yaml
+    .ctx/HANDOFF.minibox-core.minibox.state.yaml
+    .ctx/HANDOFF.minibox-macros.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.state.yaml
+    .ctx/HANDOFF.miniboxd.minibox.state.yaml
+    .ctx/HANDOFF.winbox.minibox.state.yaml
+    .ctx/HANDOFF.xtask.minibox.state.yaml
+    .kgx/
+    .minibox/
+    book/
+    xtask/docs-audit-report.json
+  files:
+  - .ctx/HANDOFF.md
+  - .ctx/HANDOFF.minibox.minibox.yaml
+  - docs/PLATFORM_SUPPORT.md
+  - docs/core/CRATE_TIERS.mbx.md
+  - docs/core/FEATURE_MATRIX.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/SECURITY_INVARIANTS.mbx.md
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+  - docs/core/STATE_MODEL.mbx.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/notes/minibox-in-minibox.local.md
+  - .capsec-baseline.json
+  - .ctx/HANDOFF.agentbox.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.state.yaml
+  - .ctx/HANDOFF.macbox.minibox.state.yaml
+  - .ctx/HANDOFF.mbx.minibox.state.yaml
+  - .ctx/HANDOFF.minibox-core.minibox.state.yaml
+  - .ctx/HANDOFF.minibox-macros.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.state.yaml
+  - .ctx/HANDOFF.miniboxd.minibox.state.yaml
+  - .ctx/HANDOFF.winbox.minibox.state.yaml
+  - .ctx/HANDOFF.xtask.minibox.state.yaml
+  - .kgx/
+  - .minibox/
+  - book/
+  - xtask/docs-audit-report.json
+  completed: null
+  extra: []
 log:
-- date: '20260525.183746'
-  summary: Resolved 3 P0 security issues (#428 env key validation,
+- date: 20260708::000000
+  summary: |-
+    Intensive CI stabilization session: 10 fix commits
+    - Clippy lint suppression: duration_suboptimal_units, unknown_lints
+    - Protocol e2e matrix narrowing: removed ubuntu (requires root for native adapter)
+    - HTTP timeout hardening: connect/request timeouts on pull e2e test
+    - Rustqual SARIF truncation fix
+    - Protocol e2e pipe deadlock resolution
+    - Reviewdog workflow removal
+    - Stability gates failures on develop resolved
+    Status: develop branch in sync with origin/develop
+    Build: cargo check clean
   commits: []
-  session: 5
-- date: '20260523.102700'
-  summary: Fixed smolvm adapter output_reader bug; implemented test-in-vm xtask (dual backend minibox+smolvm); pull tests pass, overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction; fixed CI failures from rustqual RunParams refactor
+  session: ci-stabilization
+- date: 20260701::000000
+  summary: |-
+    Commit: feat(errors): add miette diagnostics for rich CLI error rendering
+    Status: develop branch in sync with origin/develop
+    Build: cargo check clean
   commits: []
-  session: 4
-- date: '20260521'
-  summary: Closed handler-split (#356) and a-series-testing (#368-#372) — both already complete on develop
+  session: development
+- date: '20260615.055217'
+  summary: done=102 running=0 pending=19 blocked=1
   commits: []
-  session: 3
-- date: '20260515.171405'
-  summary: done=23 running=0 pending=47 blocked=0
-  commits: []
-  session: 2
-- date: '20260515.131514'
-  summary: Completed stable->staging migration, implemented CI change detection (cargo xtask detect-changes), merged domain nix cleanup (#354), created GitHub issues
-  commits: []
-  session: 1

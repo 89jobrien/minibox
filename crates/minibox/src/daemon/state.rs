@@ -4,8 +4,6 @@
 //! `Arc<DaemonState>`.  All mutable access is gated behind a tokio
 //! `RwLock` so many readers can proceed concurrently while writes are
 //!
-// TODO(#263): paused state migration — persist Paused status across daemon restart
-// TODO(#326): persist execution manifest before container spawn
 //! exclusive.
 //!
 //! State is persisted to a JSON file after every mutation so that
@@ -20,10 +18,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 // ---------------------------------------------------------------------------
-// ProcessChecker port (hexagonal architecture — process liveness port)
+// ProcessChecker port (process liveness port)
 // ---------------------------------------------------------------------------
 
 /// Port for checking whether a host PID is still alive.
@@ -48,7 +46,31 @@ impl ProcessChecker for KillProcessChecker {
 }
 
 // ---------------------------------------------------------------------------
-// StateRepository port (hexagonal architecture — persistence port)
+// CgroupFreezeChecker port (cgroup freezer inspection)
+// ---------------------------------------------------------------------------
+
+/// Port for checking whether a container's cgroup is frozen.
+///
+/// Decouples `reconcile_paused` from direct filesystem access so tests can
+/// inject a mock without requiring a real cgroup hierarchy.
+pub trait CgroupFreezeChecker: Send + Sync {
+    /// Returns `true` if the cgroup at `cgroup_path` has `cgroup.freeze` set
+    /// to `1` (frozen).
+    fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool;
+}
+
+/// Default adapter: reads `cgroup.freeze` from the filesystem.
+pub struct FsCgroupFreezeChecker;
+
+impl CgroupFreezeChecker for FsCgroupFreezeChecker {
+    fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool {
+        let freeze_path = cgroup_path.join("cgroup.freeze");
+        std::fs::read_to_string(&freeze_path).is_ok_and(|s| s.trim() == "1")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// StateRepository port (persistence port)
 // ---------------------------------------------------------------------------
 
 /// Port for persisting and loading the container state map.
@@ -80,7 +102,8 @@ pub struct JsonFileRepository {
 
 impl JsonFileRepository {
     /// Create a new repository that reads/writes `path`.
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self { path }
     }
 }
@@ -108,7 +131,7 @@ impl StateRepository for JsonFileRepository {
 
     fn save_containers(&self, containers: &HashMap<String, ContainerRecord>) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(containers)
-            .map_err(|e| anyhow::anyhow!("failed to serialise state: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("failed to serialise state: {e}"))?;
 
         let tmp_path = self.path.with_extension("json.tmp");
         std::fs::write(&tmp_path, &json).map_err(|e| {
@@ -227,6 +250,13 @@ pub struct ContainerRecord {
     pub workload_digest: Option<String>,
 }
 
+impl ContainerRecord {
+    /// Returns the container's current state string (e.g. `"Running"`, `"Stopped"`).
+    pub fn state_str(&self) -> &str {
+        &self.info.state
+    }
+}
+
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
 #[derive(Clone)]
 pub struct DaemonState {
@@ -241,7 +271,7 @@ pub struct DaemonState {
     /// Injected persistence port.  When `Some`, all load/save operations
     /// go through this port instead of the raw `state_file` path.
     repository: Option<Arc<dyn StateRepository>>,
-    /// IP addresses currently allocated by bridge network, keyed by container_id.
+    /// IP addresses currently allocated by bridge network, keyed by `container_id`.
     pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
     /// Pipeline trace persistence adapter.
     pub trace_store: Arc<dyn TraceStore>,
@@ -255,14 +285,16 @@ impl DaemonState {
     /// `data_dir/traces/` by default.
     ///
     /// [`FileTraceStore`]: minibox_core::trace::FileTraceStore
+    #[must_use]
     pub fn new(image_store: ImageStore, data_dir: &Path) -> Self {
         let trace_store: Arc<dyn TraceStore> =
-            minibox_core::trace::FileTraceStore::new(data_dir.join("traces"))
-                .map(|s| Arc::new(s) as Arc<dyn TraceStore>)
-                .unwrap_or_else(|e| {
+            minibox_core::trace::FileTraceStore::new(data_dir.join("traces")).map_or_else(
+                |e| {
                     warn!("trace store: failed to create FileTraceStore: {e}, using noop");
-                    Arc::new(minibox_core::trace::NoopTraceStore)
-                });
+                    Arc::new(minibox_core::trace::NoopTraceStore) as Arc<dyn TraceStore>
+                },
+                |s| Arc::new(s) as Arc<dyn TraceStore>,
+            );
 
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
@@ -334,15 +366,16 @@ impl DaemonState {
             }
         };
 
-        // Created and Paused containers from a previous session cannot be
-        // recovered — mark them Stopped immediately.  Running containers are
-        // left as-is so that `reconcile_on_startup` can probe their PIDs and
-        // distinguish truly orphaned processes from those still alive.
+        // Created containers from a previous session cannot be recovered —
+        // mark them Stopped immediately.  Running and Paused containers are
+        // left as-is so that `reconcile_on_startup` can probe their PIDs
+        // (and cgroup.freeze for Paused) to distinguish truly orphaned
+        // processes from those still alive.
         for record in records.values_mut() {
-            if record.info.state == "Created" || record.info.state == "Paused" {
+            if record.info.state == "Created" {
                 debug!(
-                    "marking stale container {} as Stopped (was {})",
-                    record.info.id, record.info.state
+                    "marking stale container {} as Stopped (was Created)",
+                    record.info.id
                 );
                 record.info.state = "Stopped".to_string();
                 record.info.pid = None;
@@ -361,57 +394,27 @@ impl DaemonState {
     /// supplied [`ProcessChecker`].  If the process is gone, transition the
     /// record to `"Orphaned"` and clear the PID fields.
     ///
+    /// For each container still marked `"Paused"`, verify the PID is alive and
+    /// `cgroup.freeze` contains `1`.  If either check fails, mark `"Orphaned"`.
+    ///
     /// Call this **after** [`load_from_disk`] on daemon startup.
-    pub async fn reconcile_on_startup(&self, checker: &dyn ProcessChecker) {
+    pub async fn reconcile_on_startup(
+        &self,
+        checker: &dyn ProcessChecker,
+        freeze_checker: &dyn CgroupFreezeChecker,
+    ) {
         let mut map = self.containers.write().await;
         let mut orphaned_count: u32 = 0;
 
         for record in map.values_mut() {
-            if record.info.state != "Running" {
-                continue;
-            }
-            let pid = match record.pid {
-                Some(p) => p,
-                None => {
-                    // Running with no PID is always orphaned.
-                    warn!(
-                        container_id = %record.info.id,
-                        stale_pid = 0_u32,
-                        "reconcile: container marked Running but has no PID — marking Orphaned"
-                    );
-                    record.info.state = "Orphaned".to_string();
-                    record.info.pid = None;
-                    orphaned_count += 1;
-                    continue;
+            match record.info.state.as_str() {
+                "Running" => {
+                    reconcile_running(record, checker, &mut orphaned_count);
                 }
-            };
-
-            if checker.is_alive(pid) {
-                // PID is still alive but the daemon has no reaper for it —
-                // the process will run to completion unmonitored.  Mark
-                // Orphaned so the operator sees an honest state rather than a
-                // phantom "Running" entry with no lifecycle tracking.
-                warn!(
-                    container_id = %record.info.id,
-                    pid = pid,
-                    "reconcile: container PID alive but unmonitored after restart — marking Orphaned"
-                );
-                record.info.state = "Orphaned".to_string();
-                // Preserve the PID in the record so operators can inspect the
-                // live process externally; clear the authoritative daemon PID
-                // field since the daemon no longer tracks it.
-                record.pid = None;
-                orphaned_count += 1;
-            } else {
-                warn!(
-                    container_id = %record.info.id,
-                    stale_pid = pid,
-                    "reconcile: stale container detected — PID gone, marking Orphaned"
-                );
-                record.info.state = "Orphaned".to_string();
-                record.info.pid = None;
-                record.pid = None;
-                orphaned_count += 1;
+                "Paused" => {
+                    reconcile_paused(record, checker, freeze_checker, &mut orphaned_count);
+                }
+                _ => continue,
             }
         }
 
@@ -538,7 +541,7 @@ impl DaemonState {
     /// Return `ContainerInfo` snapshots for every tracked container.
     ///
     /// The returned vec is a point-in-time snapshot; order is unspecified
-    /// (HashMap iteration order).
+    /// (`HashMap` iteration order).
     pub async fn list_containers(&self) -> Vec<ContainerInfo> {
         let map = self.containers.read().await;
         map.values().map(|r| r.info.clone()).collect()
@@ -573,11 +576,9 @@ impl DaemonState {
                 record.info.state = "Running".to_string();
             }
             // Standard forward transitions
-            ("Created", ContainerState::Running)
-            | ("Created", ContainerState::Failed)
-            | ("Running", ContainerState::Stopped)
-            | ("Running", ContainerState::Failed)
-            | ("Paused", ContainerState::Stopped) => {
+            ("Created", ContainerState::Running | ContainerState::Failed)
+            | ("Running" | "Paused", ContainerState::Stopped)
+            | ("Running", ContainerState::Failed) => {
                 if new_state == ContainerState::Stopped {
                     record.info.pid = None;
                     record.pid = None;
@@ -630,6 +631,116 @@ impl DaemonState {
         }
         drop(map);
         self.save_to_disk().await;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Startup reconciliation helpers
+// ---------------------------------------------------------------------------
+
+/// Reconcile a container that was `"Running"` when the daemon last exited.
+fn reconcile_running(
+    record: &mut ContainerRecord,
+    checker: &dyn ProcessChecker,
+    orphaned_count: &mut u32,
+) {
+    let pid = if let Some(p) = record.pid {
+        p
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            stale_pid = 0_u32,
+            "reconcile: container marked Running but has no PID — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        *orphaned_count += 1;
+        return;
+    };
+
+    if checker.is_alive(pid) {
+        warn!(
+            container_id = %record.info.id,
+            pid = pid,
+            "reconcile: container PID alive but unmonitored after restart — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.pid = None;
+        *orphaned_count += 1;
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            stale_pid = pid,
+            "reconcile: stale container detected — PID gone, marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        record.pid = None;
+        *orphaned_count += 1;
+    }
+}
+
+/// Reconcile a container that was `"Paused"` when the daemon last exited.
+///
+/// A paused container is recoverable only if its PID is still alive and the
+/// cgroup freezer is still engaged (`cgroup.freeze` contains `1`).  If either
+/// condition fails, the container is marked `"Orphaned"`.
+// NOTE: std::fs::read_to_string is intentionally synchronous here. This runs
+// once at daemon startup while holding the write lock — no concurrent work is
+// possible and the file is a single-digit-byte cgroup control file.
+fn reconcile_paused(
+    record: &mut ContainerRecord,
+    checker: &dyn ProcessChecker,
+    freeze_checker: &dyn CgroupFreezeChecker,
+    orphaned_count: &mut u32,
+) {
+    let pid = if let Some(p) = record.pid {
+        p
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            "reconcile: container marked Paused but has no PID — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        *orphaned_count += 1;
+        return;
+    };
+
+    if !checker.is_alive(pid) {
+        warn!(
+            container_id = %record.info.id,
+            stale_pid = pid,
+            "reconcile: paused container PID gone — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        record.pid = None;
+        *orphaned_count += 1;
+        return;
+    }
+
+    // PID alive — verify the cgroup freezer is still engaged.
+    let frozen = freeze_checker.is_frozen(&record.cgroup_path);
+
+    if frozen {
+        info!(
+            container_id = %record.info.id,
+            pid = pid,
+            "reconcile: paused container recovered — PID alive and cgroup frozen"
+        );
+        // Keep Paused state; clear daemon PID tracking (no reaper attached).
+        record.pid = None;
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            pid = pid,
+            cgroup_path = %record.cgroup_path.display(),
+            "reconcile: paused container cgroup not frozen — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.pid = None;
+        *orphaned_count += 1;
     }
 }
 
@@ -832,7 +943,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
@@ -897,7 +1010,9 @@ mod tests {
         // Session 2: load + reconcile with a checker that says "no such PID".
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
@@ -927,7 +1042,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -952,7 +1069,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -995,6 +1114,22 @@ mod tests {
         }
     }
 
+    /// Always reports cgroups as not frozen (default for most tests).
+    struct NeverFrozenChecker;
+    impl super::CgroupFreezeChecker for NeverFrozenChecker {
+        fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
+            false
+        }
+    }
+
+    /// Always reports cgroups as frozen.
+    struct AlwaysFrozenChecker;
+    impl super::CgroupFreezeChecker for AlwaysFrozenChecker {
+        fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
+            true
+        }
+    }
+
     /// Issue #134: "Stopped" containers must be preserved as-is on reload.
     #[tokio::test]
     async fn stopped_containers_preserved_on_reload() {
@@ -1019,7 +1154,7 @@ mod tests {
     }
 
     #[test]
-    fn container_record_deserializes_without_creation_params() {
+    fn container_record_deserialize_without_creation_params() {
         let json = r#"{
             "info": {
                 "id": "abc123",
@@ -1043,6 +1178,10 @@ mod tests {
         }"#;
         let record: ContainerRecord =
             serde_json::from_str(json).expect("must deserialize without creation_params");
+        // Exercise ContainerRecord methods — the SUT struct under test.
+        assert_eq!(record.info.id, "abc123");
+        assert_eq!(record.info.image, "alpine:latest");
+        assert_eq!(record.state_str(), "Stopped");
         assert!(
             record.creation_params.is_none(),
             "missing creation_params must deserialize as None"
@@ -1198,5 +1337,180 @@ mod tests {
         assert_eq!(cp.entrypoint, Some("/bin/bash".to_string()));
         assert_eq!(cp.user, Some("root".to_string()));
         assert_eq!(cp.platform, Some("linux/amd64".to_string()));
+    }
+
+    // ── Paused state persistence — Issue #263 ────────────────────────────
+
+    /// Issue #263: `load_from_disk` preserves `"Paused"` state (no longer
+    /// downgrades to `"Stopped"`).
+    #[tokio::test]
+    async fn paused_containers_preserved_on_load() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Paused".to_string();
+            record.info.pid = Some(12345);
+            record.pid = Some(12345);
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(containers.len(), 1);
+        assert_eq!(
+            containers[0].state, "Paused",
+            "Paused containers must be preserved through load_from_disk"
+        );
+    }
+
+    /// Issue #263: paused container with alive PID and frozen cgroup survives
+    /// reconciliation.
+    #[tokio::test]
+    async fn reconcile_preserves_paused_with_frozen_cgroup() {
+        let tmp = TempDir::new().expect("tempdir");
+        let cgroup_dir = tmp.path().join("cgroup-paused");
+        std::fs::create_dir_all(&cgroup_dir).expect("create cgroup dir");
+        std::fs::write(cgroup_dir.join("cgroup.freeze"), "1\n").expect("write freeze");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Paused".to_string();
+            record.info.pid = Some(12345);
+            record.pid = Some(12345);
+            record.cgroup_path = cgroup_dir.clone();
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &AlwaysFrozenChecker)
+            .await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers[0].state, "Paused",
+            "Paused container with alive PID + frozen cgroup must stay Paused"
+        );
+    }
+
+    /// Issue #263: paused container with dead PID becomes Orphaned.
+    #[tokio::test]
+    async fn reconcile_marks_paused_dead_pid_as_orphaned() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Paused".to_string();
+            record.info.pid = Some(99999);
+            record.pid = Some(99999);
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Paused container with dead PID must become Orphaned"
+        );
+    }
+
+    /// Issue #263: paused container with alive PID but unfrozen cgroup becomes
+    /// Orphaned (inconsistent state — process running unmonitored).
+    #[tokio::test]
+    async fn reconcile_marks_paused_unfrozen_as_orphaned() {
+        let tmp = TempDir::new().expect("tempdir");
+        let cgroup_dir = tmp.path().join("cgroup-unfrozen");
+        std::fs::create_dir_all(&cgroup_dir).expect("create cgroup dir");
+        std::fs::write(cgroup_dir.join("cgroup.freeze"), "0\n").expect("write freeze");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Paused".to_string();
+            record.info.pid = Some(12345);
+            record.pid = Some(12345);
+            record.cgroup_path = cgroup_dir.clone();
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Paused container with alive PID but unfrozen cgroup must become Orphaned"
+        );
+    }
+
+    /// Issue #263: paused container with alive PID but missing cgroup.freeze
+    /// file becomes Orphaned.
+    #[tokio::test]
+    async fn reconcile_marks_paused_missing_cgroup_as_orphaned() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Paused".to_string();
+            record.info.pid = Some(12345);
+            record.pid = Some(12345);
+            // cgroup_path points to a nonexistent directory
+            record.cgroup_path = tmp.path().join("nonexistent-cgroup");
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Paused container with missing cgroup must become Orphaned"
+        );
+    }
+
+    /// Issue #263: paused container with no PID becomes Orphaned.
+    #[tokio::test]
+    async fn reconcile_marks_paused_no_pid_as_orphaned() {
+        let tmp = TempDir::new().expect("tempdir");
+
+        {
+            let state = make_state_in(&tmp);
+            let mut record = make_test_record();
+            record.info.state = "Paused".to_string();
+            record.pid = None;
+            state.add_container(record).await;
+        }
+
+        let state2 = make_state_in(&tmp);
+        state2.load_from_disk().await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
+
+        let containers = state2.list_containers().await;
+        assert_eq!(
+            containers[0].state, "Orphaned",
+            "Paused container with no PID must become Orphaned"
+        );
     }
 }

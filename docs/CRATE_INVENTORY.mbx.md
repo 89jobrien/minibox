@@ -5,6 +5,9 @@
 > Updated 2026-05-06: date refresh; no structural changes.
 > Updated 2026-05-08: vz feature removed from miniboxd/macbox; VZ backend entry removed;
 > build-vm-image/run-vm/test-vm xtask commands removed.
+> Updated 2026-05-29: added smolbox (smolvm/krun adapter crate); crate count 10->11.
+> Updated 2026-07-07: added ail (placeholder) and minibox-bench (now owns all criterion
+> benches, previously in the minibox crate); crate count 11->13.
 
 ## Summary
 
@@ -17,8 +20,11 @@
 | macbox                 | lib        | ~3.6k  | 16           | 4                       | --                     |
 | winbox                 | lib        | ~280   | 5            | 0                       | --                         |
 | mbx                    | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests           |
+| smolbox             | lib        | ~0.4k  | 4            | 0                       | --                         |
 | minibox-crux-plugin    | bin        | --     | --           | --                      | --                         |
 | minibox-testsuite      | bin        | --     | --           | --                      | --                         |
+| minibox-bench          | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                         |
+| ail                    | bin        | ~4     | 1            | 0                       | --                         |
 | xtask                  | bin        | ~5k    | 15           | 0                       | --                         |
 
 **Estimated total:** ~48k+ lines of Rust across 159+ source files. All crates at
@@ -64,7 +70,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 **Features:** `test-utils` (mocks + fixtures + conformance), `metrics`
 (Prometheus endpoint), `otel` (OTLP trace export).
 
-**Benchmarks:** `trait_overhead`, `protocol_codec` (criterion).
+**Benchmarks:** none — all criterion benches live in `crates/minibox-bench`.
 
 ---
 
@@ -99,9 +105,11 @@ macOS daemon implementation.
 **Backends:**
 
 - **Colima**: `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`,
-  `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl
+  `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl.
+  Implemented in `crates/minibox/src/adapters/colima.rs` (not macbox).
 - **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
-  libkrun micro-VMs (HVF on macOS, KVM on Linux)
+  libkrun micro-VMs (HVF on macOS, KVM on Linux).
+  Implemented in `crates/macbox/src/krun/`.
 
 ---
 
@@ -124,6 +132,23 @@ prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgra
 
 ---
 
+## smolbox
+
+Lightweight VM adapter backends for macOS and Linux.
+
+**Backends:**
+
+- **smolvm**: `SmolvmRegistry`, `SmolvmRuntime`, `SmolvmFilesystem`, `SmolvmLimiter` --
+  delegates to the `smolvm machine run` CLI binary
+- **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
+  libkrun FFI adapter for micro-VM execution (HVF on macOS, KVM on Linux)
+
+**Modules:** `smolvm/mod.rs`, `krun/mod.rs`, `preflight.rs` (smolvm binary detection).
+
+**Depends on:** minibox, macbox.
+
+---
+
 ## minibox-crux-plugin
 
 Crux plugin binary. Exposes minibox container operations (pull, run, ps, stop,
@@ -142,6 +167,27 @@ internally by `cargo xtask test-conformance`.
 **Binaries:** `run-conformance`, `generate-report`.
 
 **Depends on:** minibox, minibox-core.
+
+---
+
+## minibox-bench
+
+Dedicated benchmark crate. Leaf crate owning all criterion targets and fixtures; the only
+place where the `test-utils` features of the lib crates are enabled.
+
+**Bench targets:** `protocol_codec`, `daemon_dispatch`, `trait_dispatch`, `layer_extract`,
+`image_pull`, plus root-gated Linux benches `linux_rootfs`, `linux_cgroup`, `linux_spawn`.
+
+**Fixtures:** `LayerSpec`/`build_layer_tar_gz` (deterministic OCI layers), `BenchRegistry`
+(wiremock-backed OCI registry).
+
+**Depends on:** minibox, minibox-core (both with `test-utils`), criterion.
+
+---
+
+## ail
+
+Placeholder binary for the agent-improvement loop. No implementation yet.
 
 ---
 
