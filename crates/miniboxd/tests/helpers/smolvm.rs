@@ -84,7 +84,7 @@ pub fn smolvm_run_with_opts(
         cmd.arg("--net");
     }
 
-    cmd.args(["--timeout", &format!("{timeout_secs}")]);
+    cmd.args(["--timeout", &format!("{timeout_secs}sec")]);
 
     for (host, guest) in volumes {
         cmd.args(["-v", &format!("{host}:{guest}")]);

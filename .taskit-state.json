@@ -5,6 +5,6 @@
   "main": "main",
   "merge_sha": null,
   "failed_steps": [
-    "compile-tests"
+    "test"
   ]
 }
