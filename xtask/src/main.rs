@@ -1,4 +1,11 @@
 //! xtask — workspace dev-tool binary.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_in_result,
+    clippy::needless_raw_string_hashes
+)]
 //!
 //! Commands are organized into subcommand groups:
 //!
