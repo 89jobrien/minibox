@@ -1,4 +1,4 @@
-//! GitHub Container Registry (ghcr.io) adapter implementing the ImageRegistry trait.
+//! GitHub Container Registry (ghcr.io) adapter implementing the `ImageRegistry` trait.
 //!
 //! Authenticates via `WWW-Authenticate` Bearer challenge. Pass a personal access
 //! token (PAT) with `read:packages` scope as `GHCR_TOKEN` to access private images;
@@ -127,10 +127,14 @@ impl GhcrRegistry {
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
         const MAX_REDIRECTS: usize = 10;
         let token = std::env::var("GHCR_TOKEN").ok();
+        // from_mins is MSRV 1.91; duration_suboptimal_units is clippy ≥1.96 — suppress both.
+        #[allow(unknown_lints, clippy::duration_suboptimal_units)]
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true)
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(120))
             .build()?;
         Ok(Self {
             store,
@@ -390,6 +394,7 @@ impl ImageRegistry for GhcrRegistry {
         self.store.has_image(name, tag)
     }
 
+    // qual:allow(iosp) reason: "adapter I/O boundary — auth, fetch manifest, download layers"
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
@@ -474,6 +479,7 @@ impl ImageRegistry for GhcrRegistry {
 /// Parse a `WWW-Authenticate: Bearer ...` header into `(realm, service, scope)`.
 ///
 /// Returns empty strings for any missing fields.
+#[must_use]
 pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
     let mut realm = String::new();
     let mut service = String::new();
@@ -495,34 +501,26 @@ pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
         // Parse the (possibly quoted) value.
         let value = if remaining.starts_with('"') {
             remaining = &remaining[1..];
-            match remaining.find('"') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    if remaining.starts_with(',') {
-                        remaining = &remaining[1..];
-                    }
-                    val
+            if let Some(end) = remaining.find('"') {
+                let val = remaining[..end].to_owned();
+                remaining = &remaining[end + 1..];
+                if remaining.starts_with(',') {
+                    remaining = &remaining[1..];
                 }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
+                val
+            } else {
+                let val = remaining.to_owned();
+                remaining = "";
+                val
             }
+        } else if let Some(end) = remaining.find(',') {
+            let val = remaining[..end].to_owned();
+            remaining = &remaining[end + 1..];
+            val
         } else {
-            match remaining.find(',') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    val
-                }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
-            }
+            let val = remaining.to_owned();
+            remaining = "";
+            val
         };
 
         match key {
@@ -599,6 +597,30 @@ mod tests {
         unsafe { std::env::set_var("GHCR_ORG_ALLOWLIST", "allowedorg") };
         assert!(check_ghcr_allowlist("otherog/img").is_err());
         unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
+    }
+
+    // Executable mirrors of kani proof 36 (allowlist_slash_boundary) — pure
+    // function, no env mutation. A failure here is a real prefix-squatting
+    // vulnerability, not a test bug.
+    #[test]
+    fn allowlist_rejects_prefix_squatting() {
+        // "org" must not permit "orgevil/image" — slash-bounded prefix only.
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("org", "org"));
+    }
+
+    #[test]
+    fn allowlist_entry_with_repo_component_is_exact_or_slash_bounded() {
+        assert!(allowlist_permits(
+            "myorg/private-image",
+            "myorg/private-image"
+        ));
+        assert!(!allowlist_permits(
+            "myorg/private-image-extra",
+            "myorg/private-image"
+        ));
     }
 
     #[test]

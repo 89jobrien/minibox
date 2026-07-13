@@ -527,10 +527,12 @@ async fn test_handle_update_explicit_images_sends_progress() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        false,
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: false,
+        },
         state,
         deps,
         tx,
@@ -552,7 +554,18 @@ async fn test_handle_update_empty_list_sends_update_complete() {
     let deps = create_test_deps_with_dir(&tmp);
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
-    handler::handle_update(vec![], false, false, false, state, deps, tx).await;
+    handler::handle_update(
+        handler::UpdateParams {
+            images: vec![],
+            all: false,
+            containers: false,
+            restart: false,
+        },
+        state,
+        deps,
+        tx,
+    )
+    .await;
 
     let resp = rx.recv().await.expect("no response from handle_update");
     assert!(
@@ -639,10 +652,12 @@ async fn test_handle_update_all_true_sends_success() {
     // Image store is empty, so all=true results in empty list → Success immediately.
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec![],
-        true,
-        false,
-        false,
+        handler::UpdateParams {
+            images: vec![],
+            all: true,
+            containers: false,
+            restart: false,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,
@@ -698,10 +713,12 @@ async fn test_handle_update_containers_true_collects_refs() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec![],
-        false,
-        true, // containers=true
-        false,
+        handler::UpdateParams {
+            images: vec![],
+            all: false,
+            containers: true,
+            restart: false,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,
@@ -766,10 +783,12 @@ async fn test_handle_update_restart_stop_fails_continues() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        true, // restart=true
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: true,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,
@@ -855,10 +874,12 @@ async fn test_handle_update_restart_no_creation_params_warns() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(32);
     handler::handle_update(
-        vec!["alpine:latest".to_string()],
-        false,
-        false,
-        true, // restart=true
+        handler::UpdateParams {
+            images: vec!["alpine:latest".to_string()],
+            all: false,
+            containers: false,
+            restart: true,
+        },
         Arc::clone(&state),
         Arc::clone(&deps),
         tx,
@@ -1311,11 +1332,13 @@ async fn test_handle_pipeline_nonexistent_file_returns_error() {
 
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
     handler::handle_pipeline(
-        "/nonexistent/pipeline.crux".to_string(),
-        None,
-        None,
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: "/nonexistent/pipeline.crux".to_string(),
+            input: None,
+            image: None,
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -1436,7 +1459,7 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, policy_override: None,
+            cgroup_parent: None, priority: None, policy_override: None,
         },
         Arc::clone(&state),
         deps,

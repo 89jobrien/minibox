@@ -8,7 +8,7 @@ watches:
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-05-14
+Last updated: 2026-07-08
 
 ---
 
@@ -70,7 +70,7 @@ adjusts stale records:
 | `Orphaned`            | Unchanged         | Already terminal                                  |
 
 The PID liveness check is performed by the `ProcessChecker` port
-(see `crates/minibox-core/src/domain.rs:ProcessChecker`; default
+(see `crates/minibox/src/daemon/state.rs:ProcessChecker`; default
 adapter uses `kill(pid, 0)`). Tests inject doubles that always
 return alive or dead.
 

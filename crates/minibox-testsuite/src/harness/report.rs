@@ -1,4 +1,4 @@
-//! `ReportGenerator` — text, JSON, and JUnit XML output formats.
+//! `ReportGenerator` — text, JSON, and `JUnit` XML output formats.
 
 use std::io::Write;
 
@@ -33,7 +33,7 @@ impl ReportGenerator {
         writeln!(w)?;
 
         let mut adapter_names: Vec<&str> = summary.by_adapter().keys().copied().collect();
-        adapter_names.sort();
+        adapter_names.sort_unstable();
 
         for adapter in adapter_names {
             let entries = &summary.by_adapter()[adapter];
@@ -50,7 +50,7 @@ impl ReportGenerator {
             writeln!(w)?;
 
             if !cfg.summary_only && (cfg.verbose || fail > 0) {
-                for r in entries.iter() {
+                for r in entries {
                     let (icon, suffix) = match &r.result {
                         TestResult::Pass => ("  ✓", String::new()),
                         TestResult::Fail { reason } => ("  ✗", format!(" FAIL: {reason}")),
@@ -107,7 +107,7 @@ impl ReportGenerator {
         Ok(())
     }
 
-    /// JUnit XML for CI artifact ingestion.
+    /// `JUnit` XML for CI artifact ingestion.
     pub fn junit_xml<W: Write>(w: &mut W, summary: &TestSummary) -> std::io::Result<()> {
         writeln!(w, r#"<?xml version="1.0" encoding="UTF-8"?>"#)?;
         writeln!(
@@ -120,7 +120,7 @@ impl ReportGenerator {
         )?;
 
         let mut adapter_names: Vec<&str> = summary.by_adapter().keys().copied().collect();
-        adapter_names.sort();
+        adapter_names.sort_unstable();
 
         for adapter in adapter_names {
             let entries = &summary.by_adapter()[adapter];
@@ -135,7 +135,7 @@ impl ReportGenerator {
                 ms as f64 / 1000.0
             )?;
 
-            for r in entries.iter() {
+            for r in entries {
                 writeln!(
                     w,
                     r#"    <testcase name="{}" classname="{adapter}" time="{:.3}">"#,
@@ -190,7 +190,7 @@ impl ReportGenerator {
         writeln!(w, "|--------|------|------|------|---------------|")?;
 
         let mut adapter_names: Vec<&str> = summary.by_adapter().keys().copied().collect();
-        adapter_names.sort();
+        adapter_names.sort_unstable();
 
         for adapter in &adapter_names {
             let entries = &summary.by_adapter()[*adapter];
@@ -209,7 +209,7 @@ impl ReportGenerator {
             writeln!(w)?;
             for adapter in &adapter_names {
                 let entries = &summary.by_adapter()[*adapter];
-                for r in entries.iter() {
+                for r in entries {
                     if let TestResult::Fail { reason } = &r.result {
                         writeln!(w, "- **{}::{}** — {reason}", r.adapter, r.name)?;
                     }

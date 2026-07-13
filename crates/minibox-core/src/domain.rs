@@ -73,6 +73,7 @@ pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
 ///
 /// Comparison uses [`Priority::score`], where higher scores represent higher
 /// priority.
+#[must_use]
 pub fn meets_min_priority(actual: &Priority, min: &Priority) -> bool {
     actual.score() >= min.score()
 }
@@ -107,7 +108,7 @@ pub struct ExprVar {
 }
 
 /// A single step in a [`WorkflowDef`].
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct WorkflowStep {
     /// Step kind discriminant (e.g. `"container-run"`, `"shell"`).
     pub kind: String,
@@ -116,6 +117,12 @@ pub struct WorkflowStep {
     /// Optional conditional expression — step is skipped when this evaluates to false.
     #[serde(default)]
     pub if_expr: Option<String>,
+    /// Optional if-guard expression evaluated before this step runs.
+    ///
+    /// When present, the expression is resolved via `evaluate_if_guard`; the step
+    /// is skipped when the resolved value is empty, `"false"`, or `"0"`.
+    #[serde(default)]
+    pub if_guard: Option<String>,
     /// When `true`, workflow execution continues even if this step fails.
     #[serde(default)]
     pub continue_on_error: bool,
@@ -183,13 +190,31 @@ pub enum StepStatus {
 impl From<StepStatus> for StepState {
     fn from(status: StepStatus) -> Self {
         match status {
-            StepStatus::Pending => StepState::Pending,
-            StepStatus::Running => StepState::Running,
-            StepStatus::Succeeded => StepState::Completed,
-            StepStatus::Failed | StepStatus::Errored => StepState::Failed,
-            StepStatus::Skipped => StepState::Skipped,
+            StepStatus::Pending => Self::Pending,
+            StepStatus::Running => Self::Running,
+            StepStatus::Succeeded => Self::Completed,
+            StepStatus::Failed | StepStatus::Errored => Self::Failed,
+            StepStatus::Skipped => Self::Skipped,
         }
     }
+}
+
+/// Determine the worst-case [`PhaseOutcome`] from a completed phase's step statuses.
+///
+/// Returns [`PhaseOutcome::Succeeded`] when `statuses` is empty (vacuously successful).
+/// Otherwise maps each status to a `PhaseOutcome` and returns the maximum (worst) value.
+pub fn determine_final_phase(statuses: &[StepStatus]) -> PhaseOutcome {
+    statuses
+        .iter()
+        .map(|s| match s {
+            StepStatus::Succeeded => PhaseOutcome::Succeeded,
+            StepStatus::Skipped => PhaseOutcome::Skipped,
+            StepStatus::Pending | StepStatus::Running => PhaseOutcome::Aborted,
+            StepStatus::Failed => PhaseOutcome::Failed,
+            StepStatus::Errored => PhaseOutcome::Errored,
+        })
+        .max()
+        .unwrap_or(PhaseOutcome::Succeeded)
 }
 
 // ── StepRunner port ──────────────────────────────────────────────────────────
@@ -216,6 +241,8 @@ pub struct StepContext {
     pub alias: String,
     /// Step-specific configuration extracted from the workflow definition.
     pub config: serde_json::Value,
+    /// Accumulated outputs from all prior steps in this workflow execution.
+    pub prior_outputs: WorkflowState,
 }
 
 /// Result value produced by a [`StepRunner`].
@@ -227,6 +254,24 @@ pub struct StepOutput {
     pub status: StepStatus,
 }
 
+/// Feature declarations that a [`StepRunner`] can advertise to callers.
+///
+/// Unlike [`StepCapability`] (which governs runtime resource injection),
+/// `StepRunnerCapability` describes *what workflow features* the runner honours.
+/// Callers can query these before dispatch to decide whether to supply optional
+/// configuration fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StepRunnerCapability {
+    /// Runner evaluates `if:` guard expressions and skips the step when false.
+    SupportsIfGuards,
+    /// Runner honours `retry:` configuration (count, delay, backoff).
+    SupportsRetry,
+    /// Runner enforces `timeout:` deadlines and returns an error on expiry.
+    SupportsTimeout,
+    /// Runner supports inter-step alias passing (reading/writing step outputs).
+    SupportsAliasState,
+}
+
 /// Port: a pluggable executor for a single workflow step kind.
 ///
 /// Implementations live in `minibox/src/adapters/` or may be provided by
@@ -236,7 +281,19 @@ pub trait StepRunner: Send + Sync {
     fn kind(&self) -> &'static str;
     /// Capability tokens required by this runner.
     fn required_capabilities(&self) -> &[StepCapability];
+    /// Workflow feature declarations for this runner.
+    ///
+    /// The default implementation returns an empty slice for backward
+    /// compatibility — existing runners that do not override this method
+    /// simply advertise no optional features.
+    fn declared_capabilities(&self) -> &[StepRunnerCapability] {
+        &[]
+    }
     /// Execute one step with the given context.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the step fails.
     fn run(&self, ctx: StepContext) -> anyhow::Result<StepOutput>;
 }
 
@@ -252,6 +309,7 @@ pub struct StepRunnerRegistry {
 
 impl StepRunnerRegistry {
     /// Create an empty registry.  No built-in runners are registered.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             runners: std::collections::HashMap::new(),
@@ -264,11 +322,21 @@ impl StepRunnerRegistry {
     }
 
     /// Look up a runner by kind string.  Returns `None` if not registered.
+    #[must_use]
     pub fn get(&self, kind: &str) -> Option<&dyn StepRunner> {
-        self.runners.get(kind).map(|r| r.as_ref())
+        self.runners.get(kind).map(std::convert::AsRef::as_ref)
+    }
+
+    /// Return the [`StepRunnerCapability`] declarations for the given runner kind.
+    ///
+    /// Returns `None` when no runner with that kind is registered.  Returns an
+    /// empty slice when the runner is registered but declares no capabilities.
+    pub fn capabilities_for(&self, kind: &str) -> Option<&[StepRunnerCapability]> {
+        self.runners.get(kind).map(|r| r.declared_capabilities())
     }
 
     /// List all registered (kind, capabilities) pairs.
+    #[must_use]
     pub fn list(&self) -> Vec<(&str, &[StepCapability])> {
         self.runners
             .iter()
@@ -382,7 +450,7 @@ impl StepRunner for OverlaySnapshotStepRunner {
 ///
 /// `host_path` is canonicalized and validated before the mount is applied.
 /// `container_path` must be absolute (starts with `/`).
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BindMount {
     /// Absolute path on the host to mount into the container.
     pub host_path: std::path::PathBuf,
@@ -394,23 +462,40 @@ pub struct BindMount {
 
 impl BindMount {
     /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the format is invalid, paths are not absolute, or
+    /// paths contain `..` components.
     pub fn parse_volume(s: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = s.splitn(3, ':').collect();
         if parts.len() < 2 {
-            anyhow::bail!(
-                "invalid volume format {:?}: expected src:dst or src:dst:ro",
-                s
-            );
+            anyhow::bail!("invalid volume format {s:?}: expected src:dst or src:dst:ro");
         }
         let host_path = std::path::PathBuf::from(parts[0]);
+        if !host_path.is_absolute() {
+            anyhow::bail!(
+                "host path {} must be absolute (start with /)",
+                host_path.display()
+            );
+        }
+        if host_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            anyhow::bail!(
+                "host path {} must not contain '..' components",
+                host_path.display()
+            );
+        }
         let container_path = std::path::PathBuf::from(parts[1]);
         if !container_path.is_absolute() {
             anyhow::bail!(
-                "container path {:?} must be absolute (start with /)",
-                container_path
+                "container path {} must be absolute (start with /)",
+                container_path.display()
             );
         }
-        let read_only = parts.get(2).map(|f| *f == "ro").unwrap_or(false);
+        let read_only = parts.get(2).is_some_and(|f| *f == "ro");
         Ok(Self {
             host_path,
             container_path,
@@ -419,6 +504,11 @@ impl BindMount {
     }
 
     /// Parse a `--mount type=bind,src=PATH,dst=PATH[,readonly]` spec into a `BindMount`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the mount type is unsupported, required keys are
+    /// missing, or paths are not absolute.
     pub fn parse_mount(s: &str) -> anyhow::Result<Self> {
         let mut mount_type = None::<String>;
         let mut src = None::<std::path::PathBuf>;
@@ -441,15 +531,30 @@ impl BindMount {
 
         match mount_type.as_deref() {
             Some("bind") | None => {}
-            Some(t) => anyhow::bail!("unsupported mount type {:?}: only 'bind' is supported", t),
+            Some(t) => anyhow::bail!("unsupported mount type {t:?}: only 'bind' is supported"),
         }
 
         let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
+        if !host_path.is_absolute() {
+            anyhow::bail!(
+                "host path {} must be absolute (start with /)",
+                host_path.display()
+            );
+        }
+        if host_path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            anyhow::bail!(
+                "host path {} must not contain '..' components",
+                host_path.display()
+            );
+        }
         let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
         if !container_path.is_absolute() {
             anyhow::bail!(
-                "container path {:?} must be absolute (start with /)",
-                container_path
+                "container path {} must be absolute (start with /)",
+                container_path.display()
             );
         }
 
@@ -751,7 +856,7 @@ pub trait ChildInit: Send + Sync {
     /// Returns an error if:
     /// - Bind mount fails
     /// - Essential filesystem mounts fail
-    /// - pivot_root syscall fails
+    /// - `pivot_root` syscall fails
     /// - Old root unmount fails
     ///
     /// # Security
@@ -768,16 +873,18 @@ pub trait ChildInit: Send + Sync {
 ///
 /// Prefer using [`RootfsSetup`] or [`ChildInit`] directly at call sites that
 /// only need one half of the lifecycle.
+// TODO: add `Send + Sync` supertraits — needed for use in Arc<dyn FilesystemProvider> across
+// async task boundaries without unsafe workarounds.
 pub trait FilesystemProvider: RootfsSetup + ChildInit {}
 
 /// Blanket implementation: any type that implements both [`RootfsSetup`] and
 /// [`ChildInit`] automatically satisfies [`FilesystemProvider`].
 impl<T: RootfsSetup + ChildInit> FilesystemProvider for T {}
 
-/// Backend-specific writable-layer metadata produced by
-/// [`RootfsSetup::setup_rootfs`] and persisted into [`ContainerRecord`]
-/// so that commit/build logic can locate the writable layer without
-/// re-querying the container runtime.
+/// Backend-specific writable-layer metadata produced by [`RootfsSetup::setup_rootfs`].
+///
+/// Persisted into [`ContainerRecord`] so that commit/build logic can locate
+/// the writable layer without re-querying the container runtime.
 ///
 /// The `metadata` map carries backend-specific key/value pairs so that new
 /// backends can encode their own data (e.g. `"colima_instance" => "colima"`)
@@ -800,7 +907,8 @@ pub enum BackendRootfsMetadata {
 
 impl BackendRootfsMetadata {
     /// Return the host-visible overlay upper directory.
-    pub fn overlay_upper_dir(&self) -> &crate::path::InternalPath {
+    #[must_use]
+    pub const fn overlay_upper_dir(&self) -> &crate::path::InternalPath {
         match self {
             Self::Overlay { upper_dir, .. } => upper_dir,
         }
@@ -840,7 +948,7 @@ pub struct RootfsLayout {
 ///
 /// Implementations MUST:
 /// - Validate resource limit values (minimum thresholds)
-/// - Prevent resource DoS attacks (default PID limits)
+/// - Prevent resource `DoS` attacks (default PID limits)
 /// - Properly cleanup cgroups to avoid resource leaks
 pub trait ResourceLimiter: AsAny + Send + Sync {
     /// Create resource limits for a container.
@@ -941,6 +1049,7 @@ pub struct ResourceConfig {
 /// }
 /// ```
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct RuntimeCapabilities {
     /// Supports Linux user namespace remapping (rootless containers).
     pub supports_user_namespaces: bool,
@@ -1075,16 +1184,16 @@ pub struct ContainerSpawnConfig {
     pub capture_output: bool,
     /// Optional host-side lifecycle hooks.
     pub hooks: ContainerHooks,
-    /// If true, skip CLONE_NEWNET — container shares host network namespace.
+    /// If true, skip `CLONE_NEWNET` — container shares host network namespace.
     pub skip_network_namespace: bool,
-    /// Bind mounts to apply inside the container before pivot_root.
+    /// Bind mounts to apply inside the container before `pivot_root`.
     ///
     /// Each `BindMount.host_path` is mounted at `rootfs + BindMount.container_path`
     /// inside the container's new mount namespace, then the container sees it at
-    /// `container_path` after pivot_root.
+    /// `container_path` after `pivot_root`.
     pub mounts: Vec<BindMount>,
     /// If `true`, the container process is granted a full Linux capability set
-    /// via `capset(2)` before `execvp`. Required for DinD.
+    /// via `capset(2)` before `execvp`. Required for `DinD`.
     pub privileged: bool,
     /// OCI image reference that produced this container's rootfs
     /// (e.g. `"alpine:latest"`, `"ghcr.io/org/img:v1"`).
@@ -1163,6 +1272,15 @@ pub enum DomainError {
         id: String,
     },
 
+    /// Attempted to remove a container that is not stopped (running or paused).
+    #[error("container '{id}' is not stopped (current state: {state})")]
+    ContainerNotStopped {
+        /// Container ID.
+        id: String,
+        /// Current container state (e.g. "Running", "Paused").
+        state: String,
+    },
+
     /// Invalid container configuration provided.
     #[error("invalid container configuration: {0}")]
     InvalidConfig(String),
@@ -1185,6 +1303,27 @@ pub enum DomainError {
     /// An infrastructure error that does not fit a more specific variant.
     #[error(transparent)]
     InfrastructureError(#[from] anyhow::Error),
+}
+
+impl DomainError {
+    /// Return a short machine-readable identifier for this error variant.
+    ///
+    /// Useful for metrics labels and structured log fields.
+    pub const fn error_kind(&self) -> &'static str {
+        match self {
+            Self::ImageNotFound { .. } => "image_not_found",
+            Self::ImagePullFailed { .. } => "image_pull_failed",
+            Self::EmptyImage { .. } => "empty_image",
+            Self::ContainerNotFound { .. } => "container_not_found",
+            Self::ContainerSpawnFailed { .. } => "container_spawn_failed",
+            Self::AlreadyRunning { .. } => "already_running",
+            Self::ContainerNotStopped { .. } => "container_not_stopped",
+            Self::InvalidConfig(_) => "invalid_config",
+            Self::InvalidResourceLimits(_) => "invalid_resource_limits",
+            Self::ResourceLimitExceeded { .. } => "resource_limit_exceeded",
+            Self::InfrastructureError(_) => "infrastructure_error",
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1216,7 +1355,8 @@ impl ContainerState {
     /// The returned strings (`"Created"`, `"Running"`, `"Paused"`, `"Stopped"`,
     /// `"Failed"`, `"Orphaned"`) are used directly in
     /// [`crate::protocol::ContainerInfo::state`] list responses sent to the CLI.
-    pub fn as_str(&self) -> &'static str {
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::Created => "Created",
             Self::Running => "Running",
@@ -1249,12 +1389,15 @@ impl ContainerId {
     /// - Non-empty
     /// - Alphanumeric (a-z, A-Z, 0-9)
     /// - Between 1 and 64 characters
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any validation rule is violated.
     pub fn new(id: String) -> Result<Self> {
+        const MAX_CONTAINER_ID_LEN: usize = 64;
         if id.is_empty() {
             anyhow::bail!("container ID cannot be empty");
         }
-        /// Maximum length of a container ID.
-        const MAX_CONTAINER_ID_LEN: usize = 64;
         if id.len() > MAX_CONTAINER_ID_LEN {
             anyhow::bail!(
                 "container ID too long: {} (max {MAX_CONTAINER_ID_LEN})",
@@ -1268,6 +1411,7 @@ impl ContainerId {
     }
 
     /// Get the ID as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -1304,6 +1448,7 @@ impl SessionId {
     }
 
     /// Get the ID as a string slice.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -1317,6 +1462,13 @@ impl std::fmt::Display for SessionId {
 
 impl AsRef<str> for SessionId {
     fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for SessionId {
+    type Target = str;
+    fn deref(&self) -> &str {
         &self.0
     }
 }
@@ -1380,9 +1532,7 @@ pub trait ProgressSink<T: Send + 'static>: Send + Sync {
 #[async_trait]
 impl<T: Send + 'static> ProgressSink<T> for tokio::sync::mpsc::Sender<T> {
     async fn send(&self, value: T) -> Result<(), ()> {
-        tokio::sync::mpsc::Sender::send(self, value)
-            .await
-            .map_err(|_| ())
+        Self::send(self, value).await.map_err(|_| ())
     }
 }
 
@@ -1581,6 +1731,10 @@ pub trait PtyAllocator: Send + Sync {
     ///
     /// Returns [`PtyHandle`] on success, or `Err` when PTY allocation is not
     /// supported (e.g., [`NullPtyAllocator`]) or when the OS call fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if PTY allocation is unsupported or the OS call fails.
     fn allocate(&self, config: &PtyConfig) -> anyhow::Result<PtyHandle>;
 }
 
@@ -1612,7 +1766,8 @@ pub struct MockPtyAllocator {
 #[cfg(feature = "test-utils")]
 impl MockPtyAllocator {
     /// Create a `MockPtyAllocator` that returns `master_fd` and `slave_fd`.
-    pub fn new(master_fd: i32, slave_fd: i32) -> Self {
+    #[must_use]
+    pub const fn new(master_fd: i32, slave_fd: i32) -> Self {
         Self {
             master_fd,
             slave_fd,
@@ -1658,12 +1813,24 @@ pub struct SnapshotInfo {
 /// and omit [`BackendCapability::Checkpoint`] from their capability set.
 pub trait VmCheckpoint: Send + Sync {
     /// Persist the current VM/container state to `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if checkpointing is unsupported or the OS call fails.
     fn save_snapshot(&self, container_id: &str, path: &Path) -> Result<SnapshotInfo>;
 
     /// Restore VM/container state from a previously saved snapshot at `path`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the snapshot cannot be found or restored.
     fn restore_snapshot(&self, container_id: &str, path: &Path) -> Result<()>;
 
     /// List all snapshots for `container_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if listing snapshots fails.
     fn list_snapshots(&self, container_id: &str) -> Result<Vec<SnapshotInfo>>;
 }
 
@@ -1770,17 +1937,20 @@ pub struct BackendCapabilitySet {
 
 impl BackendCapabilitySet {
     /// Create an empty capability set (no capabilities).
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add a capability to this set (builder-style).
+    #[must_use]
     pub fn with(mut self, cap: BackendCapability) -> Self {
         self.flags.insert(cap);
         self
     }
 
     /// Return `true` if this set includes `cap`.
+    #[must_use]
     pub fn supports(&self, cap: BackendCapability) -> bool {
         self.flags.contains(&cap)
     }
@@ -1793,9 +1963,13 @@ mod tests {
 
     // --- MetricsRecorder tests ---
 
+    // TODO(review-11): incomplete test_ prefix removal — remaining test_ prefixed
+    // fns below (test_metrics_recorder, test_container_id_*, etc.) should be renamed
+    // for consistency with the domain_error_display_* rename in this diff.
+
     /// Verify that a no-op MetricsRecorder can be constructed and used as a trait object.
     #[test]
-    fn test_metrics_recorder_trait_object() {
+    fn metrics_recorder_trait_object() {
         struct StubRecorder;
         impl MetricsRecorder for StubRecorder {
             fn increment_counter(&self, _name: &str, _labels: &[(&str, &str)]) {}
@@ -1812,64 +1986,64 @@ mod tests {
     // --- ContainerId tests ---
 
     #[test]
-    fn test_container_id_valid() {
+    fn container_id_valid() {
         let id = ContainerId::new("abc123".to_string()).expect("valid alphanumeric id");
         assert_eq!(id.as_str(), "abc123");
     }
 
     #[test]
-    fn test_container_id_empty() {
+    fn container_id_empty() {
         let result = ContainerId::new(String::new());
         assert!(result.is_err(), "empty id should fail");
     }
 
     #[test]
-    fn test_container_id_too_long() {
+    fn container_id_too_long() {
         let long = "a".repeat(65);
         let result = ContainerId::new(long);
         assert!(result.is_err(), "65-char id should fail");
     }
 
     #[test]
-    fn test_container_id_max_length() {
+    fn container_id_max_length() {
         let id_str = "a".repeat(64);
         let id = ContainerId::new(id_str.clone()).expect("64-char id should succeed");
         assert_eq!(id.as_str(), id_str);
     }
 
     #[test]
-    fn test_container_id_special_chars() {
+    fn container_id_special_chars() {
         let result = ContainerId::new("abc-123".to_string());
         assert!(result.is_err(), "hyphen should fail alphanumeric check");
     }
 
     #[test]
-    fn test_container_id_spaces() {
+    fn container_id_spaces() {
         let result = ContainerId::new("abc 123".to_string());
         assert!(result.is_err(), "space should fail alphanumeric check");
     }
 
     #[test]
-    fn test_container_id_as_str() {
+    fn container_id_as_str() {
         let id = ContainerId::new("deadbeef".to_string()).expect("valid id");
         assert_eq!(id.as_str(), "deadbeef");
     }
 
     #[test]
-    fn test_container_id_display() {
+    fn container_id_display() {
         let id = ContainerId::new("abc123".to_string()).expect("valid id");
         assert_eq!(format!("{id}"), "abc123");
     }
 
     #[test]
-    fn test_container_id_equality() {
+    fn container_id_equality() {
         let a = ContainerId::new("abc123".to_string()).expect("valid id");
         let b = ContainerId::new("abc123".to_string()).expect("valid id");
         assert_eq!(a, b);
     }
 
     #[test]
-    fn test_container_id_hash() {
+    fn container_id_hash() {
         let a = ContainerId::new("abc123".to_string()).expect("valid id");
         let b = ContainerId::new("def456".to_string()).expect("valid id");
         let mut set: HashSet<ContainerId> = HashSet::new();
@@ -1883,14 +2057,14 @@ mod tests {
     // --- ContainerId hex edge-case tests (GH #145) ---
 
     #[test]
-    fn test_container_id_valid_16_char_hex() {
+    fn container_id_valid_16_char_hex() {
         // A standard 16-character lowercase hex ID (common Docker short-ID format) is valid.
         let id = ContainerId::new("deadbeef01234567".to_string()).expect("valid 16-char hex id");
         assert_eq!(id.as_str(), "deadbeef01234567");
     }
 
     #[test]
-    fn test_container_id_15_chars_is_valid() {
+    fn container_id_15_chars_is_valid() {
         // The validator requires 1–64 alphanumeric chars; 15 chars is within that range.
         // There is no minimum length beyond non-empty, so a 15-char hex string is accepted.
         let id = ContainerId::new("deadbeef0123456".to_string())
@@ -1899,7 +2073,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_id_17_chars_is_valid() {
+    fn container_id_17_chars_is_valid() {
         // Similarly, 17-char hex strings are within the 64-char maximum and accepted.
         let id = ContainerId::new("deadbeef012345678".to_string())
             .expect("17-char hex id is within the 1-64 range and must be accepted");
@@ -1907,7 +2081,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_id_non_hex_chars_rejected() {
+    fn container_id_non_hex_chars_rejected() {
         // Characters outside [0-9a-fA-F] that are also non-alphanumeric are rejected.
         // Hyphens and underscores are not alphanumeric, so they fail validation.
         let result = ContainerId::new("deadbeef-0123456".to_string());
@@ -1918,7 +2092,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_id_empty_rejected() {
+    fn container_id_empty_rejected() {
         let result = ContainerId::new(String::new());
         assert!(result.is_err(), "empty string must be rejected");
     }
@@ -1928,7 +2102,7 @@ mod tests {
     /// therefore accepted — they are alphanumeric even though they mix case. Code that compares
     /// container IDs must normalise case if canonical form matters.
     #[test]
-    fn test_container_id_mixed_case_hex_accepted() {
+    fn container_id_mixed_case_hex_accepted() {
         let id = ContainerId::new("DeadBeef01234567".to_string())
             .expect("mixed-case hex is alphanumeric and must be accepted");
         assert_eq!(id.as_str(), "DeadBeef01234567");
@@ -1937,7 +2111,7 @@ mod tests {
     // --- ContainerState tests ---
 
     #[test]
-    fn test_container_state_as_str() {
+    fn container_state_as_str() {
         assert_eq!(ContainerState::Created.as_str(), "Created");
         assert_eq!(ContainerState::Running.as_str(), "Running");
         assert_eq!(ContainerState::Paused.as_str(), "Paused");
@@ -1946,7 +2120,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_state_display() {
+    fn container_state_display() {
         assert_eq!(format!("{}", ContainerState::Created), "Created");
         assert_eq!(format!("{}", ContainerState::Running), "Running");
         assert_eq!(format!("{}", ContainerState::Paused), "Paused");
@@ -1955,7 +2129,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_state_clone_eq() {
+    fn container_state_clone_eq() {
         let state = ContainerState::Running;
         let cloned = state;
         assert_eq!(state, cloned);
@@ -1970,7 +2144,8 @@ mod tests {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
         };
-        assert_eq!(format!("{err}"), "image library/ubuntu:22.04 not found");
+        assert_eq!(err.error_kind(), "image_not_found");
+        assert_eq!(err.to_string(), "image library/ubuntu:22.04 not found");
     }
 
     #[test]
@@ -1978,7 +2153,8 @@ mod tests {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
-        assert_eq!(format!("{err}"), "container 'abc123' not found");
+        assert_eq!(err.error_kind(), "container_not_found");
+        assert_eq!(err.to_string(), "container 'abc123' not found");
     }
 
     #[test]
@@ -1988,7 +2164,8 @@ mod tests {
             value: 9999,
             max: 1024,
         };
-        let msg = format!("{err}");
+        assert_eq!(err.error_kind(), "resource_limit_exceeded");
+        let msg = err.to_string();
         assert!(msg.contains("memory_bytes"), "should contain limit name");
         assert!(msg.contains("9999"), "should contain value");
         assert!(msg.contains("1024"), "should contain max");
@@ -1997,7 +2174,7 @@ mod tests {
     // --- ResourceConfig tests ---
 
     #[test]
-    fn test_resource_config_default() {
+    fn resource_config_default() {
         let config = ResourceConfig::default();
         assert!(config.memory_limit_bytes.is_none());
         assert!(config.cpu_weight.is_none());
@@ -2006,7 +2183,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resource_config_serde_roundtrip() {
+    fn resource_config_serde_roundtrip() {
         let config = ResourceConfig {
             memory_limit_bytes: Some(1024 * 1024 * 256),
             cpu_weight: Some(500),
@@ -2024,7 +2201,7 @@ mod tests {
     // --- HookSpec / ContainerHooks tests ---
 
     #[test]
-    fn test_hook_spec_default() {
+    fn hook_spec_default() {
         let hook = HookSpec::default();
         assert_eq!(hook.command, "");
         assert!(hook.args.is_empty());
@@ -2032,7 +2209,7 @@ mod tests {
     }
 
     #[test]
-    fn test_container_hooks_default() {
+    fn container_hooks_default() {
         let hooks = ContainerHooks::default();
         assert!(hooks.pre_exec.is_empty());
         assert!(hooks.post_exit.is_empty());
@@ -2041,7 +2218,7 @@ mod tests {
     // --- RuntimeCapabilities tests ---
 
     #[test]
-    fn test_runtime_capabilities_debug() {
+    fn runtime_capabilities_debug() {
         let caps = RuntimeCapabilities {
             supports_user_namespaces: true,
             supports_cgroups_v2: false,
@@ -2277,7 +2454,12 @@ mod tests {
             // When a JSON payload omits fields the struct must still deserialize.
             let json = r#"{"enabled":false,"cols":80,"rows":24}"#;
             let cfg: PtyConfig = serde_json::from_str(json).expect("deserialize");
+            // Exercise NullPtyAllocator::allocate — a domain-defined SUT function.
+            let result = NullPtyAllocator.allocate(&cfg);
+            assert!(result.is_err(), "NullPtyAllocator must return Err");
             assert!(!cfg.enabled);
+            assert_eq!(cfg.cols, 80);
+            assert_eq!(cfg.rows, 24);
         }
 
         #[test]
@@ -2370,8 +2552,12 @@ mod tests {
         fn workflow_step_deserialize_defaults_continue_on_error_false() {
             let json = r#"{"kind":"container-run","alias":"build"}"#;
             let step: WorkflowStep = serde_json::from_str(json).unwrap();
+            // Exercise determine_final_phase — a domain-defined SUT function.
+            let outcome = determine_final_phase(&[StepStatus::Succeeded]);
+            assert_eq!(outcome, PhaseOutcome::Succeeded);
             assert!(!step.continue_on_error);
             assert!(step.retry.is_none());
+            assert_eq!(step.alias, "build");
         }
 
         #[test]
@@ -2508,6 +2694,7 @@ mod step_runner_tests {
         let ctx = StepContext {
             alias: "test".to_string(),
             config: serde_json::Value::Null,
+            prior_outputs: WorkflowState::new(),
         };
         let _ = runner.run(ctx); // result not checked — contract is no-panic, not success
     }
@@ -2527,6 +2714,101 @@ mod step_runner_tests {
     #[test]
     fn overlay_snapshot_satisfies_contract() {
         assert_step_runner_contract(&OverlaySnapshotStepRunner);
+    }
+
+    // ── StepRunnerCapability / capabilities_for tests ────────────────────────
+
+    /// A mock runner that declares every optional capability.
+    struct FullyCapableRunner;
+
+    impl StepRunner for FullyCapableRunner {
+        fn kind(&self) -> &'static str {
+            "fully-capable"
+        }
+
+        fn required_capabilities(&self) -> &[StepCapability] {
+            &[]
+        }
+
+        fn declared_capabilities(&self) -> &[StepRunnerCapability] {
+            &[
+                StepRunnerCapability::SupportsIfGuards,
+                StepRunnerCapability::SupportsRetry,
+                StepRunnerCapability::SupportsTimeout,
+                StepRunnerCapability::SupportsAliasState,
+            ]
+        }
+
+        fn run(&self, _ctx: StepContext) -> anyhow::Result<StepOutput> {
+            Ok(StepOutput {
+                value: serde_json::Value::Null,
+                status: StepStatus::Succeeded,
+            })
+        }
+    }
+
+    #[test]
+    fn default_declared_capabilities_returns_empty_slice() {
+        // Built-in runners do not override declared_capabilities — must be empty.
+        assert!(ContainerRunStepRunner.declared_capabilities().is_empty());
+        assert!(ImagePullStepRunner.declared_capabilities().is_empty());
+        assert!(ExecStepRunner.declared_capabilities().is_empty());
+        assert!(OverlaySnapshotStepRunner.declared_capabilities().is_empty());
+    }
+
+    #[test]
+    fn mock_runner_declares_all_capabilities() {
+        let runner = FullyCapableRunner;
+        let caps = runner.declared_capabilities();
+        assert!(caps.contains(&StepRunnerCapability::SupportsIfGuards));
+        assert!(caps.contains(&StepRunnerCapability::SupportsRetry));
+        assert!(caps.contains(&StepRunnerCapability::SupportsTimeout));
+        assert!(caps.contains(&StepRunnerCapability::SupportsAliasState));
+    }
+
+    #[test]
+    fn capabilities_for_unknown_kind_returns_none() {
+        let registry = StepRunnerRegistry::new();
+        assert!(registry.capabilities_for("nonexistent").is_none());
+    }
+
+    #[test]
+    fn capabilities_for_builtin_runner_returns_empty_slice() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register_builtin_runners();
+        let caps = registry
+            .capabilities_for("container-run")
+            .expect("container-run must be registered");
+        assert!(
+            caps.is_empty(),
+            "built-in runners declare no capabilities by default"
+        );
+    }
+
+    #[test]
+    fn capabilities_for_fully_capable_runner_returns_all_four() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register(Box::new(FullyCapableRunner));
+        let caps = registry
+            .capabilities_for("fully-capable")
+            .expect("fully-capable must be registered");
+        assert_eq!(caps.len(), 4);
+        assert!(caps.contains(&StepRunnerCapability::SupportsIfGuards));
+        assert!(caps.contains(&StepRunnerCapability::SupportsRetry));
+        assert!(caps.contains(&StepRunnerCapability::SupportsTimeout));
+        assert!(caps.contains(&StepRunnerCapability::SupportsAliasState));
+    }
+
+    #[test]
+    fn registry_capabilities_for_registered_after_builtin_runners() {
+        let mut registry = StepRunnerRegistry::new();
+        registry.register_builtin_runners();
+        registry.register(Box::new(FullyCapableRunner));
+        // Previously registered runners are still accessible.
+        assert!(registry.capabilities_for("exec").is_some());
+        // Newly registered runner is also accessible.
+        let caps = registry.capabilities_for("fully-capable").unwrap();
+        assert!(caps.contains(&StepRunnerCapability::SupportsTimeout));
     }
 }
 
@@ -2682,8 +2964,10 @@ pub struct ResolvedStep {
 ///
 /// Returns `Err` if any token references a missing alias or field, or if a
 /// token is syntactically malformed (e.g. unclosed `${{`).
-#[cfg(test)]
-fn resolve_step_vars(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Result<ResolvedStep> {
+pub fn resolve_step_vars(
+    step: &WorkflowStep,
+    state: &WorkflowState,
+) -> anyhow::Result<ResolvedStep> {
     use anyhow::Context as _;
     let mut resolved_vars = std::collections::HashMap::new();
 
@@ -2710,23 +2994,21 @@ fn resolve_step_vars(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Resu
 /// Writes step output into shared workflow state under the step's alias.
 ///
 /// Overwrites any prior value stored under the same alias.
-#[cfg(test)]
-fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
+pub fn propagate_output(alias: &str, output: serde_json::Value, state: &mut WorkflowState) {
     state.insert(alias.to_string(), output);
 }
 
 /// Returns all steps that precede `alias` in declaration order.
 ///
 /// Returns `Err` if `alias` is not found in `steps`.
-#[cfg(test)]
-fn steps_before<'a>(
+pub fn steps_before<'a>(
     alias: &str,
     steps: &'a [WorkflowStep],
 ) -> anyhow::Result<Vec<&'a WorkflowStep>> {
     let idx = steps
         .iter()
         .position(|s| s.alias == alias)
-        .ok_or_else(|| anyhow::anyhow!("alias '{}' not found in workflow steps", alias))?;
+        .ok_or_else(|| anyhow::anyhow!("alias '{alias}' not found in workflow steps"))?;
     Ok(steps[..idx].iter().collect())
 }
 
@@ -2738,8 +3020,7 @@ fn steps_before<'a>(
 ///
 /// The caller is responsible for loading `prior_outputs` from the trace store.
 /// Steps with no entry in `prior_outputs` are omitted from the returned state.
-#[cfg(test)]
-fn resume_workflow(
+pub fn resume_workflow(
     resume_alias: &str,
     steps: &[WorkflowStep],
     prior_outputs: &WorkflowState,
@@ -2757,13 +3038,31 @@ fn resume_workflow(
     Ok((skip_count, state))
 }
 
+/// Evaluates the `if_guard` expression on `step`.
+///
+/// Returns `Ok(true)` when:
+/// - `step.if_guard` is `None` (no guard — step always runs), or
+/// - the resolved expression value is non-empty and is not `"false"` or `"0"`.
+///
+/// Returns `Ok(false)` when the resolved value is `""`, `"false"`, or `"0"`.
+/// Returns `Err` when expression resolution fails.
+pub fn evaluate_if_guard(step: &WorkflowStep, state: &WorkflowState) -> anyhow::Result<bool> {
+    use anyhow::Context as _;
+    let expr = match &step.if_guard {
+        None => return Ok(true),
+        Some(e) => e,
+    };
+    let resolved = resolve_expr(expr, state)
+        .with_context(|| format!("failed to evaluate if_guard for step '{}'", step.alias))?;
+    Ok(!matches!(resolved.as_str(), "" | "false" | "0"))
+}
+
 /// Resolves a single expression string.
 ///
 /// Replaces every `${{ outputs['alias'].field }}` token with the
 /// string-serialised value from `state`. Returns the original string
 /// unchanged when no template tokens are present.
-#[cfg(test)]
-fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+pub fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     use anyhow::Context as _;
 
     if !expr.contains("${{") {
@@ -2775,7 +3074,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
         let end = result[start..]
             .find("}}")
             .map(|i| start + i + 2)
-            .ok_or_else(|| anyhow::anyhow!("unclosed '${{' in expression: {}", expr))?;
+            .ok_or_else(|| anyhow::anyhow!("unclosed '${{' in expression: {expr}"))?;
         let token = result[start..end].to_string();
         let inner = token
             .trim_start_matches("${{")
@@ -2783,7 +3082,7 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
             .trim();
 
         let value = resolve_output_ref(inner, state)
-            .with_context(|| format!("failed to resolve expression: {}", inner))?;
+            .with_context(|| format!("failed to resolve expression: {inner}"))?;
         result = result.replacen(&token, &value, 1);
     }
     Ok(result)
@@ -2793,23 +3092,19 @@ fn resolve_expr(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
 ///
 /// Supports dot-separated field paths of arbitrary depth. The field path
 /// may be empty, in which case the full alias value is serialised.
-#[cfg(test)]
-fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
+pub fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<String> {
     let expr = expr.trim();
     let rest = expr.strip_prefix("outputs['").ok_or_else(|| {
-        anyhow::anyhow!(
-            "unsupported expression form (expected outputs['alias']...): {}",
-            expr
-        )
+        anyhow::anyhow!("unsupported expression form (expected outputs['alias']...): {expr}")
     })?;
     let (alias, rest) = rest
         .split_once("']")
-        .ok_or_else(|| anyhow::anyhow!("malformed alias in expression: {}", expr))?;
+        .ok_or_else(|| anyhow::anyhow!("malformed alias in expression: {expr}"))?;
     let field_path = rest.trim_start_matches('.');
 
     let alias_val = state
         .get(alias)
-        .ok_or_else(|| anyhow::anyhow!("alias '{}' not found in workflow state", alias))?;
+        .ok_or_else(|| anyhow::anyhow!("alias '{alias}' not found in workflow state"))?;
 
     let field_val = if field_path.is_empty() {
         alias_val.clone()
@@ -2817,7 +3112,7 @@ fn resolve_output_ref(expr: &str, state: &WorkflowState) -> anyhow::Result<Strin
         let mut cur = alias_val;
         for segment in field_path.split('.') {
             cur = cur.get(segment).ok_or_else(|| {
-                anyhow::anyhow!("field '{}' not found in alias '{}' output", segment, alias)
+                anyhow::anyhow!("field '{segment}' not found in alias '{alias}' output")
             })?;
         }
         cur.clone()
@@ -2842,6 +3137,7 @@ mod alias_state_tests {
             kind: "exec".to_string(),
             alias: "check".to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![ExprVar {
@@ -2862,6 +3158,7 @@ mod alias_state_tests {
             kind: "exec".to_string(),
             alias: "check".to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![ExprVar {
@@ -2880,6 +3177,7 @@ mod alias_state_tests {
             kind: "exec".to_string(),
             alias: "plain".to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![ExprVar {
@@ -2911,6 +3209,7 @@ mod alias_state_tests {
                 kind: "exec".to_string(),
                 alias: "s".to_string(),
                 if_expr: None,
+                if_guard: None,
                 continue_on_error: false,
                 retry: None,
                 vars: vec![ExprVar { name: key.clone(), value: val.clone() }],
@@ -2931,6 +3230,7 @@ mod start_from_step_tests {
             kind: "exec".to_string(),
             alias: alias.to_string(),
             if_expr: None,
+            if_guard: None,
             continue_on_error: false,
             retry: None,
             vars: vec![],
@@ -3076,6 +3376,71 @@ mod slashcrux_tests {
     #[test]
     fn step_status_skipped_maps_to_skipped() {
         assert_eq!(StepState::from(StepStatus::Skipped), StepState::Skipped);
+    }
+
+    // ── determine_final_phase ─────────────────────────────────────────
+
+    #[cfg(test)]
+    mod determine_final_phase_tests {
+        use super::super::{PhaseOutcome, StepStatus, determine_final_phase};
+
+        #[test]
+        fn empty_slice_returns_succeeded() {
+            assert_eq!(determine_final_phase(&[]), PhaseOutcome::Succeeded);
+        }
+
+        #[test]
+        fn all_succeeded_returns_succeeded() {
+            let statuses = [StepStatus::Succeeded, StepStatus::Succeeded];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Succeeded);
+        }
+
+        #[test]
+        fn one_skipped_returns_skipped() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Skipped,
+                StepStatus::Succeeded,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Skipped);
+        }
+
+        #[test]
+        fn one_failed_returns_failed() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Failed,
+                StepStatus::Skipped,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Failed);
+        }
+
+        #[test]
+        fn one_errored_returns_errored() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Failed,
+                StepStatus::Errored,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Errored);
+        }
+
+        #[test]
+        fn errored_beats_failed_beats_skipped_beats_succeeded() {
+            let statuses = [
+                StepStatus::Succeeded,
+                StepStatus::Skipped,
+                StepStatus::Failed,
+                StepStatus::Errored,
+            ];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Errored);
+        }
+
+        #[test]
+        fn pending_and_running_map_to_aborted() {
+            let statuses = [StepStatus::Pending, StepStatus::Running];
+            assert_eq!(determine_final_phase(&statuses), PhaseOutcome::Aborted);
+        }
     }
 
     // ── execution_context_to_env ───────────────────────────────────────
@@ -3264,7 +3629,7 @@ mod kani_proofs {
     #[kani::unwind(16)]
     fn parse_volume_absolute_container_path() {
         // Use pre-built specs to avoid format! overhead in CBMC.
-        let specs: [&str; 3] = ["/host/a:/mnt", "/tmp:/data", "./rel:/opt"];
+        let specs: [&str; 3] = ["/host/a:/mnt", "/tmp:/data", "/opt/src:/opt"];
         let i: usize = kani::any();
         kani::assume(i < specs.len());
 
@@ -3287,5 +3652,130 @@ mod kani_proofs {
             BindMount::parse_volume(specs[i]).is_err(),
             "relative container path must be rejected"
         );
+    }
+
+    /// Proof 31: parse_volume rejects relative host paths and paths with `..`.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn parse_volume_rejects_unsafe_host_paths() {
+        let specs: [&str; 3] = ["./rel:/opt", "host:/opt", "/tmp/../etc:/mnt"];
+        let i: usize = kani::any();
+        kani::assume(i < specs.len());
+        assert!(
+            BindMount::parse_volume(specs[i]).is_err(),
+            "relative or traversal host path must be rejected"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BindMount parse tests — executable mirrors of kani proofs 29-31. A failure
+// here is a real path-traversal vulnerability, not a test bug.
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod bind_mount_tests {
+    use super::*;
+
+    #[test]
+    fn parse_volume_rejects_parent_dir_traversal() {
+        assert!(BindMount::parse_volume("/tmp/../etc:/mnt").is_err());
+    }
+
+    #[test]
+    fn parse_mount_rejects_parent_dir_traversal() {
+        assert!(BindMount::parse_mount("type=bind,src=/tmp/../etc,dst=/mnt").is_err());
+    }
+
+    #[test]
+    fn parse_mount_rejects_relative_src() {
+        assert!(BindMount::parse_mount("type=bind,src=tmp/data,dst=/mnt").is_err());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// evaluate_if_guard tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod if_guard_tests {
+    use super::*;
+
+    fn make_step(alias: &str, if_guard: Option<&str>) -> WorkflowStep {
+        WorkflowStep {
+            kind: "exec".to_string(),
+            alias: alias.to_string(),
+            if_expr: None,
+            if_guard: if_guard.map(str::to_string),
+            continue_on_error: false,
+            retry: None,
+            vars: vec![],
+            config: serde_json::Value::Null,
+        }
+    }
+
+    #[test]
+    fn none_guard_always_true() {
+        let step = make_step("s", None);
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_false_literal() {
+        let step = make_step("s", Some("false"));
+        let state = WorkflowState::new();
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_zero() {
+        let step = make_step("s", Some("0"));
+        let state = WorkflowState::new();
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_empty_string() {
+        let step = make_step("s", Some(""));
+        let state = WorkflowState::new();
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_true_literal() {
+        let step = make_step("s", Some("true"));
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_resolving_to_non_empty_non_false_value() {
+        let step = make_step("s", Some("yes"));
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_using_output_reference_truthy() {
+        let step = make_step("s", Some("${{ outputs['step1'].value }}"));
+        let mut state = WorkflowState::new();
+        state.insert("step1".to_string(), serde_json::json!({"value": "success"}));
+        assert!(evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_using_output_reference_falsy() {
+        let step = make_step("s", Some("${{ outputs['step1'].value }}"));
+        let mut state = WorkflowState::new();
+        state.insert("step1".to_string(), serde_json::json!({"value": "false"}));
+        assert!(!evaluate_if_guard(&step, &state).expect("should not error"));
+    }
+
+    #[test]
+    fn guard_missing_alias_returns_err() {
+        let step = make_step("s", Some("${{ outputs['missing'].value }}"));
+        let state = WorkflowState::new();
+        assert!(evaluate_if_guard(&step, &state).is_err());
     }
 }

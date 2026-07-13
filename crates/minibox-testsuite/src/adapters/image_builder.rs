@@ -5,8 +5,6 @@
 use minibox::testing::mocks::build::MockImageBuilder;
 use minibox_core::domain::{BuildConfig, BuildContext, ImageBuilder};
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -31,22 +29,15 @@ fn build_config(tag: &str) -> BuildConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// build_image succeeds and returns ImageMetadata.
-pub struct BuildImageReturnsMetadata;
-impl ConformanceTest for BuildImageReturnsMetadata {
-    fn name(&self) -> &str {
-        "build_image_returns_metadata"
-    }
-    fn adapter(&self) -> &str {
-        "image_builder"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "build_image_returns_metadata",
+    adapter: "image_builder",
+    capability: BuildFromContext,
+    category: Unit,
+    |ctx| {
         let mock = MockImageBuilder::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let result = rt().block_on(mock.build_image(
@@ -62,19 +53,12 @@ impl ConformanceTest for BuildImageReturnsMetadata {
     }
 }
 
-/// build_image increments the call count.
-pub struct BuildImageIncrementsCount;
-impl ConformanceTest for BuildImageIncrementsCount {
-    fn name(&self) -> &str {
-        "build_image_increments_count"
-    }
-    fn adapter(&self) -> &str {
-        "image_builder"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "build_image_increments_count",
+    adapter: "image_builder",
+    capability: BuildFromContext,
+    category: Unit,
+    |ctx| {
         let mock = MockImageBuilder::new();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let _ = rt().block_on(mock.build_image(
@@ -87,19 +71,12 @@ impl ConformanceTest for BuildImageIncrementsCount {
     }
 }
 
-/// build_image sends at least one progress event.
-pub struct BuildImageSendsProgress;
-impl ConformanceTest for BuildImageSendsProgress {
-    fn name(&self) -> &str {
-        "build_image_sends_progress"
-    }
-    fn adapter(&self) -> &str {
-        "image_builder"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "build_image_sends_progress",
+    adapter: "image_builder",
+    capability: BuildFromContext,
+    category: Unit,
+    |ctx| {
         let mock = MockImageBuilder::new();
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
         let _ = rt().block_on(mock.build_image(
@@ -116,19 +93,12 @@ impl ConformanceTest for BuildImageSendsProgress {
     }
 }
 
-/// build_image returns Err when configured to fail.
-pub struct BuildImageFailureReturnsErr;
-impl ConformanceTest for BuildImageFailureReturnsErr {
-    fn name(&self) -> &str {
-        "build_image_failure_returns_err"
-    }
-    fn adapter(&self) -> &str {
-        "image_builder"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "build_image_failure_returns_err",
+    adapter: "image_builder",
+    capability: BuildFromContext,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockImageBuilder::new().with_failure();
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
         let result = rt().block_on(mock.build_image(
@@ -142,14 +112,4 @@ impl ConformanceTest for BuildImageFailureReturnsErr {
         );
         ctx.result()
     }
-}
-
-/// Return all image_builder conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(BuildImageReturnsMetadata),
-        Box::new(BuildImageIncrementsCount),
-        Box::new(BuildImageSendsProgress),
-        Box::new(BuildImageFailureReturnsErr),
-    ]
 }

@@ -2,8 +2,13 @@ use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::process::Command;
 
+use crate::dotenv;
+use crate::xconfig::XConfig;
+
 pub fn run(root: &Path, base: &str, mode: &str, no_synthesis: bool, prod: bool) -> Result<()> {
-    let agentbox_bin = root.join("agentbox/bin/agentbox");
+    let cfg = XConfig::load(root)?;
+
+    let agentbox_bin = root.join(&cfg.binaries.agentbox_dir);
 
     if !agentbox_bin.exists() {
         eprintln!("building agentbox...");
@@ -14,7 +19,7 @@ pub fn run(root: &Path, base: &str, mode: &str, no_synthesis: bool, prod: bool) 
                 "agentbox",
                 "-o",
                 "bin/agentbox",
-                "./cmd/agentbox",
+                &cfg.binaries.agentbox_pkg,
             ])
             .current_dir(root)
             .status()
@@ -24,37 +29,24 @@ pub fn run(root: &Path, base: &str, mode: &str, no_synthesis: bool, prod: bool) 
         }
     }
 
-    let dotenv_key = {
-        let output = Command::new("op")
-            .args([
-                "read",
-                "--account",
-                "my.1password.com",
-                "op://byxmw65w7idxsk3i6qbohfiuty/nihl7o2bojy53zy4aqtr7txyqi/password",
-            ])
-            .output()
-            .context("failed to run op read")?;
-        if !output.status.success() {
-            bail!(
-                "op read failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-        }
-        String::from_utf8(output.stdout)
-            .context("op read output not UTF-8")?
-            .trim()
-            .to_string()
+    let dotenv_key = dotenv::op_read(&std::env::var("DOTENV_KEY_OP_REF").context(
+        "DOTENV_KEY_OP_REF env var not set — set it to the op:// ref for the dotenvx private key",
+    )?)?;
+
+    let openai_model = if prod {
+        &cfg.models.prod
+    } else {
+        &cfg.models.default
     };
+    let env_file_path = cfg.dotenv.resolved_env_file();
+    let env_file_flag = format!("--env-file={env_file_path}");
 
-    let openai_model = if prod { "gpt-5.3" } else { "gpt-4o" };
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let env_file = format!("--env-file={home}/dev/.env");
-
+    let agentbox_str = agentbox_bin.to_string_lossy();
     let mut args = vec![
         "run",
-        &env_file,
+        &env_file_flag,
         "--",
-        agentbox_bin.to_str().unwrap_or("agentbox"),
+        &agentbox_str,
         "council",
         "--base",
         base,

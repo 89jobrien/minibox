@@ -22,6 +22,7 @@ use tracing::{debug, info};
 /// Each field corresponds to a namespace type. When `true` the child process
 /// will be placed into a fresh, private copy of that namespace.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct NamespaceConfig {
     /// Isolate the process ID space (`CLONE_NEWPID`).
     pub new_pid: bool,
@@ -37,7 +38,7 @@ pub struct NamespaceConfig {
 
 impl NamespaceConfig {
     /// Returns a configuration that enables all supported namespaces.
-    pub fn all() -> Self {
+    pub const fn all() -> Self {
         Self {
             new_pid: true,
             new_mount: true,
@@ -96,7 +97,7 @@ const CHILD_STACK_SIZE: usize = 8 * 1024 * 1024;
 /// - The `child_fn` closure is passed as a raw pointer; we guarantee it lives
 ///   until the child has started by keeping the `Box` alive for the duration
 ///   of this call.
-/// - After `clone` returns in the parent the child_fn memory is still owned by
+/// - After `clone` returns in the parent the `child_fn` memory is still owned by
 ///   this frame, so there is no double-free.
 /// - The child must not return from `child_fn`; it must call `_exit` (or
 ///   exec). Callers enforce this contract.
@@ -122,7 +123,7 @@ where
 
     // Box the closure so we have a stable address to pass through the C ABI.
     let boxed: Box<Box<dyn FnOnce() -> isize + Send>> = Box::new(Box::new(child_fn));
-    let child_arg = Box::into_raw(boxed) as *mut libc::c_void;
+    let child_arg = Box::into_raw(boxed).cast::<libc::c_void>();
 
     // The trampoline function with the C calling convention required by clone(2).
     extern "C" fn trampoline(arg: *mut libc::c_void) -> libc::c_int {
@@ -130,7 +131,7 @@ where
         // only place that touches this pointer, and clone guarantees it is
         // called exactly once.
         let closure: Box<Box<dyn FnOnce() -> isize + Send>> =
-            unsafe { Box::from_raw(arg as *mut Box<dyn FnOnce() -> isize + Send>) };
+            unsafe { Box::from_raw(arg.cast::<Box<dyn FnOnce() -> isize + Send>>()) };
         let ret = (*closure)();
         ret as libc::c_int
     }
@@ -141,7 +142,10 @@ where
     // - `trampoline` has the correct C signature for clone's `fn` parameter.
     // - `child_arg` is a valid heap pointer that will be consumed by the child.
     let pid = unsafe {
-        let stack_top = stack.as_mut_ptr().add(CHILD_STACK_SIZE) as *mut libc::c_void;
+        let stack_top = stack
+            .as_mut_ptr()
+            .add(CHILD_STACK_SIZE)
+            .cast::<libc::c_void>();
         libc::clone(trampoline, stack_top, flags_raw, child_arg)
     };
 
@@ -149,7 +153,7 @@ where
     if pid < 0 {
         // SAFETY: clone failed, so the trampoline was never called and the
         // pointer still owns the allocation.
-        let _ = unsafe { Box::from_raw(child_arg as *mut Box<dyn FnOnce() -> isize + Send>) };
+        let _ = unsafe { Box::from_raw(child_arg.cast::<Box<dyn FnOnce() -> isize + Send>>()) };
         let errno = nix::errno::Errno::last();
         return Err(NamespaceError::CloneFailed(format!(
             "libc::clone returned {pid}: {errno}"
@@ -161,7 +165,7 @@ where
     // copy of the address space and will free its copy of child_arg in the
     // trampoline. The parent's allocation at child_arg still exists and must
     // be freed here to avoid a memory leak.
-    let _ = unsafe { Box::from_raw(child_arg as *mut Box<dyn FnOnce() -> isize + Send>) };
+    let _ = unsafe { Box::from_raw(child_arg.cast::<Box<dyn FnOnce() -> isize + Send>>()) };
 
     // Keep the stack alive until after clone returns (parent path).
     // The child has its own copy of the address space so it does not share
@@ -311,11 +315,14 @@ mod kani_proofs {
 
         if !clone_succeeded {
             // Clone failed: parent frees the pointer (line 152).
+            // SAFETY: clone failed so the trampoline was never called; ptr still owns the allocation.
             let _ = unsafe { Box::from_raw(ptr) };
             free_count += 1;
         } else {
             // Clone succeeded without CLONE_VM: parent frees its copy (line 164).
             // Child has its own address space copy freed in the trampoline.
+            // SAFETY: clone() without CLONE_VM gives parent and child separate address spaces;
+            // the parent frees its copy here; the child's copy is freed in the trampoline.
             let _ = unsafe { Box::from_raw(ptr) };
             free_count += 1;
         }

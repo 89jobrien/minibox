@@ -26,6 +26,7 @@ pub enum Area {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ChangeSet {
     pub core: bool,
     pub daemon: bool,
@@ -41,7 +42,7 @@ pub struct ChangeSet {
 }
 
 impl ChangeSet {
-    fn set(&mut self, area: Area) {
+    const fn set(&mut self, area: Area) {
         match area {
             Area::Core => self.core = true,
             Area::Daemon => self.daemon = true,
@@ -65,6 +66,7 @@ impl ChangeSet {
 /// Map a changed file path (relative to workspace root) to a workspace area.
 ///
 /// Returns `None` for paths that don't match any tracked area (e.g. `fuzz/`).
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 pub fn classify_path(path: &str) -> Option<Area> {
     if path.starts_with("crates/minibox-core/") || path.starts_with("crates/minibox-macros/") {
         Some(Area::Core)
@@ -140,7 +142,7 @@ pub fn detect_changes(root: &Path, base_ref: &str) -> Result<ChangeSet> {
     Ok(cs)
 }
 
-/// Serialise a ChangeSet to `key=value` output lines.
+/// Serialise a `ChangeSet` to `key=value` output lines.
 pub fn changeset_to_output_lines(cs: &ChangeSet) -> Vec<String> {
     vec![
         format!("core={}", cs.core),

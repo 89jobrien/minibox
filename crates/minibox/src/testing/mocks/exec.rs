@@ -1,4 +1,5 @@
 //! Mock implementation of [`ExecRuntime`].
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -93,7 +94,7 @@ impl ExecRuntime for MockExecRuntime {
         let mut state = self.state.lock().expect("mock: poisoned lock");
         state.call_count += 1;
         state.last_container_id = Some(container_id.clone());
-        state.last_spec = Some(spec.clone());
+        state.last_spec = Some(spec);
 
         if state.should_fail {
             anyhow::bail!("mock exec failure");

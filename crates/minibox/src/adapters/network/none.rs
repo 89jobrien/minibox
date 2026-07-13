@@ -18,7 +18,8 @@ pub struct NoopNetwork;
 
 impl NoopNetwork {
     /// Create a new no-op network adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

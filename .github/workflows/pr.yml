@@ -80,6 +80,31 @@ jobs:
       - name: run actionlint
         run: actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
 
+  ci-ok:
+    name: CI passed
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - detect-changes
+      - lint
+      - test-unit
+      - actionlint
+    steps:
+      - name: check job results
+        run: |
+          results=(
+            "${{ needs.lint.result }}"
+            "${{ needs.test-unit.result }}"
+            "${{ needs.actionlint.result }}"
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
+              echo "CI failed: at least one job reported $r"
+              exit 1
+            fi
+          done
+          echo "All jobs passed or were skipped"
+
   cancel-on-failure:
     name: cancel on failure
     runs-on: ubuntu-latest

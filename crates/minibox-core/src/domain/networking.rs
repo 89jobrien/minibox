@@ -32,6 +32,7 @@ impl std::fmt::Display for NetworkMode {
 
 impl NetworkMode {
     /// Returns the lowercase wire name for this mode.
+    #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {
             Self::None => "none",
@@ -217,9 +218,9 @@ pub enum Protocol {
 impl std::fmt::Display for Protocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Protocol::Tcp => write!(f, "tcp"),
-            Protocol::Udp => write!(f, "udp"),
-            Protocol::Sctp => write!(f, "sctp"),
+            Self::Tcp => write!(f, "tcp"),
+            Self::Udp => write!(f, "udp"),
+            Self::Sctp => write!(f, "sctp"),
         }
     }
 }

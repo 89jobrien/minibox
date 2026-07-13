@@ -13,6 +13,14 @@ use super::run::run_from_params;
 use super::stop::stop_inner;
 use super::{HandlerDependencies, send_error};
 
+/// Bundled user-supplied parameters for an image update request.
+pub struct UpdateParams {
+    pub images: Vec<String>,
+    pub all: bool,
+    pub containers: bool,
+    pub restart: bool,
+}
+
 /// Resolve the list of image refs to update based on `all`, `containers`, or
 /// explicit `images` list.
 async fn resolve_update_targets(
@@ -60,16 +68,19 @@ async fn resolve_update_targets(
 ///
 /// When `restart` is `true`, Running or Paused containers whose source image
 /// was updated are stopped and re-run from their stored `creation_params`.
-// qual:allow(complexity) reason: "4-step update pipeline with per-image progress"
+// qual:allow(iosp) reason: "handler orchestration — resolve images, pull, restart"
 pub async fn handle_update(
-    images: Vec<String>,
-    all: bool,
-    containers: bool,
-    restart: bool,
+    p: UpdateParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let UpdateParams {
+        images,
+        all,
+        containers,
+        restart,
+    } = p;
     // ── Step 1: resolve the list of image refs to update ─────────────────────
     let target_refs = match resolve_update_targets(images, all, containers, &state, &deps).await {
         Ok(refs) => refs,
@@ -177,7 +188,7 @@ pub async fn handle_update(
                 Some(r) => (r.source_image_ref.as_deref(), r.creation_params.clone()),
                 None => (None, None),
             };
-            if !image_ref.map(|r| target_set.contains(r)).unwrap_or(false) {
+            if !image_ref.is_some_and(|r| target_set.contains(r)) {
                 continue;
             }
 

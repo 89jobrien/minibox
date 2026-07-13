@@ -38,7 +38,8 @@ pub struct OciPushAdapter {
 }
 
 impl OciPushAdapter {
-    pub fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
+    #[must_use]
+    pub const fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
         Self { client, store }
     }
 }
@@ -47,7 +48,6 @@ as_any!(OciPushAdapter);
 
 #[async_trait]
 impl ImagePusher for OciPushAdapter {
-    // qual:allow(complexity) reason: "OCI push protocol: auth, blob upload, manifest put"
     async fn push_image(
         &self,
         image_ref: &minibox_core::image::reference::ImageRef,
@@ -233,6 +233,7 @@ fn registry_scheme(registry_host: &str) -> &'static str {
 }
 
 /// Construct an [`OciPushAdapter`] as a [`DynImagePusher`].
+#[must_use]
 pub fn oci_push_adapter(client: RegistryClient, store: Arc<ImageStore>) -> DynImagePusher {
     Arc::new(OciPushAdapter::new(client, store))
 }

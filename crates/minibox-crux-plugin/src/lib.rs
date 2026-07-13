@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use crux_plugin::protocol::{HandlerDecl, Request, Response};
 use minibox_core::client::{DaemonClient, default_socket_path};
 use minibox_core::domain::BindMount;
-use minibox_core::protocol::{DaemonRequest, DaemonResponse};
+use minibox_core::protocol::DaemonRequest;
 use serde_json::Value;
 use tracing::{debug, warn};
 
@@ -17,6 +17,7 @@ pub use crux_plugin::protocol;
 // ── Handler declarations ───────────────────────────────────────────────────────
 
 /// All handlers exposed by this plugin, in declaration order.
+#[must_use]
 pub fn handler_decls() -> Vec<HandlerDecl> {
     vec![
         HandlerDecl {
@@ -98,17 +99,13 @@ pub async fn dispatch(handler: &str, input: Value) -> Result<Value> {
         .await
         .with_context(|| format!("daemon call for handler '{handler}'"))?;
 
-    // Collect all responses until the stream closes.
+    // Collect all responses until a terminal response arrives or the stream
+    // closes. `ContainerCreated` is non-terminal per the protocol contract:
+    // for non-ephemeral runs the daemon sends it and then drops its sender,
+    // so `stream.next()` returns `None` and the loop exits on stream close.
     let mut responses: Vec<Value> = Vec::new();
     while let Some(resp) = stream.next().await.context("read daemon response")? {
-        let is_terminal = matches!(
-            &resp,
-            DaemonResponse::Success { .. }
-                | DaemonResponse::Error { .. }
-                | DaemonResponse::ContainerStopped { .. }
-                | DaemonResponse::ContainerCreated { .. }
-                | DaemonResponse::ContainerList { .. }
-        );
+        let is_terminal = resp.is_terminal();
         let json = serde_json::to_value(&resp).context("serialize DaemonResponse")?;
         responses.push(json);
         if is_terminal {
@@ -148,7 +145,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 ephemeral: false,
                 network: None,
                 mounts,
-                privileged: false,
+                privileged: input["privileged"].as_bool().unwrap_or(false),
                 env,
                 name,
                 tty: false,
@@ -307,22 +304,25 @@ pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
 pub fn str_field(v: &Value, key: &str) -> Result<String> {
     v[key]
         .as_str()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .ok_or_else(|| anyhow::anyhow!("missing or non-string field '{key}'"))
 }
 
+#[must_use]
 pub fn opt_str_field(v: &Value, key: &str) -> Option<String> {
-    v[key].as_str().map(|s| s.to_string())
+    v[key].as_str().map(std::string::ToString::to_string)
 }
 
+#[must_use]
 pub fn opt_u64_field(v: &Value, key: &str) -> Option<u64> {
     v[key].as_u64()
 }
 
+#[must_use]
 pub fn str_array_field(v: &Value, key: &str) -> Option<Vec<String>> {
     v[key].as_array().map(|arr| {
         arr.iter()
-            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+            .filter_map(|x| x.as_str().map(std::string::ToString::to_string))
             .collect()
     })
 }
@@ -369,6 +369,29 @@ mod tests {
             }
             other => panic!("unexpected request: {other:?}"),
         }
+    }
+
+    #[test]
+    fn build_request_run_maps_privileged_true() {
+        let req = build_request(
+            "minibox::container::run",
+            &json!({"image": "alpine", "privileged": true}),
+        )
+        .expect("build_request");
+        let DaemonRequest::Run { privileged, .. } = req else {
+            panic!("expected Run");
+        };
+        assert!(privileged, "privileged: true must pass through to Run");
+    }
+
+    #[test]
+    fn build_request_run_defaults_privileged_false() {
+        let req = build_request("minibox::container::run", &json!({"image": "alpine"}))
+            .expect("build_request");
+        let DaemonRequest::Run { privileged, .. } = req else {
+            panic!("expected Run");
+        };
+        assert!(!privileged, "privileged must default to false when absent");
     }
 
     #[test]

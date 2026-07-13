@@ -49,6 +49,9 @@ pub enum MacboxError {
     NoBackendAvailable,
 }
 
+// TODO(#161): centralize adapter registration — this function duplicates
+// `build_colima_handler_dependencies` in `crates/miniboxd/src/main.rs`.
+// Consolidate both into a shared builder module when refactoring adapters.
 #[allow(clippy::too_many_arguments)]
 pub fn build_colima_handler_dependencies(
     state: Arc<DaemonState>,
@@ -61,7 +64,7 @@ pub fn build_colima_handler_dependencies(
 ) -> Result<Arc<HandlerDependencies>> {
     let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let registry_port: DynImageRegistry = registry.clone();
-    let image_loader: DynImageLoader = registry.clone();
+    let image_loader: DynImageLoader = registry;
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
@@ -168,7 +171,7 @@ impl minibox::daemon::server::ServerListener for MacUnixListener {
 /// 6. Removes any stale socket file, binds a new Unix socket, and runs the
 ///    [`minibox::daemon::server::run_server`] accept loop with root-auth disabled.
 /// 7. Cleans up the socket file on graceful shutdown (Ctrl-C).
-// qual:allow(complexity) reason: "daemon startup: tracing, paths, adapter probe, accept loop"
+// qual:allow(iosp) reason: "daemon entrypoint — init tracing, build deps, run server"
 pub async fn start() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -177,15 +180,11 @@ pub async fn start() -> Result<()> {
     info!("miniboxd (macOS) starting");
 
     // ── Paths ────────────────────────────────────────────────────────────
-    let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::data_dir());
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::run_dir());
-    let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::socket_path());
+    let data_dir =
+        std::env::var("MINIBOX_DATA_DIR").map_or_else(|_| paths::data_dir(), PathBuf::from);
+    let run_dir = std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| paths::run_dir(), PathBuf::from);
+    let socket_path =
+        std::env::var("MINIBOX_SOCKET_PATH").map_or_else(|_| paths::socket_path(), PathBuf::from);
 
     let images_dir = data_dir.join("images");
     let containers_dir = data_dir.join("containers");
@@ -321,7 +320,10 @@ pub async fn start() -> Result<()> {
 ///
 /// The krun backend delegates container execution to `smolvm` (a thin
 /// wrapper over libkrun) rather than Linux namespaces or Colima.
-// qual:allow(complexity) reason: "krun daemon startup: socket, deps, accept loop"
+// TODO: extract socket bind/chmod/stale-removal boilerplate shared by `start()` and
+// `start_krun()` (and any future adapter entrypoints) into a `bind_socket(path) -> Result<UnixListener>`
+// helper to eliminate 3x duplication (lines ~270-308, ~381-415).
+// qual:allow(iosp) reason: "daemon entrypoint — build krun deps, bind socket, run server"
 async fn start_krun(
     socket_path: std::path::PathBuf,
     _images_dir: std::path::PathBuf,

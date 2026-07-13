@@ -1,8 +1,9 @@
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use minibox_core::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
     encode_response,
 };
+use std::hint::black_box;
 
 fn small_run_request() -> DaemonRequest {
     minibox_macros::test_run!()

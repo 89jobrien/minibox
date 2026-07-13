@@ -14,13 +14,13 @@ Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` 
 
 - `README.md` — user-facing overview and quickstart.
 - `DEVELOPMENT.md` — canonical developer workflow and command selection.
-- `docs/core/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
-- `docs/core/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
-- `docs/core/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
-- `docs/core/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
-- `docs/core/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
-- `docs/core/STATE_MODEL.mbx.md` — daemon persistence model.
-- `docs/core/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
+- `docs/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
+- `docs/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
+- `docs/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
+- `docs/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
+- `docs/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
+- `docs/STATE_MODEL.mbx.md` — daemon persistence model.
+- `docs/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
 
 If changing container code, protocol types, adapters, or tests, read the relevant reference above instead of relying on this compact file.
 
@@ -230,8 +230,14 @@ items are `done`.
 
 - Persistent context lives in @.ctx/memory-bank/
 - Read before substantive work: !`ls .ctx/memory-bank/`
-- update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md.
-- See @AGENTS.md for the full file list.
+- update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md
+- See @AGENTS.md for the full file list
+
+## Context Graph
+
+- Wiki root: `Read(.kgx/wiki/index.md)`
+- Query the graph: !`kgx query <entity>`
+-
 
 ## Agent-specific guidance
 

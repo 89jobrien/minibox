@@ -5,6 +5,8 @@
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
 //!
 // TODO(#116): raise coverage on handler and lifecycle/error paths
+// TODO(review-10): 15+ qual:allow(complexity) in handler modules — consider
+// raising the rustqual complexity threshold for handler/ instead of per-fn annotations.
 //!
 //! # Hexagonal Architecture
 //!
@@ -49,11 +51,13 @@ pub(crate) use self::image::{handle_list_images, handle_prune, handle_remove_ima
 pub use self::lifecycle::{handle_list, handle_pause, handle_remove, handle_resume};
 pub use self::logs::handle_logs;
 pub use self::manifest::{handle_get_manifest, handle_verify_manifest};
-pub use self::pipeline::{handle_list_pipelines, handle_pipeline, handle_show_pipeline};
+pub use self::pipeline::{
+    PipelineParams, handle_list_pipelines, handle_pipeline, handle_show_pipeline,
+};
 pub use self::run::{RunParams, handle_run};
 pub use self::snapshot::{handle_list_snapshots, handle_restore_snapshot, handle_save_snapshot};
 pub use self::stop::handle_stop;
-pub use self::update::handle_update;
+pub use self::update::{UpdateParams, handle_update};
 
 // ─── Shared imports ──────────────────────────────────────────────────────────
 
@@ -101,9 +105,9 @@ pub(crate) async fn send_error(tx: &mpsc::Sender<DaemonResponse>, context: &str,
 /// `handle_send_input` / `handle_resize_pty` dispatched from `server.rs`.
 #[derive(Default)]
 pub struct PtySessionRegistry {
-    /// Resize event senders: session_id → sender for `(cols, rows)`.
+    /// Resize event senders: `session_id` → sender for `(cols, rows)`.
     pub resize: HashMap<String, mpsc::Sender<(u16, u16)>>,
-    /// Stdin byte senders: session_id → sender for raw bytes.
+    /// Stdin byte senders: `session_id` → sender for raw bytes.
     /// Only populated when `tty = true`.
     pub stdin: HashMap<String, mpsc::Sender<Vec<u8>>>,
 }
@@ -159,7 +163,7 @@ pub struct ImageDeps {
     pub image_loader: minibox_core::domain::DynImageLoader,
     /// Image garbage collector for prune operations.
     pub image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
-    /// Image store for direct image operations (e.g. RemoveImage).
+    /// Image store for direct image operations (e.g. `RemoveImage`).
     pub image_store: Arc<minibox_core::image::ImageStore>,
 }
 
@@ -319,6 +323,7 @@ pub struct PolicyOverride {
 impl ContainerPolicy {
     /// Apply overrides, returning a new policy. `None` fields preserve the
     /// base value.
+    #[must_use]
     pub fn with_overrides(&self, overrides: &PolicyOverride) -> Self {
         Self {
             allow_bind_mounts: overrides
@@ -333,6 +338,7 @@ impl ContainerPolicy {
     ///
     /// - `MINIBOX_ALLOW_BIND_MOUNTS=1|true|yes` enables bind mounts (default: deny).
     /// - `MINIBOX_ALLOW_PRIVILEGED=1|true|yes` enables privileged mode (default: deny).
+    #[must_use]
     pub fn from_env() -> Self {
         Self {
             allow_bind_mounts: env_flag("MINIBOX_ALLOW_BIND_MOUNTS"),
@@ -346,8 +352,7 @@ impl ContainerPolicy {
 pub(crate) fn env_flag(name: &str) -> bool {
     std::env::var(name)
         .ok()
-        .map(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
+        .is_some_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
 /// Validate a container run request against the active policy.
@@ -376,19 +381,19 @@ pub fn validate_policy(
                 .into(),
         );
     }
+    // Priority comparison: slashcrux::Priority::score() returns a u32 where
+    // higher values indicate higher priority (Critical > High > Medium > Low).
     if let Some(min) = &policy.min_priority {
         match priority {
             Some(p) if p.score() >= min.score() => {}
             Some(p) => {
                 return Err(format!(
-                    "policy violation: container priority {:?} is below minimum {:?}",
-                    p, min
+                    "policy violation: container priority {p:?} is below minimum {min:?}"
                 ));
             }
             None => {
                 return Err(format!(
-                    "policy violation: no priority specified but minimum {:?} is required",
-                    min
+                    "policy violation: no priority specified but minimum {min:?} is required"
                 ));
             }
         }
@@ -485,6 +490,13 @@ mod pub_crate_handler_tests {
             execution_policy: None,
             checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
+    }
+
+    /// Like [`make_deps`] but with a caller-supplied `ContainerPolicy`.
+    fn make_deps_with_policy(tmp: &TempDir, policy: ContainerPolicy) -> Arc<HandlerDependencies> {
+        let mut deps = (*make_deps(tmp)).clone();
+        deps.policy = policy;
+        Arc::new(deps)
     }
 
     // ── handle_list_images ────────────────────────────────────────────────────
@@ -808,22 +820,28 @@ mod pub_crate_handler_tests {
 
     #[test]
     fn test_env_flag_present_true() {
+        // SAFETY: Rust 2024 requires unsafe for set_var/remove_var. Each test
+        // uses a unique env var name, avoiding races with other parallel tests.
         unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_TRUE", "true") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_TRUE");
+        // SAFETY: same unique var; restoring to absent state.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_TRUE") };
         assert!(result, "env_flag must return true for 'true'");
     }
 
     #[test]
     fn test_env_flag_present_one() {
+        // SAFETY: unique env var name; no other test reads MINIBOX_TEST_ENV_FLAG_ONE.
         unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_ONE", "1") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_ONE");
+        // SAFETY: same unique var; restoring to absent state.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_ONE") };
         assert!(result, "env_flag must return true for '1'");
     }
 
     #[test]
     fn test_env_flag_missing_returns_false() {
+        // SAFETY: unique env var name; remove_var on an absent key is a no-op.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_MISSING") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_MISSING");
         assert!(!result, "env_flag must return false when var is absent");
@@ -831,8 +849,10 @@ mod pub_crate_handler_tests {
 
     #[test]
     fn test_env_flag_false_value_returns_false() {
+        // SAFETY: unique env var name; no other test reads MINIBOX_TEST_ENV_FLAG_FALSE.
         unsafe { std::env::set_var("MINIBOX_TEST_ENV_FLAG_FALSE", "false") };
         let result = env_flag("MINIBOX_TEST_ENV_FLAG_FALSE");
+        // SAFETY: same unique var; restoring to absent state.
         unsafe { std::env::remove_var("MINIBOX_TEST_ENV_FLAG_FALSE") };
         assert!(!result, "env_flag must return false for 'false'");
     }
@@ -1001,6 +1021,71 @@ mod pub_crate_handler_tests {
         let effective = base.with_overrides(&PolicyOverride::default());
         assert!(effective.allow_bind_mounts);
         assert!(effective.allow_privileged);
+    }
+
+    // ── handle_run policy_override consumption ──────────────────────────
+
+    #[tokio::test]
+    async fn handle_run_policy_override_permits_bind_mount_under_deny_policy() {
+        // Default policy denies bind mounts; the override (as used by
+        // handle_pipeline) must widen it for this run only.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps_with_policy(&tmp, ContainerPolicy::default());
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let params = RunParams {
+            image: "alpine".to_string(),
+            mounts: vec![minibox_core::domain::BindMount {
+                host_path: tmp.path().to_path_buf(),
+                container_path: "/pipeline.crux".into(),
+                read_only: true,
+            }],
+            policy_override: Some(PolicyOverride {
+                allow_bind_mounts: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        handle_run(params, state, deps, tx).await;
+
+        let first = rx.recv().await.expect("response");
+        if let DaemonResponse::Error { message } = &first {
+            assert!(
+                !message.contains("policy violation"),
+                "run must pass the policy gate with an override, got: {message}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_run_without_override_rejects_bind_mount_under_deny_policy() {
+        // No override: the default deny policy must still reject bind mounts.
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps_with_policy(&tmp, ContainerPolicy::default());
+
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        let params = RunParams {
+            image: "alpine".to_string(),
+            mounts: vec![minibox_core::domain::BindMount {
+                host_path: tmp.path().to_path_buf(),
+                container_path: "/pipeline.crux".into(),
+                read_only: true,
+            }],
+            policy_override: None,
+            ..Default::default()
+        };
+        handle_run(params, state, deps, tx).await;
+
+        let first = rx.recv().await.expect("response");
+        match &first {
+            DaemonResponse::Error { message } => assert!(
+                message.contains("policy violation"),
+                "expected policy violation error, got: {message}"
+            ),
+            other => panic!("expected policy violation Error, got: {other:?}"),
+        }
     }
 
     // ── handle_load_image error path ──────────────────────────────────────
@@ -1396,6 +1481,139 @@ mod pub_crate_handler_tests {
         assert!(
             matches!(decision, PolicyDecision::Deny(_)),
             "untrusted image must be denied by restrictive policy"
+        );
+    }
+
+    // ── lifecycle error paths ─────────────────────────────────────────────
+    //
+    // Uncovered error paths targeted here:
+    //   1. handle_pause: container not found → DaemonResponse::Error
+    //   2. handle_pause: container found but not in Running state → DaemonResponse::Error
+    //   3. handle_resume: container not found → DaemonResponse::Error
+    //   4. handle_resume: container found but not in Paused state → DaemonResponse::Error
+    //   5. handle_remove: container not found (resolve_id returns None) → DaemonResponse::Error
+    //   6. handle_remove: container is still Running → DaemonResponse::Error
+    //   7. handle_stop: container not found (resolve_id returns None) → DaemonResponse::Error
+    //   8. handle_list: empty state returns ContainerList with no entries
+
+    #[tokio::test]
+    async fn lifecycle_pause_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+
+        let resp = lifecycle::handle_pause("no-such-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[cfg(feature = "test-utils")]
+    #[tokio::test]
+    async fn lifecycle_pause_container_not_running_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+
+        // Insert a stopped container (not Running).
+        let mut record = crate::testing::helpers::daemon::make_stub_record("stopped-ctr");
+        record.info.state = "stopped".to_string();
+        state.add_container(record).await;
+
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+        let resp = lifecycle::handle_pause("stopped-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not running")),
+            "expected 'not running' error for non-running container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_resume_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+
+        let resp = lifecycle::handle_resume("no-such-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[cfg(feature = "test-utils")]
+    #[tokio::test]
+    async fn lifecycle_resume_container_not_paused_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+
+        // Insert a running container (not Paused).
+        let mut record = crate::testing::helpers::daemon::make_stub_record("running-ctr");
+        record.info.state = "running".to_string();
+        state.add_container(record).await;
+
+        let event_sink = Arc::new(minibox_core::events::NoopEventSink);
+        let resp = lifecycle::handle_resume("running-ctr".to_string(), state, event_sink).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not paused")),
+            "expected 'not paused' error for non-paused container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_remove_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let resp = lifecycle::handle_remove("no-such-ctr".to_string(), state, deps).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[cfg(feature = "test-utils")]
+    #[tokio::test]
+    async fn lifecycle_remove_running_container_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        // Insert a running container.
+        let mut record = crate::testing::helpers::daemon::make_stub_record("run-ctr");
+        record.info.state = "Running".to_string();
+        state.add_container(record).await;
+
+        let resp = lifecycle::handle_remove("run-ctr".to_string(), state, deps).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error when removing a running container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_stop_container_not_found_returns_error() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+        let deps = make_deps(&tmp);
+
+        let resp = stop::handle_stop("no-such-ctr".to_string(), state, deps).await;
+        assert!(
+            matches!(resp, DaemonResponse::Error { ref message } if message.contains("not found")),
+            "expected not-found error for missing container, got {resp:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn lifecycle_list_empty_state_returns_empty_list() {
+        let tmp = TempDir::new().expect("create temp dir");
+        let state = make_state(&tmp);
+
+        let resp = lifecycle::handle_list(state).await;
+        assert!(
+            matches!(resp, DaemonResponse::ContainerList { ref containers } if containers.is_empty()),
+            "expected empty ContainerList for empty state, got {resp:?}"
         );
     }
 }

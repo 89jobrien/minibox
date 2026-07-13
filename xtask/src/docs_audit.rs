@@ -71,15 +71,11 @@ fn code_facts(root: &Path) -> Result<BTreeMap<String, String>> {
     // crate_count: dirs under crates/ with Cargo.toml (excluding xtask)
     let crates_dir = root.join("crates");
     let mut crate_count = 0u32;
-    let mut crate_names = BTreeSet::new();
     if crates_dir.is_dir() {
         for entry in std::fs::read_dir(&crates_dir)? {
             let entry = entry?;
             if entry.path().join("Cargo.toml").exists() {
                 crate_count += 1;
-                if let Some(name) = entry.file_name().to_str() {
-                    crate_names.insert(name.to_string());
-                }
             }
         }
     }
@@ -402,7 +398,7 @@ fn parse_watches(content: &str) -> Vec<String> {
 
         if in_watches {
             if trimmed.starts_with("- ") {
-                let val = trimmed.strip_prefix("- ").unwrap().trim();
+                let val = trimmed.trim_start_matches("- ").trim();
                 watches.push(val.to_string());
             } else if !trimmed.is_empty() {
                 // Another YAML key — done with watches

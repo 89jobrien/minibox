@@ -1,7 +1,8 @@
 use anyhow::{Result, bail};
 use std::{fs, path::Path};
 
-/// CI guard: verify HandlerDependencies construction site count in miniboxd/src/main.rs.
+/// CI guard: verify `HandlerDependencies` construction site count in miniboxd/src/main.rs.
+#[allow(dead_code)]
 ///
 /// When a field is added to `HandlerDependencies`, all four adapter suites (native, gke,
 /// colima, krun) must be updated together. This check fails if the count deviates from `expected`.

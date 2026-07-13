@@ -6,8 +6,6 @@ use minibox::testing::mocks::push::MockImagePusher;
 use minibox_core::domain::{ImagePusher, RegistryCredentials};
 use minibox_core::image::reference::ImageRef;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -20,27 +18,20 @@ fn alpine() -> ImageRef {
     ImageRef::parse("alpine:3.18").expect("parse alpine ref")
 }
 
-fn anon() -> RegistryCredentials {
+const fn anon() -> RegistryCredentials {
     RegistryCredentials::Anonymous
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// push_image succeeds and returns a PushResult with a non-empty digest.
-pub struct PushImageReturnsDigest;
-impl ConformanceTest for PushImageReturnsDigest {
-    fn name(&self) -> &str {
-        "push_image_returns_digest"
-    }
-    fn adapter(&self) -> &str {
-        "image_pusher"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "push_image_returns_digest",
+    adapter: "image_pusher",
+    capability: PushToRegistry,
+    category: Unit,
+    |ctx| {
         let mock = MockImagePusher::new();
         let result = rt().block_on(mock.push_image(&alpine(), &anon(), None));
         if let Some(r) = ctx.assert_ok(result, "push_image should succeed") {
@@ -50,19 +41,12 @@ impl ConformanceTest for PushImageReturnsDigest {
     }
 }
 
-/// push_image records the tag in the mock.
-pub struct PushImageRecordsTag;
-impl ConformanceTest for PushImageRecordsTag {
-    fn name(&self) -> &str {
-        "push_image_records_tag"
-    }
-    fn adapter(&self) -> &str {
-        "image_pusher"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "push_image_records_tag",
+    adapter: "image_pusher",
+    capability: PushToRegistry,
+    category: Unit,
+    |ctx| {
         let mock = MockImagePusher::new();
         rt().block_on(mock.push_image(&alpine(), &anon(), None))
             .expect("push");
@@ -74,19 +58,12 @@ impl ConformanceTest for PushImageRecordsTag {
     }
 }
 
-/// push_image returns Err when configured to fail.
-pub struct PushImageFailureReturnsErr;
-impl ConformanceTest for PushImageFailureReturnsErr {
-    fn name(&self) -> &str {
-        "push_image_failure_returns_err"
-    }
-    fn adapter(&self) -> &str {
-        "image_pusher"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "push_image_failure_returns_err",
+    adapter: "image_pusher",
+    capability: PushToRegistry,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockImagePusher::new().with_failure();
         let result = rt().block_on(mock.push_image(&alpine(), &anon(), None));
         ctx.assert_err(result, "push_image with failure configured must return Err");
@@ -94,19 +71,12 @@ impl ConformanceTest for PushImageFailureReturnsErr {
     }
 }
 
-/// push_image sends progress when a channel is provided.
-pub struct PushImageSendsProgress;
-impl ConformanceTest for PushImageSendsProgress {
-    fn name(&self) -> &str {
-        "push_image_sends_progress"
-    }
-    fn adapter(&self) -> &str {
-        "image_pusher"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "push_image_sends_progress",
+    adapter: "image_pusher",
+    capability: PushToRegistry,
+    category: Unit,
+    |ctx| {
         let mock = MockImagePusher::new();
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
         let result =
@@ -116,14 +86,4 @@ impl ConformanceTest for PushImageSendsProgress {
         ctx.assert_true(got.is_some(), "at least one progress event should be sent");
         ctx.result()
     }
-}
-
-/// Return all image_pusher conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(PushImageReturnsDigest),
-        Box::new(PushImageRecordsTag),
-        Box::new(PushImageFailureReturnsErr),
-        Box::new(PushImageSendsProgress),
-    ]
 }

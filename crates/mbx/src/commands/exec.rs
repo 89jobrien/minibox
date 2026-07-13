@@ -261,17 +261,22 @@ mod tests {
         );
     }
 
+    /// Build the DaemonRequest::Exec that `execute` would send for the given args.
+    fn build_exec_request(container_id: &str, cmd: &[&str], tty: bool) -> DaemonRequest {
+        DaemonRequest::Exec {
+            container_id: container_id.to_string(),
+            cmd: cmd.iter().map(|s| s.to_string()).collect(),
+            env: vec![],
+            working_dir: None,
+            tty,
+            user: None,
+        }
+    }
+
     /// Verify that the Exec request serialises with the correct JSON type tag.
     #[test]
     fn daemon_request_exec_has_type_tag() {
-        let req = DaemonRequest::Exec {
-            container_id: "ctr1".to_string(),
-            cmd: vec!["ls".to_string()],
-            env: vec![],
-            working_dir: None,
-            tty: false,
-            user: None,
-        };
+        let req = build_exec_request("ctr1", &["ls"], false);
         let json = serde_json::to_string(&req).unwrap();
         assert!(
             json.contains("\"type\":\"Exec\""),
@@ -282,6 +287,7 @@ mod tests {
     /// Verify that `execute` parses an ExecStarted response without panicking.
     #[test]
     fn daemon_response_exec_started_deserialises() {
+        let _req = build_exec_request("ctr1", &["sh"], true);
         let json = r#"{"type":"ExecStarted","exec_id":"exec-42"}"#;
         let resp: DaemonResponse = serde_json::from_str(json).unwrap();
         assert!(

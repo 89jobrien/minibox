@@ -11,6 +11,8 @@ members = [
     "crates/minibox-crux-plugin",
     "crates/minibox-testsuite",
     "crates/smolbox",
+    "crates/ail",
+    "crates/minibox-bench",
     "xtask",
 ]
 
@@ -18,7 +20,7 @@ members = [
 name = "minibox"
 
 [workspace.package]
-version = "0.30.0"
+version = "0.31.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -31,18 +33,19 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
+miette = { version = "7", features = ["fancy"] }
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Traces (OTEL bridge + OTLP export)
-opentelemetry = "0.31"
-opentelemetry_sdk = "0.31"
-opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
-tracing-opentelemetry = "0.32"
+opentelemetry = "0.32"
+opentelemetry_sdk = "0.32"
+opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic"] }
+tracing-opentelemetry = "0.33"
 
 # Metrics (direct Prometheus client — NOT the discontinued opentelemetry-prometheus)
-prometheus-client = "0.23"
+prometheus-client = "0.24"
 
 # Infrastructure
 axum = { version = "0.8", features = ["tokio"] }
@@ -51,7 +54,7 @@ dashmap = "6"
 clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls", "query"] }
 sha2 = "0.10"
 hex = "0.4"
 flate2 = "1"
@@ -70,17 +73,17 @@ pin-project-lite = "0.2"
 ipnet = "2"
 
 # Benchmarking
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { version = "0.7", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
-minibox-core = { path = "crates/minibox-core", version = "0.30.0" }
+minibox-core = { path = "crates/minibox-core", version = "0.31.0" }
 minibox = { path = "crates/minibox" }
-minibox-macros = { path = "crates/minibox-macros", version = "0.30.0" }
+minibox-macros = { path = "crates/minibox-macros", version = "0.31.0" }
 macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
 slashcrux = "0.1"
-dirs = "5"
+dirs = "6"
 secrecy = "0.10"
 keyring = "3"
 wiremock = "0.6"     # dev-only: used exclusively in [dev-dependencies] blocks
@@ -90,3 +93,64 @@ proptest = "1"      # dev-only: property-based testing
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 turmoil = "0.7"     # dev-only: deterministic network simulation tests
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing
+inventory = "0.3"
+paste = "1"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
+[workspace.lints.clippy]
+all          = { level = "warn", priority = -1 }
+pedantic     = { level = "warn", priority = -1 }
+nursery      = { level = "warn", priority = -1 }
+unwrap_used  = "deny"
+expect_used  = "deny"
+panic        = "deny"
+todo         = "deny"
+unimplemented = "deny"
+
+# Style lints — intentional exceptions for this codebase
+# option_if_let_else: map_or_else rewrites are less readable when branches
+#   contain side effects (process::exit, early returns).
+option_if_let_else      = { level = "allow", priority = 1 }
+# items_after_statements: local consts in function bodies improve locality.
+items_after_statements  = { level = "allow", priority = 1 }
+# too_many_lines: logically cohesive functions (protocol dispatch, image pull).
+too_many_lines          = { level = "allow", priority = 1 }
+# Cast lints: these casts are contextually checked (display/progress math).
+cast_precision_loss     = { level = "allow", priority = 1 }
+cast_possible_truncation = { level = "allow", priority = 1 }
+cast_possible_wrap      = { level = "allow", priority = 1 }
+cast_sign_loss          = { level = "allow", priority = 1 }
+# similar_names: identifiers are distinct enough (pid/pgid, layers_dir/layer_dir).
+similar_names           = { level = "allow", priority = 1 }
+# used_underscore_binding: guards use _ prefix to suppress unused warnings but
+#   must be explicitly dropped in cleanup paths.
+used_underscore_binding = { level = "allow", priority = 1 }
+# unused_self: required by trait impl signatures even when self isn't accessed.
+unused_self             = { level = "allow", priority = 1 }
+# unnecessary_wraps: keeps consistency with trait/async handler signatures.
+unnecessary_wraps       = { level = "allow", priority = 1 }
+# needless_pass_by_value: matches trait or async handler signatures.
+needless_pass_by_value  = { level = "allow", priority = 1 }
+# manual_let_else: not always more readable; optional rewrite.
+manual_let_else         = { level = "allow", priority = 1 }
+# must_use_candidate / return_self_not_must_use: builder methods opt out of
+#   #[must_use] where chaining isn't the intended usage pattern.
+must_use_candidate          = { level = "allow", priority = 1 }
+return_self_not_must_use    = { level = "allow", priority = 1 }
+# missing_errors_doc / missing_panics_doc: internal crate; comprehensive doc
+#   coverage is tracked separately.
+missing_errors_doc      = { level = "allow", priority = 1 }
+missing_panics_doc      = { level = "allow", priority = 1 }
+# significant_drop_tightening: nursery lint; lock guard scoping is correct but
+#   tightening is not always beneficial in async handlers.
+significant_drop_tightening = { level = "allow", priority = 1 }
+# unnecessary_debug_formatting: format/bail calls use {:?} for path/error types.
+unnecessary_debug_formatting = { level = "allow", priority = 1 }
+# branches_sharing_code: hoisting is less readable in match/if with context.
+branches_sharing_code   = { level = "allow", priority = 1 }
+# needless_continue: explicit continue aids readability in state-machine loops.
+needless_continue       = { level = "allow", priority = 1 }
+# ref_option: &Option<T> vs Option<&T> — trait signatures dictate the form.
+ref_option              = { level = "allow", priority = 1 }

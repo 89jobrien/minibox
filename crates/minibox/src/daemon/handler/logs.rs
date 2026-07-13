@@ -16,7 +16,6 @@ use super::{HandlerDependencies, send_error};
 /// [`DaemonResponse::Success`] when `follow` is `false` (the only supported
 /// mode for now).  Sends [`DaemonResponse::Error`] when the container is not
 /// found.
-// qual:allow(complexity) reason: "logs handler: container lookup, file read, stream"
 pub async fn handle_logs(
     name_or_id: String,
     _follow: bool,
@@ -28,17 +27,16 @@ pub async fn handle_logs(
     use minibox_core::protocol::OutputStreamKind;
     use std::io::{BufRead, BufReader};
 
-    let id = match state.resolve_id(&name_or_id).await {
-        Some(id) => id,
-        None => {
-            send_error(
-                &tx,
-                "handle_logs",
-                format!("container not found: {name_or_id}"),
-            )
-            .await;
-            return;
-        }
+    let id = if let Some(id) = state.resolve_id(&name_or_id).await {
+        id
+    } else {
+        send_error(
+            &tx,
+            "handle_logs",
+            format!("container not found: {name_or_id}"),
+        )
+        .await;
+        return;
     };
 
     // Read stdout.log then stderr.log; missing files are silently skipped.

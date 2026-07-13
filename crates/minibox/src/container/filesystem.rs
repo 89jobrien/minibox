@@ -38,7 +38,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 ///
 /// Prevents path traversal attacks by applying two independent checks:
 ///
-/// 1. **Component scan** — rejects paths that contain any `..` (ParentDir)
+/// 1. **Component scan** — rejects paths that contain any `..` (`ParentDir`)
 ///    component before any filesystem access occurs.
 /// 2. **Canonicalization** — resolves symlinks and verifies that the resulting
 ///    absolute path has `base_dir` (also canonicalized) as a prefix, catching
@@ -50,16 +50,13 @@ fn has_parent_dir_component(path: &Path) -> bool {
 pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
     // Reject paths with parent directory components
     if has_parent_dir_component(path) {
-        anyhow::bail!(
-            "path traversal attempt: layer path contains '..' component: {:?}",
-            path
-        );
+        anyhow::bail!("path traversal attempt: layer path contains '..' component: {path:?}");
     }
 
     // Canonicalize both paths to resolve symlinks
     let canonical_path = path
         .canonicalize()
-        .with_context(|| format!("canonicalizing layer path {:?}", path))?;
+        .with_context(|| format!("canonicalizing layer path {path:?}"))?;
 
     let canonical_base = base_dir
         .canonicalize()
@@ -68,14 +65,12 @@ pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Resul
             fs::create_dir_all(base_dir)?;
             base_dir.canonicalize()
         })
-        .with_context(|| format!("canonicalizing base dir {:?}", base_dir))?;
+        .with_context(|| format!("canonicalizing base dir {base_dir:?}"))?;
 
     // Verify the layer path is within the base directory
     if !canonical_path.starts_with(&canonical_base) {
         anyhow::bail!(
-            "path traversal attempt: layer {:?} is outside allowed directory {:?}",
-            canonical_path,
-            canonical_base
+            "path traversal attempt: layer {canonical_path:?} is outside allowed directory {canonical_base:?}"
         );
     }
 
@@ -129,7 +124,7 @@ pub fn setup_overlay_with_base(
     // SECURITY: Validate all layer paths to prevent path traversal.
     for layer_path in image_layers {
         validate_layer_path(layer_path, images_base)
-            .with_context(|| format!("validating layer path {:?}", layer_path))?;
+            .with_context(|| format!("validating layer path {layer_path:?}"))?;
     }
 
     // overlayfs lowerdir lists layers from **top** (most recent) to **bottom**
@@ -250,7 +245,6 @@ fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyho
 /// the kernel's sysfs interface. `proc`, `sysfs`, and `devtmpfs` are all
 /// mounted with `MS_NOSUID | MS_NODEV | MS_NOEXEC` where applicable to prevent
 /// privilege escalation.
-// qual:allow(complexity) reason: "sequential mount syscalls — splitting loses auditability"
 pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
     debug!(new_root = ?new_root, "pivot_root: starting");
 
@@ -383,7 +377,6 @@ pub fn apply_bind_mounts(
     Ok(())
 }
 
-// qual:allow(complexity) reason: "bind mount setup with security validation"
 fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -415,16 +408,16 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
     if !target.exists() {
         if host_canonical.is_dir() {
             fs::create_dir_all(&target).with_context(|| {
-                format!("failed to create bind mount target directory {:?}", target)
+                format!("failed to create bind mount target directory {target:?}")
             })?;
         } else {
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent).with_context(|| {
-                    format!("failed to create parent for bind mount target {:?}", target)
+                    format!("failed to create parent for bind mount target {target:?}")
                 })?;
             }
             fs::write(&target, b"")
-                .with_context(|| format!("failed to create bind mount target file {:?}", target))?;
+                .with_context(|| format!("failed to create bind mount target file {target:?}"))?;
         }
     }
 
@@ -432,10 +425,10 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
     // traversal through an existing container layer before pivot_root).
     let canonical_rootfs = rootfs
         .canonicalize()
-        .with_context(|| format!("failed to canonicalize rootfs {:?}", rootfs))?;
+        .with_context(|| format!("failed to canonicalize rootfs {rootfs:?}"))?;
     let canonical_target = target
         .canonicalize()
-        .with_context(|| format!("failed to canonicalize bind mount target {:?}", target))?;
+        .with_context(|| format!("failed to canonicalize bind mount target {target:?}"))?;
     if !canonical_target.starts_with(&canonical_rootfs) {
         anyhow::bail!(
             "path traversal attempt: bind mount target {:?} escapes rootfs {:?}",
@@ -457,7 +450,7 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
         target: target.display().to_string(),
         source,
     })
-    .with_context(|| format!("bind mount {:?} -> {:?} failed", host_canonical, target))?;
+    .with_context(|| format!("bind mount {host_canonical:?} -> {target:?} failed"))?;
 
     if m.read_only {
         mount(
@@ -472,7 +465,7 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
             target: target.display().to_string(),
             source,
         })
-        .with_context(|| format!("read-only remount of bind mount {:?} failed", target))?;
+        .with_context(|| format!("read-only remount of bind mount {target:?} failed"))?;
     }
 
     debug!(
@@ -518,10 +511,9 @@ use crate::fs_util::{default_dev_symlinks, default_device_nodes};
 
 /// Set up /dev inside the container rootfs using tmpfs + mknod.
 ///
-/// Called in the child init path after CLONE_NEWNS, before pivot_root.
+/// Called in the child init path after `CLONE_NEWNS`, before `pivot_root`.
 /// Uses the same approach as runc/libcontainer: tmpfs mount + explicit
 /// mknod calls. Works reliably at any nesting depth.
-// qual:allow(complexity) reason: "sequential device node creation"
 pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
     let dev_dir = rootfs.join("dev");
     fs::create_dir_all(&dev_dir).ok();
@@ -544,7 +536,7 @@ pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
     // Create device nodes
     for node in default_device_nodes() {
         let path = dev_dir.join(node.name);
-        let dev = nix::sys::stat::makedev(node.major as u64, node.minor as u64);
+        let dev = nix::sys::stat::makedev(u64::from(node.major), u64::from(node.minor));
         nix::sys::stat::mknod(
             &path,
             nix::sys::stat::SFlag::S_IFCHR,
@@ -786,6 +778,8 @@ mod tests {
 
     // device node/symlink and copy_dir_recursive tests live in
     // crate::fs_util::tests (cross-platform, runs on macOS).
+    // Verified: fs_util::tests has device_nodes_complete, dev_symlinks_complete,
+    // and device_node_majmin_matches_linux_standard with equivalent coverage.
 
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
@@ -800,6 +794,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_mounts_directory() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -827,6 +823,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_read_only() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -900,6 +898,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_creates_target_dir() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }

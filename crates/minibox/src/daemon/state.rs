@@ -46,6 +46,30 @@ impl ProcessChecker for KillProcessChecker {
 }
 
 // ---------------------------------------------------------------------------
+// CgroupFreezeChecker port (cgroup freezer inspection)
+// ---------------------------------------------------------------------------
+
+/// Port for checking whether a container's cgroup is frozen.
+///
+/// Decouples `reconcile_paused` from direct filesystem access so tests can
+/// inject a mock without requiring a real cgroup hierarchy.
+pub trait CgroupFreezeChecker: Send + Sync {
+    /// Returns `true` if the cgroup at `cgroup_path` has `cgroup.freeze` set
+    /// to `1` (frozen).
+    fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool;
+}
+
+/// Default adapter: reads `cgroup.freeze` from the filesystem.
+pub struct FsCgroupFreezeChecker;
+
+impl CgroupFreezeChecker for FsCgroupFreezeChecker {
+    fn is_frozen(&self, cgroup_path: &std::path::Path) -> bool {
+        let freeze_path = cgroup_path.join("cgroup.freeze");
+        std::fs::read_to_string(&freeze_path).is_ok_and(|s| s.trim() == "1")
+    }
+}
+
+// ---------------------------------------------------------------------------
 // StateRepository port (persistence port)
 // ---------------------------------------------------------------------------
 
@@ -78,7 +102,8 @@ pub struct JsonFileRepository {
 
 impl JsonFileRepository {
     /// Create a new repository that reads/writes `path`.
-    pub fn new(path: PathBuf) -> Self {
+    #[must_use]
+    pub const fn new(path: PathBuf) -> Self {
         Self { path }
     }
 }
@@ -106,7 +131,7 @@ impl StateRepository for JsonFileRepository {
 
     fn save_containers(&self, containers: &HashMap<String, ContainerRecord>) -> anyhow::Result<()> {
         let json = serde_json::to_string_pretty(containers)
-            .map_err(|e| anyhow::anyhow!("failed to serialise state: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("failed to serialise state: {e}"))?;
 
         let tmp_path = self.path.with_extension("json.tmp");
         std::fs::write(&tmp_path, &json).map_err(|e| {
@@ -225,6 +250,13 @@ pub struct ContainerRecord {
     pub workload_digest: Option<String>,
 }
 
+impl ContainerRecord {
+    /// Returns the container's current state string (e.g. `"Running"`, `"Stopped"`).
+    pub fn state_str(&self) -> &str {
+        &self.info.state
+    }
+}
+
 /// Shared daemon state, cheap to clone because it wraps `Arc`s internally.
 #[derive(Clone)]
 pub struct DaemonState {
@@ -239,7 +271,7 @@ pub struct DaemonState {
     /// Injected persistence port.  When `Some`, all load/save operations
     /// go through this port instead of the raw `state_file` path.
     repository: Option<Arc<dyn StateRepository>>,
-    /// IP addresses currently allocated by bridge network, keyed by container_id.
+    /// IP addresses currently allocated by bridge network, keyed by `container_id`.
     pub allocated_ips: Arc<RwLock<HashMap<String, std::net::IpAddr>>>,
     /// Pipeline trace persistence adapter.
     pub trace_store: Arc<dyn TraceStore>,
@@ -253,14 +285,16 @@ impl DaemonState {
     /// `data_dir/traces/` by default.
     ///
     /// [`FileTraceStore`]: minibox_core::trace::FileTraceStore
+    #[must_use]
     pub fn new(image_store: ImageStore, data_dir: &Path) -> Self {
         let trace_store: Arc<dyn TraceStore> =
-            minibox_core::trace::FileTraceStore::new(data_dir.join("traces"))
-                .map(|s| Arc::new(s) as Arc<dyn TraceStore>)
-                .unwrap_or_else(|e| {
+            minibox_core::trace::FileTraceStore::new(data_dir.join("traces")).map_or_else(
+                |e| {
                     warn!("trace store: failed to create FileTraceStore: {e}, using noop");
-                    Arc::new(minibox_core::trace::NoopTraceStore)
-                });
+                    Arc::new(minibox_core::trace::NoopTraceStore) as Arc<dyn TraceStore>
+                },
+                |s| Arc::new(s) as Arc<dyn TraceStore>,
+            );
 
         Self {
             containers: Arc::new(RwLock::new(HashMap::new())),
@@ -364,7 +398,11 @@ impl DaemonState {
     /// `cgroup.freeze` contains `1`.  If either check fails, mark `"Orphaned"`.
     ///
     /// Call this **after** [`load_from_disk`] on daemon startup.
-    pub async fn reconcile_on_startup(&self, checker: &dyn ProcessChecker) {
+    pub async fn reconcile_on_startup(
+        &self,
+        checker: &dyn ProcessChecker,
+        freeze_checker: &dyn CgroupFreezeChecker,
+    ) {
         let mut map = self.containers.write().await;
         let mut orphaned_count: u32 = 0;
 
@@ -374,7 +412,7 @@ impl DaemonState {
                     reconcile_running(record, checker, &mut orphaned_count);
                 }
                 "Paused" => {
-                    reconcile_paused(record, checker, &mut orphaned_count);
+                    reconcile_paused(record, checker, freeze_checker, &mut orphaned_count);
                 }
                 _ => continue,
             }
@@ -503,7 +541,7 @@ impl DaemonState {
     /// Return `ContainerInfo` snapshots for every tracked container.
     ///
     /// The returned vec is a point-in-time snapshot; order is unspecified
-    /// (HashMap iteration order).
+    /// (`HashMap` iteration order).
     pub async fn list_containers(&self) -> Vec<ContainerInfo> {
         let map = self.containers.read().await;
         map.values().map(|r| r.info.clone()).collect()
@@ -538,11 +576,9 @@ impl DaemonState {
                 record.info.state = "Running".to_string();
             }
             // Standard forward transitions
-            ("Created", ContainerState::Running)
-            | ("Created", ContainerState::Failed)
-            | ("Running", ContainerState::Stopped)
-            | ("Running", ContainerState::Failed)
-            | ("Paused", ContainerState::Stopped) => {
+            ("Created", ContainerState::Running | ContainerState::Failed)
+            | ("Running" | "Paused", ContainerState::Stopped)
+            | ("Running", ContainerState::Failed) => {
                 if new_state == ContainerState::Stopped {
                     record.info.pid = None;
                     record.pid = None;
@@ -608,19 +644,18 @@ fn reconcile_running(
     checker: &dyn ProcessChecker,
     orphaned_count: &mut u32,
 ) {
-    let pid = match record.pid {
-        Some(p) => p,
-        None => {
-            warn!(
-                container_id = %record.info.id,
-                stale_pid = 0_u32,
-                "reconcile: container marked Running but has no PID — marking Orphaned"
-            );
-            record.info.state = "Orphaned".to_string();
-            record.info.pid = None;
-            *orphaned_count += 1;
-            return;
-        }
+    let pid = if let Some(p) = record.pid {
+        p
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            stale_pid = 0_u32,
+            "reconcile: container marked Running but has no PID — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        *orphaned_count += 1;
+        return;
     };
 
     if checker.is_alive(pid) {
@@ -650,23 +685,26 @@ fn reconcile_running(
 /// A paused container is recoverable only if its PID is still alive and the
 /// cgroup freezer is still engaged (`cgroup.freeze` contains `1`).  If either
 /// condition fails, the container is marked `"Orphaned"`.
+// NOTE: std::fs::read_to_string is intentionally synchronous here. This runs
+// once at daemon startup while holding the write lock — no concurrent work is
+// possible and the file is a single-digit-byte cgroup control file.
 fn reconcile_paused(
     record: &mut ContainerRecord,
     checker: &dyn ProcessChecker,
+    freeze_checker: &dyn CgroupFreezeChecker,
     orphaned_count: &mut u32,
 ) {
-    let pid = match record.pid {
-        Some(p) => p,
-        None => {
-            warn!(
-                container_id = %record.info.id,
-                "reconcile: container marked Paused but has no PID — marking Orphaned"
-            );
-            record.info.state = "Orphaned".to_string();
-            record.info.pid = None;
-            *orphaned_count += 1;
-            return;
-        }
+    let pid = if let Some(p) = record.pid {
+        p
+    } else {
+        warn!(
+            container_id = %record.info.id,
+            "reconcile: container marked Paused but has no PID — marking Orphaned"
+        );
+        record.info.state = "Orphaned".to_string();
+        record.info.pid = None;
+        *orphaned_count += 1;
+        return;
     };
 
     if !checker.is_alive(pid) {
@@ -683,10 +721,7 @@ fn reconcile_paused(
     }
 
     // PID alive — verify the cgroup freezer is still engaged.
-    let freeze_path = record.cgroup_path.join("cgroup.freeze");
-    let frozen = std::fs::read_to_string(&freeze_path)
-        .map(|s| s.trim() == "1")
-        .unwrap_or(false);
+    let frozen = freeze_checker.is_frozen(&record.cgroup_path);
 
     if frozen {
         info!(
@@ -700,7 +735,7 @@ fn reconcile_paused(
         warn!(
             container_id = %record.info.id,
             pid = pid,
-            freeze_path = %freeze_path.display(),
+            cgroup_path = %record.cgroup_path.display(),
             "reconcile: paused container cgroup not frozen — marking Orphaned"
         );
         record.info.state = "Orphaned".to_string();
@@ -908,7 +943,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
@@ -973,7 +1010,9 @@ mod tests {
         // Session 2: load + reconcile with a checker that says "no such PID".
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(containers.len(), 1);
@@ -1003,7 +1042,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1028,7 +1069,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1067,6 +1110,22 @@ mod tests {
     struct AlwaysAliveChecker;
     impl super::ProcessChecker for AlwaysAliveChecker {
         fn is_alive(&self, _pid: u32) -> bool {
+            true
+        }
+    }
+
+    /// Always reports cgroups as not frozen (default for most tests).
+    struct NeverFrozenChecker;
+    impl super::CgroupFreezeChecker for NeverFrozenChecker {
+        fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
+            false
+        }
+    }
+
+    /// Always reports cgroups as frozen.
+    struct AlwaysFrozenChecker;
+    impl super::CgroupFreezeChecker for AlwaysFrozenChecker {
+        fn is_frozen(&self, _cgroup_path: &std::path::Path) -> bool {
             true
         }
     }
@@ -1119,6 +1178,10 @@ mod tests {
         }"#;
         let record: ContainerRecord =
             serde_json::from_str(json).expect("must deserialize without creation_params");
+        // Exercise ContainerRecord methods — the SUT struct under test.
+        assert_eq!(record.info.id, "abc123");
+        assert_eq!(record.info.image, "alpine:latest");
+        assert_eq!(record.state_str(), "Stopped");
         assert!(
             record.creation_params.is_none(),
             "missing creation_params must deserialize as None"
@@ -1325,7 +1388,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &AlwaysFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1350,7 +1415,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&NeverAliveChecker).await;
+        state2
+            .reconcile_on_startup(&NeverAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1380,7 +1447,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1408,7 +1477,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(
@@ -1432,7 +1503,9 @@ mod tests {
 
         let state2 = make_state_in(&tmp);
         state2.load_from_disk().await;
-        state2.reconcile_on_startup(&AlwaysAliveChecker).await;
+        state2
+            .reconcile_on_startup(&AlwaysAliveChecker, &NeverFrozenChecker)
+            .await;
 
         let containers = state2.list_containers().await;
         assert_eq!(

@@ -20,6 +20,12 @@ minibox = { workspace = true, features = ["test-utils"] }
 minibox-core = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+slashcrux = { workspace = true }
 tokio = { workspace = true }
 chrono = { workspace = true }
 tempfile = { workspace = true }
+inventory = { workspace = true }
+paste = { workspace = true }
+
+[lints]
+workspace = true

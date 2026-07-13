@@ -13,6 +13,8 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env().add_directive(
+                // Static string — parse cannot fail.
+                #[allow(clippy::expect_used)]
                 "minibox_crux_plugin=info"
                     .parse()
                     .expect("valid static directive"),
