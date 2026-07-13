@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "algorithm": "sha256-normalized-core-contract-v1",
+  "surfaces": [
+    {
+      "name": "minibox-core-events",
+      "path": "crates/minibox-core/src/events.rs",
+      "hash": "2c4b3d7767426f89398a2528bbb437299d8536abf9f1aaf384d124b0e41d25e1"
+    },
+    {
+      "name": "minibox-core-domain",
+      "path": "crates/minibox-core/src/domain.rs",
+      "hash": "8439863046f4b38c8a77d8b59a6b5a2405362a7f68432f764cdee0798c79ff24"
+    },
+    {
+      "name": "minibox-core-trace",
+      "path": "crates/minibox-core/src/trace.rs",
+      "hash": "5f8fe3f6e3f2004058ab9798c79952e09e1a6ce209bdb1a006f03cea1d49b168"
+    },
+    {
+      "name": "minibox-core-typestate",
+      "path": "crates/minibox-core/src/typestate.rs",
+      "hash": "6b66ab5cc68f481380bc809bf7b9229d2315cd1a04af4c8271229a55ca0d49e6"
+    },
+    {
+      "name": "minibox-container_state",
+      "path": "crates/minibox/src/container_state.rs",
+      "hash": "8992f3fbea047bb72fd1500fc4eb8236df67c78caa8adf2e255acc6c2b471730"
+    },
+    {
+      "name": "minibox-domain",
+      "path": "crates/minibox/src/domain.rs",
+      "hash": "9aa93d173de64d77598582b710eff416a9f62f08fa1070407f3bdb596fe0f8a5"
+    },
+    {
+      "name": "xtask-test_linux",
+      "path": "xtask/src/test_linux.rs",
+      "hash": "c1169c280b038b1b50d123094dfb1668214b3e21f52bfb6cfaeae755b275b040"
+    },
+    {
+      "name": "xtask-checkpoint",
+      "path": "xtask/src/checkpoint.rs",
+      "hash": "f0bd7b15509c4f2b73247d8c4e5508ce7308b349d27948a58564798007231389"
+    },
+    {
+      "name": "xtask-docs_audit",
+      "path": "xtask/src/docs_audit.rs",
+      "hash": "c637c33fe94bcb7bd1c75fa55690d35e695854c74b3becb6635bd18d565b8052"
+    },
+    {
+      "name": "xtask-preflight",
+      "path": "xtask/src/preflight.rs",
+      "hash": "ad4c4c3d0fb57b3357fc996e3d8ffa8e7e10e32a62ed71341564b371a4494eca"
+    }
+  ]
+}
