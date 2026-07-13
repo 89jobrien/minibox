@@ -1,0 +1,10 @@
+{
+  "phase": "ci_gate",
+  "staging": "next",
+  "release": "staging",
+  "main": "main",
+  "merge_sha": null,
+  "failed_steps": [
+    "lint"
+  ]
+}

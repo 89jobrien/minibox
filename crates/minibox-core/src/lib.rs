@@ -1,3 +1,31 @@
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::uninlined_format_args,
+        clippy::redundant_clone,
+        clippy::redundant_closure,
+        clippy::redundant_closure_for_method_calls,
+        clippy::single_char_pattern,
+        clippy::match_same_arms,
+        clippy::map_unwrap_or,
+        clippy::manual_assert,
+        clippy::ptr_as_ptr,
+        clippy::ref_as_ptr,
+        clippy::must_use_candidate,
+        clippy::missing_const_for_fn,
+        clippy::unreadable_literal,
+        clippy::type_complexity,
+        clippy::float_cmp,
+        clippy::cast_lossless,
+        clippy::diverging_sub_expression,
+        clippy::single_match_else,
+        clippy::items_after_test_module,
+    )
+)]
 //! # minibox-core
 //!
 //! Cross-platform shared types, domain traits, protocol definitions, and

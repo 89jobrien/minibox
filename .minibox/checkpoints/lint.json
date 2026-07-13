@@ -1,0 +1,7 @@
+{
+  "gate": "lint",
+  "tree_hash": "e7f185694a85229fcc98c1c2d2d5f614d85b3d94",
+  "platform": "macos-aarch64",
+  "rustc_version": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "timestamp": "2026-07-08T05:59:16.635890Z"
+}

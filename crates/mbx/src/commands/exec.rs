@@ -13,6 +13,16 @@
 //! * [`DaemonResponse::ContainerStopped`] — exec process exited; CLI exits
 //!   with the carried exit code.
 //! * [`DaemonResponse::Error`] — fatal error; CLI exits with code 1.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::{Context as _, Result};
 use base64::Engine;
@@ -181,6 +191,17 @@ pub async fn execute(
     Ok(())
 }
 
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::redundant_closure_for_method_calls,
+    clippy::redundant_clone,
+    clippy::single_char_pattern,
+    clippy::uninlined_format_args,
+    clippy::semicolon_if_nothing_returned,
+    clippy::doc_markdown
+)]
 #[cfg(test)]
 mod tests {
     use super::*;

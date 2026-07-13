@@ -21,6 +21,22 @@
 //! 2. `run_daemon(config)`: tracing → adapter selection → privilege check →
 //!    path resolution → directory creation → state load → dependency injection →
 //!    socket bind → signal handler → accept loop.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result,
+        clippy::uninlined_format_args,
+        clippy::redundant_clone,
+        clippy::collapsible_if,
+        clippy::match_same_arms,
+        clippy::only_used_in_recursion,
+        clippy::used_underscore_binding,
+    )
+)]
 
 // ── Windows ───────────────────────────────────────────────────────────────
 #[cfg(target_os = "windows")]

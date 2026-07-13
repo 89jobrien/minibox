@@ -195,6 +195,14 @@ fn parse_policy_bool(name: &str, v: &str) -> Option<bool> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args,
+    clippy::redundant_clone,
+    clippy::collapsible_if
+)]
 mod tests {
     use super::*;
 

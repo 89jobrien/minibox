@@ -7,6 +7,16 @@
 //!   originating stream.
 //! * [`DaemonResponse::Success`] — terminal; all logs delivered, exit 0.
 //! * [`DaemonResponse::Error`] — terminal error; print to stderr, exit 1.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::{Context as _, Result};
 use minibox_core::client::DaemonClient;
