@@ -172,3 +172,4 @@ docs/archive/
 .capsec-baseline.json
 bench/results/
 .taskit-state.json
+.taskit-cache/
