@@ -130,6 +130,24 @@ pub fn build_colima_handler_dependencies(
     }))
 }
 
+/// Bind a Unix socket at `path`, removing any stale socket first, and set
+/// permissions to 0o600. Returns the bound [`UnixListener`].
+fn bind_socket(path: &std::path::Path) -> Result<UnixListener> {
+    use std::os::unix::fs::PermissionsExt;
+    if path.exists() {
+        warn!(path = %path.display(), "socket: removing stale socket");
+        std::fs::remove_file(path)
+            .with_context(|| format!("removing stale socket {}", path.display()))?;
+    }
+    let listener = UnixListener::bind(path)
+        .with_context(|| format!("binding Unix socket at {}", path.display()))?;
+    let perms = std::fs::Permissions::from_mode(0o600);
+    std::fs::set_permissions(path, perms)
+        .with_context(|| format!("setting socket permissions on {}", path.display()))?;
+    info!("listening on {}", path.display());
+    Ok(listener)
+}
+
 /// Newtype wrapper around [`tokio::net::UnixListener`] that implements
 /// [`minibox::daemon::server::ServerListener`] for the macOS daemon.
 ///
@@ -265,27 +283,10 @@ pub async fn start() -> Result<()> {
     )?;
 
     // ── Socket ───────────────────────────────────────────────────────────
-    if socket_path.exists() {
-        warn!(path = %socket_path.display(), "socket: removing stale socket");
-        std::fs::remove_file(&socket_path)
-            .with_context(|| format!("removing stale socket {}", socket_path.display()))?;
-    }
-
-    let raw_listener = UnixListener::bind(&socket_path)
-        .with_context(|| format!("binding Unix socket at {}", socket_path.display()))?;
-
     // SECURITY: Restrict socket to owner-only (0o600). macOS does not require
     // root auth for Colima (operations run in the VM), but the socket should
     // still not be accessible to other local users.
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let permissions = std::fs::Permissions::from_mode(0o600);
-        std::fs::set_permissions(&socket_path, permissions)
-            .with_context(|| format!("setting socket permissions on {}", socket_path.display()))?;
-        info!("socket permissions set to 0600");
-    }
-
-    info!("listening on {}", socket_path.display());
+    let raw_listener = bind_socket(&socket_path)?;
 
     // ── Signal handling ──────────────────────────────────────────────────
     let shutdown = async {
@@ -375,27 +376,7 @@ async fn start_krun(
     });
 
     // ── Socket ───────────────────────────────────────────────────────────
-    if socket_path.exists() {
-        warn!(path = %socket_path.display(), "socket: removing stale socket");
-        std::fs::remove_file(&socket_path)
-            .with_context(|| format!("removing stale socket {}", socket_path.display()))?;
-    }
-
-    let raw_listener = UnixListener::bind(&socket_path)
-        .with_context(|| format!("krun: binding Unix socket at {}", socket_path.display()))?;
-
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))
-            .with_context(|| {
-                format!(
-                    "krun: setting socket permissions on {}",
-                    socket_path.display()
-                )
-            })?;
-    }
-
-    info!("krun: listening on {}", socket_path.display());
+    let raw_listener = bind_socket(&socket_path)?;
 
     let shutdown = async {
         tokio::signal::ctrl_c().await.ok();
@@ -431,6 +412,26 @@ async fn start_krun(
 )]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn bind_socket_creates_listener_with_0600_perms() {
+        use std::os::unix::fs::MetadataExt;
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("test.sock");
+        let _listener = bind_socket(&path).expect("bind_socket");
+        let mode = std::fs::metadata(&path).expect("metadata").mode() & 0o777;
+        assert_eq!(mode, 0o600, "socket must be owner-only (0o600)");
+    }
+
+    #[tokio::test]
+    async fn bind_socket_removes_stale_socket() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("stale.sock");
+        // Create a file to simulate a stale socket.
+        std::fs::write(&path, b"stale").expect("write stale file");
+        // bind_socket should remove it and succeed.
+        let _listener = bind_socket(&path).expect("bind_socket with stale file");
+    }
     use minibox_core::image::gc::ImageGc;
     use tempfile::TempDir;
 
