@@ -154,7 +154,11 @@ mod tests {
     use super::*;
     fn collect_diagnostics(path: &Path) -> Vec<Diagnostic> {
         let mut diags = Vec::new();
-        lint_file_diagnostics(path, path.parent().unwrap_or(Path::new("/")), &mut diags);
+        lint_file_diagnostics(
+            path,
+            path.parent().unwrap_or_else(|| Path::new("/")),
+            &mut diags,
+        );
         diags
     }
 

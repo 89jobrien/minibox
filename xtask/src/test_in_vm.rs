@@ -588,7 +588,7 @@ mod tests {
         );
     }
 
-    /// Serialize env-mutating tests (Rust 2024: set_var/remove_var are unsafe).
+    /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]

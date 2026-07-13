@@ -787,6 +787,7 @@ fn parse_handler_fn_coverage(output: &str) -> Option<HandlerCoverage> {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::parse_handler_fn_coverage;
 
