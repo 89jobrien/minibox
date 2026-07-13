@@ -47,7 +47,9 @@ opentelemetry-otlp   = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 
 [features]
-## Test infrastructure: mocks, fixtures, conformance helpers (never compile into production)
+## Test infrastructure: mocks, fixtures, conformance helpers.
+## Enabled by default (crate is not published; test utils needed for cargo nextest compile-tests).
+default = ["test-utils"]
 test-utils = ["minibox-core/test-utils"]
 ## Prometheus /metrics endpoint + prometheus-client recorder
 metrics = ["dep:prometheus-client", "dep:axum"]

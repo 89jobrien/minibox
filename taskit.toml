@@ -2,7 +2,7 @@
 crates = [
   { dir = "crates/minibox-core", pkg = "minibox-core" },
   { dir = "crates/minibox-macros", pkg = "minibox-macros" },
-  { dir = "crates/minibox", pkg = "minibox" },
+  { dir = "crates/minibox", pkg = "minibox", features = ["test-utils"] },
   { dir = "crates/macbox", pkg = "macbox" },
   { dir = "crates/miniboxd", pkg = "miniboxd" },
   { dir = "crates/winbox", pkg = "winbox" },
