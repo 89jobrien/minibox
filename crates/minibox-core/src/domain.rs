@@ -873,9 +873,7 @@ pub trait ChildInit: Send + Sync {
 ///
 /// Prefer using [`RootfsSetup`] or [`ChildInit`] directly at call sites that
 /// only need one half of the lifecycle.
-// TODO: add `Send + Sync` supertraits — needed for use in Arc<dyn FilesystemProvider> across
-// async task boundaries without unsafe workarounds.
-pub trait FilesystemProvider: RootfsSetup + ChildInit {}
+pub trait FilesystemProvider: RootfsSetup + ChildInit + Send + Sync {}
 
 /// Blanket implementation: any type that implements both [`RootfsSetup`] and
 /// [`ChildInit`] automatically satisfies [`FilesystemProvider`].
@@ -1962,10 +1960,6 @@ mod tests {
     use std::collections::HashSet;
 
     // --- MetricsRecorder tests ---
-
-    // TODO(review-11): incomplete test_ prefix removal — remaining test_ prefixed
-    // fns below (test_metrics_recorder, test_container_id_*, etc.) should be renamed
-    // for consistency with the domain_error_display_* rename in this diff.
 
     /// Verify that a no-op MetricsRecorder can be constructed and used as a trait object.
     #[test]
