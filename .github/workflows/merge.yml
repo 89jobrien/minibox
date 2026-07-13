@@ -195,6 +195,13 @@ jobs:
     if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
+      - name: pre-test runner cleanup
+        run: |
+          # Kill orphaned miniboxd processes from prior runs and free port 9090.
+          sudo pkill -f miniboxd || true
+          sleep 1
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask nuke-test-state || true
       - name: cargo xtask test-e2e-suite
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
@@ -207,6 +214,13 @@ jobs:
     if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
+      - name: pre-test runner cleanup
+        run: |
+          # Kill orphaned miniboxd processes from prior runs and free port 9090.
+          sudo pkill -f miniboxd || true
+          sleep 1
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask nuke-test-state || true
       - name: cargo xtask test-integration
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
@@ -219,6 +233,13 @@ jobs:
     if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
+      - name: pre-test runner cleanup
+        run: |
+          # Kill orphaned miniboxd processes from prior runs and free port 9090.
+          sudo pkill -f miniboxd || true
+          sleep 1
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo xtask nuke-test-state || true
       - name: cargo xtask test-e2e
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"

@@ -432,19 +432,25 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 
     // ── Metrics ──────────────────────────────────────────────────────────
     #[cfg(feature = "metrics")]
-    let metrics_recorder = {
+    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> = {
         const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
         let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
             .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
             .parse()
             .context("parsing MINIBOX_METRICS_ADDR")?;
         let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
-        let (_addr, _handle) =
-            minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
-                .await
-                .context("starting metrics server")?;
-        info!(addr = %_addr, "metrics server listening");
-        recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
+        match minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
+            .await
+        {
+            Ok((_addr, _handle)) => {
+                info!(addr = %_addr, "metrics server listening");
+                recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
+            }
+            Err(e) => {
+                tracing::warn!(addr = %metrics_addr, error = %e, "metrics server failed to bind; continuing without metrics");
+                Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new())
+            }
+        }
     };
     #[cfg(not(feature = "metrics"))]
     let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
