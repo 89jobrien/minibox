@@ -20,6 +20,8 @@ tempfile = "3"
 toml = "1.1"
 chrono = { version = "0.4", features = ["serde"] }
 xshell = "0.2"
+miette = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

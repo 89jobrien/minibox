@@ -4310,10 +4310,12 @@ dependencies = [
  "chrono",
  "dirs",
  "hex",
+ "miette",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
+ "thiserror",
  "toml 1.1.2+spec-1.1.0",
  "xshell",
 ]
