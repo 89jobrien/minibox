@@ -382,6 +382,24 @@ fn select_and_validate_adapter_suite() -> Result<AdapterSuite> {
     Ok(suite)
 }
 
+fn prepare_daemon_directories(paths: &DaemonPaths) -> Result<()> {
+    const OWNER_RWX_PERMS: u32 = 0o700;
+    use std::os::unix::fs::DirBuilderExt;
+    for dir in &[
+        paths.images_dir.as_path(),
+        paths.containers_dir.as_path(),
+        paths.run_dir.as_path(),
+        paths.run_containers_dir.as_path(),
+    ] {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(OWNER_RWX_PERMS)
+            .create(dir)
+            .with_context(|| format!("creating directory {}", dir.display()))?;
+    }
+    Ok(())
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
@@ -422,22 +440,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     }
 
     // ── Directories ──────────────────────────────────────────────────────
-    const OWNER_RWX_PERMS: u32 = 0o700;
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        for dir in &[
-            paths.images_dir.as_path(),
-            paths.containers_dir.as_path(),
-            paths.run_dir.as_path(),
-            paths.run_containers_dir.as_path(),
-        ] {
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(OWNER_RWX_PERMS)
-                .create(dir)
-                .with_context(|| format!("creating directory {}", dir.display()))?;
-        }
-    }
+    prepare_daemon_directories(&paths)?;
 
     // ── Shared state ─────────────────────────────────────────────────────
     let state = load_state(&paths).await?;
