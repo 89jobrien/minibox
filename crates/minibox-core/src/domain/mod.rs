@@ -71,6 +71,7 @@ mod filesystem;
 mod ids;
 mod image;
 mod legacy;
+mod pty;
 mod runtime;
 mod state;
 
@@ -80,5 +81,6 @@ pub use filesystem::*;
 pub use ids::*;
 pub use image::*;
 pub use legacy::*;
+pub use pty::*;
 pub use runtime::*;
 pub use state::*;
