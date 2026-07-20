@@ -65,6 +65,7 @@ pub use networking::*;
 // Re-export slashcrux vocabulary types for agentic workflow metadata.
 pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
 
+mod checkpoint;
 mod error;
 mod exec;
 mod filesystem;
@@ -75,6 +76,7 @@ mod pty;
 mod runtime;
 mod state;
 
+pub use checkpoint::*;
 pub use error::*;
 pub use exec::*;
 pub use filesystem::*;
