@@ -99,6 +99,26 @@ fn spawn_sigwinch_forwarder_task(socket_path: std::path::PathBuf, exec_id: Strin
     }
 }
 
+async fn handle_exec_started(exec_id: String, tty: bool, socket_path: &std::path::Path) {
+    if tty {
+        // Stdin relay task — batches reads and sends one SendInput per
+        // read() call via DaemonWriter (fire-and-forget, no per-call
+        // response needed), avoiding the per-keypress connection cost.
+        spawn_stdin_relay_task(socket_path.to_path_buf(), exec_id.clone());
+
+        // Initial terminal size.
+        #[cfg(unix)]
+        send_initial_pty_size(socket_path, &exec_id).await;
+
+        // SIGWINCH forwarding — uses tokio's process-wide signal stream
+        // so the signal is reliably received regardless of which Tokio
+        // worker thread the OS delivers it to.  Per-thread sigprocmask
+        // is not portable under a multi-threaded runtime.
+        #[cfg(unix)]
+        spawn_sigwinch_forwarder_task(socket_path.to_path_buf(), exec_id.clone());
+    }
+}
+
 fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data)
@@ -153,23 +173,7 @@ pub async fn execute(
     while let Some(response) = stream.next().await.context("stream error")? {
         match response {
             DaemonResponse::ExecStarted { exec_id } => {
-                if tty {
-                    // Stdin relay task — batches reads and sends one SendInput per
-                    // read() call via DaemonWriter (fire-and-forget, no per-call
-                    // response needed), avoiding the per-keypress connection cost.
-                    spawn_stdin_relay_task(sp.clone(), exec_id.clone());
-
-                    // Initial terminal size.
-                    #[cfg(unix)]
-                    send_initial_pty_size(&sp, &exec_id).await;
-
-                    // SIGWINCH forwarding — uses tokio's process-wide signal stream
-                    // so the signal is reliably received regardless of which Tokio
-                    // worker thread the OS delivers it to.  Per-thread sigprocmask
-                    // is not portable under a multi-threaded runtime.
-                    #[cfg(unix)]
-                    spawn_sigwinch_forwarder_task(sp.clone(), exec_id.clone());
-                }
+                handle_exec_started(exec_id, tty, &sp).await;
             }
             DaemonResponse::ContainerOutput { stream, data } => {
                 handle_container_output(stream, &data)?;
