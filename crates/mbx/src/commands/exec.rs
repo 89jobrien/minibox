@@ -60,6 +60,18 @@ fn spawn_stdin_relay_task(socket_path: std::path::PathBuf, exec_id: String) {
     });
 }
 
+#[cfg(unix)]
+async fn send_initial_pty_size(socket_path: &std::path::Path, exec_id: &str) {
+    let (cols, rows) = crate::terminal::terminal_size();
+    let _ = DaemonWriter::with_socket(socket_path)
+        .send(DaemonRequest::ResizePty {
+            session_id: minibox_core::domain::SessionId::from(exec_id.to_string()),
+            cols,
+            rows,
+        })
+        .await;
+}
+
 fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data)
@@ -122,16 +134,7 @@ pub async fn execute(
 
                     // Initial terminal size.
                     #[cfg(unix)]
-                    {
-                        let (cols, rows) = crate::terminal::terminal_size();
-                        let _ = DaemonWriter::with_socket(&sp)
-                            .send(DaemonRequest::ResizePty {
-                                session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
-                                cols,
-                                rows,
-                            })
-                            .await;
-                    }
+                    send_initial_pty_size(&sp, &exec_id).await;
 
                     // SIGWINCH forwarding — uses tokio's process-wide signal stream
                     // so the signal is reliably received regardless of which Tokio
