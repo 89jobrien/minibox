@@ -431,6 +431,21 @@ async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::Metric
     ))
 }
 
+fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> ContainerPolicy {
+    let env_policy = ContainerPolicy::from_env();
+    ContainerPolicy {
+        allow_bind_mounts: config
+            .policy
+            .allow_bind_mounts
+            .unwrap_or(env_policy.allow_bind_mounts),
+        allow_privileged: config
+            .policy
+            .allow_privileged
+            .unwrap_or(env_policy.allow_privileged),
+        ..Default::default()
+    }
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
@@ -498,18 +513,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 
     // Build container policy: config file values take precedence, then env
     // vars, then deny-all defaults.
-    let env_policy = ContainerPolicy::from_env();
-    let policy = ContainerPolicy {
-        allow_bind_mounts: config
-            .policy
-            .allow_bind_mounts
-            .unwrap_or(env_policy.allow_bind_mounts),
-        allow_privileged: config
-            .policy
-            .allow_privileged
-            .unwrap_or(env_policy.allow_privileged),
-        ..Default::default()
-    };
+    let policy = resolve_container_policy(&config);
     tracing::info!(
         allow_bind_mounts = policy.allow_bind_mounts,
         allow_privileged = policy.allow_privileged,
