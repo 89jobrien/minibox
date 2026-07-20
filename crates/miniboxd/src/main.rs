@@ -347,17 +347,24 @@ async fn load_state(paths: &DaemonPaths) -> Result<Arc<DaemonState>> {
 
 // ── Unified daemon entry point ────────────────────────────────────────────
 
+#[cfg(feature = "otel")]
+fn init_daemon_tracing() -> minibox::daemon::telemetry::traces::OtelGuard {
+    let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
+    minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
+}
+#[cfg(not(feature = "otel"))]
+fn init_daemon_tracing() {
+    minibox_core::init_tracing();
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // ── Tracing ──────────────────────────────────────────────────────────
     #[cfg(feature = "otel")]
-    let _otel_guard = {
-        let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
-        minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
-    };
+    let _otel_guard = init_daemon_tracing();
     #[cfg(not(feature = "otel"))]
-    minibox_core::init_tracing();
+    init_daemon_tracing();
 
     info!("miniboxd starting");
 
