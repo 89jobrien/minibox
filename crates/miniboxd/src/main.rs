@@ -446,6 +446,56 @@ fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> Containe
     }
 }
 
+fn bind_and_secure_socket(sock_path: &std::path::Path) -> Result<UnixListener> {
+    if sock_path.exists() {
+        warn!("removing stale socket at {}", sock_path.display());
+        std::fs::remove_file(sock_path)
+            .with_context(|| format!("removing stale socket {}", sock_path.display()))?;
+    }
+
+    let raw_listener = UnixListener::bind(sock_path)
+        .with_context(|| format!("binding Unix socket at {}", sock_path.display()))?;
+
+    // SECURITY: Restrict socket permissions; allow overrides for group access.
+    {
+        use std::os::unix::fs::PermissionsExt;
+        const DEFAULT_SOCKET_PERMS: u32 = 0o600;
+        let mut mode = DEFAULT_SOCKET_PERMS;
+        if let Ok(mode_str) = std::env::var("MINIBOX_SOCKET_MODE") {
+            let mode_str = mode_str.trim();
+            let mode_str = mode_str.strip_prefix("0o").unwrap_or(mode_str);
+            match u32::from_str_radix(mode_str, 8) {
+                Ok(parsed) => mode = parsed,
+                Err(err) => warn!("invalid MINIBOX_SOCKET_MODE={mode_str}: {err}"),
+            }
+        }
+
+        if let Ok(group_name) = std::env::var("MINIBOX_SOCKET_GROUP") {
+            let group_name = group_name.trim();
+            if !group_name.is_empty() {
+                if let Some(group) = nix::unistd::Group::from_name(group_name)
+                    .with_context(|| format!("looking up group {group_name}"))?
+                {
+                    nix::unistd::chown(sock_path, None, Some(group.gid))
+                        .with_context(|| format!("setting socket group to {group_name}"))?;
+                    info!("socket group set to {group_name}");
+                } else {
+                    warn!("MINIBOX_SOCKET_GROUP={group_name} not found");
+                }
+            }
+        }
+
+        let metadata = std::fs::metadata(sock_path)?;
+        let mut permissions = metadata.permissions();
+        permissions.set_mode(mode);
+        std::fs::set_permissions(sock_path, permissions)
+            .with_context(|| format!("setting socket permissions to {mode:04o}"))?;
+        info!("socket permissions set to {mode:04o}");
+    }
+
+    Ok(raw_listener)
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
@@ -535,52 +585,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 
     // ── Socket ───────────────────────────────────────────────────────────
     let sock_path = &paths.socket_path;
-    if sock_path.exists() {
-        warn!("removing stale socket at {}", sock_path.display());
-        std::fs::remove_file(sock_path)
-            .with_context(|| format!("removing stale socket {}", sock_path.display()))?;
-    }
-
-    let raw_listener = UnixListener::bind(sock_path)
-        .with_context(|| format!("binding Unix socket at {}", sock_path.display()))?;
-
-    // SECURITY: Restrict socket permissions; allow overrides for group access.
-    {
-        use std::os::unix::fs::PermissionsExt;
-        const DEFAULT_SOCKET_PERMS: u32 = 0o600;
-        let mut mode = DEFAULT_SOCKET_PERMS;
-        if let Ok(mode_str) = std::env::var("MINIBOX_SOCKET_MODE") {
-            let mode_str = mode_str.trim();
-            let mode_str = mode_str.strip_prefix("0o").unwrap_or(mode_str);
-            match u32::from_str_radix(mode_str, 8) {
-                Ok(parsed) => mode = parsed,
-                Err(err) => warn!("invalid MINIBOX_SOCKET_MODE={mode_str}: {err}"),
-            }
-        }
-
-        if let Ok(group_name) = std::env::var("MINIBOX_SOCKET_GROUP") {
-            let group_name = group_name.trim();
-            if !group_name.is_empty() {
-                if let Some(group) = nix::unistd::Group::from_name(group_name)
-                    .with_context(|| format!("looking up group {group_name}"))?
-                {
-                    nix::unistd::chown(sock_path, None, Some(group.gid))
-                        .with_context(|| format!("setting socket group to {group_name}"))?;
-                    info!("socket group set to {group_name}");
-                } else {
-                    warn!("MINIBOX_SOCKET_GROUP={group_name} not found");
-                }
-            }
-        }
-
-        let metadata = std::fs::metadata(sock_path)?;
-        let mut permissions = metadata.permissions();
-        permissions.set_mode(mode);
-        std::fs::set_permissions(sock_path, permissions)
-            .with_context(|| format!("setting socket permissions to {mode:04o}"))?;
-        info!("socket permissions set to {mode:04o}");
-    }
-
+    let raw_listener = bind_and_secure_socket(sock_path)?;
     info!("listening on {}", sock_path.display());
 
     // ── Signal handling ──────────────────────────────────────────────────
