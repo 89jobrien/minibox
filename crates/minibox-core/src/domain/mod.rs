@@ -66,11 +66,13 @@ pub use networking::*;
 pub use slashcrux::{ExecutionContext, Priority, StepState, Urgency};
 
 mod error;
+mod filesystem;
 mod ids;
 mod legacy;
 mod state;
 
 pub use error::*;
+pub use filesystem::*;
 pub use ids::*;
 pub use legacy::*;
 pub use state::*;
