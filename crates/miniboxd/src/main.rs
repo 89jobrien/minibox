@@ -357,6 +357,31 @@ fn init_daemon_tracing() {
     minibox_core::init_tracing();
 }
 
+fn select_and_validate_adapter_suite() -> Result<AdapterSuite> {
+    let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
+    let available = adapter_registry::available_adapter_names();
+    info!(
+        selected_adapter = %suite,
+        available_adapters = ?available,
+        "adapter suite selected"
+    );
+
+    #[cfg(target_os = "linux")]
+    adapter_registry::warn_if_native_without_root();
+
+    #[cfg(target_os = "linux")]
+    if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
+        anyhow::bail!("miniboxd must run as root (native adapter suite)");
+    }
+
+    #[cfg(target_os = "linux")]
+    if suite == AdapterSuite::Native {
+        migrate_to_supervisor_cgroup();
+    }
+
+    Ok(suite)
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
@@ -379,29 +404,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
     // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
     // Config file adapter field is injected above when env is unset.
-    let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
-    let available = adapter_registry::available_adapter_names();
-    info!(
-        selected_adapter = %suite,
-        available_adapters = ?available,
-        "adapter suite selected"
-    );
-
-    // ── Native preflight warning ─────────────────────────────────────────
-    #[cfg(target_os = "linux")]
-    adapter_registry::warn_if_native_without_root();
-
-    // ── Privilege check (native only) ────────────────────────────────────
-    #[cfg(target_os = "linux")]
-    if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
-        anyhow::bail!("miniboxd must run as root (native adapter suite)");
-    }
-
-    // ── Cgroup self-migration (native only) ──────────────────────────────
-    #[cfg(target_os = "linux")]
-    if suite == AdapterSuite::Native {
-        migrate_to_supervisor_cgroup();
-    }
+    let suite = select_and_validate_adapter_suite()?;
 
     // ── Resolve paths (configurable via env vars) ───────────────────────
     let paths = resolve_paths();

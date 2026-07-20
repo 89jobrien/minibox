@@ -3,7 +3,7 @@
 This document summarizes which minibox adapters work on which platforms and what
 capabilities each adapter provides. It is written for end users of minibox.
 
-Last updated: 2026-07-13
+Last updated: 2026-07-20
 
 ---
 
