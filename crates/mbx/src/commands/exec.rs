@@ -72,6 +72,33 @@ async fn send_initial_pty_size(socket_path: &std::path::Path, exec_id: &str) {
         .await;
 }
 
+#[cfg(unix)]
+fn spawn_sigwinch_forwarder_task(socket_path: std::path::PathBuf, exec_id: String) {
+    use tokio::signal::unix::{SignalKind, signal};
+    match signal(SignalKind::window_change()) {
+        Ok(mut sigwinch) => {
+            tokio::spawn(async move {
+                let writer = DaemonWriter::with_socket(&socket_path);
+                while sigwinch.recv().await.is_some() {
+                    let (cols, rows) = crate::terminal::terminal_size();
+                    let _ = writer
+                        .send(DaemonRequest::ResizePty {
+                            session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
+                            cols,
+                            rows,
+                        })
+                        .await;
+                }
+            });
+        }
+        Err(e) => {
+            eprintln!(
+                "exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}"
+            );
+        }
+    }
+}
+
 fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data)
@@ -141,35 +168,7 @@ pub async fn execute(
                     // worker thread the OS delivers it to.  Per-thread sigprocmask
                     // is not portable under a multi-threaded runtime.
                     #[cfg(unix)]
-                    {
-                        use tokio::signal::unix::{SignalKind, signal};
-                        let sp3 = sp.clone();
-                        let sid2 = exec_id.clone();
-                        match signal(SignalKind::window_change()) {
-                            Ok(mut sigwinch) => {
-                                tokio::spawn(async move {
-                                    let writer = DaemonWriter::with_socket(&sp3);
-                                    while sigwinch.recv().await.is_some() {
-                                        let (cols, rows) = crate::terminal::terminal_size();
-                                        let _ = writer
-                                            .send(DaemonRequest::ResizePty {
-                                                session_id: minibox_core::domain::SessionId::from(
-                                                    sid2.clone(),
-                                                ),
-                                                cols,
-                                                rows,
-                                            })
-                                            .await;
-                                    }
-                                });
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}"
-                                );
-                            }
-                        }
-                    }
+                    spawn_sigwinch_forwarder_task(sp.clone(), exec_id.clone());
                 }
             }
             DaemonResponse::ContainerOutput { stream, data } => {
