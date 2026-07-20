@@ -35,6 +35,23 @@ use std::io::Write;
 /// Connects to the daemon, sends a `DaemonRequest::Exec`, then streams
 /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped`.
 /// Exits with the container process exit code.
+fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .context("failed to decode exec output chunk")?;
+    match stream {
+        OutputStreamKind::Stdout => {
+            std::io::stdout().write_all(&bytes)?;
+            std::io::stdout().flush()?;
+        }
+        OutputStreamKind::Stderr => {
+            std::io::stderr().write_all(&bytes)?;
+            std::io::stderr().flush()?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn execute(
     container_id: String,
     cmd: Vec<String>,
@@ -154,19 +171,7 @@ pub async fn execute(
                 }
             }
             DaemonResponse::ContainerOutput { stream, data } => {
-                let bytes = base64::engine::general_purpose::STANDARD
-                    .decode(&data)
-                    .context("failed to decode exec output chunk")?;
-                match stream {
-                    OutputStreamKind::Stdout => {
-                        std::io::stdout().write_all(&bytes)?;
-                        std::io::stdout().flush()?;
-                    }
-                    OutputStreamKind::Stderr => {
-                        std::io::stderr().write_all(&bytes)?;
-                        std::io::stderr().flush()?;
-                    }
-                }
+                handle_container_output(stream, &data)?;
             }
             DaemonResponse::ContainerStopped { exit_code } => {
                 #[cfg(unix)]
