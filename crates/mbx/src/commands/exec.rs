@@ -35,6 +35,31 @@ use std::io::Write;
 /// Connects to the daemon, sends a `DaemonRequest::Exec`, then streams
 /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped`.
 /// Exits with the container process exit code.
+fn spawn_stdin_relay_task(socket_path: std::path::PathBuf, exec_id: String) {
+    tokio::spawn(async move {
+        use tokio::io::AsyncReadExt as _;
+        let writer = DaemonWriter::with_socket(&socket_path);
+        let mut stdin = tokio::io::stdin();
+        let mut buf = [0u8; 256];
+        loop {
+            match stdin.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                    let req = DaemonRequest::SendInput {
+                        session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
+                        data,
+                    };
+                    if writer.send(req).await.is_err() {
+                        eprintln!("exec: stdin relay: daemon connection lost");
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
+
 fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data)
@@ -93,33 +118,7 @@ pub async fn execute(
                     // Stdin relay task — batches reads and sends one SendInput per
                     // read() call via DaemonWriter (fire-and-forget, no per-call
                     // response needed), avoiding the per-keypress connection cost.
-                    let sp2 = sp.clone();
-                    let sid = exec_id.clone();
-                    tokio::spawn(async move {
-                        use tokio::io::AsyncReadExt as _;
-                        let writer = DaemonWriter::with_socket(&sp2);
-                        let mut stdin = tokio::io::stdin();
-                        let mut buf = [0u8; 256];
-                        loop {
-                            match stdin.read(&mut buf).await {
-                                Ok(0) | Err(_) => break,
-                                Ok(n) => {
-                                    let data =
-                                        base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
-                                    let req = DaemonRequest::SendInput {
-                                        session_id: minibox_core::domain::SessionId::from(
-                                            sid.clone(),
-                                        ),
-                                        data,
-                                    };
-                                    if writer.send(req).await.is_err() {
-                                        eprintln!("exec: stdin relay: daemon connection lost");
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    });
+                    spawn_stdin_relay_task(sp.clone(), exec_id.clone());
 
                     // Initial terminal size.
                     #[cfg(unix)]
