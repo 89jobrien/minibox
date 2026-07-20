@@ -400,6 +400,37 @@ fn prepare_daemon_directories(paths: &DaemonPaths) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "metrics")]
+async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
+    const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
+    let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
+        .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
+        .parse()
+        .context("parsing MINIBOX_METRICS_ADDR")?;
+    let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
+    Ok(
+        match minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
+            .await
+        {
+            Ok((_addr, _handle)) => {
+                info!(addr = %_addr, "metrics server listening");
+                recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
+            }
+            Err(e) => {
+                tracing::warn!(addr = %metrics_addr, error = %e, "metrics server failed to bind; continuing without metrics");
+                Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new())
+            }
+        },
+    )
+}
+
+#[cfg(not(feature = "metrics"))]
+async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
+    Ok(Arc::new(
+        minibox::daemon::telemetry::NoOpMetricsRecorder::new(),
+    ))
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
@@ -460,30 +491,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     let event_broker = Arc::new(BroadcastEventBroker::new());
 
     // ── Metrics ──────────────────────────────────────────────────────────
-    #[cfg(feature = "metrics")]
-    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> = {
-        const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
-        let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
-            .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
-            .parse()
-            .context("parsing MINIBOX_METRICS_ADDR")?;
-        let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
-        match minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
-            .await
-        {
-            Ok((_addr, _handle)) => {
-                info!(addr = %_addr, "metrics server listening");
-                recorder as Arc<dyn minibox_core::domain::MetricsRecorder>
-            }
-            Err(e) => {
-                tracing::warn!(addr = %metrics_addr, error = %e, "metrics server failed to bind; continuing without metrics");
-                Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new())
-            }
-        }
-    };
-    #[cfg(not(feature = "metrics"))]
-    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
-        Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
+    let metrics_recorder = build_metrics_recorder().await?;
 
     // ── Dependency Injection ─────────────────────────────────────────────
     let require_root_auth = suite == AdapterSuite::Native;
