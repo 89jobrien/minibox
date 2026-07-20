@@ -496,6 +496,18 @@ fn bind_and_secure_socket(sock_path: &std::path::Path) -> Result<UnixListener> {
     Ok(raw_listener)
 }
 
+fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output = ()>> {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sigterm = signal(SignalKind::terminate()).context("SIGTERM handler")?;
+    let mut sigint = signal(SignalKind::interrupt()).context("SIGINT handler")?;
+    Ok(async move {
+        tokio::select! {
+            _ = sigterm.recv() => { info!("received SIGTERM, shutting down"); }
+            _ = sigint.recv()  => { info!("received SIGINT, shutting down");  }
+        }
+    })
+}
+
 #[cfg(unix)]
 // qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
 async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
@@ -589,15 +601,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     info!("listening on {}", sock_path.display());
 
     // ── Signal handling ──────────────────────────────────────────────────
-    use tokio::signal::unix::{SignalKind, signal};
-    let mut sigterm = signal(SignalKind::terminate()).context("SIGTERM handler")?;
-    let mut sigint = signal(SignalKind::interrupt()).context("SIGINT handler")?;
-    let shutdown = async move {
-        tokio::select! {
-            _ = sigterm.recv() => { info!("received SIGTERM, shutting down"); }
-            _ = sigint.recv()  => { info!("received SIGINT, shutting down");  }
-        }
-    };
+    let shutdown = install_shutdown_signal_handlers()?;
 
     let listener = UnixServerListener(raw_listener);
 
