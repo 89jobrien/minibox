@@ -76,6 +76,8 @@ fn make_container_record(id: &str, name: Option<&str>, state: &str) -> Container
         post_exit_hooks: vec![],
         rootfs_metadata: None,
         source_image_ref: Some("alpine:latest".to_string()),
+        upper_dir: None,
+        merged_dir: None,
         step_state: None,
         priority: None,
         urgency: None,

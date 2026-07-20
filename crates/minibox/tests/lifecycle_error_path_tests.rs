@@ -165,6 +165,8 @@ fn make_record_with_state(id: &str, state: &str, cgroup_path: PathBuf) -> Contai
         post_exit_hooks: vec![],
         rootfs_metadata: None,
         source_image_ref: None,
+        upper_dir: None,
+        merged_dir: None,
         step_state: None,
         priority: None,
         urgency: None,

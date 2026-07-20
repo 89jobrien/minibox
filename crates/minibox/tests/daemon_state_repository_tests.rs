@@ -90,6 +90,8 @@ async fn json_file_repository_round_trips() {
             post_exit_hooks: vec![],
             rootfs_metadata: None,
             source_image_ref: None,
+            upper_dir: None,
+            merged_dir: None,
             step_state: None,
             priority: None,
             urgency: None,
