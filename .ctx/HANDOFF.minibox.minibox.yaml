@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-07-20
+updated: 2026-07-21
 items:
 - id: chain-e-4
   doob_uuid: null
@@ -12,7 +12,7 @@ items:
   files: []
   completed: null
   extra:
-  - date: 2026-06-15
+  - date: 2026-07-21
     type: blocker
     field: null
     value: null
@@ -23,88 +23,29 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (27 files)
+  title: Uncommitted changes (8 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    docs/PLATFORM_SUPPORT.md
-    docs/core/CRATE_TIERS.mbx.md
-    docs/core/FEATURE_MATRIX.mbx.md
-    docs/core/GOTCHAS.mbx.md
-    docs/core/ROADMAP.mbx.md
-    docs/core/SECURITY_INVARIANTS.mbx.md
-    docs/core/STABILITY_CHECKLIST.mbx.md
-    docs/core/STATE_MODEL.mbx.md
-    docs/core/SUPPORT_TIERS.mbx.md
-    docs/notes/minibox-in-minibox.local.md
-    .capsec-baseline.json
-    .ctx/HANDOFF.agentbox.minibox.state.yaml
-    .ctx/HANDOFF.minibox.minibox.state.yaml
-    .ctx/HANDOFF.macbox.minibox.state.yaml
-    .ctx/HANDOFF.mbx.minibox.state.yaml
-    .ctx/HANDOFF.minibox-core.minibox.state.yaml
-    .ctx/HANDOFF.minibox-macros.minibox.state.yaml
-    .ctx/HANDOFF.minibox.minibox.state.yaml
-    .ctx/HANDOFF.miniboxd.minibox.state.yaml
-    .ctx/HANDOFF.winbox.minibox.state.yaml
-    .ctx/HANDOFF.xtask.minibox.state.yaml
-    .kgx/
-    .minibox/
-    book/
-    xtask/docs-audit-report.json
+    .debtmap.toml
+    docs/designs/2026-07-17-musl-prepush-cross-check-design.md
+    docs/designs/2026-07-20-debtmap-top10-refactor-design.md
+    docs/plans/2026-07-17-musl-prepush-cross-check.md
+    docs/plans/2026-07-20-debtmap-top10-refactor.md
+    toolkit.nu
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - docs/PLATFORM_SUPPORT.md
-  - docs/core/CRATE_TIERS.mbx.md
-  - docs/core/FEATURE_MATRIX.mbx.md
-  - docs/core/GOTCHAS.mbx.md
-  - docs/core/ROADMAP.mbx.md
-  - docs/core/SECURITY_INVARIANTS.mbx.md
-  - docs/core/STABILITY_CHECKLIST.mbx.md
-  - docs/core/STATE_MODEL.mbx.md
-  - docs/core/SUPPORT_TIERS.mbx.md
-  - docs/notes/minibox-in-minibox.local.md
-  - .capsec-baseline.json
-  - .ctx/HANDOFF.agentbox.minibox.state.yaml
-  - .ctx/HANDOFF.minibox.minibox.state.yaml
-  - .ctx/HANDOFF.macbox.minibox.state.yaml
-  - .ctx/HANDOFF.mbx.minibox.state.yaml
-  - .ctx/HANDOFF.minibox-core.minibox.state.yaml
-  - .ctx/HANDOFF.minibox-macros.minibox.state.yaml
-  - .ctx/HANDOFF.minibox.minibox.state.yaml
-  - .ctx/HANDOFF.miniboxd.minibox.state.yaml
-  - .ctx/HANDOFF.winbox.minibox.state.yaml
-  - .ctx/HANDOFF.xtask.minibox.state.yaml
-  - .kgx/
-  - .minibox/
-  - book/
-  - xtask/docs-audit-report.json
+  - .debtmap.toml
+  - docs/designs/2026-07-17-musl-prepush-cross-check-design.md
+  - docs/designs/2026-07-20-debtmap-top10-refactor-design.md
+  - docs/plans/2026-07-17-musl-prepush-cross-check.md
+  - docs/plans/2026-07-20-debtmap-top10-refactor.md
+  - toolkit.nu
   completed: null
   extra: []
 log:
-- date: 20260708::000000
-  summary: |-
-    Intensive CI stabilization session: 10 fix commits
-    - Clippy lint suppression: duration_suboptimal_units, unknown_lints
-    - Protocol e2e matrix narrowing: removed ubuntu (requires root for native adapter)
-    - HTTP timeout hardening: connect/request timeouts on pull e2e test
-    - Rustqual SARIF truncation fix
-    - Protocol e2e pipe deadlock resolution
-    - Reviewdog workflow removal
-    - Stability gates failures on develop resolved
-    Status: develop branch in sync with origin/develop
-    Build: cargo check clean
-  commits: []
-  session: ci-stabilization
-- date: 20260701::000000
-  summary: |-
-    Commit: feat(errors): add miette diagnostics for rich CLI error rendering
-    Status: develop branch in sync with origin/develop
-    Build: cargo check clean
-  commits: []
-  session: development
-- date: '20260615.055217'
-  summary: done=102 running=0 pending=19 blocked=1
+- date: '20260721.132010'
+  summary: done=136 running=0 pending=26 blocked=1
   commits: []

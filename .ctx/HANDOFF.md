@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-07-20)
+# Handoff — minibox (2026-07-21)
 
 **Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
@@ -31,22 +31,9 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (27 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (8 files) |
 | chain-e-4 | P2 | blocked | Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items |
 
 ## Log
 
-- 20260708::000000: Intensive CI stabilization session: 10 fix commits
-- Clippy lint suppression: duration_suboptimal_units, unknown_lints
-- Protocol e2e matrix narrowing: removed ubuntu (requires root for native adapter)
-- HTTP timeout hardening: connect/request timeouts on pull e2e test
-- Rustqual SARIF truncation fix
-- Protocol e2e pipe deadlock resolution
-- Reviewdog workflow removal
-- Stability gates failures on develop resolved
-Status: develop branch in sync with origin/develop
-Build: cargo check clean
-- 20260701::000000: Commit: feat(errors): add miette diagnostics for rich CLI error rendering
-Status: develop branch in sync with origin/develop
-Build: cargo check clean
-- 20260615.055217: done=102 running=0 pending=19 blocked=1
+- 20260721.132010: done=136 running=0 pending=26 blocked=1
