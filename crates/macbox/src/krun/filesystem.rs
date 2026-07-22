@@ -78,6 +78,12 @@ impl ChildInit for KrunFilesystem {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
 mod tests {
     use super::*;
     use minibox_core::domain::{ChildInit, RootfsSetup};

@@ -1,0 +1,113 @@
+generated: 2026-07-08
+since_days: 30
+sessions_scanned: 18
+total_commands: 1714
+top_supported:
+  - command: grep
+    count: 58
+    rule: no-bash-use-nu
+    est_savings_tokens: 7348
+  - command: find-generic-password
+    count: 30
+    rule: no-bash-use-nu
+    est_savings_tokens: 11063
+  - command: sed
+    count: 26
+    rule: no-sed-n-use-read
+    est_savings_tokens: 10914
+  - command: git
+    count: 19
+    rule: no-bash-use-nu
+    est_savings_tokens: 6379
+  - command: tail
+    count: 10
+    rule: no-head-tail-use-read
+    est_savings_tokens: 2611
+  - command: git branch
+    count: 9
+    rule: no-bash-use-nu
+    est_savings_tokens: 985
+  - command: cat
+    count: 8
+    rule: no-cat-use-read
+    est_savings_tokens: 5588
+  - command: rustqual .
+    count: 7
+    rule: no-bash-use-nu
+    est_savings_tokens: 363
+  - command: cargo clippy
+    count: 7
+    rule: no-bash-use-nu
+    rtk_equivalent: rtk cargo
+    est_savings_tokens: 36175
+    est_savings_pct: 90
+  - command: cargo xtask
+    count: 7
+    rule: no-bash-use-nu
+    est_savings_tokens: 4530
+  - command: # Check
+    count: 6
+    rule: no-bash-use-nu
+    est_savings_tokens: 2279
+  - command: # The
+    count: 5
+    rule: no-bash-use-nu
+    est_savings_tokens: 272
+  - command: cargo check
+    count: 5
+    rule: no-bash-use-nu
+    est_savings_tokens: 461
+  - command: godmode task
+    count: 5
+    rule: no-bash-use-nu
+    est_savings_tokens: 457
+  - command: # Look
+    count: 4
+    rule: no-sed-n-use-read
+    est_savings_tokens: 1680
+top_unhandled:
+  - base_command: nu
+    count: 1087
+    example: "nu -c 'godmode task next' 2>/dev/null || cat .ctx/GODMODE.tasks.yaml 2>/dev/null..."
+  - base_command: grep
+    count: 62
+    example: "grep -n 'with_max_total_image_size' crates/minibox-core/src/image/registry.rs | ..."
+  - base_command: cargo xtask
+    count: 31
+    example: "cargo xtask bench 2>&1 | tail -8"
+  - base_command: cargo clippy
+    count: 30
+    example: "cargo clippy -p minibox --features test-utils --message-format short 2>&1 | grep..."
+  - base_command: cargo check
+    count: 27
+    example: "cargo check -p minibox-testsuite 2>&1 | tail -5"
+  - base_command: git
+    count: 23
+    example: "git push"
+  - base_command: gh run
+    count: 14
+    example: "gh run list --branch develop --repo 89jobrien/minibox --limit 3 --json databaseI..."
+  - base_command: git commit
+    count: 7
+    example: "git commit -m \"$(cat <<'EOF'\nfeat(testsuite): replace ConformanceTest boilerplat..."
+  - base_command: cargo nextest
+    count: 6
+    example: "cargo nextest run --workspace -E 'not binary(smolvm_e2e_tests)' 2>&1 | tail -6"
+  - base_command: rustqual .
+    count: 6
+    example: "rustqual . --no-fail 2>&1 | grep -E \"^(Score|Quality|Total|Findings|WARNING)\" | ..."
+  - base_command: git status
+    count: 5
+    example: "git status --short"
+  - base_command: git push
+    count: 4
+    example: "git push 2>&1"
+  - base_command: op item
+    count: 4
+    example: "op item get oh3qzaefimnzzmzvssy33eba6u --account my.1password.com --format json ..."
+  - base_command: mkdir
+    count: 4
+    example: "mkdir -p /Users/joe/dev/minibox/docs/plans"
+  - base_command: git add
+    count: 4
+    example: "git add \\\n  Cargo.toml Cargo.lock \\\n  crates/minibox-core/Cargo.toml \\\n  crates/..."

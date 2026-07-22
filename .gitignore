@@ -171,3 +171,5 @@ docs/archive/
 .claude/skills/whatidid/cache/
 .capsec-baseline.json
 bench/results/
+.taskit-state.json
+.taskit-cache/

@@ -18,6 +18,16 @@
 //! mbx rm <id>
 //! mbx pull nginx
 //! ```
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 mod commands;
 pub(crate) mod terminal;
@@ -688,6 +698,17 @@ pub mod main_tests_shim {
     }
 }
 
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::redundant_closure_for_method_calls,
+    clippy::redundant_clone,
+    clippy::single_char_pattern,
+    clippy::uninlined_format_args,
+    clippy::semicolon_if_nothing_returned,
+    clippy::doc_markdown
+)]
 #[cfg(test)]
 mod tests {
     use super::*;

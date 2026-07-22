@@ -16,9 +16,6 @@
 //!    output or tab-completion.
 //! 4. [`validate_adapter_name`] wraps [`parse_adapter`] returning `anyhow::Result`,
 //!    suitable for early-startup validation in `main`.
-//
-// TODO(#307): evaluate making smolvm the unconditional default when smolvm binary
-// detection is reliable on all CI platforms.
 
 use std::fmt;
 
@@ -322,6 +319,17 @@ pub fn warn_if_native_without_root() {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::doc_markdown,
+    clippy::uninlined_format_args,
+    clippy::match_same_arms,
+    clippy::redundant_clone,
+    clippy::collapsible_if,
+    clippy::used_underscore_binding
+)]
 mod tests {
     use super::*;
 

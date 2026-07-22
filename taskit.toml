@@ -2,7 +2,7 @@
 crates = [
   { dir = "crates/minibox-core", pkg = "minibox-core" },
   { dir = "crates/minibox-macros", pkg = "minibox-macros" },
-  { dir = "crates/minibox", pkg = "minibox" },
+  { dir = "crates/minibox", pkg = "minibox", features = ["test-utils"] },
   { dir = "crates/macbox", pkg = "macbox" },
   { dir = "crates/miniboxd", pkg = "miniboxd" },
   { dir = "crates/winbox", pkg = "winbox" },
@@ -21,13 +21,11 @@ dependents = ["minibox", "miniboxd", "smolbox"]
 
 [[workspace.propagation]]
 source = "minibox"
-# TODO: "miniboxd" appears twice — remove the duplicate
-dependents = ["macbox", "miniboxd", "miniboxd", "winbox", "smolbox", "minibox-testsuite"]
+dependents = ["macbox", "miniboxd", "winbox", "smolbox", "minibox-testsuite"]
 
 [[workspace.propagation]]
 source = "minibox-core"
-# TODO: "minibox", "miniboxd", "mbx" each appear twice — remove the duplicates
-dependents = ["minibox-core", "minibox", "minibox", "macbox", "miniboxd", "miniboxd", "winbox", "mbx", "mbx", "minibox-crux-plugin", "minibox-testsuite"]
+dependents = ["minibox", "macbox", "miniboxd", "winbox", "mbx", "minibox-crux-plugin", "minibox-testsuite"]
 
 [[workspace.propagation]]
 source = "minibox-macros"

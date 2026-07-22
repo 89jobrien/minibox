@@ -422,8 +422,7 @@ fn build_execution_manifest(p: ManifestBuildParams<'_>) -> minibox_core::domain:
         ExecutionManifestSubject,
     };
 
-    // TODO(#436): replace Debug format with explicit Display/as_str
-    let net_mode_str = format!("{net_mode:?}").to_lowercase();
+    let net_mode_str = net_mode.as_str().to_string();
     ExecutionManifest {
         schema_version: 1,
         container_id: id.to_string(),
@@ -511,6 +510,11 @@ fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord 
             .source_image_ref
             .clone()
             .or_else(|| Some(image_label.to_string())),
+        // TODO(rootfs-metadata-persist): populate from rootfs_layout during
+        // create/run (see backlog item "Persist rootfs metadata into
+        // ContainerRecord during create/run").
+        upper_dir: None,
+        merged_dir: None,
         step_state: None,
         priority: None,
         urgency: None,
@@ -999,8 +1003,11 @@ async fn run_inner(
         .metrics
         .set_gauge("minibox_active_containers", active, &[]);
 
-    // TODO(#429): propagate net.attach error instead of swallowing with .ok()
-    prepared.net.attach(&id, pid).await.ok();
+    prepared
+        .net
+        .attach(&id, pid)
+        .await
+        .with_context(|| format!("net.attach failed for container {id}"))?;
 
     let pid_file = deps.lifecycle.run_containers_base.join(&id).join("pid");
     if let Err(e) = std::fs::write(&pid_file, pid.to_string()) {

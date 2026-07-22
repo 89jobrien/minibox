@@ -21,6 +21,22 @@
 //! 2. `run_daemon(config)`: tracing → adapter selection → privilege check →
 //!    path resolution → directory creation → state load → dependency injection →
 //!    socket bind → signal handler → accept loop.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result,
+        clippy::uninlined_format_args,
+        clippy::redundant_clone,
+        clippy::collapsible_if,
+        clippy::match_same_arms,
+        clippy::only_used_in_recursion,
+        clippy::used_underscore_binding,
+    )
+)]
 
 // ── Windows ───────────────────────────────────────────────────────────────
 #[cfg(target_os = "windows")]
@@ -331,31 +347,17 @@ async fn load_state(paths: &DaemonPaths) -> Result<Arc<DaemonState>> {
 
 // ── Unified daemon entry point ────────────────────────────────────────────
 
-#[cfg(unix)]
-// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
-async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
-    // ── Tracing ──────────────────────────────────────────────────────────
-    #[cfg(feature = "otel")]
-    let _otel_guard = {
-        let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
-        minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
-    };
-    #[cfg(not(feature = "otel"))]
+#[cfg(feature = "otel")]
+fn init_daemon_tracing() -> minibox::daemon::telemetry::traces::OtelGuard {
+    let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
+    minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
+}
+#[cfg(not(feature = "otel"))]
+fn init_daemon_tracing() {
     minibox_core::init_tracing();
+}
 
-    info!("miniboxd starting");
-
-    // ── Config ────────────────────────────────────────────────────────────
-    info!(
-        adapter = ?config.adapter,
-        log_level = ?config.log_level,
-        "config loaded"
-    );
-
-    // ── Adapter suite ────────────────────────────────────────────────────
-    // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
-    // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
-    // Config file adapter field is injected above when env is unset.
+fn select_and_validate_adapter_suite() -> Result<AdapterSuite> {
     let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
     let available = adapter_registry::available_adapter_names();
     info!(
@@ -364,81 +366,49 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         "adapter suite selected"
     );
 
-    // ── Native preflight warning ─────────────────────────────────────────
     #[cfg(target_os = "linux")]
     adapter_registry::warn_if_native_without_root();
 
-    // ── Privilege check (native only) ────────────────────────────────────
     #[cfg(target_os = "linux")]
     if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
         anyhow::bail!("miniboxd must run as root (native adapter suite)");
     }
 
-    // ── Cgroup self-migration (native only) ──────────────────────────────
     #[cfg(target_os = "linux")]
     if suite == AdapterSuite::Native {
         migrate_to_supervisor_cgroup();
     }
 
-    // ── Resolve paths (configurable via env vars) ───────────────────────
-    let paths = resolve_paths();
+    Ok(suite)
+}
 
-    // ── Startup diagnostics ──────────────────────────────────────────────
-    #[cfg(target_os = "linux")]
-    {
-        let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
-            .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
-        minibox::daemon::server::log_startup_info(
-            &paths.socket_path.display().to_string(),
-            &paths.data_dir.display().to_string(),
-            &cgroup_root,
-        );
-    }
-
-    // ── Directories ──────────────────────────────────────────────────────
+fn prepare_daemon_directories(paths: &DaemonPaths) -> Result<()> {
     const OWNER_RWX_PERMS: u32 = 0o700;
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        for dir in &[
-            paths.images_dir.as_path(),
-            paths.containers_dir.as_path(),
-            paths.run_dir.as_path(),
-            paths.run_containers_dir.as_path(),
-        ] {
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(OWNER_RWX_PERMS)
-                .create(dir)
-                .with_context(|| format!("creating directory {}", dir.display()))?;
-        }
+    use std::os::unix::fs::DirBuilderExt;
+    for dir in &[
+        paths.images_dir.as_path(),
+        paths.containers_dir.as_path(),
+        paths.run_dir.as_path(),
+        paths.run_containers_dir.as_path(),
+    ] {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(OWNER_RWX_PERMS)
+            .create(dir)
+            .with_context(|| format!("creating directory {}", dir.display()))?;
     }
+    Ok(())
+}
 
-    // ── Shared state ─────────────────────────────────────────────────────
-    let state = load_state(&paths).await?;
-    info!("state loaded from disk and reconciled");
-
-    // ── Image GC ─────────────────────────────────────────────────────────
-    let leases_path = paths.data_dir.join("leases.json");
-    let lease_service = Arc::new(
-        DiskLeaseService::new(leases_path)
-            .await
-            .context("creating lease service")?,
-    );
-    let image_gc: Arc<dyn ImageGarbageCollector> =
-        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
-
-    // ── Event broker ─────────────────────────────────────────────────────
-    let event_broker = Arc::new(BroadcastEventBroker::new());
-
-    // ── Metrics ──────────────────────────────────────────────────────────
-    #[cfg(feature = "metrics")]
-    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> = {
-        const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
-        let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
-            .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
-            .parse()
-            .context("parsing MINIBOX_METRICS_ADDR")?;
-        let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
+#[cfg(feature = "metrics")]
+async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
+    const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
+    let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
+        .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
+        .parse()
+        .context("parsing MINIBOX_METRICS_ADDR")?;
+    let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
+    Ok(
         match minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
             .await
         {
@@ -450,19 +420,20 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
                 tracing::warn!(addr = %metrics_addr, error = %e, "metrics server failed to bind; continuing without metrics");
                 Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new())
             }
-        }
-    };
-    #[cfg(not(feature = "metrics"))]
-    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
-        Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
+        },
+    )
+}
 
-    // ── Dependency Injection ─────────────────────────────────────────────
-    let require_root_auth = suite == AdapterSuite::Native;
+#[cfg(not(feature = "metrics"))]
+async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
+    Ok(Arc::new(
+        minibox::daemon::telemetry::NoOpMetricsRecorder::new(),
+    ))
+}
 
-    // Build container policy: config file values take precedence, then env
-    // vars, then deny-all defaults.
+fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> ContainerPolicy {
     let env_policy = ContainerPolicy::from_env();
-    let policy = ContainerPolicy {
+    ContainerPolicy {
         allow_bind_mounts: config
             .policy
             .allow_bind_mounts
@@ -472,28 +443,10 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
             .allow_privileged
             .unwrap_or(env_policy.allow_privileged),
         ..Default::default()
-    };
-    tracing::info!(
-        allow_bind_mounts = policy.allow_bind_mounts,
-        allow_privileged = policy.allow_privileged,
-        "container policy configured (config > env > default)"
-    );
+    }
+}
 
-    let deps = build_handler_deps(
-        suite,
-        Arc::clone(&state),
-        &paths,
-        metrics_recorder.clone(),
-        Arc::clone(&event_broker),
-        Arc::clone(&image_gc),
-        policy,
-    )
-    .await?;
-
-    info!("dependency injection configured");
-
-    // ── Socket ───────────────────────────────────────────────────────────
-    let sock_path = &paths.socket_path;
+fn bind_and_secure_socket(sock_path: &std::path::Path) -> Result<UnixListener> {
     if sock_path.exists() {
         warn!("removing stale socket at {}", sock_path.display());
         std::fs::remove_file(sock_path)
@@ -540,18 +493,115 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         info!("socket permissions set to {mode:04o}");
     }
 
-    info!("listening on {}", sock_path.display());
+    Ok(raw_listener)
+}
 
-    // ── Signal handling ──────────────────────────────────────────────────
+fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output = ()>> {
     use tokio::signal::unix::{SignalKind, signal};
     let mut sigterm = signal(SignalKind::terminate()).context("SIGTERM handler")?;
     let mut sigint = signal(SignalKind::interrupt()).context("SIGINT handler")?;
-    let shutdown = async move {
+    Ok(async move {
         tokio::select! {
             _ = sigterm.recv() => { info!("received SIGTERM, shutting down"); }
             _ = sigint.recv()  => { info!("received SIGINT, shutting down");  }
         }
-    };
+    })
+}
+
+#[cfg(unix)]
+// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
+async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
+    // ── Tracing ──────────────────────────────────────────────────────────
+    #[cfg(feature = "otel")]
+    let _otel_guard = init_daemon_tracing();
+    #[cfg(not(feature = "otel"))]
+    init_daemon_tracing();
+
+    info!("miniboxd starting");
+
+    // ── Config ────────────────────────────────────────────────────────────
+    info!(
+        adapter = ?config.adapter,
+        log_level = ?config.log_level,
+        "config loaded"
+    );
+
+    // ── Adapter suite ────────────────────────────────────────────────────
+    // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
+    // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
+    // Config file adapter field is injected above when env is unset.
+    let suite = select_and_validate_adapter_suite()?;
+
+    // ── Resolve paths (configurable via env vars) ───────────────────────
+    let paths = resolve_paths();
+
+    // ── Startup diagnostics ──────────────────────────────────────────────
+    #[cfg(target_os = "linux")]
+    {
+        let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
+            .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
+        minibox::daemon::server::log_startup_info(
+            &paths.socket_path.display().to_string(),
+            &paths.data_dir.display().to_string(),
+            &cgroup_root,
+        );
+    }
+
+    // ── Directories ──────────────────────────────────────────────────────
+    prepare_daemon_directories(&paths)?;
+
+    // ── Shared state ─────────────────────────────────────────────────────
+    let state = load_state(&paths).await?;
+    info!("state loaded from disk and reconciled");
+
+    // ── Image GC ─────────────────────────────────────────────────────────
+    let leases_path = paths.data_dir.join("leases.json");
+    let lease_service = Arc::new(
+        DiskLeaseService::new(leases_path)
+            .await
+            .context("creating lease service")?,
+    );
+    let image_gc: Arc<dyn ImageGarbageCollector> =
+        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+
+    // ── Event broker ─────────────────────────────────────────────────────
+    let event_broker = Arc::new(BroadcastEventBroker::new());
+
+    // ── Metrics ──────────────────────────────────────────────────────────
+    let metrics_recorder = build_metrics_recorder().await?;
+
+    // ── Dependency Injection ─────────────────────────────────────────────
+    let require_root_auth = suite == AdapterSuite::Native;
+
+    // Build container policy: config file values take precedence, then env
+    // vars, then deny-all defaults.
+    let policy = resolve_container_policy(&config);
+    tracing::info!(
+        allow_bind_mounts = policy.allow_bind_mounts,
+        allow_privileged = policy.allow_privileged,
+        "container policy configured (config > env > default)"
+    );
+
+    let deps = build_handler_deps(
+        suite,
+        Arc::clone(&state),
+        &paths,
+        metrics_recorder.clone(),
+        Arc::clone(&event_broker),
+        Arc::clone(&image_gc),
+        policy,
+    )
+    .await?;
+
+    info!("dependency injection configured");
+
+    // ── Socket ───────────────────────────────────────────────────────────
+    let sock_path = &paths.socket_path;
+    let raw_listener = bind_and_secure_socket(sock_path)?;
+    info!("listening on {}", sock_path.display());
+
+    // ── Signal handling ──────────────────────────────────────────────────
+    let shutdown = install_shutdown_signal_handlers()?;
 
     let listener = UnixServerListener(raw_listener);
 
@@ -573,18 +623,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 }
 
 // ── Handler dependency builders (per adapter suite) ───────────────────────
-//
-// TODO: centralize adapter registration into a shared builder (#161)
-//
-// Each `build_*_handler_dependencies` function below constructs a
-// `HandlerDependencies` struct for one adapter suite.  A second copy of
-// `build_colima_handler_dependencies` lives in `crates/macbox/src/lib.rs`
-// for the legacy macOS-only daemon path.  To centralize:
-//   1. Move all `build_*_handler_dependencies` fns into a new crate or
-//      module (e.g. `minibox-adapters` or `miniboxd::adapter_builders`).
-//   2. Remove the duplicate in `macbox/src/lib.rs` and have it call the
-//      shared builder instead.
-//   3. Update `HandlerDependencies` construction sites in tests accordingly.
+// Issue #161: centralize adapter registration
 
 #[cfg(unix)]
 #[allow(clippy::unused_async)]

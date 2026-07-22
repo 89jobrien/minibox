@@ -5,7 +5,8 @@
 //! single JSON object terminated by `\n`.
 //!
 // TODO(#83): add PTY/stdio protocol variants for interactive containers
-// TODO(#183): add BuildImage DaemonRequest variant + mbx build command
+// TODO(#183): DaemonRequest::Build variant + handler exist; still missing
+// an `mbx build` CLI subcommand to invoke it
 // TODO(#229): add container networking protocol variants
 //!
 //! The `#[serde(tag = "type")]` attribute makes the discriminant field
