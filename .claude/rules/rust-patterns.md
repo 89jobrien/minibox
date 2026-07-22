@@ -269,6 +269,81 @@ impl ContainerRuntime for MyPlatformRuntime {
 // Tests: use mock adapters from adapters::mocks
 ```
 
+## Rustqual Lint Suppressions
+
+Workspace-wide SRP/complexity lints are enforced via the `rustqual` tool (see the ongoing
+"Rustqual SRP sweep"). When a function genuinely can't be split further — an I/O-boundary
+orchestration function, or an infallible/irrecoverable operation — suppress with an explicit
+code and reason, immediately above the item:
+
+```rust
+// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
+async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> { ... }
+
+// qual:allow(complexity) reason: "poisoned mutex is irrecoverable"
+pub fn remove(&self) -> Result<()> { ... }
+
+// qual:allow(complexity, iosp) reason: "bridge network setup: veth pair, IP alloc, iptables"
+async fn setup(&self, container_id: &str, config: &NetworkConfig) -> Result<String> { ... }
+```
+
+Known codes: `iosp` (I/O-boundary orchestration — a function that necessarily coordinates several
+side effects: bind socket, spawn process, stream output), `complexity` (branching/control-flow
+that can't be reduced without obscuring intent, e.g. a poisoned-mutex-is-fatal path).
+
+**Never suppress without a reason string.** The reason is the reviewer's justification for
+accepting the exception — write it as if defending the choice, not describing what the code does.
+
+### Extract, don't suppress, when a function grows for no structural reason
+
+Before reaching for `qual:allow`, check whether the function is doing one job awkwardly or
+several jobs stitched together. If it's the latter, extract named helpers — this repo's
+convention is `verb_noun` helpers pulled out in place, right above or below the caller in the
+same file, not moved to a new module:
+
+```rust
+// ✅ Before: run_daemon() inlined signal handling
+// After: extracted with a name that states exactly what it does
+fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output = ()>> {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut sigterm = signal(SignalKind::terminate()).wrap_err("SIGTERM handler")?;
+    let mut sigint = signal(SignalKind::interrupt()).wrap_err("SIGINT handler")?;
+    Ok(async move {
+        tokio::select! {
+            _ = sigterm.recv() => { info!("received SIGTERM, shutting down"); }
+            _ = sigint.recv()  => { info!("received SIGINT, shutting down");  }
+        }
+    })
+}
+```
+
+Only reach for `qual:allow` once extraction genuinely doesn't apply — e.g. the function's whole
+job *is* orchestration (bootstrap, setup/teardown sequences) and splitting it would scatter
+sequencing logic across files without reducing complexity.
+
+## Clippy Allows in Test Modules
+
+Workspace lints deny `unwrap_used`/`expect_used`/`panic` across **all** targets, including tests
+— `cargo clippy --all-targets --workspace -- -D warnings` fails on a bare `#[cfg(test)] mod
+tests` that uses `.unwrap()`/`.expect()`/`panic!()`, which is otherwise idiomatic in test code.
+Add the allow directly on the test module, not workspace-wide:
+
+```rust
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
+mod tests {
+    use super::*;
+    // ...
+}
+```
+
+Do this per-module as tests are added — don't pre-emptively blanket-allow at the crate level.
+
 ## Anti-Patterns (Minibox-Specific)
 
 | Pattern                                       | Problem                             | Fix                                           |
@@ -283,3 +358,5 @@ impl ContainerRuntime for MyPlatformRuntime {
 | Missing cleanup on error path                 | Orphaned cgroups, stuck overlays    | Explicit cleanup with warn on secondary error |
 | `set_var`/`remove_var` in tests without mutex | Parallel test races                 | `static Mutex<()>` guard                      |
 | `OwnedFd` alive across `clone()`              | Double-close in parent and child    | `std::mem::forget` before clone               |
+| `.ok()` swallowing a fallible call            | Silent failure, e.g. network never attached | Propagate with `.wrap_err(...)?`      |
+| `format!("{val:?}")` on an enum for display   | Breaks if variant names/Debug repr change | Add/use `as_str()` or `Display`         |
