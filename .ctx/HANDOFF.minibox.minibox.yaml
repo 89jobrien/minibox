@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-07-21
+updated: 2026-07-22
 items:
 - id: chain-e-4
   doob_uuid: null
@@ -12,7 +12,7 @@ items:
   files: []
   completed: null
   extra:
-  - date: 2026-07-21
+  - date: 2026-07-22
     type: blocker
     field: null
     value: null
@@ -23,29 +23,37 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (8 files)
+  title: Uncommitted changes (12 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .debtmap.toml
-    docs/designs/2026-07-17-musl-prepush-cross-check-design.md
-    docs/designs/2026-07-20-debtmap-top10-refactor-design.md
-    docs/plans/2026-07-17-musl-prepush-cross-check.md
-    docs/plans/2026-07-20-debtmap-top10-refactor.md
-    toolkit.nu
+    docs/PLATFORM_SUPPORT.md
+    docs/core/CRATE_TIERS.mbx.md
+    docs/core/FEATURE_MATRIX.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/SECURITY_INVARIANTS.mbx.md
+    docs/core/STABILITY_CHECKLIST.mbx.md
+    docs/core/STATE_MODEL.mbx.md
+    docs/core/SUPPORT_TIERS.mbx.md
+    docs/notes/minibox-in-minibox.local.md
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .debtmap.toml
-  - docs/designs/2026-07-17-musl-prepush-cross-check-design.md
-  - docs/designs/2026-07-20-debtmap-top10-refactor-design.md
-  - docs/plans/2026-07-17-musl-prepush-cross-check.md
-  - docs/plans/2026-07-20-debtmap-top10-refactor.md
-  - toolkit.nu
+  - docs/PLATFORM_SUPPORT.md
+  - docs/core/CRATE_TIERS.mbx.md
+  - docs/core/FEATURE_MATRIX.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/SECURITY_INVARIANTS.mbx.md
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+  - docs/core/STATE_MODEL.mbx.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/notes/minibox-in-minibox.local.md
   completed: null
   extra: []
 log:
-- date: '20260721.132010'
+- date: '20260722.063956'
   summary: done=136 running=0 pending=26 blocked=1
   commits: []
