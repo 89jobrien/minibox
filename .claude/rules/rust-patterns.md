@@ -6,7 +6,7 @@ Minibox-specific Rust idioms and constraints. Applied to all code in this reposi
 
 These override general Rust conventions:
 
-1. **No `.unwrap()` in production** — Use `.context("description")?`. Tests: use `expect("reason")`.
+1. **No `.unwrap()` in production** — Use `.into_diagnostic().wrap_err("description")?` (or `.wrap_err("description")?` directly for miette-native error types). Tests: use `expect("reason")`.
 2. **Path validation on all user input** — Every path derived from user input or external data (tar entries, image refs, CLI args) must go through `validate_layer_path()` or equivalent canonicalize+prefix-check before touching the filesystem.
 3. **`spawn_blocking` for fork/clone/exec** — Container creation operations must not run inline in `async fn`. Always wrap in `tokio::task::spawn_blocking`.
 4. **`SO_PEERCRED` auth is mandatory** — The UID==0 check in `minibox/src/daemon/server.rs` must run before any request processing. Never bypass or weaken it.
@@ -15,23 +15,29 @@ These override general Rust conventions:
 
 ## Error Handling
 
-### Always context, always anyhow
+### Always context, always miette
+
+`anyhow` is deprecated in this repo. New code and any code touched during a refactor must use
+`miette` (`Result<T>`, `IntoDiagnostic`, `WrapErr`/`Context`) instead. Migration is in progress —
+see the migration note below.
 
 ```rust
-use anyhow::{Context, Result};
+use miette::{IntoDiagnostic, Result, WrapErr};
 
 // ✅ Correct
 fn read_manifest(path: &Path) -> Result<ImageManifest> {
     let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read manifest: {}", path.display()))?;
+        .into_diagnostic()
+        .wrap_err_with(|| format!("Failed to read manifest: {}", path.display()))?;
     serde_json::from_str(&content)
-        .context("Failed to parse image manifest JSON")
+        .into_diagnostic()
+        .wrap_err("Failed to parse image manifest JSON")
 }
 
 // ❌ Wrong — no context
 fn read_manifest(path: &Path) -> Result<ImageManifest> {
-    let content = fs::read_to_string(path)?;
-    Ok(serde_json::from_str(&content)?)
+    let content = fs::read_to_string(path).into_diagnostic()?;
+    Ok(serde_json::from_str(&content).into_diagnostic()?)
 }
 
 // ❌ Wrong — panic in daemon crashes all containers
@@ -41,13 +47,26 @@ fn read_manifest(path: &Path) -> ImageManifest {
 }
 ```
 
+For error types that are matched on (protocol errors, adapter errors, domain errors), keep
+`thiserror` enums and derive `miette::Diagnostic` on them for rich CLI rendering (error codes,
+help text, source spans) instead of collapsing them into an opaque report at the point of origin.
+
+#### Migration note
+
+`anyhow` still appears throughout the daemon/core/adapters. Do not do a mechanical
+find-and-replace across the workspace in one pass — convert a module at a time, verify
+`cargo check -p <crate>` after each, and keep the crate's public error type stable across the
+boundary (callers outside the crate shouldn't need to know whether it's using anyhow or miette
+internally mid-migration). `minibox-cli` already renders errors via miette (`cf37b05a`); that's
+the reference pattern for `.wrap_err()` usage and `Diagnostic` derives.
+
 ### Cleanup on failure (mandatory for resource-creating functions)
 
 ```rust
 // ✅ Correct: clean up overlay mount if cgroup setup fails
 fn create_container(config: &ContainerConfig) -> Result<ContainerId> {
     let rootfs = create_overlay(&config.layers, &id)
-        .context("create_overlay")?;
+        .wrap_err("create_overlay")?;
 
     if let Err(e) = setup_cgroup(&id, &config.limits) {
         // Best-effort cleanup — log warn, don't propagate secondary error
@@ -58,7 +77,7 @@ fn create_container(config: &ContainerConfig) -> Result<ContainerId> {
                 "container: overlay cleanup failed after cgroup error"
             );
         }
-        return Err(e).context("setup_cgroup");
+        return Err(e).wrap_err("setup_cgroup");
     }
     Ok(id)
 }
@@ -69,7 +88,7 @@ fn create_container(config: &ContainerConfig) -> Result<ContainerId> {
 ```rust
 // ✅ Correct: validate before any filesystem operation
 fn extract_entry(entry: &TarEntry, dest: &Path) -> Result<()> {
-    let entry_path = entry.path().context("entry path")?;
+    let entry_path = entry.path().into_diagnostic().wrap_err("entry path")?;
     validate_layer_path(&entry_path)?;  // Rejects .., absolute paths
 
     let target = dest.join(&entry_path);
@@ -77,9 +96,10 @@ fn extract_entry(entry: &TarEntry, dest: &Path) -> Result<()> {
     let parent = target.parent().unwrap_or(dest);
     if parent.exists() {
         let canonical = fs::canonicalize(parent)
-            .with_context(|| format!("canonicalize {}", parent.display()))?;
+            .into_diagnostic()
+            .wrap_err_with(|| format!("canonicalize {}", parent.display()))?;
         if !canonical.starts_with(dest) {
-            bail!("path escapes destination: {}", entry_path.display());
+            miette::bail!("path escapes destination: {}", entry_path.display());
         }
     }
     // Safe to write
@@ -87,7 +107,7 @@ fn extract_entry(entry: &TarEntry, dest: &Path) -> Result<()> {
 
 // ❌ Wrong: direct join without validation
 fn extract_entry(entry: &TarEntry, dest: &Path) -> Result<()> {
-    let target = dest.join(entry.path()?);
+    let target = dest.join(entry.path().into_diagnostic()?);
     fs::write(&target, data)?;  // Zip Slip if path is "../../../etc/cron.d/evil"
 }
 ```
@@ -105,7 +125,8 @@ async fn handle_run(
         create_container_namespaces(&req)
     })
     .await
-    .context("spawn_blocking join")??;
+    .into_diagnostic()
+    .wrap_err("spawn_blocking join")??;
 
     state.lock().await.add_container(id.clone(), ContainerRecord::new(&req));
     Ok(id)
@@ -210,7 +231,7 @@ let running: Vec<_> = state.containers
 
 ```rust
 // 1. Imports
-use anyhow::{Context, Result};
+use miette::{IntoDiagnostic, Result, WrapErr};
 use nix::sched::CloneFlags;
 
 // 2. Public types
@@ -252,7 +273,7 @@ impl ContainerRuntime for MyPlatformRuntime {
 
 | Pattern                                       | Problem                             | Fix                                           |
 | --------------------------------------------- | ----------------------------------- | --------------------------------------------- |
-| `.unwrap()` in production                     | Daemon panic orphans all containers | `.context()?`                                 |
+| `.unwrap()` in production                     | Daemon panic orphans all containers | `.into_diagnostic().wrap_err()?`              |
 | `Path::join(user_input)` without validation   | Zip Slip / path traversal           | `validate_layer_path()` first                 |
 | `fork()`/`clone()` in async fn                | Blocks tokio runtime, possible UB   | `tokio::task::spawn_blocking`                 |
 | `println!` in daemon code                     | Contaminates container stdio        | `tracing::info!/warn!`                        |
