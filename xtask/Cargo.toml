@@ -28,3 +28,8 @@ tempfile = "3"
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+# miette/thiserror are staged for the musl prepush cross-check diagnostic
+# (docs/designs/2026-07-17-musl-prepush-cross-check-design.md), not yet implemented.
+ignored = ["miette", "thiserror"]
