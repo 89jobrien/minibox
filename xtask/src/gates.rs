@@ -1295,9 +1295,15 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
             // .unwrap() inside ANY test module, not just the last one.
             // Nested #[cfg(test)] (e.g. proptest_tests inside tests) are
             // handled by only entering/exiting at the outermost level.
+            //
+            // Between `#[cfg(test)]` and `mod tests {` there may be other
+            // attributes (e.g. a multi-line `#[allow(...)]`) — track their
+            // `[`/`]` bracket depth so those lines don't cancel saw_cfg_test.
             let mut in_test_module = false;
             let mut test_brace_depth: i32 = 0;
             let mut saw_cfg_test = false;
+            let mut in_attr_block = false;
+            let mut attr_bracket_depth: i32 = 0;
 
             for (i, line) in content.lines().enumerate() {
                 let trimmed = line.trim();
@@ -1307,12 +1313,34 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
                     continue;
                 }
 
-                if saw_cfg_test && !trimmed.is_empty() {
+                if saw_cfg_test {
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if in_attr_block {
+                        attr_bracket_depth += trimmed.matches('[').count() as i32;
+                        attr_bracket_depth -= trimmed.matches(']').count() as i32;
+                        if attr_bracket_depth <= 0 {
+                            in_attr_block = false;
+                        }
+                        continue;
+                    }
                     if trimmed.starts_with("mod ") || trimmed.starts_with("pub mod ") {
                         in_test_module = true;
                         test_brace_depth = 0;
+                        saw_cfg_test = false;
+                    } else if trimmed.starts_with('#') {
+                        // Another attribute (possibly multi-line) before `mod`.
+                        attr_bracket_depth = trimmed.matches('[').count() as i32
+                            - trimmed.matches(']').count() as i32;
+                        if attr_bracket_depth > 0 {
+                            in_attr_block = true;
+                        }
+                        continue;
+                    } else {
+                        // Not `mod`, not an attribute — give up.
+                        saw_cfg_test = false;
                     }
-                    saw_cfg_test = false;
                 }
 
                 if in_test_module {
