@@ -16,8 +16,52 @@ const SURFACES: &[Surface] = &[
         path: "crates/minibox-core/src/protocol.rs",
     },
     Surface {
-        name: "domain-ports",
-        path: "crates/minibox-core/src/domain.rs",
+        name: "domain-capability",
+        path: "crates/minibox-core/src/domain/capability.rs",
+    },
+    Surface {
+        name: "domain-checkpoint",
+        path: "crates/minibox-core/src/domain/checkpoint.rs",
+    },
+    Surface {
+        name: "domain-error",
+        path: "crates/minibox-core/src/domain/error.rs",
+    },
+    Surface {
+        name: "domain-exec",
+        path: "crates/minibox-core/src/domain/exec.rs",
+    },
+    Surface {
+        name: "domain-filesystem",
+        path: "crates/minibox-core/src/domain/filesystem.rs",
+    },
+    Surface {
+        name: "domain-ids",
+        path: "crates/minibox-core/src/domain/ids.rs",
+    },
+    Surface {
+        name: "domain-image",
+        path: "crates/minibox-core/src/domain/image.rs",
+    },
+    Surface {
+        name: "domain-metrics",
+        path: "crates/minibox-core/src/domain/metrics.rs",
+    },
+    Surface {
+        name: "domain-pty",
+        path: "crates/minibox-core/src/domain/pty.rs",
+    },
+    Surface {
+        name: "domain-runtime",
+        path: "crates/minibox-core/src/domain/runtime.rs",
+    },
+    Surface {
+        name: "domain-state",
+        path: "crates/minibox-core/src/domain/state.rs",
+    },
+    Surface {
+        name: "domain-workflow",
+        path: "crates/minibox-core/src/domain/workflow.rs",
     },
     Surface {
         name: "domain-networking",

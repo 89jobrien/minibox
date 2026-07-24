@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-07-22)
+# Handoff — minibox (2026-07-24)
 
 **Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
