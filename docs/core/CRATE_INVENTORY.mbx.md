@@ -4,14 +4,14 @@
 
 | Crate               | Type       | LOC    | Source files | Test files              | Features                  |
 | ------------------- | ---------- | ------ | ------------ | ----------------------- | ------------------------- |
-| minibox-core        | lib        | ~12.6k | 28           | 7 integration + inline  | test-utils, fuzzing       |
-| minibox             | lib        | ~21.5k | 71           | 36 integration + inline | test-utils, metrics, otel |
+| minibox-core        | lib        | ~12.6k | 28           | 10 integration + inline | test-utils, fuzzing       |
+| minibox             | lib        | ~21.5k | 71           | 56 integration + inline | test-utils, metrics, otel |
 | minibox-macros      | proc-macro | ~175   | 9            | 1 integration           | --                        |
-| miniboxd            | bin+lib    | ~1.6k  | 4            | 7 integration + inline  | metrics, otel, tailnet    |
+| miniboxd            | bin+lib    | ~1.6k  | 4            | 13 integration + inline | metrics, otel, tailnet    |
 | macbox              | lib        | ~3.6k  | 16           | 4                       | --                        |
 | smolbox             | lib        | ~148   | 4            | 2 integration           | --                        |
-| winbox              | lib        | ~280   | 5            | 0                       | --                        |
-| mbx                 | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests          |
+| winbox              | lib        | ~280   | 5            | 1 integration           | --                        |
+| mbx                 | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests          |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
 | minibox-bench       | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                        |
@@ -30,12 +30,15 @@ version 0.31.0 (xtask 0.1.0).
 Cross-platform shared types. Single source of truth for protocol, domain
 traits, error types, image management, and the Unix socket client.
 
-**Key modules:** `domain.rs` (all trait ports), `protocol.rs` (DaemonRequest /
+**Key modules:** `protocol.rs` (DaemonRequest /
 DaemonResponse), `image/` (ImageStore, ImageRef, RegistryClient, layer
 extraction, GC, leases, dockerfile), `client/` (DaemonClient,
 DaemonResponseStream), `events.rs` (ContainerEvent, EventSink/Source,
 BroadcastEventBroker), `adapters/` (HostnameRegistryRouter, mocks,
 test_fixtures, conformance).
+
+Note: domain traits (all ports) live in `crates/minibox/src/domain.rs`, not
+in this crate.
 
 **External deps:** serde, tokio, reqwest, anyhow, thiserror, tracing, sha2,
 tar, flate2, slashcrux (Priority/Urgency/ExecutionContext for RunPipeline/Run).
@@ -49,6 +52,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 
 **Key modules:**
 
+- `domain.rs` (all trait ports)
 - `container/` (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
   process.rs
 - `adapters/`: native (overlay, cgroup, namespace, bridge network), gke

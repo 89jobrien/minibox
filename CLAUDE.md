@@ -8,7 +8,7 @@ Guidance for Claude Code when working in this repository.
 
 Minibox is a Rust 2024 Docker-like container runtime with a daemon/CLI split, OCI image support, Linux namespace/cgroup isolation, overlay filesystems, and macOS adapter backends.
 
-Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
+Default adapter selection lives in `crates/miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
 
 ## Read First
 
@@ -78,11 +78,11 @@ Use `just` or `cargo xtask` for repeatable gates.
 
 ## Architecture Guardrails
 
-- Domain ports live in `minibox-core/src/domain.rs` and are implemented by adapters under `crates/minibox/src/adapters/`.
+- Domain ports live in `crates/minibox/src/domain.rs` and are implemented by adapters under `crates/minibox/src/adapters/`.
 - `minibox` re-exports `minibox-core`; do not remove re-exports needed by `as_any!`/`adapt!` macro expansion.
 - `DaemonRequest`/`DaemonResponse` are canonical in `crates/minibox-core/src/protocol.rs`.
 - `DaemonResponse::ContainerOutput` is non-terminal; most other response variants end request streaming. Update terminal-response logic when adding variants.
-- `HandlerDependencies` changes require updating all adapter suite construction sites in `miniboxd/src/main.rs`.
+- `HandlerDependencies` changes require updating all adapter suite construction sites in `crates/miniboxd/src/main.rs`.
 
 ## Security Invariants
 
@@ -132,7 +132,7 @@ No direct path from user input    → call validate_layer_path() first
 No env::set_var in parallel tests → use static Mutex<()> guard
 No new protocol field without     → #[serde(default)]
   backward compat
-New adapter? Update composition   → miniboxd/src/main.rs (all suites)
+New adapter? Update composition   → crates/miniboxd/src/main.rs (all suites)
 New HandlerDependencies field?    → update all construction sites
 ```
 
