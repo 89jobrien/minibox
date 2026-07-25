@@ -147,11 +147,24 @@ impl SmolVmRegistry {
     }
 
     /// Run a command inside the smolvm VM and return its stdout.
-    fn vm_exec(&self, args: &[&str]) -> Result<String> {
+    ///
+    /// The real `smolvm` invocation blocks on a synchronous `Command::output()`
+    /// call that can take well over a minute (VM boot + image pull), so it runs
+    /// on a blocking-pool thread via `spawn_blocking` rather than inline on the
+    /// async runtime — otherwise it starves whichever tokio worker picked up
+    /// this request's task.
+    async fn vm_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        smolvm_exec(&self.image, args)
+        let image = self.image.clone();
+        let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
+        tokio::task::spawn_blocking(move || {
+            let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
+            smolvm_exec(&image, &arg_refs)
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
     }
 }
 
@@ -171,6 +184,7 @@ impl ImageRegistry for SmolVmRegistry {
             &format!("reference={full_name}"),
             "--quiet",
         ])
+        .await
         .is_ok_and(|out| !out.trim().is_empty())
     }
 
@@ -183,7 +197,7 @@ impl ImageRegistry for SmolVmRegistry {
         let tag = image_ref.tag.clone();
         let full_name = format!("{cache_name}:{tag}");
 
-        self.vm_exec(&["docker", "pull", &full_name])?;
+        self.vm_exec(&["docker", "pull", &full_name]).await?;
 
         Ok(ImageMetadata {
             name: cache_name,
@@ -236,11 +250,20 @@ impl SmolVmRuntime {
     }
 
     /// Run a command inside the smolvm VM and return its stdout.
-    fn vm_exec(&self, args: &[&str]) -> Result<String> {
+    ///
+    /// See [`SmolVmRegistry::vm_exec`] — same rationale for `spawn_blocking`.
+    async fn vm_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        smolvm_exec(&self.image, args)
+        let image = self.image.clone();
+        let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
+        tokio::task::spawn_blocking(move || {
+            let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
+            smolvm_exec(&image, &arg_refs)
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
     }
 }
 
@@ -294,27 +317,35 @@ impl ContainerRuntime for SmolVmRuntime {
             })
             .collect();
 
-        let vol_refs: Vec<(&str, &str)> = volumes
-            .iter()
-            .map(|(h, g)| (h.as_str(), g.as_str()))
-            .collect();
-        let env_refs: Vec<(&str, &str)> = env_pairs
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
         let (stdout, exit_code) = if self.executor.is_some() {
             // Use the test executor — flatten command into a single arg list.
-            (self.vm_exec(&command)?, 0)
+            (self.vm_exec(&command).await?, 0)
         } else {
             const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
-            let result = smolvm_exec_full(
-                &self.image,
-                &command,
-                &vol_refs,
-                &env_refs,
-                DEFAULT_EXEC_TIMEOUT_SECS,
-            )?;
+            let image = self.image.clone();
+            let command_owned: Vec<String> = command.iter().map(|s| (*s).to_owned()).collect();
+            let volumes_owned = volumes.clone();
+            let env_pairs_owned = env_pairs.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let command_refs: Vec<&str> = command_owned.iter().map(String::as_str).collect();
+                let vol_refs: Vec<(&str, &str)> = volumes_owned
+                    .iter()
+                    .map(|(h, g)| (h.as_str(), g.as_str()))
+                    .collect();
+                let env_refs: Vec<(&str, &str)> = env_pairs_owned
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                smolvm_exec_full(
+                    &image,
+                    &command_refs,
+                    &vol_refs,
+                    &env_refs,
+                    DEFAULT_EXEC_TIMEOUT_SECS,
+                )
+            })
+            .await
+            .map_err(|e| anyhow!("smolvm_exec_full: join error: {e}"))??;
             (result.stdout, result.exit_code)
         };
 

@@ -283,10 +283,7 @@ pub fn workspace_root(start: &Path) -> Option<std::path::PathBuf> {
         {
             return Some(dir);
         }
-        match dir.parent() {
-            Some(p) => dir = p.to_path_buf(),
-            None => return None,
-        }
+        dir = dir.parent()?.to_path_buf();
     }
 }
 

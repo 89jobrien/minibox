@@ -6,7 +6,7 @@
 //! ```text
 //! mbx pull alpine
 //! mbx run alpine -- /bin/echo hello-lifecycle
-//! mbx run alpine -- /bin/sleep 30      (background, for exec/logs/ps/stop)
+//! mbx run alpine -- /bin/sleep 30      (background, for exec/logs/ps/stop; native-only)
 //! mbx exec <id> -- /bin/echo exec-ok    (native-only, setns + PTY)
 //! mbx logs <id>
 //! mbx ps                                (poll for "Running")
@@ -21,10 +21,22 @@
 //! `Reporter::skip()` with a clear reason rather than failing hard when the
 //! active backend lacks the capability — mirroring the
 //! `ConformanceTest::required_capability()` auto-skip convention described
-//! in the `capability_matrix` research. The scenario as a whole has no single
-//! required capability (`required_capability()` returns `None`) because the
-//! pull/run/ps/stop/rm steps are expected to work on every adapter; only the
-//! exec/logs sub-steps are gated individually.
+//! in the `capability_matrix` research.
+//!
+//! The "start a long-running container, observe it as `Running`, then stop
+//! it mid-execution" portion is native-Linux-only for a different reason
+//! than exec/logs: `crates/minibox/src/daemon/handler/run.rs` documents the
+//! `"Created"` -> `"Running"` transition as happening once the runtime
+//! reports a PID *after* `spawn_process` returns. The native adapter forks
+//! and returns immediately, so that transition is observable. The smolvm
+//! adapter's `spawn_process` runs the whole command to completion
+//! synchronously inside a single blocking call before returning at all (see
+//! `SmolVmRuntime`'s doc comment) — there is no intermediate `Running` state
+//! to observe, and nothing meaningful to `stop` mid-execution. Polling for
+//! `Running` against such an adapter cannot succeed even given unlimited
+//! time, so that portion is gated on `ctx.is_native_linux()` rather than a
+//! `BackendCapability`, and non-native adapters get a clear skip instead of
+//! a permanent timeout failure.
 
 use minibox_core::domain::BackendCapability;
 
@@ -74,6 +86,15 @@ impl Scenario for Lifecycle {
             return Ok(());
         }
         r.success("echo container ran and produced expected output");
+
+        if !ctx.is_native_linux() {
+            r.skip(
+                "long-running container / mid-execution stop requires an adapter with an \
+                 observable 'Running' state; the active backend runs commands synchronously \
+                 to completion inside spawn_process (see module docs) and has no such state",
+            );
+            return Ok(());
+        }
 
         r.step("starting long-running container: /bin/sleep 30");
         let (mut cli_child, container_id) =
