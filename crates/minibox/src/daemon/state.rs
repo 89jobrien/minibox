@@ -553,13 +553,26 @@ impl DaemonState {
         map.values().any(|r| r.info.name.as_deref() == Some(name))
     }
 
-    /// Return `ContainerInfo` snapshots for every tracked container.
+    /// Return `ContainerInfo` snapshots for every tracked container, ordered
+    /// by creation time (oldest first, ties broken by `id`).
     ///
-    /// The returned vec is a point-in-time snapshot; order is unspecified
-    /// (`HashMap` iteration order).
+    /// The returned vec is a point-in-time snapshot. `containers` is a
+    /// `HashMap`, whose iteration order is unspecified and effectively
+    /// randomized per-process (`RandomState` hasher) — callers that infer
+    /// "the container that just appeared" from table position (e.g. `mbx
+    /// ps`'s last row, or test harnesses polling for a freshly-created
+    /// container) need a deterministic, creation-stable order rather than
+    /// raw map iteration. `created_at` is an ISO 8601 string, so a plain
+    /// lexicographic sort is also chronological.
     pub async fn list_containers(&self) -> Vec<ContainerInfo> {
         let map = self.containers.read().await;
-        map.values().map(|r| r.info.clone()).collect()
+        let mut containers: Vec<ContainerInfo> = map.values().map(|r| r.info.clone()).collect();
+        containers.sort_by(|a, b| {
+            a.created_at
+                .cmp(&b.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        containers
     }
 
     /// Change the `state` field of a container using the typed [`ContainerState`] enum.

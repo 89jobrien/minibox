@@ -88,6 +88,17 @@ pub fn run_demo(adapter: &str, filter: Option<&str>, strict: bool) -> Result<()>
 
     reporter.summary();
 
+    println!();
+    println!("=== daemon log ===");
+    let daemon_log = ctx.daemon_log();
+    if daemon_log.is_empty() {
+        println!("(no daemon output captured)");
+    } else {
+        for line in &daemon_log {
+            println!("  | {line}");
+        }
+    }
+
     if strict && had_failure {
         anyhow::bail!("one or more showcase scenarios failed (--strict)");
     }

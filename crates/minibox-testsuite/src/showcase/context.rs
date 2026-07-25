@@ -19,9 +19,10 @@
 //! signature (`fn run(...) -> anyhow::Result<()>`), so scenario code can use
 //! `?` against `ScenarioCtx` methods without a conversion shim.
 
-use std::io::{BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, anyhow};
@@ -122,6 +123,12 @@ struct DaemonFixture {
     data_dir: tempfile::TempDir,
     run_dir: tempfile::TempDir,
     cgroup_root: PathBuf,
+    /// Combined stdout+stderr lines from the daemon process, drained
+    /// continuously by background threads so demo/showcase callers can
+    /// always surface the daemon log (e.g. after a scenario failure)
+    /// rather than only capturing stderr in the narrow "socket never
+    /// appeared" failure path.
+    log_lines: Arc<Mutex<Vec<String>>>,
 }
 
 impl DaemonFixture {
@@ -175,6 +182,8 @@ impl DaemonFixture {
             .spawn()
             .with_context(|| format!("failed to spawn {}", daemon_bin.display()))?;
 
+        let log_lines = Arc::new(Mutex::new(Vec::new()));
+
         let mut fixture = Self {
             child: Some(child),
             socket_path: socket_path.clone(),
@@ -182,24 +191,21 @@ impl DaemonFixture {
             data_dir,
             run_dir,
             cgroup_root,
+            log_lines: Arc::clone(&log_lines),
         };
 
-        // Drain stdout in a background thread so debug logging during slow
-        // operations can't fill the 64KB pipe buffer and deadlock the
-        // daemon (documented gotcha in docs/core/GOTCHAS.mbx.md).
-        if let Some(child) = fixture.child.as_mut()
-            && let Some(stdout) = child.stdout.take()
-        {
-            std::thread::spawn(move || {
-                let mut reader = BufReader::new(stdout);
-                let mut buf = [0u8; 4096];
-                loop {
-                    match reader.read(&mut buf) {
-                        Ok(0) | Err(_) => break,
-                        Ok(_) => {}
-                    }
-                }
-            });
+        // Drain stdout+stderr in background threads so debug logging during
+        // slow operations can't fill the 64KB pipe buffer and deadlock the
+        // daemon (documented gotcha in docs/core/GOTCHAS.mbx.md), while
+        // still retaining every line so the demo can always show the
+        // daemon log rather than discarding it.
+        if let Some(child) = fixture.child.as_mut() {
+            if let Some(stdout) = child.stdout.take() {
+                spawn_log_drain_thread(stdout, Arc::clone(&log_lines));
+            }
+            if let Some(stderr) = child.stderr.take() {
+                spawn_log_drain_thread(stderr, log_lines);
+            }
         }
 
         let start = Instant::now();
@@ -216,6 +222,15 @@ impl DaemonFixture {
         }
 
         Ok(fixture)
+    }
+
+    /// Snapshot of every daemon stdout/stderr line captured so far, in the
+    /// (interleaved) order the drain threads observed them.
+    fn daemon_log(&self) -> Vec<String> {
+        self.log_lines
+            .lock()
+            .map(|lines| lines.clone())
+            .unwrap_or_default()
     }
 
     fn cli(&self, args: &[&str]) -> Command {
@@ -236,18 +251,39 @@ impl DaemonFixture {
         }
     }
 
-    /// Kill the daemon and capture stderr for diagnostics. Only meaningful
-    /// when the daemon is expected to have already failed.
+    /// Kill the daemon and return the captured log for diagnostics. Only
+    /// meaningful when the daemon is expected to have already failed.
+    ///
+    /// Reads from `log_lines` rather than `child.wait_with_output()` — the
+    /// stdout/stderr handles were already taken by the drain threads in
+    /// `start_with_env`, so `wait_with_output()` would see empty pipes.
     fn kill_and_capture_stderr(&mut self) -> String {
         let Some(mut child) = self.child.take() else {
             return "(daemon already reaped)".to_string();
         };
         let _ = child.kill();
-        match child.wait_with_output() {
-            Ok(o) => String::from_utf8_lossy(&o.stderr).to_string(),
-            Err(e) => format!("(could not capture stderr: {e})"),
-        }
+        let _ = child.wait();
+        self.daemon_log().join("\n")
     }
+}
+
+/// Spawn a background thread that drains `reader` line-by-line into
+/// `log_lines`, forever (until EOF/error). Keeps the daemon's pipe buffer
+/// from filling (see `start_with_env`) while preserving every line for
+/// later inspection instead of discarding it.
+fn spawn_log_drain_thread<R: std::io::Read + Send + 'static>(
+    reader: R,
+    log_lines: Arc<Mutex<Vec<String>>>,
+) {
+    std::thread::spawn(move || {
+        let reader = BufReader::new(reader);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            if let Ok(mut lines) = log_lines.lock() {
+                lines.push(line);
+            }
+        }
+    });
 }
 
 impl Drop for DaemonFixture {
@@ -477,6 +513,14 @@ impl ScenarioCtx {
     #[must_use]
     pub fn is_root(&self) -> bool {
         is_root_impl()
+    }
+
+    /// Snapshot of every line the daemon has written to stdout/stderr so
+    /// far this session, in observed order. Always available (not gated on
+    /// failure) so demo/showcase callers can surface it unconditionally.
+    #[must_use]
+    pub fn daemon_log(&self) -> Vec<String> {
+        self.fixture.daemon_log()
     }
 
     /// Resolve a workspace binary by name (`miniboxd`, `mbx`), for

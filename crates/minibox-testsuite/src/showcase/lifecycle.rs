@@ -141,16 +141,23 @@ impl Scenario for Lifecycle {
         }
         r.success("container stopped");
 
-        r.step(&format!("removing container {container_id}"));
-        let rm_out = fixture.run_cli(&["rm", &container_id]);
-        if !rm_out.success {
+        // `mbx run` (foreground/streaming) always sends `ephemeral: true`; the
+        // daemon auto-removes the container record once it stops/exits
+        // (see crates/minibox/src/daemon/handler/run.rs, "Auto-remove
+        // ephemeral container state"). So there is nothing left to `rm` here
+        // — confirm the auto-remove actually happened instead.
+        r.step(&format!(
+            "verifying container {container_id} was auto-removed"
+        ));
+        let ps_out = fixture.run_cli(&["ps"]);
+        if ps_out.stdout.contains(&container_id) {
             r.failure(&format!(
-                "rm failed\nstdout: {}\nstderr: {}",
-                rm_out.stdout, rm_out.stderr
+                "container {container_id} still listed in ps after stop (expected ephemeral auto-remove)\nps output:\n{}",
+                ps_out.stdout
             ));
             return Ok(());
         }
-        r.success("container removed");
+        r.success("container auto-removed after stop, as expected for ephemeral runs");
 
         Ok(())
     }
