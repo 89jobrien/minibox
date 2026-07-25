@@ -18,13 +18,15 @@ watches:
 > via macbox::build_colima_handler_dependencies.
 > Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
 > removed.
+> Updated 2026-07-25: crate count corrected to 13 workspace members (added ail,
+> minibox-bench, xtask was previously omitted from the count).
 
 ## Workspace Overview
 
-10 crates, Rust 2024 edition, workspace version 0.30.0.
+13 workspace members (12 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
 
-<!-- fact:crate_count=10 -->
-<!-- fact:workspace_version=0.30.0 -->
+<!-- fact:crate_count=13 -->
+<!-- fact:workspace_version=0.31.0 -->
 
 ```text
 minibox-macros          (proc-macro, ~300 LOC)
@@ -42,6 +44,8 @@ miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
 minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
+minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
+ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 ```
 
@@ -58,6 +62,8 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | mbx                 | minibox-core                                                  |
 | minibox-crux-plugin | minibox-core                                                  |
 | minibox-testsuite   | minibox, minibox-core                                         |
+| minibox-bench       | minibox, minibox-core, minibox-macros                         |
+| ail                 | --                                                             |
 | xtask               | (standalone)                                                  |
 
 ---

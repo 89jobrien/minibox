@@ -19,9 +19,9 @@
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
 **Estimated total:** ~79k lines of Rust across 345 source files. All crates at
-version 0.30.0 (xtask 0.1.0).
+version 0.31.0 (xtask 0.1.0).
 
-<!-- fact:workspace_version=0.30.0 -->
+<!-- fact:workspace_version=0.31.0 -->
 
 ---
 
