@@ -58,6 +58,7 @@ serial_test = { workspace = true }
 async-trait = { workspace = true }
 minibox-core = { workspace = true, features = ["test-utils"] }
 minibox = { workspace = true, features = ["test-utils"] }
+minibox-testsuite = { workspace = true }
 proptest = "1"
 turmoil = { workspace = true }
 minibox-macros = { workspace = true }

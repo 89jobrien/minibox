@@ -1840,8 +1840,12 @@ version = "0.31.0"
 name = "minibox-testsuite"
 version = "0.31.0"
 dependencies = [
+ "anyhow",
+ "async-trait",
  "chrono",
  "inventory",
+ "libc",
+ "miette",
  "minibox",
  "minibox-core",
  "paste",
@@ -1850,6 +1854,8 @@ dependencies = [
  "slashcrux",
  "tempfile",
  "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1863,6 +1869,7 @@ dependencies = [
  "minibox",
  "minibox-core",
  "minibox-macros",
+ "minibox-testsuite",
  "nix",
  "proptest",
  "serde",
@@ -4361,6 +4368,7 @@ dependencies = [
  "dirs",
  "hex",
  "miette",
+ "minibox-testsuite",
  "serde",
  "serde_json",
  "sha2",

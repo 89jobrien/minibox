@@ -762,7 +762,7 @@ fn build_native_handler_dependencies(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
     );
-    let filesystem = Arc::new(OverlayFilesystem::new());
+    let filesystem = Arc::new(OverlayFilesystem::new_with_base(data_dir.join("images")));
     let runtime = Arc::new(LinuxNamespaceRuntime::new());
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),

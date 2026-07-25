@@ -1,142 +1,123 @@
-//! `cargo xtask demo [--adapter <name>]` — short end-to-end demonstration.
+//! `cargo xtask demo [--adapter <name>] [--filter <name>] [--strict]` —
+//! narrated end-to-end walkthrough of the showcase scenario suite.
 //!
-//! Sets `MINIBOX_ADAPTER` and runs a pull + run sequence against the named
-//! adapter. The command is advisory: it exits 0 even when the container
-//! commands fail (they require Linux or a running VM). On macOS the smolvm
-//! and krun adapters require the VM kernel image to be present; the commands
-//! are attempted and failures are printed with an informative note.
+//! This is a thin runner over the shared scenario modules in
+//! `minibox_testsuite::showcase` — the same `Scenario` implementations that
+//! back the silent e2e assertions in
+//! `crates/miniboxd/tests/showcase_e2e_tests.rs`. Narration is driven
+//! entirely by `NarratedReporter`; this file only sequences scenarios and
+//! handles capability-based skipping.
+//!
+//! Scenarios run in dependency order: core lifecycle first, then
+//! pause/resume + cgroups, then mounts/privileged, then bridge networking,
+//! then build/commit/push last (most complex, calls domain adapters
+//! directly rather than the CLI).
+//!
+//! By default the demo is advisory: scenario failures are narrated via
+//! `Reporter::failure()` but do not affect the process exit code, matching
+//! the previous ad hoc demo.rs behavior. Pass `--strict` to propagate any
+//! scenario failure as a non-zero exit (`Err`), which also makes this a
+//! real, if slow and narrated, test surface.
 
 use anyhow::Result;
-use std::path::Path;
-use std::process::Command;
-use xshell::Shell;
+use minibox_testsuite::showcase::{self, NarratedReporter, Reporter, Scenario, ScenarioCtx};
 
-/// Locate the `mbx` binary: prefer one already on PATH, then fall back to the
-/// workspace debug build so the demo works straight after `cargo build`.
-fn find_mbx(root: &Path) -> Option<std::path::PathBuf> {
-    // Check PATH first.
-    if let Ok(out) = Command::new("which").arg("mbx").output()
-        && out.status.success()
-    {
-        let p = std::path::PathBuf::from(String::from_utf8_lossy(&out.stdout).trim());
-        if p.exists() {
-            return Some(p);
+/// Run the showcase demo. `filter` restricts to scenarios whose name
+/// contains the given substring. `strict` propagates scenario failures as a
+/// process error instead of only narrating them.
+pub fn run_demo(adapter: &str, filter: Option<&str>, strict: bool) -> Result<()> {
+    // SAFETY: xtask is single-threaded at this point in startup (no other
+    // thread has been spawned yet that could race on the environment).
+    unsafe {
+        std::env::set_var("MINIBOX_ADAPTER", adapter);
+    }
+
+    let reporter = NarratedReporter::new();
+    println!("=== minibox showcase demo ===");
+    println!("adapter: {adapter}");
+
+    let ctx = match ScenarioCtx::discover() {
+        Ok(ctx) => ctx,
+        Err(e) => {
+            println!(
+                "note: could not start a real daemon for the showcase demo ({e:#}). \
+                 Run `cargo build --release` first, or set MINIBOX_TEST_BIN_DIR."
+            );
+            println!("=== demo complete (skipped — daemon unavailable) ===");
+            return Ok(());
         }
-    }
-    // Fall back to workspace debug build.
-    let built = root.join("target/debug/mbx");
-    if built.exists() {
-        return Some(built);
-    }
-    None
-}
-
-pub fn demo(_sh: &Shell, root: &Path, adapter: &str) -> Result<()> {
-    eprintln!("=== minibox demo ===");
-    eprintln!("adapter: {adapter}");
-
-    if cfg!(target_os = "macos") {
-        eprintln!(
-            "note: on macOS the {adapter} adapter requires a VM kernel image \
-             (~/.minibox/vm). Commands will run but may fail gracefully if the \
-             image is not present."
-        );
-    }
-
-    let mbx = if let Some(p) = find_mbx(root) {
-        p
-    } else {
-        eprintln!(
-            "note: mbx binary not found on PATH or in target/debug/. \
-             Run `cargo build -p mbx` first, or install mbx."
-        );
-        eprintln!("=== demo complete (skipped — mbx not found) ===");
-        return Ok(());
     };
 
-    eprintln!();
-    eprintln!("$ mbx pull alpine --tag latest");
-    let pull_status = Command::new(&mbx)
-        .args(["pull", "alpine", "--tag", "latest"])
-        .env("MINIBOX_ADAPTER", adapter)
-        .status();
-    match pull_status {
-        Ok(s) if s.success() => eprintln!("pull: ok"),
-        Ok(s) => eprintln!("pull: exited with {s} (non-fatal in demo)"),
-        Err(e) => eprintln!("pull: could not run mbx: {e} (non-fatal in demo)"),
+    let scenarios: Vec<&dyn Scenario> = vec![
+        &showcase::lifecycle::Lifecycle,
+        &showcase::pause_resume::PauseResumeCgroup,
+        &showcase::mounts_privileged::MountsPrivileged,
+        &showcase::networking::BridgeNetworking,
+        &showcase::build_commit_push::BuildCommitPush,
+    ];
+
+    let mut had_failure = false;
+
+    for scenario in scenarios {
+        if let Some(f) = filter
+            && !scenario.name().contains(f)
+        {
+            continue;
+        }
+
+        reporter.section(scenario.name());
+
+        if let Some(cap) = scenario.required_capability()
+            && !ctx.supports(cap)
+        {
+            reporter.skip(&format!(
+                "{} not supported by adapter '{}'",
+                scenario.name(),
+                ctx.descriptor.name
+            ));
+            continue;
+        }
+
+        if let Err(e) = scenario.run(&ctx, &reporter) {
+            had_failure = true;
+            reporter.failure(&format!("{} failed: {e:#}", scenario.name()));
+            // Continue to the next scenario rather than aborting the whole
+            // demo — a single broken capability shouldn't hide the rest.
+        }
     }
 
-    eprintln!();
-    eprintln!("$ mbx run --rm alpine:latest -- echo \"hello from minibox\"");
-    let run_status = Command::new(&mbx)
-        .args([
-            "run",
-            "--rm",
-            "alpine:latest",
-            "--",
-            "echo",
-            "hello from minibox",
-        ])
-        .env("MINIBOX_ADAPTER", adapter)
-        .status();
-    match run_status {
-        Ok(s) if s.success() => eprintln!("run: ok"),
-        Ok(s) => eprintln!("run: exited with {s} (non-fatal in demo)"),
-        Err(e) => eprintln!("run: could not run mbx: {e} (non-fatal in demo)"),
-    }
+    reporter.summary();
 
-    eprintln!();
-    eprintln!("=== demo complete ===");
+    if strict && had_failure {
+        anyhow::bail!("one or more showcase scenarios failed (--strict)");
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
-    fn find_mbx_returns_none_for_nonexistent_root() {
-        // A temp dir that has no target/debug/mbx binary.
-        let root = Path::new("/tmp");
-        // We cannot guarantee `mbx` is on PATH in CI, so we only check that
-        // the function returns without panicking.
-        let _ = find_mbx(root);
-    }
-
-    #[test]
-    fn find_mbx_prefers_path_binary_over_built() {
-        // With a nonexistent workspace, target/debug/mbx cannot exist, so the
-        // result depends only on PATH: if `mbx` is installed (dev machines),
-        // find_mbx must return that binary; otherwise (CI) it must return
-        // None rather than a dangling path.
-        let root = Path::new("/nonexistent/workspace");
-        let result = find_mbx(root);
-        let on_path = Command::new("which")
-            .arg("mbx")
-            .output()
-            .is_ok_and(|out| out.status.success());
-        if on_path {
-            assert!(result.is_some(), "mbx is on PATH, find_mbx must return it");
-            if let Some(found) = result {
-                assert!(found.exists(), "returned path must exist: {found:?}");
-            }
-        } else {
-            assert!(
-                result.is_none(),
-                "expected None for nonexistent workspace, got {result:?}"
+    fn run_demo_returns_ok_when_daemon_unavailable() {
+        // No real miniboxd/mbx binaries in a typical CI/dev environment
+        // without a prior release build; discover() should fail
+        // gracefully and run_demo should return Ok (non-strict default).
+        // SAFETY: test-only env mutation; MINIBOX_TEST_BIN_DIR isn't
+        // touched by other parallel tests in this crate.
+        unsafe {
+            std::env::set_var(
+                "MINIBOX_TEST_BIN_DIR",
+                "/nonexistent/showcase-demo-test-dir",
             );
         }
-    }
-
-    #[test]
-    fn demo_returns_ok_when_mbx_not_found() {
-        // With a fake root, mbx won't be found — the function must exit
-        // gracefully with Ok(()) rather than returning an error.
-        use xshell::Shell;
-        let sh = Shell::new().expect("shell");
-        let root = Path::new("/nonexistent/workspace");
-        let result = demo(&sh, root, "smolvm");
-        assert!(result.is_ok(), "demo should return Ok when mbx is absent");
+        let result = run_demo("smolvm", None, false);
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BIN_DIR");
+        }
+        assert!(
+            result.is_ok(),
+            "non-strict demo should return Ok even without a daemon"
+        );
     }
 }

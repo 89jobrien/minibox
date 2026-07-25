@@ -17,6 +17,7 @@ Default adapter selection lives in `crates/miniboxd/src/adapter_registry.rs`: `s
 - `docs/core/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
 - `docs/core/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
 - `docs/core/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
+- `docs/core/XTASK_CLI.mbx.md` — full `cargo xtask` command reference; see also `xtask/schema/cli.schema.json`.
 - `docs/core/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
 - `docs/core/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
 - `docs/core/STATE_MODEL.mbx.md` — daemon persistence model.
