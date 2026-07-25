@@ -80,10 +80,11 @@ impl Scenario for Lifecycle {
             fixture.spawn_run_background(&["alpine", "--", "/bin/sleep", "30"]);
 
         r.step("polling ps for Running state");
-        let appeared = fixture.wait_for_running(&container_id, std::time::Duration::from_secs(5));
+        let timeout = ctx.running_timeout();
+        let appeared = fixture.wait_for_running(&container_id, timeout);
         if !appeared {
             r.failure(&format!(
-                "container {container_id} did not appear as Running in ps within 5s"
+                "container {container_id} did not appear as Running in ps within {timeout:?}"
             ));
             let _ = fixture.run_cli(&["stop", &container_id]);
             let _ = cli_child.wait();

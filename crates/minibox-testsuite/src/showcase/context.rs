@@ -456,6 +456,22 @@ impl ScenarioCtx {
         cfg!(target_os = "linux") && self.descriptor.name == "native"
     }
 
+    /// Timeout to allow a container to reach `Running` in `mbx ps`.
+    ///
+    /// VM-backed adapters (smolvm, krun, colima, gke) boot an ephemeral
+    /// machine and may pull a base VM image on first use before the
+    /// container process itself starts, which the native adapter never
+    /// does — 5s is enough for native but routinely too short for a VM
+    /// boot, so scale up for any non-native backend.
+    #[must_use]
+    pub fn running_timeout(&self) -> Duration {
+        if self.descriptor.name == "native" {
+            Duration::from_secs(5)
+        } else {
+            Duration::from_secs(60)
+        }
+    }
+
     /// Whether the current process is running as root (required for
     /// bridge networking / privileged-mode scenarios).
     #[must_use]
@@ -614,17 +630,28 @@ fn fail(msg: impl std::fmt::Display) -> ! {
 }
 
 /// Extract the container ID from the last non-empty line of `mbx ps`
-/// output, assuming the conventional `ID  IMAGE  STATUS  ...` table format
-/// with a single header row.
+/// output, assuming the conventional `ID  NAME  IMAGE  COMMAND  STATE
+/// CREATED  PID` table format (7 columns) with a single header row.
+///
+/// `mbx ps` prints the placeholder line `"(no containers)"` when the list
+/// is empty (`crates/mbx/src/commands/ps.rs`) — that line has only 2
+/// whitespace tokens, so requiring the full 7-column shape here rejects it
+/// rather than mistaking its first token `"(no"` for a real container ID.
 fn last_container_id(ps_stdout: &str) -> Option<String> {
+    const TABLE_COLUMNS: usize = 7;
+
     let lines: Vec<&str> = ps_stdout.lines().filter(|l| !l.trim().is_empty()).collect();
     if lines.len() < 2 {
         return None;
     }
-    lines
-        .last()
-        .and_then(|line| line.split_whitespace().next())
-        .map(str::to_string)
+    lines.last().and_then(|line| {
+        let mut tokens = line.split_whitespace();
+        let id = tokens.next()?;
+        if tokens.count() + 1 < TABLE_COLUMNS {
+            return None;
+        }
+        Some(id.to_string())
+    })
 }
 
 #[cfg(unix)]
@@ -685,13 +712,24 @@ mod tests {
 
     #[test]
     fn last_container_id_parses_final_row() {
-        let ps = "ID       IMAGE   STATUS\nabc123   alpine  Running\n";
+        let ps = "CONTAINER ID  NAME  IMAGE   COMMAND    STATE    CREATED  PID\n\
+                   abc123        -     alpine  /bin/sh    Running  now      42\n";
         assert_eq!(last_container_id(ps), Some("abc123".to_string()));
     }
 
     #[test]
     fn last_container_id_none_when_only_header() {
-        let ps = "ID       IMAGE   STATUS\n";
+        let ps = "CONTAINER ID  NAME  IMAGE  COMMAND  STATE  CREATED  PID\n";
+        assert_eq!(last_container_id(ps), None);
+    }
+
+    #[test]
+    fn last_container_id_none_when_no_containers_placeholder() {
+        // `mbx ps` prints this line when the list is empty
+        // (crates/mbx/src/commands/ps.rs) — its first token "(no" must not
+        // be mistaken for a container ID.
+        let ps = "CONTAINER ID  NAME  IMAGE  COMMAND  STATE  CREATED  PID\n\
+                   (no containers)\n";
         assert_eq!(last_container_id(ps), None);
     }
 }
