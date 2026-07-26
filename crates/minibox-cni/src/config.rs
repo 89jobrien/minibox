@@ -109,6 +109,33 @@ impl NetworkConfigList {
         })?;
         serde_json::from_value(final_result).map_err(CniError::ConfigParse)
     }
+
+    /// Run the DEL chain in reverse plugin order. Individual plugin DEL
+    /// failures are logged and do not short-circuit remaining teardown
+    /// steps — matches the CNI spec's expectation that DEL is idempotent
+    /// and best-effort.
+    #[tracing::instrument(skip(self), fields(network = %self.name, plugin_count = self.plugins.len()))]
+    pub async fn del(
+        &self,
+        cni_path: &[std::path::PathBuf],
+        netns: &str,
+        container_id: &str,
+        ifname: &str,
+    ) -> Result<(), CniError> {
+        for plugin in self.plugins.iter().rev() {
+            if let Err(err) =
+                crate::exec::exec_plugin(cni_path, plugin, "DEL", netns, container_id, ifname, None)
+                    .await
+            {
+                tracing::warn!(
+                    plugin = %plugin.plugin_type,
+                    error = %err,
+                    "cni: plugin DEL failed during teardown"
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -266,6 +293,54 @@ mod tests {
         assert!(
             del_marker.exists(),
             "rollback DEL should have run for the succeeded plugin"
+        );
+    }
+
+    #[tokio::test]
+    async fn del_runs_all_plugins_in_reverse_even_if_one_fails() {
+        let bin_dir = tempfile::tempdir().expect("bin tempdir");
+        let second_marker = bin_dir.path().join("second-plugin-deleted");
+
+        // First in chain order (last in DEL order) always fails.
+        write_executable(bin_dir.path(), "fake-bridge", "#!/bin/sh\nexit 1\n");
+        // Second in chain order (first in DEL order) succeeds and leaves a marker.
+        write_executable(
+            bin_dir.path(),
+            "fake-portmap",
+            &format!("#!/bin/sh\ntouch {}\nexit 0\n", second_marker.display()),
+        );
+
+        let list = NetworkConfigList {
+            cni_version: "1.0.0".to_string(),
+            name: "minibox0".to_string(),
+            plugins: vec![
+                PluginConfig {
+                    plugin_type: "fake-bridge".to_string(),
+                    raw: serde_json::json!({"type": "fake-bridge"}),
+                },
+                PluginConfig {
+                    plugin_type: "fake-portmap".to_string(),
+                    raw: serde_json::json!({"type": "fake-portmap"}),
+                },
+            ],
+        };
+
+        let result = list
+            .del(
+                &[bin_dir.path().to_path_buf()],
+                "/fake/netns",
+                "container-1",
+                "eth0",
+            )
+            .await;
+
+        assert!(
+            result.is_ok(),
+            "del() should return Ok even if a plugin DEL fails"
+        );
+        assert!(
+            second_marker.exists(),
+            "the succeeding plugin's DEL should still have run"
         );
     }
 }
