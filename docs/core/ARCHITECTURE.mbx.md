@@ -1,18 +1,3 @@
----
-title: Minibox Architecture Reference
-doctype: reference
-project: minibox
-status: active
-created: 2026-04-27
-updated: 2026-07-26
-watches:
-    - crates/*/Cargo.toml
-    - crates/miniboxd/src/adapter_registry.rs
-    - crates/minibox-core/src/domain/mod.rs
-    - crates/minibox-core/src/domain/*.rs
-    - crates/minibox-core/src/protocol.rs
----
-
 # Minibox Architecture Reference
 
 > Generated 2026-04-27 from automated codebase analysis.
@@ -41,11 +26,9 @@ minibox-macros          (proc-macro, ~300 LOC)
 minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain traits, protocol, image ops
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
-    ^     ^
-macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm) | Windows stub
-    ^
-smolbox                 (macOS VM backend) — smolvm adapter; default macOS runtime
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  (platform libs) — Colima | smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
@@ -65,8 +48,9 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | minibox-core        | minibox-macros                                                |
 | minibox             | minibox-core, minibox-macros                                  |
 | macbox              | minibox, minibox-core                                         |
+| smolbox             | minibox, minibox-core                                         |
 | winbox              | minibox, minibox-core                                         |
-| miniboxd            | minibox, minibox-core (unix), macbox (unix), winbox (windows) |
+| miniboxd            | minibox, minibox-core (unix), macbox/smolbox (unix), winbox (windows) |
 | mbx                 | minibox-core                                                  |
 | minibox-crux-plugin | minibox-core                                                  |
 | minibox-mcp         | minibox-core                                                  |

@@ -11,8 +11,54 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- `TESTING.md` — full test strategy reference: category table, platform/root/CI matrix,
-  per-category commands, test helpers guide, CI coverage map and gaps, writing conventions
+**MCP control surface:**
+- `minibox-mcp` stdio server for agent workflows, with tools for doctor, container listing,
+  image listing, logs, manifests, image pulls, runs, stops, and removals.
+- Policy gates for higher-risk MCP actions. Mutations, bind mounts, privileged runs, and host
+  networking stay disabled unless explicitly enabled with `MINIBOX_MCP_ALLOW_*` environment
+  variables.
+
+**SmolVM local image loading:**
+- SmolVM can load local OCI image tarballs into the VM image cache, making locally built images
+  available without first pushing them to a registry.
+
+**Benchmark and regression tooling:**
+- Expanded hot-path benchmark coverage and regression checks.
+- `just bench`, `just bench-check`, and `just bench-baseline` workflows for local performance
+  runs and baseline comparison.
+
+**Showcase and schemas:**
+- End-to-end showcase suite and narrated demo workflow for container lifecycle behavior.
+- Generated CLI schema for tool integration and validation.
+
+**Testing documentation:**
+- `TESTING.md` now provides a full test strategy reference, including platform/root/CI matrices,
+  per-category commands, helper guidance, coverage maps, and writing conventions.
+
+**Backup workflow:**
+- SOPS-backed rustic backup workflow for maintainers, including `just` recipes to materialize,
+  initialize, and verify the local backup repository without committing plaintext secrets.
+
+### Changed
+
+- README and core docs now reflect current adapter support, command names, feature coverage,
+  and known limitations.
+- Platform capability docs now include the MCP control surface and current Native, GKE, Colima,
+  SmolVM, Krun, and Winbox support.
+- CLI command paths now use richer diagnostics for daemon errors, missing responses, and
+  unexpected responses.
+
+### Fixed
+
+- `mbx diagnose` now includes recent container logs, giving users more context while debugging
+  failed or unexpected container states.
+- `mbx pause` and `mbx resume` terminal response handling is more reliable.
+- `mbx ps` polling output parsing is more robust.
+- Paused container state now persists across daemon restarts.
+- SmolVM command execution avoids blocking the async runtime during VM operations.
+- SmolVM local image loading now tags loaded images and makes them available inside the VM cache.
+- CI and quality gates are more reliable across protocol drift checks, clippy behavior, SARIF
+  output, rustqual reporting, and stability validation.
 
 ---
 

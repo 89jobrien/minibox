@@ -89,10 +89,9 @@ minibox-macros          proc macros (as_any!, adapt!)
 minibox-core            cross-platform types, domain traits, protocol, OCI ops
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
-    ^         ^
-macbox      winbox      macOS backends: colima (minibox) + smolvm/krun (smolbox) | Windows stub
-smolbox
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket

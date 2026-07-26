@@ -1,0 +1,27 @@
+[package]
+name = "minibox-cni"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "CNI (Container Network Interface) plugin exec protocol and chain orchestration"
+publish = false
+
+[dependencies]
+minibox-core = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+dashmap = { workspace = true }
+miette = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

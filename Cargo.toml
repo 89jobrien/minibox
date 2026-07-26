@@ -14,6 +14,7 @@ members = [
     "crates/ail",
     "crates/minibox-bench",
     "crates/mcp",
+    "crates/minibox-cni",
     "xtask",
 ]
 
@@ -81,6 +82,7 @@ minibox-core = { path = "crates/minibox-core", version = "0.31.0" }
 minibox = { path = "crates/minibox" }
 minibox-testsuite = { path = "crates/minibox-testsuite" }
 minibox-macros = { path = "crates/minibox-macros", version = "0.31.0" }
+minibox-cni = { path = "crates/minibox-cni" }
 macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }

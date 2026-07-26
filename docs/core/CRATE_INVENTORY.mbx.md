@@ -19,8 +19,9 @@
 | ail                 | bin        | ~4     | 1            | 0                       | --                        |
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
-**Estimated total:** ~81k lines of Rust across 357 source files. All crates at
-version 0.31.0 (xtask 0.1.0).
+**Estimated total:** run `cargo xtask info metrics` for the current workspace
+member count and Rust source-line total. All crates are at version 0.31.0
+(xtask 0.1.0).
 
 <!-- fact:workspace_version=0.31.0 -->
 

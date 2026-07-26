@@ -1,15 +1,3 @@
----
-title: State Persistence Model
-doctype: reference
-project: minibox
-status: active
-created: 2026-05-06
-updated: 2026-07-26
-watches:
-  - crates/minibox/src/daemon/state.rs
-  - crates/minibox-core/src/protocol.rs
----
-
 # State Persistence Model
 
 How minibox tracks container state across daemon restarts.

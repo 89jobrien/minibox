@@ -1831,6 +1831,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-cni"
+version = "0.31.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "dashmap",
+ "miette",
+ "minibox-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "minibox-core"
 version = "0.31.0"
 dependencies = [

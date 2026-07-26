@@ -100,7 +100,7 @@ in release binaries.
 
 | Crate                 | Path                         | Role                                                                                                               |
 | --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `xtask`               | `xtask`                      | Cargo xtask runner: `pre-commit`, `prepush`, `test unit`, `test conformance`, `bench`, `build-test-image`, and more. |
+| `xtask`               | `xtask`                      | Cargo xtask runner: `pre-commit`, `prepush`, `test unit`/`test conformance`, `bench`, `build-test-image`, and more. |
 | `minibox-macros`      | `crates/minibox-macros`      | Proc-macro crate: `as_any!` and `adapt!` derive macros used by `minibox`.                                          |
 | `minibox-testsuite` | `crates/minibox-testsuite` | Conformance test harness (`run-conformance`, `generate-report`). Not published.                                    |
 | `minibox-bench`       | `crates/minibox-bench`       | Criterion benchmark crate and benchmark fixtures. Not published.                                                   |
@@ -125,8 +125,9 @@ was removed during the v0.23.0 consolidation; only a pre-built binary artifact r
 
 ### No new Core or Platform crates until stabilization gates are met
 
-The workspace currently has 13 crates across all tiers. Adding more crates before
-the core runtime is hardened increases maintenance surface without shipping value.
+The workspace currently has 13 product/runtime crates under `crates/`, plus the
+`xtask` workspace dev-tool member. Adding more crates before the core runtime is
+hardened increases maintenance surface without shipping value.
 
 **A new crate MAY be added to the Core or Platform tier only when ALL of the
 following gates in `docs/core/STABILITY_CHECKLIST.mbx.md` are green:**
