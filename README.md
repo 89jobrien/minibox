@@ -89,7 +89,7 @@ breakdown.
 
 ## Architecture
 
-10 crates, Rust 2024 edition:
+13 crates plus `xtask`, Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
@@ -104,7 +104,10 @@ miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
+minibox-mcp             MCP stdio server for agent-controlled minibox tools
 minibox-testsuite       conformance test harness for adapter trait contracts
+minibox-bench           benchmark crate
+ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
 

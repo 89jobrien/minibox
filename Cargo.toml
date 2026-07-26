@@ -13,6 +13,7 @@ members = [
     "crates/smolbox",
     "crates/ail",
     "crates/minibox-bench",
+    "crates/mcp",
     "xtask",
 ]
 

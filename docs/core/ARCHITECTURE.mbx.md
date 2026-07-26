@@ -20,12 +20,13 @@ watches:
 > removed.
 > Updated 2026-07-25: crate count corrected to 13 workspace members (added ail,
 > minibox-bench, xtask was previously omitted from the count).
+> Updated 2026-07-26: added `minibox-mcp` MCP stdio control surface.
 
 ## Workspace Overview
 
-13 workspace members (12 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
+14 workspace members (13 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
 
-<!-- fact:crate_count=13 -->
+<!-- fact:crate_count=14 -->
 <!-- fact:workspace_version=0.31.0 -->
 
 ```text
@@ -43,6 +44,7 @@ miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI 
 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
+minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
 minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
 minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
 ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
@@ -61,6 +63,7 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | miniboxd            | minibox, minibox-core (unix), macbox (unix), winbox (windows) |
 | mbx                 | minibox-core                                                  |
 | minibox-crux-plugin | minibox-core                                                  |
+| minibox-mcp         | minibox-core                                                  |
 | minibox-testsuite   | minibox, minibox-core                                         |
 | minibox-bench       | minibox, minibox-core, minibox-macros                         |
 | ail                 | --                                                             |

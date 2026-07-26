@@ -123,6 +123,14 @@ Key implementation sites backing the "Yes" entries above:
 
 ---
 
+## Control Surfaces
+
+- `mbx` is the primary CLI and connects directly to the daemon Unix socket.
+- `minibox-crux-plugin` exposes a JSON-RPC stdio bridge for Crux workflows.
+- `minibox-mcp` exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.
+
+---
+
 ## Legend
 
 - **Yes** -- implemented and tested
