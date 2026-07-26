@@ -225,7 +225,7 @@ No sentence case. No trailing period.
 Minibox follows the **hexagonal (ports and adapters)** pattern:
 
 ```text
-Domain Layer (minibox-core/src/domain.rs)
+Domain Layer (minibox-core/src/domain/)
   → Defines trait "ports": ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime
   → Zero infrastructure imports
 
@@ -240,7 +240,7 @@ Composition Root (miniboxd/src/main.rs)
 
 Rules:
 
-- Domain traits live exclusively in `minibox-core/src/domain.rs`. Never add a trait there that
+- Domain traits live under `minibox-core/src/domain/`. Never add a trait there that
   imports from `nix`, `libc`, or any platform crate.
 - New adapter suites are added to `minibox/src/adapters/` (Linux/cross-platform) or `smolbox/`
   (smolvm/krun macOS VM adapters) and exported from the module root.

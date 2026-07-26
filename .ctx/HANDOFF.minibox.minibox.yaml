@@ -92,13 +92,7 @@ items:
 log:
 - date: '20260726.044634'
   summary: 'Reviewed the new minibox-mcp stdio MCP crate (4-agent parallel PR review: code, silent-failures, type-design, test-coverage), annotated confirmed findings as TODO(review) comments in source, then live-verified the built mcp binary over raw JSON-RPC/stdio (tool list, policy-denied paths, doctor/ps against a real miniboxd). Verification also drove `cargo xtask demo`, which surfaced a real bug — smolvm pull panics because the guest VM has no docker installed — filed as GH #465.'
-  commits:
-  - !Object
-    sha: d8f1e52e
-    branch: develop
-  - !Object
-    sha: 36e93cf3
-    branch: develop
+  commits: []
   session: 1
 - date: '20260722.063956'
   summary: done=136 running=0 pending=26 blocked=1

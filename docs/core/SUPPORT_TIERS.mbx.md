@@ -4,7 +4,7 @@ Formal support-tier definitions for minibox crates and adapters.
 
 Last updated: 2026-07-26
 
-See also: `docs/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/FEATURE_MATRIX.mbx.md`
+See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
 (per-adapter capability breakdown).
 
 ---
@@ -73,7 +73,7 @@ in any release. No security response commitment. Exists to document intent or re
 | **Security response**      | Within 72 hours                           | Best-effort                        | No commitment           |
 | **Removal policy**         | Requires deprecation + major version bump | Noted in CHANGELOG                 | No notice required      |
 
-The 7 mandatory gates are defined in `docs/STABILITY_CHECKLIST.mbx.md`. Gates 1–6 are hard
+The 7 mandatory gates are defined in `docs/core/STABILITY_CHECKLIST.mbx.md`. Gates 1–6 are hard
 blockers enforced by CI; Gate 7 (in-memory mock double) is advisory but required for Tier 1
 promotion via human review.
 

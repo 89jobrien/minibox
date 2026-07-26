@@ -1,8 +1,14 @@
 ---
+title: Minibox Architecture Reference
+doctype: reference
+project: minibox
+status: active
+created: 2026-04-27
+updated: 2026-07-26
 watches:
     - crates/*/Cargo.toml
     - crates/miniboxd/src/adapter_registry.rs
-    - crates/minibox-core/src/domain.rs
+    - crates/minibox-core/src/domain/mod.rs
     - crates/minibox-core/src/domain/*.rs
     - crates/minibox-core/src/protocol.rs
 ---
@@ -18,15 +24,15 @@ watches:
 > via macbox::build_colima_handler_dependencies.
 > Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
 > removed.
-> Updated 2026-07-25: crate count corrected to 13 workspace members (added ail,
-> minibox-bench, xtask was previously omitted from the count).
+> Updated 2026-07-25: crate count corrected to 13 crates, plus xtask as the
+> workspace dev-tool member (added ail and minibox-bench).
 > Updated 2026-07-26: added `minibox-mcp` MCP stdio control surface.
 
 ## Workspace Overview
 
 14 workspace members (13 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
 
-<!-- fact:crate_count=14 -->
+<!-- fact:crate_count=13 -->
 <!-- fact:workspace_version=0.31.0 -->
 
 ```text
@@ -73,9 +79,10 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 
 ## Domain Traits (Hexagonal Ports)
 
-Most are defined in `crates/minibox-core/src/domain.rs`; `NetworkProvider` is in
-`crates/minibox-core/src/domain/networking.rs`. All are re-exported via
-`crates/minibox/src/domain.rs`.
+Most are defined under `crates/minibox-core/src/domain/`; `NetworkProvider` is in
+`crates/minibox-core/src/domain/networking.rs`. The `minibox` crate re-exports the
+core domain surface via `crates/minibox/src/domain.rs` for adapter and macro
+compatibility.
 
 ### Primary Ports (wired in HandlerDependencies)
 
@@ -187,7 +194,7 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-27 request variants, 28 response variants. Canonical source:
+29 request variants, 28 response variants. Canonical source:
 `crates/minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
@@ -195,17 +202,19 @@ HandlerDependencies
 Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
-RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest
+RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest,
+ListPipelines, ShowPipeline, RunWorkflow
 
 ### DaemonResponse Variants
 
 **Terminal** (end a request): ContainerCreated, Success, ContainerPaused,
 ContainerResumed, ContainerList, ImageLoaded, ImageList, Error,
-ContainerStopped, BuildComplete, Pruned, PipelineComplete, SnapshotSaved,
-SnapshotRestored, SnapshotList, Manifest, VerifyResult
+ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
+PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
+Manifest, VerifyResult, WorkflowComplete
 
 **Non-terminal** (streaming): ContainerOutput, ExecStarted, PushProgress,
-BuildOutput, Event, LogLine, UpdateProgress
+BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
 
 ---
 
@@ -300,7 +309,7 @@ container records to disk (atomic rename) on every add/remove.
 Records survive daemon restart; running processes do not reattach.
 State machine: Created -> Running -> Paused -> Stopped
 (+ Failed, Orphaned).
-See `docs/STATE_MODEL.mbx.md` for full detail.
+See `docs/core/STATE_MODEL.mbx.md` for full detail.
 
 ---
 

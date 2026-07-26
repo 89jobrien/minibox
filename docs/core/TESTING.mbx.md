@@ -1,4 +1,10 @@
 ---
+title: Testing Guide
+doctype: guide
+project: minibox
+status: active
+created: 2026-06-13
+updated: 2026-07-26
 watches:
   - crates/minibox/tests/
   - crates/minibox-core/tests/
@@ -163,7 +169,7 @@ expectations. Not runtime tests — they validate that certain patterns
 compile (or correctly fail to compile).
 
 ```bash
-cargo xtask borrow-fixtures           # 11 fixtures
+cargo xtask borrow-fixtures           # 19 fixtures
 ```
 
 ---

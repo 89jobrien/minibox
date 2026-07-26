@@ -13,12 +13,13 @@
 | winbox              | lib        | ~280   | 5            | 1 integration           | --                        |
 | mbx                 | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests          |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
+| minibox-mcp         | lib+bin    | ~1.6k  | 11           | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
 | minibox-bench       | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                        |
 | ail                 | bin        | ~4     | 1            | 0                       | --                        |
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
-**Estimated total:** ~79k lines of Rust across 345 source files. All crates at
+**Estimated total:** ~81k lines of Rust across 357 source files. All crates at
 version 0.31.0 (xtask 0.1.0).
 
 <!-- fact:workspace_version=0.31.0 -->
@@ -31,14 +32,12 @@ Cross-platform shared types. Single source of truth for protocol, domain
 traits, error types, image management, and the Unix socket client.
 
 **Key modules:** `protocol.rs` (DaemonRequest /
-DaemonResponse), `image/` (ImageStore, ImageRef, RegistryClient, layer
+DaemonResponse), `domain/` (domain ports, workflow/execution policy, runtime
+capabilities), `image/` (ImageStore, ImageRef, RegistryClient, layer
 extraction, GC, leases, dockerfile), `client/` (DaemonClient,
 DaemonResponseStream), `events.rs` (ContainerEvent, EventSink/Source,
 BroadcastEventBroker), `adapters/` (HostnameRegistryRouter, mocks,
 test_fixtures, conformance).
-
-Note: domain traits (all ports) live in `crates/minibox/src/domain.rs`, not
-in this crate.
 
 **External deps:** serde, tokio, reqwest, anyhow, thiserror, tracing, sha2,
 tar, flate2, slashcrux (Priority/Urgency/ExecutionContext for RunPipeline/Run).
@@ -52,7 +51,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 
 **Key modules:**
 
-- `domain.rs` (all trait ports)
+- `domain.rs` (compatibility re-exports of `minibox-core` domain ports)
 - `container/` (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
   process.rs
 - `adapters/`: native (overlay, cgroup, namespace, bridge network), gke
@@ -136,7 +135,8 @@ CLI client. Connects to daemon via Unix socket, sends JSON requests, streams
 responses.
 
 **Subcommands:** run, ps, stop, pause, resume, rm, pull, exec, logs, events,
-prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgrade.
+prune, rmi, sandbox, snapshot (save/restore/list), pipeline (run/list/show),
+load, doctor, manifest, verify, diagnose, update, upgrade.
 
 ---
 
@@ -147,6 +147,18 @@ rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
 the crux agentic DSL runtime.
 
 **Depends on:** minibox-core, crux-plugin (git dep).
+
+---
+
+## minibox-mcp
+
+MCP stdio server for agent-controlled minibox operations. Wraps existing daemon
+protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and
+rm, with MCP-specific policy gates around mutating and higher-risk run options.
+
+**Binaries:** `mcp`.
+
+**Depends on:** minibox-core, rmcp, miette.
 
 ---
 

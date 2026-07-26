@@ -118,6 +118,7 @@ Thumbs.db
 # Local development
 .env
 .env.local
+/cache/
 *.log
 *.pid
 .env.nu

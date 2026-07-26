@@ -27,8 +27,8 @@ structured tracing, property testing.
 - OCI image pull — Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
 - Image management — `prune` / `rmi` with lease-based GC
 - Bind mounts and privileged mode — `-v`/`--mount`, `--privileged`
-- Log capture — `minibox logs <id>` for stored stdout/stderr
-- Container events — `minibox events` streams lifecycle events
+- Log capture — `mbx logs <id>` for stored stdout/stderr
+- Container events — `mbx events` streams lifecycle events
 
 ### Experimental-ish
 
@@ -73,7 +73,7 @@ sudo ./target/release/mbx rm <id>
 | Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay           |
 | Linux aarch64         | **Production** | `native`        | Same as x86_64                             |
 | Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS      |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ blocked by Apple bug |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed      |
 | macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                          |
 | Windows               | Planned        | `winbox` stub   | Returns error unconditionally              |
 
@@ -81,7 +81,7 @@ sudo ./target/release/mbx rm <id>
 
 ## Architecture
 
-10 crates, Rust 2024 edition:
+13 crates plus `xtask` (14 workspace members), Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
@@ -90,25 +90,28 @@ minibox-core            cross-platform types, domain traits, protocol, OCI ops
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
     ^         ^
-macbox      winbox      macOS backends: colima (macbox) + smolvm/krun (smolbox) | Windows stub
+macbox      winbox      macOS backends: colima (minibox) + smolvm/krun (smolbox) | Windows stub
 smolbox
     ^          ^
 miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
-minibox-testsuite     conformance test harness for adapter trait contracts
+minibox-mcp             MCP stdio server for agent-controlled minibox tools
+minibox-testsuite       conformance test harness for adapter trait contracts
+minibox-bench           benchmark crate
+ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
 
 **Hexagonal ports.** Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`,
-`ContainerRuntime`, `NetworkProvider`, …) live in `minibox-core`. Adapters implement them.
+`ContainerRuntime`, `NetworkProvider`, …) live under `minibox-core/src/domain/`. Adapters implement them.
 Tests use mock adapters — no real HTTP or filesystem required.
 
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
-**Protocol.** JSON-over-newline on a Unix socket. 27 request variants, 28 response variants.
+**Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
 Canonical source: `minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`ARCHITECTURE`](ARCHITECTURE.mbx.md).
@@ -181,8 +184,8 @@ macOS without root. See [`TEST_INFRASTRUCTURE`](TEST_INFRASTRUCTURE.mbx.md).
 ## Developer Workflow
 
 ```bash
-cargo xtask pre-commit       # fmt + clippy + release build (macOS-safe gate)
-cargo xtask prepush          # nextest + coverage (Linux gate)
+cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
+cargo xtask prepush          # release build + release nextest + conformance
 just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 ```
@@ -195,8 +198,8 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 
 Issues and PRs are welcome. A few things to know before contributing:
 
-- Run `cargo xtask pre-commit` before pushing — it's the same gate as CI.
-- New adapters implement the domain traits in `minibox-core/src/domain.rs`.
+- Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
+- New adapters implement the domain traits under `minibox-core/src/domain/`.
 - Protocol changes start in `minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`
@@ -211,12 +214,12 @@ Issues and PRs are welcome. A few things to know before contributing:
 | ---------------------- | ------------------------------------- |
 | Bridge networking      | Experimental                          |
 | OCI push/commit/build  | Experimental                          |
-| macOS VZ.framework     | Blocked (Apple bug on ARM64 macOS 26) |
+| macOS VZ.framework     | Removed after Apple ARM64 bug         |
 | Seccomp / capabilities | Planned                               |
 | Rootless support       | Planned                               |
 | Port forwarding / DNS  | Planned                               |
 | Windows (WSL2)         | Planned                               |
-| MCP control surface    | Planned                               |
+| MCP control surface    | Initial MCP stdio server implemented  |
 
 Full details: [`ROADMAP`](ROADMAP.mbx.md).
 

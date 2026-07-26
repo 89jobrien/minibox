@@ -1,7 +1,7 @@
 # Stability Checklist
 
 Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
-crate. See `docs/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
+crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
 Last updated: 2026-07-26
@@ -40,7 +40,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 | 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
 | 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`handler.rs`)              |
 | 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm, krun all tested |
-| 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | fmt + clippy + release build               |
+| 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | staged fmt/clippy + config/docs checks     |
 | 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~506 tests (macOS cross-platform subset)   |
 | 6   | `cargo deny check` passes                                  | [GATE]     | Met     | License + advisory audit in CI             |
 | 7   | New domain trait has an in-memory mock double in tests     | [ADVISORY] | —       | Required for hexagonal port compliance     |
@@ -59,7 +59,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 cargo test -p minibox-core -- protocol
 
 # Gate 2: handler coverage (requires Linux + llvm-cov)
-cargo xtask prepush  # generates coverage report
+cargo xtask coverage-check
 
 # Gate 3: adapter integration tests
 just test-integration  # Linux + root

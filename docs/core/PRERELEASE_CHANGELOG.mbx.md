@@ -72,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Plugin extraction: dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench moved to
   `minibox-plugins` workspace
-- `cargo xtask pre-commit` — fmt-check + clippy + release build (macOS-safe)
+- `cargo xtask pre-commit` — staged fmt/clippy plus config/docs checks (macOS-safe)
 - CI `all-features` job, coverage-check gate (handler 80% threshold)
 - Stability checklist enforcement gates, protocol-drift detection workflow
 - `init_tracing()` with `MINIBOX_TRACE_LEVEL` env var

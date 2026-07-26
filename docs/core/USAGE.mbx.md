@@ -181,7 +181,7 @@ Exits non-zero if any drift is found.
 
 **In-VM drift check**
 
-After `cargo xtask build-vm-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
+After `cargo xtask build-test-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
 per ref, tab-separated: `<name>\t<sha256>`). Run `/sbin/check-drift.sh` inside the VM to verify
 installed files match their expected hashes.
 

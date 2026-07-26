@@ -53,19 +53,19 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo check --workspace` — compile/check workspace.
 - `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
-- `cargo xtask pre-commit` — macOS-safe pre-commit gate: fmt, clippy fixes/checks with warnings denied, release build.
-- `cargo xtask prepush` — broader Linux-oriented gate: nextest (use `cargo xtask coverage` separately for coverage reports).
+- `cargo xtask pre-commit` — macOS-safe pre-commit gate: staged fmt/clippy plus config/docs checks.
+- `cargo xtask prepush` — broader gate: release build, release nextest, and conformance (use `cargo xtask coverage` separately for coverage reports).
 - `cargo xtask test-unit` — cross-platform unit and conformance subset.
 - `cargo xtask test-property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
 - `just test-e2e` — Linux+root daemon/CLI tests.
 - `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.
-- `cargo xtask build-vm-image` — build cached Alpine kernel/agent image for macOS VM adapters.
+- `cargo xtask build-test-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
   to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
 - `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
 
-`scripts/*.py` Claude Agent SDK scripts require an interactive foreground terminal and fail when run through background/non-interactive execution.
+No Python scripts are expected in the project; use Rust scripts or Nushell helpers for agent tooling.
 
 ## Rust and Test Conventions
 
@@ -79,7 +79,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 
 ## Architecture Guardrails
 
-- Domain ports live in `crates/minibox/src/domain.rs` and are implemented by adapters under `crates/minibox/src/adapters/`.
+- Domain ports live under `crates/minibox-core/src/domain/` and are re-exported by `crates/minibox/src/domain.rs` for adapter compatibility.
 - `minibox` re-exports `minibox-core`; do not remove re-exports needed by `as_any!`/`adapt!` macro expansion.
 - `DaemonRequest`/`DaemonResponse` are canonical in `crates/minibox-core/src/protocol.rs`.
 - `DaemonResponse::ContainerOutput` is non-terminal; most other response variants end request streaming. Update terminal-response logic when adding variants.
