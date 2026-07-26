@@ -81,7 +81,7 @@ test-adapters:
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd
+    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd -p minibox-cni
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
