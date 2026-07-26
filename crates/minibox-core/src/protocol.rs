@@ -2316,7 +2316,7 @@ mod tests {
                     output: serde_json::json!({}),
                     status: StepStatus::Succeeded,
                 },
-                true,
+                false,
             ),
             (
                 DaemonResponse::WorkflowComplete {
@@ -2361,7 +2361,7 @@ mod tests {
                 DaemonResponse::ImageList { .. } => true,
                 DaemonResponse::Manifest { .. } => true,
                 DaemonResponse::VerifyResult { .. } => true,
-                DaemonResponse::WorkflowStepComplete { .. } => true,
+                DaemonResponse::WorkflowStepComplete { .. } => false,
                 DaemonResponse::WorkflowComplete { .. } => true,
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
