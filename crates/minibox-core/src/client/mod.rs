@@ -19,6 +19,7 @@ use std::path::PathBuf;
 /// 3. Platform default:
 ///    - macOS: `/tmp/minibox/miniboxd.sock` (no `/run` directory on macOS)
 ///    - Linux/other: `/run/minibox/miniboxd.sock`
+#[must_use]
 pub fn default_socket_path() -> PathBuf {
     if let Ok(p) = std::env::var("MINIBOX_SOCKET_PATH") {
         return PathBuf::from(p);
@@ -39,6 +40,7 @@ pub fn default_socket_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_macros::{unsafe_remove_var, unsafe_set_var};
     use std::sync::Mutex;
 
     static ENV_MUTEX: Mutex<()> = Mutex::new(());
@@ -46,12 +48,8 @@ mod tests {
     #[test]
     fn socket_path_default_filename_is_miniboxd_sock() {
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
-        // SAFETY: serialised by ENV_MUTEX; no other thread mutates the
-        // process-wide env while the lock is held.
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
         let path = default_socket_path();
         assert_eq!(
             path.file_name().expect("path has filename"),
@@ -63,10 +61,8 @@ mod tests {
     #[test]
     fn socket_path_default_macos_is_tmp_minibox() {
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
         let path = default_socket_path();
         assert_eq!(path, PathBuf::from("/tmp/minibox/miniboxd.sock"));
     }
@@ -75,10 +71,8 @@ mod tests {
     #[test]
     fn socket_path_default_linux_is_run_minibox() {
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
         let path = default_socket_path();
         assert_eq!(path, PathBuf::from("/run/minibox/miniboxd.sock"));
     }
@@ -86,43 +80,31 @@ mod tests {
     #[test]
     fn socket_path_env_socket_path_overrides_default() {
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
-        unsafe {
-            std::env::set_var("MINIBOX_SOCKET_PATH", "/custom/path/daemon.sock");
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
+        unsafe_set_var!("MINIBOX_SOCKET_PATH", "/custom/path/daemon.sock");
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
         let path = default_socket_path();
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-        }
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
         assert_eq!(path, PathBuf::from("/custom/path/daemon.sock"));
     }
 
     #[test]
     fn socket_path_env_socket_path_wins_over_run_dir() {
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
-        unsafe {
-            std::env::set_var("MINIBOX_SOCKET_PATH", "/explicit/miniboxd.sock");
-            std::env::set_var("MINIBOX_RUN_DIR", "/some/run/dir");
-        }
+        unsafe_set_var!("MINIBOX_SOCKET_PATH", "/explicit/miniboxd.sock");
+        unsafe_set_var!("MINIBOX_RUN_DIR", "/some/run/dir");
         let path = default_socket_path();
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
         assert_eq!(path, PathBuf::from("/explicit/miniboxd.sock"));
     }
 
     #[test]
     fn socket_path_run_dir_appends_miniboxd_sock() {
         let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
-        unsafe {
-            std::env::remove_var("MINIBOX_SOCKET_PATH");
-            std::env::set_var("MINIBOX_RUN_DIR", "/var/run/minibox-test");
-        }
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
+        unsafe_set_var!("MINIBOX_RUN_DIR", "/var/run/minibox-test");
         let path = default_socket_path();
-        unsafe {
-            std::env::remove_var("MINIBOX_RUN_DIR");
-        }
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
         assert_eq!(path, PathBuf::from("/var/run/minibox-test/miniboxd.sock"));
     }
 }

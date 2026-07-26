@@ -2,7 +2,7 @@
 //!
 //! This crate houses the lightweight VM adapter backends:
 //!
-//! - [`smolvm`] -- SmolVM CLI adapter (delegates to `smolvm machine run`)
+//! - [`smolvm`] -- `SmolVM` CLI adapter (delegates to `smolvm machine run`)
 //! - [`krun`] -- libkrun FFI adapter (delegates to smolvm/libkrun microVMs)
 //! - [`preflight`] -- smolvm binary detection and version checking
 

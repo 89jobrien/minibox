@@ -54,6 +54,8 @@ async fn handle_run_once(
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -109,6 +111,7 @@ fn mock_deps_with_registry(registry: MockRegistry, temp_dir: &TempDir) -> Arc<Ha
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -160,6 +163,7 @@ fn mock_deps_with_network(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -819,7 +823,7 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, tx)
+            .build_image(&context, &config, Arc::new(tx))
             .await
             .expect("build must succeed");
 
@@ -857,7 +861,7 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, tx)
+            .build_image(&context, &config, Arc::new(tx))
             .await
             .expect("build must succeed");
 
@@ -1542,6 +1546,7 @@ mod error_path_conformance {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1664,6 +1669,7 @@ mod krun_suite {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: false,
                 allow_privileged: false,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -1700,6 +1706,8 @@ mod krun_suite {
                 name: None,
                 platform: None,
                 cgroup_parent: None,
+                priority: None,
+                policy_override: None,
             },
             state,
             deps,
@@ -1772,6 +1780,8 @@ mod krun_suite {
                 name: None,
                 platform: None,
                 cgroup_parent: None,
+                priority: None,
+                policy_override: None,
             },
             state,
             deps,
@@ -2610,6 +2620,7 @@ mod policy_conformance {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts,
                 allow_privileged,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -2639,6 +2650,8 @@ mod policy_conformance {
                 name: None,
                 platform: None,
                 cgroup_parent: None,
+                priority: None,
+                policy_override: None,
             },
             state,
             deps,

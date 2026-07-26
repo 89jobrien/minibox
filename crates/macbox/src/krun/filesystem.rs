@@ -17,7 +17,8 @@ pub struct KrunFilesystem;
 
 impl KrunFilesystem {
     /// Create a new `KrunFilesystem` adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

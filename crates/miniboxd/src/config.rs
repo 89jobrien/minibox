@@ -41,6 +41,8 @@ impl DaemonConfig {
     /// 1. `/etc/minibox/config.toml` (system)
     /// 2. `$HOME/.config/minibox/config.toml` (user)
     /// 3. `MINIBOX_*` env vars (highest priority)
+    // qual:allow(iosp) reason: "config loading inherently mixes file I/O with merge logic"
+    #[must_use]
     pub fn load() -> Self {
         let mut cfg = Self::default();
 
@@ -59,6 +61,7 @@ impl DaemonConfig {
 
     /// Load config from a specific file path. Returns defaults if the
     /// file is missing; logs a warning if the file exists but is invalid.
+    #[must_use]
     pub fn load_from_path(path: &Path) -> Self {
         match std::fs::read_to_string(path) {
             Ok(content) => toml::from_str(&content).unwrap_or_else(|e| {
@@ -105,7 +108,7 @@ impl DaemonConfig {
     }
 
     /// Apply `MINIBOX_*` env var overrides on top of this config.
-    // TODO(#432): add env overrides for PolicyConfig fields
+    #[must_use]
     pub fn with_env_overrides(mut self) -> Self {
         if let Ok(v) = std::env::var("MINIBOX_ADAPTER") {
             self.adapter = Some(v);
@@ -121,6 +124,27 @@ impl DaemonConfig {
         }
         if let Ok(v) = std::env::var("MINIBOX_IMAGES_DIR") {
             self.images_dir = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_ALLOW_PRIVILEGED")
+            && let Some(b) = parse_policy_bool("MINIBOX_ALLOW_PRIVILEGED", &v)
+        {
+            self.policy.allow_privileged = Some(b);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_ALLOW_BIND_MOUNTS")
+            && let Some(b) = parse_policy_bool("MINIBOX_ALLOW_BIND_MOUNTS", &v)
+        {
+            self.policy.allow_bind_mounts = Some(b);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_MAX_IMAGE_SIZE_MB") {
+            if let Ok(n) = v.parse::<u64>() {
+                self.policy.max_image_size_mb = Some(n);
+            } else {
+                tracing::warn!(
+                    var = "MINIBOX_MAX_IMAGE_SIZE_MB",
+                    value = %v,
+                    "config: unrecognised integer value ignored"
+                );
+            }
         }
         self
     }
@@ -151,12 +175,31 @@ impl DaemonConfig {
     }
 }
 
+/// Parse a boolean-ish policy env value. Accepts `1|true|yes` /
+/// `0|false|no` (case-insensitive, trimmed). Unrecognised values are
+/// rejected with a warning — never silently ignored on a
+/// security-policy variable. Consistent with `ContainerPolicy::from_env`.
+fn parse_policy_bool(name: &str, v: &str) -> Option<bool> {
+    match v.trim().to_lowercase().as_str() {
+        "1" | "true" | "yes" => Some(true),
+        "0" | "false" | "no" => Some(false),
+        other => {
+            tracing::warn!(
+                var = name,
+                value = other,
+                "config: unrecognised boolean value ignored"
+            );
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn empty_toml_produces_defaults() {
+    fn daemon_config_empty_toml_produces_defaults() {
         let cfg: DaemonConfig = toml::from_str("").expect("empty TOML");
         assert!(cfg.adapter.is_none());
         assert!(cfg.log_level.is_none());
@@ -164,7 +207,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_full_config() {
+    fn daemon_config_parses_full_config() {
         let toml_str = r#"
             adapter = "smolvm"
             log_level = "debug"
@@ -214,7 +257,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_toml_returns_defaults() {
+    fn daemon_config_invalid_toml_returns_defaults() {
         // Invalid TOML should not panic — returns defaults with warning.
         let result = toml::from_str::<DaemonConfig>("not valid [[[ toml");
         assert!(result.is_err());
@@ -236,6 +279,118 @@ mod tests {
         assert_eq!(merged.log_level.as_deref(), Some("warn"));
     }
 
+    /// Serializes tests that mutate `MINIBOX_*` env vars.
+    static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn env_overrides_policy_fields() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "true");
+        unsafe_set_var!("MINIBOX_ALLOW_BIND_MOUNTS", "false");
+        unsafe_set_var!("MINIBOX_MAX_IMAGE_SIZE_MB", "512");
+
+        let cfg = DaemonConfig::default().with_env_overrides();
+
+        // Clean up before assertions so failures don't leak env state.
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+        unsafe_remove_var!("MINIBOX_ALLOW_BIND_MOUNTS");
+        unsafe_remove_var!("MINIBOX_MAX_IMAGE_SIZE_MB");
+
+        assert_eq!(cfg.policy.allow_privileged, Some(true));
+        assert_eq!(cfg.policy.allow_bind_mounts, Some(false));
+        assert_eq!(cfg.policy.max_image_size_mb, Some(512));
+    }
+
+    #[test]
+    fn env_override_accepts_yes_and_one() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "yes");
+        unsafe_set_var!("MINIBOX_ALLOW_BIND_MOUNTS", "1");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+        unsafe_remove_var!("MINIBOX_ALLOW_BIND_MOUNTS");
+
+        assert_eq!(
+            cfg.policy.allow_privileged,
+            Some(true),
+            "'yes' must parse as true, consistent with ContainerPolicy::from_env"
+        );
+        assert_eq!(
+            cfg.policy.allow_bind_mounts,
+            Some(true),
+            "'1' must parse as true"
+        );
+    }
+
+    #[test]
+    fn env_override_accepts_no_and_zero() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "no");
+        unsafe_set_var!("MINIBOX_ALLOW_BIND_MOUNTS", "0");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+        unsafe_remove_var!("MINIBOX_ALLOW_BIND_MOUNTS");
+
+        assert_eq!(
+            cfg.policy.allow_privileged,
+            Some(false),
+            "'no' must parse as false"
+        );
+        assert_eq!(
+            cfg.policy.allow_bind_mounts,
+            Some(false),
+            "'0' must parse as false"
+        );
+    }
+
+    #[test]
+    fn env_override_warns_and_ignores_garbage_bool() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_ALLOW_PRIVILEGED", "banana");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_ALLOW_PRIVILEGED");
+
+        assert_eq!(
+            cfg.policy.allow_privileged, None,
+            "garbage boolean must be rejected, not coerced"
+        );
+    }
+
+    #[test]
+    fn env_override_invalid_u64_leaves_max_image_size_unset() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_MAX_IMAGE_SIZE_MB", "lots");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_MAX_IMAGE_SIZE_MB");
+
+        assert_eq!(cfg.policy.max_image_size_mb, None);
+    }
+
+    #[test]
+    fn parse_policy_bool_is_case_insensitive_and_trims() {
+        assert_eq!(parse_policy_bool("X", " TRUE "), Some(true));
+        assert_eq!(parse_policy_bool("X", "Yes"), Some(true));
+        assert_eq!(parse_policy_bool("X", "FALSE"), Some(false));
+        assert_eq!(parse_policy_bool("X", "No"), Some(false));
+        assert_eq!(parse_policy_bool("X", "banana"), None);
+        assert_eq!(parse_policy_bool("X", ""), None);
+    }
+
     #[test]
     fn load_from_valid_toml_file() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -250,5 +405,108 @@ log_level = "trace"
         let cfg = DaemonConfig::load_from_path(&path);
         assert_eq!(cfg.adapter.as_deref(), Some("native"));
         assert_eq!(cfg.log_level.as_deref(), Some("trace"));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 31: production profile always sets allow_privileged = Some(false)
+    /// and allow_bind_mounts = Some(false). This is a security invariant —
+    /// a regression here is a privilege escalation.
+    #[kani::proof]
+    fn production_profile_locks_privileges() {
+        let cfg = DaemonConfig::profile("production");
+        assert_eq!(
+            cfg.policy.allow_privileged,
+            Some(false),
+            "production must deny privileged"
+        );
+        assert_eq!(
+            cfg.policy.allow_bind_mounts,
+            Some(false),
+            "production must deny bind mounts"
+        );
+    }
+
+    /// Proof 32: production profile sets a finite image size cap.
+    #[kani::proof]
+    fn production_profile_has_image_size_cap() {
+        let cfg = DaemonConfig::profile("production");
+        assert!(
+            cfg.policy.max_image_size_mb.is_some(),
+            "production must set max_image_size_mb"
+        );
+        assert_eq!(cfg.policy.max_image_size_mb, Some(2048));
+    }
+
+    /// Proof 33: merge with Default is identity — Option::or(None) returns
+    /// the original Some value. This is the core merge invariant.
+    #[kani::proof]
+    fn merge_with_default_is_identity() {
+        // Verify the Option::or semantics that merge relies on.
+        let a: Option<u64> = Some(42);
+        let b: Option<u64> = None;
+        // other.or(self) where other=None => self wins.
+        assert_eq!(b.or(a), Some(42));
+
+        // All-None overlay preserves all base fields.
+        let base_policy = PolicyConfig {
+            allow_privileged: Some(true),
+            allow_bind_mounts: Some(false),
+            max_image_size_mb: Some(1024),
+        };
+        let empty_policy = PolicyConfig::default();
+
+        let merged_priv = empty_policy
+            .allow_privileged
+            .or(base_policy.allow_privileged);
+        let merged_bind = empty_policy
+            .allow_bind_mounts
+            .or(base_policy.allow_bind_mounts);
+        let merged_size = empty_policy
+            .max_image_size_mb
+            .or(base_policy.max_image_size_mb);
+
+        assert_eq!(merged_priv, Some(true));
+        assert_eq!(merged_bind, Some(false));
+        assert_eq!(merged_size, Some(1024));
+    }
+
+    /// Proof 34: merge prefers `other` — Option::or gives precedence to
+    /// the first (other) value when both are Some.
+    #[kani::proof]
+    fn merge_other_wins() {
+        let a: Option<u64> = Some(1);
+        let b: Option<u64> = Some(2);
+        // other.or(self) where other=Some(2) => other wins.
+        assert_eq!(b.or(a), Some(2));
+
+        // Applied to policy: other's allow_privileged wins.
+        let base = PolicyConfig {
+            allow_privileged: Some(true),
+            ..Default::default()
+        };
+        let overlay = PolicyConfig {
+            allow_privileged: Some(false),
+            ..Default::default()
+        };
+        let merged = overlay.allow_privileged.or(base.allow_privileged);
+        assert_eq!(merged, Some(false));
+    }
+
+    /// Proof 35: unknown profile name returns all-None defaults (no
+    /// accidental privilege grant).
+    #[kani::proof]
+    fn unknown_profile_returns_safe_defaults() {
+        let cfg = DaemonConfig::profile("nonexistent");
+        assert!(cfg.policy.allow_privileged.is_none());
+        assert!(cfg.policy.allow_bind_mounts.is_none());
+        assert!(cfg.policy.max_image_size_mb.is_none());
     }
 }

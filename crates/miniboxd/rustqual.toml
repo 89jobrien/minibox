@@ -1,0 +1,26 @@
+# rustqual config for miniboxd binary crate
+# Tests use unsafe env mutation (Rust 2024) and structural repetition.
+# Inline test modules in src/ also use unsafe set_var — ignore test_* functions.
+
+ignore_functions = [
+    "main",
+    "test_*",
+    # Inline #[cfg(test)] functions in adapter_registry and main use
+    # unsafe env::set_var (Rust 2024). Names don't follow test_* convention.
+    "adapter_from_env_*",
+    "resolve_data_dir_*",
+    "resolve_paths_*",
+]
+
+exclude_files = [
+    "tests/*",
+]
+
+[duplicates]
+detect_dead_code = false
+
+# Unsafe blocks in test functions (env::set_var under Rust 2024) are expected.
+# The ignore_functions pattern handles test_* naming but unsafe counts still
+# include #[cfg(test)] helper functions. Accept the baseline.
+[complexity]
+max_function_lines = 68

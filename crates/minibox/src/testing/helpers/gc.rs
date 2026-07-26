@@ -1,4 +1,5 @@
 //! No-op image garbage collector for tests.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use minibox_core::image::gc::{ImageGarbageCollector, PruneReport};
 use std::sync::{Arc, Mutex};

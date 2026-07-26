@@ -1,0 +1,61 @@
+[package]
+name = "minibox-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+# The lib holds fixtures only; criterion flags like --noplot must not reach
+# the default libtest bench harness.
+bench = false
+
+[dependencies]
+anyhow.workspace = true
+flate2.workspace = true
+minibox = { workspace = true, features = ["test-utils"] }
+minibox-core = { workspace = true, features = ["test-utils"] }
+nix.workspace = true
+sha2.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+wiremock.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+minibox-macros.workspace = true
+
+[[bench]]
+name = "protocol_codec"
+harness = false
+
+[[bench]]
+name = "daemon_dispatch"
+harness = false
+
+[[bench]]
+name = "trait_dispatch"
+harness = false
+
+[[bench]]
+name = "layer_extract"
+harness = false
+
+[[bench]]
+name = "image_pull"
+harness = false
+
+[[bench]]
+name = "linux_rootfs"
+harness = false
+
+[[bench]]
+name = "linux_cgroup"
+harness = false
+
+[[bench]]
+name = "linux_spawn"
+harness = false

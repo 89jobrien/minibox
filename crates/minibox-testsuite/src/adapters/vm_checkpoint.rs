@@ -6,8 +6,6 @@ use minibox::testing::mocks::vm_checkpoint::MockVmCheckpoint;
 use minibox_core::domain::VmCheckpoint;
 use std::path::PathBuf;
 
-use crate::harness::{ConformanceTest, TestCategory, TestContext, TestResult};
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -17,22 +15,15 @@ fn snap_path() -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Test structs
+// Tests
 // ---------------------------------------------------------------------------
 
-/// save_snapshot succeeds and returns SnapshotInfo with matching container_id.
-pub struct SaveSnapshotReturnsInfo;
-impl ConformanceTest for SaveSnapshotReturnsInfo {
-    fn name(&self) -> &str {
-        "save_snapshot_returns_info"
-    }
-    fn adapter(&self) -> &str {
-        "vm_checkpoint"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "save_snapshot_returns_info",
+    adapter: "vm_checkpoint",
+    capability: Checkpoint,
+    category: Unit,
+    |ctx| {
         let mock = MockVmCheckpoint::new();
         let result = mock.save_snapshot("ctr-snap-001", &snap_path());
         if let Some(info) = ctx.assert_ok(result, "save_snapshot should succeed") {
@@ -46,19 +37,12 @@ impl ConformanceTest for SaveSnapshotReturnsInfo {
     }
 }
 
-/// save_snapshot increments the stored snapshot count.
-pub struct SaveSnapshotIncrementsCount;
-impl ConformanceTest for SaveSnapshotIncrementsCount {
-    fn name(&self) -> &str {
-        "save_snapshot_increments_count"
-    }
-    fn adapter(&self) -> &str {
-        "vm_checkpoint"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "save_snapshot_increments_count",
+    adapter: "vm_checkpoint",
+    capability: Checkpoint,
+    category: Unit,
+    |ctx| {
         let mock = MockVmCheckpoint::new();
         mock.save_snapshot("ctr-snap-002", &snap_path())
             .expect("save");
@@ -70,19 +54,12 @@ impl ConformanceTest for SaveSnapshotIncrementsCount {
     }
 }
 
-/// list_snapshots returns only snapshots for the requested container.
-pub struct ListSnapshotsFiltersByContainerId;
-impl ConformanceTest for ListSnapshotsFiltersByContainerId {
-    fn name(&self) -> &str {
-        "list_snapshots_filters_by_container_id"
-    }
-    fn adapter(&self) -> &str {
-        "vm_checkpoint"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_snapshots_filters_by_container_id",
+    adapter: "vm_checkpoint",
+    capability: Checkpoint,
+    category: Unit,
+    |ctx| {
         let mock = MockVmCheckpoint::new();
         mock.save_snapshot("ctr-a", &snap_path()).expect("save a");
         mock.save_snapshot("ctr-b", &snap_path()).expect("save b");
@@ -101,19 +78,12 @@ impl ConformanceTest for ListSnapshotsFiltersByContainerId {
     }
 }
 
-/// list_snapshots returns empty for an unknown container.
-pub struct ListSnapshotsEmptyForUnknown;
-impl ConformanceTest for ListSnapshotsEmptyForUnknown {
-    fn name(&self) -> &str {
-        "list_snapshots_empty_for_unknown"
-    }
-    fn adapter(&self) -> &str {
-        "vm_checkpoint"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "list_snapshots_empty_for_unknown",
+    adapter: "vm_checkpoint",
+    capability: Checkpoint,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockVmCheckpoint::new();
         let list = mock.list_snapshots("no-such-container").expect("list");
         ctx.assert_eq(
@@ -125,19 +95,12 @@ impl ConformanceTest for ListSnapshotsEmptyForUnknown {
     }
 }
 
-/// restore_snapshot succeeds after a prior save.
-pub struct RestoreSnapshotSucceedsAfterSave;
-impl ConformanceTest for RestoreSnapshotSucceedsAfterSave {
-    fn name(&self) -> &str {
-        "restore_snapshot_succeeds_after_save"
-    }
-    fn adapter(&self) -> &str {
-        "vm_checkpoint"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::Unit
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "restore_snapshot_succeeds_after_save",
+    adapter: "vm_checkpoint",
+    capability: Checkpoint,
+    category: Unit,
+    |ctx| {
         let mock = MockVmCheckpoint::new();
         mock.save_snapshot("ctr-snap-003", &snap_path())
             .expect("save");
@@ -147,19 +110,12 @@ impl ConformanceTest for RestoreSnapshotSucceedsAfterSave {
     }
 }
 
-/// restore_snapshot returns Err when no snapshot exists.
-pub struct RestoreSnapshotFailsWithoutSave;
-impl ConformanceTest for RestoreSnapshotFailsWithoutSave {
-    fn name(&self) -> &str {
-        "restore_snapshot_fails_without_save"
-    }
-    fn adapter(&self) -> &str {
-        "vm_checkpoint"
-    }
-    fn category(&self) -> TestCategory {
-        TestCategory::EdgeCase
-    }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
+crate::conformance_test! {
+    name: "restore_snapshot_fails_without_save",
+    adapter: "vm_checkpoint",
+    capability: Checkpoint,
+    category: EdgeCase,
+    |ctx| {
         let mock = MockVmCheckpoint::new();
         let result = mock.restore_snapshot("nonexistent", &snap_path());
         ctx.assert_err(
@@ -168,16 +124,4 @@ impl ConformanceTest for RestoreSnapshotFailsWithoutSave {
         );
         ctx.result()
     }
-}
-
-/// Return all vm_checkpoint conformance tests.
-pub fn all() -> Vec<Box<dyn ConformanceTest>> {
-    vec![
-        Box::new(SaveSnapshotReturnsInfo),
-        Box::new(SaveSnapshotIncrementsCount),
-        Box::new(ListSnapshotsFiltersByContainerId),
-        Box::new(ListSnapshotsEmptyForUnknown),
-        Box::new(RestoreSnapshotSucceedsAfterSave),
-        Box::new(RestoreSnapshotFailsWithoutSave),
-    ]
 }

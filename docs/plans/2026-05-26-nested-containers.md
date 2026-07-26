@@ -1,7 +1,7 @@
 # Nested Containers (minibox-in-minibox)
 
 **Date:** 2026-05-26
-**Status:** Draft
+**Status:** done
 **Author:** Joseph O'Brien
 
 ## Goal

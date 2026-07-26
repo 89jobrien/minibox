@@ -1,7 +1,7 @@
 //! Transport-agnostic daemon connection handler.
 //!
 //! Callers provide a [`ServerListener`] impl — Unix socket or Named Pipe.
-//! [`PeerCreds`] from `accept()` carries SO_PEERCRED data when available.
+//! [`PeerCreds`] from `accept()` carries `SO_PEERCRED` data when available.
 //!
 //! The protocol is line-oriented JSON: the client writes one JSON line per
 //! request and the daemon responds with one or more JSON lines per response.
@@ -58,10 +58,60 @@ pub trait ServerListener: Send + 'static {
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
 }
 
+/// Extract peer credentials from a connected Unix socket raw file descriptor.
+///
+/// - **Linux**: Uses `SO_PEERCRED` via `getsockopt` (returns uid + pid).
+/// - **macOS**: Uses `getpeereid(2)` (returns uid; pid = 0 sentinel).
+///
+/// Returns `None` if the syscall fails.
+#[cfg(target_os = "linux")]
+pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
+    use std::mem;
+    let mut cred: nix::libc::ucred = unsafe { mem::zeroed() };
+    let mut len = mem::size_of::<nix::libc::ucred>() as nix::libc::socklen_t;
+    // SAFETY: fd is a valid connected Unix socket fd. getsockopt with
+    // SO_PEERCRED is safe on any connected Unix domain socket.
+    let ret = unsafe {
+        nix::libc::getsockopt(
+            fd,
+            nix::libc::SOL_SOCKET,
+            nix::libc::SO_PEERCRED,
+            (&raw mut cred).cast::<nix::libc::c_void>(),
+            &raw mut len,
+        )
+    };
+    if ret == 0 {
+        Some(PeerCreds {
+            uid: cred.uid,
+            pid: cred.pid,
+        })
+    } else {
+        warn!("SO_PEERCRED failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
+/// Extract peer credentials from a connected Unix socket raw file descriptor.
+///
+/// macOS variant using `getpeereid(2)`.
+#[cfg(target_os = "macos")]
+pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
+    let mut uid: nix::libc::uid_t = 0;
+    let mut gid: nix::libc::gid_t = 0;
+    // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
+    // call on any connected Unix domain socket.
+    if unsafe { nix::libc::getpeereid(fd, &raw mut uid, &raw mut gid) } == 0 {
+        Some(PeerCreds { uid, pid: 0 })
+    } else {
+        warn!("getpeereid failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
 /// Determine whether a connection should be accepted given peer credentials
 /// and the `require_root_auth` flag.
 ///
-/// This is the single source of truth for the SO_PEERCRED gate so the logic
+/// This is the single source of truth for the `SO_PEERCRED` gate so the logic
 /// can be unit-tested without a real socket.
 ///
 /// # Rules
@@ -72,7 +122,8 @@ pub trait ServerListener: Send + 'static {
 /// | `true`              | None          | denied  |
 /// | `true`              | Some(uid = 0) | allowed |
 /// | `true`              | Some(uid > 0) | denied  |
-pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
+#[must_use]
+pub const fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
     if !require_root_auth {
         return true;
     }
@@ -174,7 +225,7 @@ where
                     Err(e) => error!("server: accept error: {e}"),
                 }
             }
-            _ = &mut shutdown => {
+            () = &mut shutdown => {
                 info!("server: shutdown signal received");
                 break;
             }
@@ -241,6 +292,7 @@ async fn bounded_read_line<R: tokio::io::AsyncRead + Unpin>(
 ///
 /// Streaming responses (`ContainerOutput`) are forwarded until the terminal
 /// `ContainerStopped` message closes the exchange.
+// qual:allow(iosp) reason: "server I/O boundary: read/parse/dispatch loop mixes control flow with handler calls"
 pub async fn handle_connection<S>(
     stream: S,
     state: Arc<DaemonState>,
@@ -350,36 +402,13 @@ where
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
-/// as the first message, followed by `ContainerOutput` chunks and then
-/// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
-/// server loop exits naturally when `rx.recv()` returns `None`.
-fn is_terminal_response(r: &DaemonResponse) -> bool {
-    matches!(
-        r,
-        DaemonResponse::ContainerStopped { .. }
-            | DaemonResponse::Error { .. }
-            | DaemonResponse::Success { .. }
-            | DaemonResponse::ContainerList { .. }
-            | DaemonResponse::ImageLoaded { .. }
-            | DaemonResponse::BuildComplete { .. }
-            | DaemonResponse::ContainerPaused { .. }
-            | DaemonResponse::ContainerResumed { .. }
-            | DaemonResponse::Pruned { .. }
-            | DaemonResponse::PipelineComplete { .. }
-            | DaemonResponse::SnapshotSaved { .. }
-            | DaemonResponse::SnapshotRestored { .. }
-            | DaemonResponse::SnapshotList { .. }
-            | DaemonResponse::ImageList { .. }
-            | DaemonResponse::Manifest { .. }
-            | DaemonResponse::VerifyResult { .. }
-            | DaemonResponse::WorkflowStepComplete { .. }
-            | DaemonResponse::WorkflowComplete { .. }
-            | DaemonResponse::PipelineList { .. }
-            | DaemonResponse::PipelineDetail { .. }
-    )
-    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
-    // Event, and UpdateProgress are non-terminal.
+/// Delegates to the canonical [`DaemonResponse::is_terminal`] predicate in
+/// `minibox-core`. `ContainerCreated` is intentionally non-terminal: ephemeral
+/// runs send it as the first message, followed by `ContainerOutput` chunks and
+/// then `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so
+/// the server loop exits naturally when `rx.recv()` returns `None`.
+const fn is_terminal_response(r: &DaemonResponse) -> bool {
+    r.is_terminal()
 }
 
 /// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
@@ -413,6 +442,7 @@ async fn send_terminal_response(
 /// Each variant maps 1-to-1 to a handler function in [`crate::handler`].
 /// The `Run` variant is the only one that may produce multiple responses
 /// (streaming output chunks); all others produce exactly one response.
+// qual:allow(iosp) reason: "request router: match-based dispatch is orchestration by design"
 async fn dispatch(
     request: DaemonRequest,
     state: Arc<DaemonState>,
@@ -435,6 +465,7 @@ async fn dispatch(
             tty: _,
             platform,
             cgroup_parent,
+            priority,
             ..
         } => {
             let params = handler::RunParams {
@@ -451,6 +482,8 @@ async fn dispatch(
                 name,
                 platform,
                 cgroup_parent,
+                priority,
+                policy_override: None,
             };
             handler::handle_run(params, state, deps, tx).await;
         }
@@ -618,8 +651,19 @@ async fn dispatch(
             env,
             ..
         } => {
-            handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
-                .await;
+            handler::handle_pipeline(
+                handler::PipelineParams {
+                    pipeline_path,
+                    input,
+                    image,
+                    budget,
+                    env,
+                },
+                state,
+                deps,
+                tx,
+            )
+            .await;
         }
         DaemonRequest::ListPipelines { limit, pipeline } => {
             let response = handler::handle_list_pipelines(limit, pipeline, state).await;
@@ -636,10 +680,12 @@ async fn dispatch(
             restart,
         } => {
             tokio::spawn(handler::handle_update(
-                images,
-                all,
-                containers,
-                restart,
+                handler::UpdateParams {
+                    images,
+                    all,
+                    containers,
+                    restart,
+                },
                 Arc::clone(&state),
                 Arc::clone(&deps),
                 tx,
@@ -761,6 +807,7 @@ mod tests {
             policy: crate::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
             execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

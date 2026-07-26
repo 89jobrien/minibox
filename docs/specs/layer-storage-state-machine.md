@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Layer Storage State Machine for Parallel Pulls
 
 Issue: #149

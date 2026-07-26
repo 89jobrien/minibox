@@ -29,7 +29,7 @@ td:first-child, th:first-child { text-align: left; }
 <div class="card" style="margin-top:1.5rem">
 <h2>Latest Run</h2>
 <table id="latest-table"><thead><tr>
-<th>Benchmark</th><th>Mean (ns)</th><th>Median</th><th>p95</th><th>p99</th><th>Std Dev</th><th>Peak Mem (KB)</th>
+<th>Benchmark</th><th>Mean (ns)</th><th>Median</th><th>p95</th><th>p99</th><th>Std Dev</th>
 </tr></thead><tbody></tbody></table>
 </div>
 <script>
@@ -96,7 +96,6 @@ if (runs.length > 0) {
     tr.appendChild(td(m.p95_ns.toFixed(1)));
     tr.appendChild(td(m.p99_ns.toFixed(1)));
     tr.appendChild(td(m.std_dev_ns.toFixed(1)));
-    tr.appendChild(td((m.memory_peak_bytes/1024).toFixed(1)));
     tbody.appendChild(tr);
   }
 }

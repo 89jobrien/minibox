@@ -1,0 +1,17 @@
+# rustqual config for macbox crate
+# Test files contain structural repetition from krun adapter conformance
+# patterns — not meaningful duplication.
+
+ignore_functions = ["main", "test_*"]
+
+exclude_files = [
+    "tests/*",
+]
+
+[duplicates]
+detect_dead_code = false
+
+[complexity]
+# Test files excluded above; production .expect() on mutex/const parsing
+# is acceptable — no further suppression needed.
+detect_error_handling = true

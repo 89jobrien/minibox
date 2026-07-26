@@ -1,4 +1,4 @@
-//! Overlay filesystem adapter implementing the FilesystemProvider trait.
+//! Overlay filesystem adapter implementing the `FilesystemProvider` trait.
 //!
 //! This adapter wraps the existing overlay filesystem implementation from
 //! [`crate::container::filesystem`] to implement the domain's

@@ -2,8 +2,7 @@
 //!
 //! Images are stored under `{base_dir}/{name}/{tag}/`:
 //! - `manifest.json` -- the OCI manifest JSON blob.
-//! - `layers/{digest}/` -- one directory per layer, containing the extracted
-//!   tar contents.
+//! - `layers/{digest}/` -- one directory per layer, containing the extracted tar contents.
 //!
 //! [`ImageStore`] is the main entry point.
 
@@ -36,6 +35,10 @@ impl ImageStore {
     /// Create an [`ImageStore`] pointing at `base_dir`.
     ///
     /// The directory is created if it does not already exist.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `base_dir` cannot be created.
     pub fn new(base_dir: impl Into<PathBuf>) -> anyhow::Result<Self> {
         let base_dir = base_dir.into();
         std::fs::create_dir_all(&base_dir).map_err(|source| ImageError::StoreWrite {
@@ -56,6 +59,7 @@ impl ImageStore {
     /// (canonicalize, anyhow chain) since this is a read-only existence check
     /// on a caller-supplied name that has already been validated upstream.
     /// Dangerous-char rejection is still performed inline.
+    #[must_use]
     pub fn has_image(&self, name: &str, tag: &str) -> bool {
         // Inline basic safety checks — reject traversal / absolute / empty.
         for component in [name, tag] {
@@ -77,6 +81,10 @@ impl ImageStore {
 
     /// Return the ordered list of layer directories for `name:tag`
     /// (bottom-to-top, matching the order in the manifest).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest cannot be read or parsed.
     pub fn get_image_layers(&self, name: &str, tag: &str) -> anyhow::Result<Vec<PathBuf>> {
         let manifest = self.load_manifest(name, tag)?;
         let layers_base = self.layers_dir(name, tag)?;
@@ -97,6 +105,10 @@ impl ImageStore {
     /// List all `"name:tag"` strings known to this store.
     ///
     /// Walks `{base_dir}/*/` directories looking for `manifest.json`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the store directory cannot be read.
     pub async fn list_all_images(&self) -> anyhow::Result<Vec<String>> {
         let mut result = Vec::new();
         let mut rd = tokio::fs::read_dir(&self.base_dir).await?;
@@ -121,6 +133,10 @@ impl ImageStore {
     }
 
     /// Return the total disk usage of an image's layer dirs in bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image directory or any entry metadata cannot be read.
     pub async fn image_size_bytes(&self, name: &str, tag: &str) -> anyhow::Result<u64> {
         let dir = self.image_dir(name, tag)?;
         let mut total = 0u64;
@@ -142,6 +158,10 @@ impl ImageStore {
     /// Delete an image's manifest and all layer directories.
     ///
     /// Best-effort: logs a warning if the directory cannot be removed.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image directory cannot be removed.
     pub async fn delete_image(&self, name: &str, tag: &str) -> anyhow::Result<()> {
         let dir = self.image_dir(name, tag)?;
         if dir.exists() {
@@ -158,6 +178,11 @@ impl ImageStore {
     // -----------------------------------------------------------------------
 
     /// Persist the OCI manifest for `name:tag`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest directory cannot be created or the file
+    /// cannot be written.
     pub fn store_manifest(
         &self,
         name: &str,
@@ -184,7 +209,7 @@ impl ImageStore {
             source,
         })?;
 
-        info!("stored manifest for {}:{} at {:?}", name, tag, path);
+        info!("stored manifest for {}:{} at {}", name, tag, path.display());
         Ok(())
     }
 
@@ -194,6 +219,10 @@ impl ImageStore {
     /// `data_reader` is consumed and its contents are extracted into
     /// `{layers_dir}/{digest_key}/`. The digest is NOT verified here -- call
     /// [`layer::verify_digest`] before passing data if you need verification.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the layer directory cannot be created or tar extraction fails.
     pub fn store_layer<R: Read>(
         &self,
         name: &str,
@@ -205,7 +234,11 @@ impl ImageStore {
         let dest = self.layers_dir(name, tag)?.join(&digest_key);
 
         if dest.exists() {
-            debug!("layer {} already extracted at {:?}, skipping", digest, dest);
+            debug!(
+                "layer {} already extracted at {}, skipping",
+                digest,
+                dest.display()
+            );
             return Ok(dest);
         }
 
@@ -215,9 +248,9 @@ impl ImageStore {
         })?;
 
         extract_layer(&mut data_reader, &dest)
-            .with_context(|| format!("extracting layer {digest} to {dest:?}"))?;
+            .with_context(|| format!("extracting layer {digest} to {}", dest.display()))?;
 
-        info!("stored layer {} at {:?}", digest, dest);
+        info!("stored layer {} at {}", digest, dest.display());
         Ok(dest)
     }
 
@@ -233,6 +266,11 @@ impl ImageStore {
     /// 5. Cleans up the tmp dir on any failure (extraction or digest mismatch).
     ///
     /// Returns the final layer directory path.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if extraction, digest verification, or the atomic rename fails.
+    // qual:allow(iosp) reason: "I/O boundary — extract, verify digest, atomic rename"
     pub fn store_layer_verified<R: Read>(
         &self,
         name: &str,
@@ -305,10 +343,10 @@ impl ImageStore {
         if let Err(e) = std::fs::rename(&tmp_dir, &layer_dir) {
             // Another concurrent caller may have won the race.
             if layer_dir.exists() {
-                let _ = std::fs::remove_dir_all(&tmp_dir);
+                cleanup_tmp_dir_with_warn(&tmp_dir, expected_digest);
                 return Ok(layer_dir);
             }
-            let _ = std::fs::remove_dir_all(&tmp_dir);
+            cleanup_tmp_dir_with_warn(&tmp_dir, expected_digest);
             return Err(e).with_context(|| {
                 format!("rename {} -> {}", tmp_dir.display(), layer_dir.display())
             });
@@ -330,6 +368,10 @@ impl ImageStore {
     ///
     /// Public wrapper of the private [`Self::load_manifest`] used by the push
     /// adapter to enumerate layer digests before uploading.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the manifest file is missing or cannot be parsed.
     pub fn load_manifest_pub(&self, name: &str, tag: &str) -> anyhow::Result<OciManifest> {
         self.load_manifest(name, tag)
     }
@@ -338,6 +380,10 @@ impl ImageStore {
     ///
     /// Public wrapper of the private [`Self::layers_dir`] used by the push
     /// adapter to locate extracted layer directories.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image name or tag fails validation.
     pub fn layers_dir_pub(&self, name: &str, tag: &str) -> anyhow::Result<std::path::PathBuf> {
         self.layers_dir(name, tag)
     }
@@ -366,23 +412,30 @@ impl ImageStore {
         if let Some(parent) = result.parent()
             && parent.exists()
         {
-            let canonical = parent
-                .canonicalize()
-                .with_context(|| format!("canonicalizing parent of image dir: {parent:?}"))?;
+            let canonical = parent.canonicalize().with_context(|| {
+                format!("canonicalizing parent of image dir: {}", parent.display())
+            })?;
             let canonical_base = self
                 .base_dir
                 .canonicalize()
-                .with_context(|| format!("canonicalizing base dir: {:?}", self.base_dir))?;
+                .with_context(|| format!("canonicalizing base dir: {}", self.base_dir.display()))?;
 
             if !canonical.starts_with(&canonical_base) {
                 return Err(ImageError::Other(format!(
-                    "path traversal attempt: image dir {canonical:?} is outside base {canonical_base:?}"
+                    "path traversal attempt: image dir {} is outside base {}",
+                    canonical.display(),
+                    canonical_base.display()
                 ))
                 .into());
             }
         }
 
-        debug!("validated image_dir for {}:{}: {:?}", name, tag, result);
+        debug!(
+            "validated image_dir for {}:{}: {}",
+            name,
+            tag,
+            result.display()
+        );
         Ok(result)
     }
 
@@ -463,6 +516,12 @@ fn validate_image_component(label: &str, value: &str) -> anyhow::Result<()> {
 /// `progress` is called with a human-readable status string for each major
 /// step (auth, manifest fetch, each layer).  Pass a no-op closure to silence
 /// progress output.
+///
+/// # Errors
+///
+/// Returns an error if the image reference is invalid, registry authentication
+/// fails, the manifest cannot be fetched, or any layer blob download or
+/// extraction fails.
 pub async fn pull(
     image_ref: &str,
     store_path: impl Into<std::path::PathBuf>,

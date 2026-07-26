@@ -1,3 +1,7 @@
+---
+status: done
+---
+
 # Plan: Nyx-Inspired Improvements
 
 ## Goal
