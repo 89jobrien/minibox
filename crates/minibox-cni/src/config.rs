@@ -212,4 +212,60 @@ mod tests {
         assert_eq!(result.ips[0].address, "10.0.0.5/24");
         let _ = std::fs::remove_file("/tmp/minibox-cni-test-portmap-input.json");
     }
+
+    #[tokio::test]
+    async fn add_rolls_back_succeeded_plugins_on_mid_chain_failure() {
+        let bin_dir = tempfile::tempdir().expect("bin tempdir");
+        let del_marker = bin_dir.path().join("bridge-was-deleted");
+
+        // Plugin 1 succeeds on ADD, and on DEL touches a marker file so the
+        // test can assert rollback actually ran.
+        write_executable(
+            bin_dir.path(),
+            "fake-bridge",
+            &format!(
+                "#!/bin/sh\nif [ \"$CNI_COMMAND\" = \"ADD\" ]; then\n  echo '{{\"cniVersion\":\"1.0.0\"}}'\nelif [ \"$CNI_COMMAND\" = \"DEL\" ]; then\n  touch {}\nfi\nexit 0\n",
+                del_marker.display()
+            ),
+        );
+        // Plugin 2 always fails ADD with a structured error.
+        write_executable(
+            bin_dir.path(),
+            "fake-portmap",
+            "#!/bin/sh\necho '{\"code\":9,\"msg\":\"boom\"}'\nexit 1\n",
+        );
+
+        let list = NetworkConfigList {
+            cni_version: "1.0.0".to_string(),
+            name: "minibox0".to_string(),
+            plugins: vec![
+                PluginConfig {
+                    plugin_type: "fake-bridge".to_string(),
+                    raw: serde_json::json!({"type": "fake-bridge"}),
+                },
+                PluginConfig {
+                    plugin_type: "fake-portmap".to_string(),
+                    raw: serde_json::json!({"type": "fake-portmap"}),
+                },
+            ],
+        };
+
+        let result = list
+            .add(
+                &[bin_dir.path().to_path_buf()],
+                "/fake/netns",
+                "container-1",
+                "eth0",
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(CniError::PluginError { code: Some(9), .. })
+        ));
+        assert!(
+            del_marker.exists(),
+            "rollback DEL should have run for the succeeded plugin"
+        );
+    }
 }
