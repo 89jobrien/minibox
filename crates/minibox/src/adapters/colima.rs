@@ -951,16 +951,13 @@ adapt!(
     ColimaLimiter,
     ColimaRuntime
 );
+/// Serialises environment-variable mutations across parallel Colima tests.
+#[cfg(test)]
+static ENV_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    /// Serialises environment-variable mutations across parallel tests.
-    // SAFETY: Rust 2024 requires unsafe for set_var/remove_var. The Mutex
-    // ensures only one test modifies the environment at a time.
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_colima_registry_creation() {
@@ -1335,6 +1332,7 @@ mod bind_mount_tests {
 
     #[test]
     fn validate_lima_paths_accepts_home_subdir() {
+        let _guard = super::ENV_MUTEX.lock().expect("env lock poisoned");
         let home = home_dir();
         let mounts = vec![BindMount {
             host_path: home.join("some/project/bin"),
