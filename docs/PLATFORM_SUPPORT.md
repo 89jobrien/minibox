@@ -68,6 +68,27 @@ MINIBOX_ADAPTER=colima miniboxd
   - Overlay filesystem support in the kernel
 - **Isolation:** Linux PID, mount, network, UTS, and IPC namespaces + cgroups v2
 
+#### Optional: CNI-based bridge networking (`cni` feature)
+
+`native`'s bridge networking (`MINIBOX_NETWORK_MODE=bridge`) has two implementations, selected
+at compile time:
+
+- **Off (default):** the built-in `BridgeNetwork` adapter — veth pairs, IP allocation, and DNAT
+  implemented directly in Rust, no external dependencies.
+- **On (`cargo build --features cni` / `miniboxd --features cni`):** real CNI-spec plugin
+  execution via `minibox-cni`, gaining in-container DNS through the standard `dnsname` plugin.
+  Requires:
+  - The standard `containernetworking/plugins` release binaries — `bridge`, `host-local`,
+    `portmap`, `dnsname` — on `MINIBOX_CNI_PATH` (colon-separated, default `/opt/cni/bin`)
+  - A `.conflist` at `MINIBOX_CNI_CONFIG_DIR/10-minibox.conflist` (default
+    `/etc/cni/net.d/10-minibox.conflist`) listing the plugin chain
+  - Run `mbx doctor` to check plugin binary presence before relying on this feature — with the
+    feature compiled in but the plugins missing, container runs fail fast at the network-setup
+    step rather than silently falling back to the built-in implementation
+
+This is scoped to the `native` adapter only — `gke`, `colima`, `smolvm`, and `krun` have no
+host-visible per-container network namespace for a CNI plugin to attach to.
+
 ### `gke`
 
 - **Platforms:** Linux (GKE pods)
