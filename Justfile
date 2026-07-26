@@ -1,3 +1,4 @@
+import? 'sops.just'
 default:
     @just --list
 

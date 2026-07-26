@@ -174,6 +174,35 @@ max_image_size_mb = 2048
 
 ---
 
+## Backup Setup
+
+This project has a local rustic repository configured by the SOPS-backed just recipes:
+
+- `RUSTIC_REPOSITORY=/Users/joe/.local/share/rustic/minibox`
+- `RUSTIC_PASSWORD_FILE=~/.config/rustic/password`
+
+The repository password is stored as an encrypted SOPS secret in
+`secrets/rustic.sops.yaml`. Do not commit the materialized password file under
+`~/.config/rustic/password`; regenerate it from SOPS when needed:
+
+```bash
+just rustic-password-materialize
+```
+
+Initialize and verify the local repository with:
+
+```bash
+just rustic-init
+just rustic-verify
+```
+
+The recipes default to the paths above and respect `RUSTIC_REPOSITORY` /
+`RUSTIC_PASSWORD_FILE` overrides. `just rustic-verify` runs `rustic snapshots` and should
+report that the repository password is correct. A newly initialized repository reports
+`0 snapshot(s)`.
+
+---
+
 ## Testing
 
 ```bash
