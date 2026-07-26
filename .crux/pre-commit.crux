@@ -1,0 +1,42 @@
+pipeline: minibox_pre_commit
+# Local mirror of `cargo xtask pre-commit` — validation-only checks.
+# Runs: fmt, clippy, actionlint (if staged workflows), docs lint.
+# Does not modify files or the git index.
+#
+# Run: crux run .crux/pre-commit.crux
+budget: { calls: 8 }
+
+steps:
+  - step: fmt
+    handler: shell::exec
+    args:
+      cmd: "cargo fmt --all --check"
+
+  - step: clippy
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo clippy
+        -p minibox -p minibox-macros -p mbx -p minibox-core
+        -p macbox -p miniboxd -p winbox
+        -- -D warnings
+
+  - step: actionlint
+    handler: shell::exec
+    args:
+      cmd: >-
+        which actionlint > /dev/null 2>&1 || {
+          echo "actionlint not found, skipping";
+          exit 0;
+        };
+        actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
+
+  - step: docs_lint
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint-docs"
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "pre-commit gates passed"

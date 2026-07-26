@@ -1,0 +1,27 @@
+# Minibox CI gate VM — local replacement for macOS CI lint+test jobs.
+#
+# Requires a pre-provisioned machine with Rust toolchain. Create once:
+#   cargo xtask setup-test-vm
+#
+# Then use ci-cached machine with source mount:
+#   smolvm machine start --name minibox-ci
+#   smolvm machine exec --name minibox-ci -- bash -lc 'cd /src && cargo xtask verify'
+#   smolvm machine exec --name minibox-ci -- bash -lc 'cd /src && cargo xtask test-unit'
+#   smolvm machine stop --name minibox-ci
+
+image = "alpine:3.20"
+cpus = 4
+memory = 8192
+net = true
+overlay = 4
+workdir = "/src"
+
+[dev]
+init = [
+    "apk add --no-cache bash coreutils util-linux mount shadow",
+    "mkdir -p /var/lib/minibox /run/minibox",
+]
+volumes = ["./:/src"]
+
+[health]
+exec = ["rustc", "--version"]

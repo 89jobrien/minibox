@@ -9,10 +9,11 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
             socket_path: super::default_socket_path(),
-        })
+        }
     }
 
     pub fn with_socket(path: impl AsRef<Path>) -> Self {
@@ -21,6 +22,9 @@ impl DaemonClient {
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if the socket connection or request send fails.
     pub async fn call(&self, request: DaemonRequest) -> Result<DaemonResponseStream> {
         let mut stream = UnixStream::connect(&self.socket_path)
             .await
@@ -29,7 +33,7 @@ impl DaemonClient {
         // Send request
         let payload = serde_json::to_string(&request)?;
         stream
-            .write_all(format!("{}\n", payload).as_bytes())
+            .write_all(format!("{payload}\n").as_bytes())
             .await
             .map_err(ClientError::ConnectionFailed)?;
         stream
@@ -48,6 +52,10 @@ pub struct DaemonResponseStream {
 }
 
 impl DaemonResponseStream {
+    /// # Errors
+    ///
+    /// Returns an error if reading from the socket fails or the response
+    /// cannot be deserialized.
     pub async fn next(&mut self) -> Result<Option<DaemonResponse>> {
         let mut line = String::new();
         let n = self
@@ -64,14 +72,6 @@ impl DaemonResponseStream {
             decode_response(line.as_bytes()).map_err(|e| ClientError::FrameError(e.to_string()))?;
 
         Ok(Some(response))
-    }
-
-    pub async fn try_collect(mut self) -> Result<Vec<DaemonResponse>> {
-        let mut responses = Vec::new();
-        while let Some(resp) = self.next().await? {
-            responses.push(resp);
-        }
-        Ok(responses)
     }
 }
 
@@ -91,13 +91,16 @@ impl DaemonWriter {
     }
 
     /// Send `request` to the daemon and return immediately without reading the response.
+    /// # Errors
+    ///
+    /// Returns an error if the socket connection or request send fails.
     pub async fn send(&self, request: DaemonRequest) -> Result<()> {
         let mut stream = UnixStream::connect(&self.socket_path)
             .await
             .map_err(ClientError::ConnectionFailed)?;
         let payload = serde_json::to_string(&request)?;
         stream
-            .write_all(format!("{}\n", payload).as_bytes())
+            .write_all(format!("{payload}\n").as_bytes())
             .await
             .map_err(ClientError::ConnectionFailed)?;
         stream
@@ -110,7 +113,7 @@ impl DaemonWriter {
 
 impl Default for DaemonClient {
     fn default() -> Self {
-        Self::new().expect("failed to create default client")
+        Self::new()
     }
 }
 
@@ -121,7 +124,16 @@ mod tests {
     #[test]
     fn test_client_creation() {
         let client = DaemonClient::new();
-        assert!(client.is_ok());
+        // Default socket path must be non-empty and end with the expected filename.
+        assert!(
+            client.socket_path.file_name().is_some(),
+            "socket path must have a filename component"
+        );
+        assert_eq!(
+            client.socket_path.file_name().unwrap(),
+            "miniboxd.sock",
+            "default socket filename should be miniboxd.sock"
+        );
     }
 
     #[test]

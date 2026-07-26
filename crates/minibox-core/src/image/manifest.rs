@@ -104,6 +104,7 @@ impl ManifestList {
     /// Matches on `os` and `architecture`. If the target has a `variant`, the
     /// descriptor must also match that variant. If the target has no variant,
     /// any variant (or none) on the descriptor is accepted.
+    #[must_use]
     pub fn find_platform(&self, target: &TargetPlatform) -> Option<&Descriptor> {
         self.manifests.iter().find(|d| {
             if let Some(p) = &d.platform {
@@ -111,11 +112,10 @@ impl ManifestList {
                     return false;
                 }
                 // If the target specifies a variant, it must match.
-                if let Some(tv) = &target.variant {
-                    p.variant.as_ref() == Some(tv)
-                } else {
-                    true
-                }
+                target
+                    .variant
+                    .as_ref()
+                    .is_none_or(|tv| p.variant.as_ref() == Some(tv))
             } else {
                 false
             }
@@ -123,6 +123,7 @@ impl ManifestList {
     }
 
     /// Find the descriptor for the `linux/amd64` platform.
+    #[must_use]
     pub fn find_linux_amd64(&self) -> Option<&Descriptor> {
         self.find_platform(&TargetPlatform::linux_amd64())
     }
@@ -161,10 +162,10 @@ impl ManifestResponse {
     pub fn parse(body: &[u8], media_type: &str) -> anyhow::Result<Self> {
         if media_type.contains("manifest.list") || media_type.contains("image.index") {
             let list: ManifestList = serde_json::from_slice(body)?;
-            Ok(ManifestResponse::List(list))
+            Ok(Self::List(list))
         } else {
             let manifest: OciManifest = serde_json::from_slice(body)?;
-            Ok(ManifestResponse::Single(manifest))
+            Ok(Self::Single(manifest))
         }
     }
 }
@@ -190,7 +191,8 @@ pub struct TargetPlatform {
 impl Default for TargetPlatform {
     /// Auto-detect the host platform, mapping Rust arch names to OCI conventions.
     fn default() -> Self {
-        let os = std::env::consts::OS.to_string();
+        // OCI containers are always Linux — use "linux" regardless of host OS.
+        let os = "linux".to_string();
         let architecture = match std::env::consts::ARCH {
             "aarch64" => "arm64".to_string(),
             "x86_64" => "amd64".to_string(),
@@ -210,6 +212,7 @@ impl TargetPlatform {
     /// # Errors
     ///
     /// Returns an error if the string does not contain at least `os/arch`.
+    // qual:allow(iosp) reason: "pure validation — bail! counted as call"
     pub fn parse(s: &str) -> anyhow::Result<Self> {
         let parts: Vec<&str> = s.split('/').collect();
         match parts.len() {
@@ -256,6 +259,7 @@ impl TargetPlatform {
     }
 
     /// Convenience constructor for `linux/amd64`.
+    #[must_use]
     pub fn linux_amd64() -> Self {
         Self {
             os: "linux".to_string(),
@@ -505,7 +509,7 @@ mod tests {
             !tp.architecture.is_empty(),
             "architecture should be non-empty"
         );
-        assert_eq!(tp.os, std::env::consts::OS);
+        assert_eq!(tp.os, "linux");
     }
 
     #[test]

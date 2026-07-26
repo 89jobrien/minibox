@@ -142,6 +142,11 @@ fn all_response_variants() -> Vec<DaemonResponse> {
             id: "abc123".to_string(),
             snapshots: vec![],
         },
+        DaemonResponse::PipelineList { pipelines: vec![] },
+        DaemonResponse::PipelineDetail {
+            id: "trace-1".to_string(),
+            trace: serde_json::json!({"steps": []}),
+        },
     ]
 }
 
@@ -177,7 +182,7 @@ fn test_all_response_variants_serde_roundtrip() {
 /// Verifies that a JSON Run request that omits all optional fields still
 /// deserializes successfully with the expected defaults.
 #[test]
-fn test_request_run_backward_compat_omits_optional_fields() {
+fn daemon_request_run_backward_compat_omits_optional_fields() {
     // Minimal Run — only the fields that were present in the original protocol
     // (no ephemeral, network, env, mounts, privileged, name, tty).
     let json = r#"{"type":"Run","image":"alpine","tag":null,"command":["/bin/sh"],"memory_limit_bytes":null,"cpu_weight":null}"#;
@@ -213,7 +218,7 @@ fn test_request_run_backward_compat_omits_optional_fields() {
 /// Verifies that a Exec request omitting the optional fields deserializes with
 /// correct defaults.
 #[test]
-fn test_request_exec_backward_compat_omits_optional_fields() {
+fn daemon_request_exec_backward_compat_omits_optional_fields() {
     let json = r#"{"type":"Exec","container_id":"abc123","cmd":["/bin/sh"]}"#;
 
     let req: DaemonRequest =
@@ -236,7 +241,7 @@ fn test_request_exec_backward_compat_omits_optional_fields() {
 
 /// Verifies that a Prune request omitting `dry_run` deserializes with false.
 #[test]
-fn test_request_prune_backward_compat_omits_dry_run() {
+fn daemon_request_prune_backward_compat_omits_dry_run() {
     let json = r#"{"type":"Prune"}"#;
 
     let req: DaemonRequest =
@@ -253,7 +258,7 @@ fn test_request_prune_backward_compat_omits_dry_run() {
 /// Verifies that a Commit request omitting optional string fields deserializes
 /// with None / empty defaults.
 #[test]
-fn test_request_commit_backward_compat_omits_optional_fields() {
+fn daemon_request_commit_backward_compat_omits_optional_fields() {
     let json = r#"{"type":"Commit","container_id":"abc123","target_image":"my-img:latest"}"#;
 
     let req: DaemonRequest =
@@ -279,7 +284,7 @@ fn test_request_commit_backward_compat_omits_optional_fields() {
 /// Verifies Build omitting `build_args` and `no_cache` deserializes with
 /// defaults.
 #[test]
-fn test_request_build_backward_compat_omits_optional_fields() {
+fn daemon_request_build_backward_compat_omits_optional_fields() {
     let json = r#"{"type":"Build","dockerfile":"FROM alpine","context_path":"/tmp/ctx","tag":"my:latest"}"#;
 
     let req: DaemonRequest =
@@ -328,7 +333,9 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::SnapshotSaved { .. }
         | DaemonResponse::SnapshotRestored { .. }
         | DaemonResponse::SnapshotList { .. }
-        | DaemonResponse::ImageList { .. } => true,
+        | DaemonResponse::ImageList { .. }
+        | DaemonResponse::PipelineList { .. }
+        | DaemonResponse::PipelineDetail { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }
@@ -339,6 +346,13 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::Event { .. }
         | DaemonResponse::LogLine { .. }
         | DaemonResponse::UpdateProgress { .. } => false,
+
+        // Manifest inspection — terminal (single response per request).
+        DaemonResponse::Manifest { .. } | DaemonResponse::VerifyResult { .. } => true,
+
+        // Workflow — step updates are non-terminal; final summary is terminal.
+        DaemonResponse::WorkflowStepComplete { .. } => false,
+        DaemonResponse::WorkflowComplete { .. } => true,
     }
 }
 
@@ -397,6 +411,11 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::SnapshotList {
             id: "abc123".to_string(),
             snapshots: vec![],
+        },
+        DaemonResponse::PipelineList { pipelines: vec![] },
+        DaemonResponse::PipelineDetail {
+            id: "trace-1".to_string(),
+            trace: serde_json::json!({"steps": []}),
         },
     ];
 
@@ -472,8 +491,8 @@ fn test_terminal_classification_is_exhaustive() {
 /// Verifies that a RunPipeline request omitting all optional fields still
 /// deserializes with the expected defaults.
 #[test]
-fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
-    let json = r#"{"type":"RunPipeline","pipeline_path":"work.cruxx"}"#;
+fn daemon_request_run_pipeline_backward_compat_omits_optional_fields() {
+    let json = r#"{"type":"RunPipeline","pipeline_path":"work.crux"}"#;
 
     let req: DaemonRequest =
         serde_json::from_str(json).expect("backward-compat RunPipeline deserialization failed");
@@ -488,7 +507,7 @@ fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
             max_depth,
             ..
         } => {
-            assert_eq!(pipeline_path, "work.cruxx");
+            assert_eq!(pipeline_path, "work.crux");
             assert!(input.is_none(), "input should default to None");
             assert!(image.is_none(), "image should default to None");
             assert!(budget.is_none(), "budget should default to None");
@@ -504,9 +523,9 @@ fn test_request_run_pipeline_backward_compat_omits_optional_fields() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn run_pipeline_request_snapshot() {
+fn daemon_request_run_pipeline_snapshot() {
     let req = DaemonRequest::RunPipeline {
-        pipeline_path: "/workspace/.cruxx/pipelines/work.cruxx".into(),
+        pipeline_path: "/workspace/.crux/pipelines/work.crux".into(),
         input: Some(serde_json::json!({"prompt": "hello"})),
         image: None,
         budget: None,
@@ -520,9 +539,9 @@ fn run_pipeline_request_snapshot() {
 }
 
 #[test]
-fn run_pipeline_request_minimal_snapshot() {
+fn daemon_request_run_pipeline_minimal_snapshot() {
     let req = DaemonRequest::RunPipeline {
-        pipeline_path: "work.cruxx".into(),
+        pipeline_path: "work.crux".into(),
         input: None,
         image: None,
         budget: None,
@@ -540,7 +559,7 @@ fn run_pipeline_request_minimal_snapshot() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn pipeline_complete_response_snapshot() {
+fn daemon_response_pipeline_complete_snapshot() {
     let resp = DaemonResponse::PipelineComplete {
         trace: serde_json::json!({
             "id": "01HYX-test-trace",

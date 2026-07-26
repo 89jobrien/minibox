@@ -1,13 +1,11 @@
-//! test_linux — hexagonal architecture for `cargo xtask test-linux`.
+//! `test_linux` — hexagonal architecture for `cargo xtask test-linux`.
 //!
 //! Three port traits define the pipeline:
 //!   Compiler         — cross-compile test binaries to musl
-//!   InitramfsBuilder — assemble gzip cpio initramfs from a rootfs directory
-//!   VmRunner         — boot VM, stream serial, detect sentinel
+//!   `InitramfsBuilder` — assemble gzip cpio initramfs from a rootfs directory
+//!   `VmRunner`         — boot VM or run container, stream output, detect sentinel
 //!
-//! TODO (#306): wire real adapters for smolvm once the QEMU/VZ path is removed.
-
-#![allow(dead_code)] // TODO(#306): wire smolvm real adapters
+//! Real adapters: `ZigbuildCompiler`, `CpioInitramfsBuilder`, `SmolvmRunner`.
 
 use anyhow::{Context, Result, bail};
 use std::path::Path;
@@ -29,11 +27,10 @@ pub trait InitramfsBuilder {
     fn build(&self, rootfs_dir: &Path, output_path: &Path) -> Result<()>;
 }
 
-/// Boot a QEMU VM, stream serial output, and detect the test-done sentinel.
+/// Boot a micro-VM or container and stream test output.
 pub trait VmRunner {
-    /// Boot the VM with the given kernel, initramfs, and cmdline.
-    /// Stream serial output to stdout with a `[vm]` prefix.
-    /// Return Ok(()) iff `MINIBOX_TESTS_DONE rc=0` is received before EOF.
+    /// Boot the VM with the given kernel and initramfs, or run a container image.
+    /// Return Ok(()) iff the test suite exits with status 0.
     fn run(&self, kernel_path: &Path, initramfs_path: &Path, cmdline: &str) -> Result<()>;
 }
 
@@ -43,7 +40,7 @@ pub trait VmRunner {
 
 /// Compile via `cargo zigbuild`, falling back to `cargo build` with
 /// `CC_<target>` / `CARGO_TARGET_<target>_LINKER` env vars pointing at
-/// `aarch64-linux-musl-gcc` (or the x86_64 equivalent).
+/// `aarch64-linux-musl-gcc` (or the `x86_64` equivalent).
 pub struct ZigbuildCompiler {
     /// Crate packages to build as binaries (e.g. `["miniboxd", "mbx"]`).
     pub bin_packages: Vec<String>,
@@ -52,7 +49,7 @@ pub struct ZigbuildCompiler {
 }
 
 impl ZigbuildCompiler {
-    pub fn new(bin_packages: Vec<String>, test_packages: Vec<String>) -> Self {
+    pub const fn new(bin_packages: Vec<String>, test_packages: Vec<String>) -> Self {
         Self {
             bin_packages,
             test_packages,
@@ -65,7 +62,7 @@ impl ZigbuildCompiler {
             .status()
             .context("spawning cargo zigbuild")?;
         if !status.success() {
-            bail!("cargo zigbuild {:?} failed", args);
+            bail!("cargo zigbuild {args:?} failed");
         }
         Ok(())
     }
@@ -85,7 +82,7 @@ impl ZigbuildCompiler {
             .status()
             .context("spawning cargo build")?;
         if !status.success() {
-            bail!("cargo build {:?} failed", args);
+            bail!("cargo build {args:?} failed");
         }
         Ok(())
     }
@@ -114,12 +111,9 @@ impl Compiler for ZigbuildCompiler {
         for pkg in &self.bin_packages {
             println!("  compiling  {pkg} → {target}");
             if use_zigbuild {
-                ZigbuildCompiler::run_cargo_zigbuild(&["zigbuild", "-p", pkg, "--target", target])?;
+                Self::run_cargo_zigbuild(&["zigbuild", "-p", pkg, "--target", target])?;
             } else {
-                ZigbuildCompiler::run_cargo_with_musl_gcc(
-                    &["build", "-p", pkg, "--target", target],
-                    target,
-                )?;
+                Self::run_cargo_with_musl_gcc(&["build", "-p", pkg, "--target", target], target)?;
             }
         }
 
@@ -127,17 +121,84 @@ impl Compiler for ZigbuildCompiler {
         for pkg in &self.test_packages {
             println!("  compiling tests {pkg} → {target}");
             if use_zigbuild {
-                ZigbuildCompiler::run_cargo_zigbuild(&[
-                    "zigbuild", "--tests", "-p", pkg, "--target", target,
-                ])?;
+                Self::run_cargo_zigbuild(&["zigbuild", "--tests", "-p", pkg, "--target", target])?;
             } else {
-                ZigbuildCompiler::run_cargo_with_musl_gcc(
+                Self::run_cargo_with_musl_gcc(
                     &["test", "--no-run", "-p", pkg, "--target", target],
                     target,
                 )?;
             }
         }
 
+        Ok(())
+    }
+}
+
+/// Build a gzip-compressed cpio initramfs from a rootfs directory.
+///
+/// Shells out to `find | cpio --null -o --format=newc | gzip` (available on any Linux CI).
+pub struct CpioInitramfsBuilder;
+
+impl InitramfsBuilder for CpioInitramfsBuilder {
+    fn build(&self, rootfs_dir: &Path, output_path: &Path) -> Result<()> {
+        use std::process::{Command, Stdio};
+
+        let find = Command::new("find")
+            .arg(".")
+            .arg("-print0")
+            .current_dir(rootfs_dir)
+            .stdout(Stdio::piped())
+            .spawn()
+            .context("spawning find")?;
+
+        let cpio = Command::new("cpio")
+            .args(["--null", "-o", "--format=newc"])
+            .stdin(find.stdout.context("find stdout")?)
+            .stdout(Stdio::piped())
+            .spawn()
+            .context("spawning cpio")?;
+
+        let gzip_out = std::fs::File::create(output_path)
+            .with_context(|| format!("creating {}", output_path.display()))?;
+
+        let mut gzip = Command::new("gzip")
+            .stdin(cpio.stdout.context("cpio stdout")?)
+            .stdout(gzip_out)
+            .spawn()
+            .context("spawning gzip")?;
+
+        let status = gzip.wait().context("waiting for gzip")?;
+        if !status.success() {
+            bail!("cpio/gzip pipeline failed building initramfs");
+        }
+        Ok(())
+    }
+}
+
+/// Run tests via `minibox run --privileged <image_name> -- /run-tests.sh`.
+///
+/// `kernel_path` and `initramfs_path` are unused; the container image is expected to have
+/// been built and loaded via `cargo xtask build-test-image` before invoking this runner.
+pub struct SmolvmRunner {
+    /// OCI image reference to run, e.g. `minibox-tester:latest`.
+    pub image_name: String,
+}
+
+impl VmRunner for SmolvmRunner {
+    fn run(&self, _kernel_path: &Path, _initramfs_path: &Path, _cmdline: &str) -> Result<()> {
+        println!(
+            "SmolvmRunner: minibox run --privileged {} -- /run-tests.sh",
+            self.image_name
+        );
+        let status = std::process::Command::new("minibox")
+            .args(["run", "--privileged"])
+            .arg(&self.image_name)
+            .args(["--", "/run-tests.sh"])
+            .status()
+            .context("spawning minibox run")?;
+        if !status.success() {
+            bail!("minibox run {} exited non-zero", self.image_name);
+        }
         Ok(())
     }
 }
@@ -511,6 +572,29 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("mock vm runner"));
+    }
+
+    #[test]
+    fn smolvm_runner_constructs_correctly() {
+        let r = SmolvmRunner {
+            image_name: "minibox-tester:latest".to_string(),
+        };
+        assert_eq!(r.image_name, "minibox-tester:latest");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn cpio_initramfs_builder_creates_output_file() {
+        let tmp = tempdir().unwrap();
+        let rootfs = tmp.path().join("rootfs");
+        std::fs::create_dir_all(rootfs.join("bin")).unwrap();
+        std::fs::write(rootfs.join("bin/sh"), b"#!/bin/sh").unwrap();
+        let output = tmp.path().join("initramfs.img");
+        let builder = CpioInitramfsBuilder;
+        let result = builder.build(&rootfs, &output);
+        assert!(result.is_ok(), "builder failed: {result:?}");
+        assert!(output.exists(), "initramfs.img should be created");
+        assert!(output.metadata().unwrap().len() > 0, "should be non-empty");
     }
 
     #[test]

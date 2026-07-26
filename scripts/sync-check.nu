@@ -9,5 +9,5 @@ def main [
     let args = ["--base" $base]
     let args = if $dry_run { $args | append "--dry-run" } else { $args }
 
-    ^rust-script ($env.FILE_PWD | path join "scripts" "sync-check.rs") ...$args
+    ^rust-script ($env.FILE_PWD | path join "sync-check.rs") ...$args
 }

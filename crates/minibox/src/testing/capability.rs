@@ -19,13 +19,13 @@ impl SkipReason {
     /// Return a human-readable explanation.
     pub fn message(&self) -> String {
         match self {
-            SkipReason::CapabilityNotDeclared { capability } => {
+            Self::CapabilityNotDeclared { capability } => {
                 format!("backend does not declare {capability} capability")
             }
-            SkipReason::ExternalServiceUnavailable { service } => {
+            Self::ExternalServiceUnavailable { service } => {
                 format!("external service not available: {service}")
             }
-            SkipReason::PlatformUnsupported { platform } => {
+            Self::PlatformUnsupported { platform } => {
                 format!("platform not supported: {platform}")
             }
         }
@@ -136,6 +136,152 @@ impl ConformanceCapability for GcCapability {
     fn skip_reason(&self) -> SkipReason {
         SkipReason::CapabilityNotDeclared {
             capability: "ImageGarbageCollection",
+        }
+    }
+}
+
+/// Capability: backend provides filesystem operations (`RootfsSetup` + `ChildInit`).
+pub struct FilesystemCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for FilesystemCapability {
+    fn name(&self) -> &'static str {
+        "Filesystem"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared {
+            capability: "Filesystem",
+        }
+    }
+}
+
+/// Capability: backend provides exec into running containers.
+pub struct ExecCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for ExecCapability {
+    fn name(&self) -> &'static str {
+        "Exec"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared { capability: "Exec" }
+    }
+}
+
+/// Capability: backend provides network namespace setup.
+pub struct NetworkCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for NetworkCapability {
+    fn name(&self) -> &'static str {
+        "Network"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared {
+            capability: "Network",
+        }
+    }
+}
+
+/// Capability: backend provides TTY allocation.
+pub struct TtyCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for TtyCapability {
+    fn name(&self) -> &'static str {
+        "Tty"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared { capability: "Tty" }
+    }
+}
+
+/// Capability: backend provides low-level PTY pair allocation.
+pub struct PtyCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for PtyCapability {
+    fn name(&self) -> &'static str {
+        "Pty"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared { capability: "Pty" }
+    }
+}
+
+/// Capability: backend provides metrics recording.
+pub struct MetricsCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for MetricsCapability {
+    fn name(&self) -> &'static str {
+        "Metrics"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared {
+            capability: "Metrics",
+        }
+    }
+}
+
+/// Capability: backend provides multi-registry routing.
+pub struct RegistryRouterCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for RegistryRouterCapability {
+    fn name(&self) -> &'static str {
+        "RegistryRouter"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared {
+            capability: "RegistryRouter",
+        }
+    }
+}
+
+/// Capability: backend provides local OCI tarball loading.
+pub struct ImageLoaderCapability {
+    pub supported: bool,
+}
+
+impl ConformanceCapability for ImageLoaderCapability {
+    fn name(&self) -> &'static str {
+        "ImageLoader"
+    }
+    fn is_supported(&self) -> bool {
+        self.supported
+    }
+    fn skip_reason(&self) -> SkipReason {
+        SkipReason::CapabilityNotDeclared {
+            capability: "ImageLoader",
         }
     }
 }

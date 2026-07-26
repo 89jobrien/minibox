@@ -1,4 +1,4 @@
-//! SmolVM adapter suite — lightweight Linux VMs via smolmachines.
+//! `SmolVM` adapter suite — lightweight Linux VMs via smolmachines.
 //!
 //! Delegates container operations into a smolmachines VM. smolmachines
 //! uses libkrun (a lightweight VMM) to boot Linux VMs with sub-second
@@ -7,7 +7,7 @@
 //! Selected by `MINIBOX_ADAPTER=smolvm`. Compiled on all platforms.
 //!
 //! Requirements:
-//! - smolmachines installed (https://smolmachines.com)
+//! - smolmachines installed (<https://smolmachines.com>)
 //!   - macOS: `brew install smolvm`
 //!   - Linux: see smolmachines docs
 
@@ -59,14 +59,23 @@ fn smolvm_exec(image: &str, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Output from a synchronous smolvm command execution.
+struct SmolVmOutput {
+    stdout: String,
+    exit_code: i32,
+}
+
 /// Run a command via the real `smolvm` binary with volume mounts and env vars.
+///
+/// Returns both stdout and exit code. Does NOT treat non-zero exit as an error
+/// — the caller (handler) decides how to handle the exit code.
 fn smolvm_exec_full(
     image: &str,
     args: &[&str],
     volumes: &[(&str, &str)],
     env: &[(&str, &str)],
     timeout_secs: u32,
-) -> Result<String> {
+) -> Result<SmolVmOutput> {
     let mut cmd = Command::new("smolvm");
     cmd.args(["machine", "run", "--net", "--image", image]);
     cmd.args(["--timeout", &format!("{timeout_secs}s")]);
@@ -85,21 +94,22 @@ fn smolvm_exec_full(
         .output()
         .map_err(|e| anyhow!("failed to execute smolvm: {e}"))?;
 
-    if !output.status.success() {
-        return Err(anyhow!(
-            "smolvm command failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
+    if !output.stderr.is_empty() {
+        combined.push_str(&String::from_utf8_lossy(&output.stderr));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    Ok(SmolVmOutput {
+        stdout: combined,
+        exit_code: output.status.code().unwrap_or(1),
+    })
 }
 
 // ============================================================================
 // SmolVm Image Registry Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`ImageRegistry`].
+/// `SmolVM` implementation of [`ImageRegistry`].
 ///
 /// Pulls images via `smolvm machine run` which handles image management
 /// internally. smolvm caches images locally after first pull.
@@ -112,6 +122,7 @@ pub struct SmolVmRegistry {
 
 impl SmolVmRegistry {
     /// Create a new registry adapter using the default smolvm image.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             image: DEFAULT_IMAGE.to_string(),
@@ -120,6 +131,7 @@ impl SmolVmRegistry {
     }
 
     /// Override the smolvm VM image (default: `ubuntu:24.04`).
+    #[must_use]
     pub fn with_image(mut self, image: String) -> Self {
         self.image = image;
         self
@@ -159,8 +171,7 @@ impl ImageRegistry for SmolVmRegistry {
             &format!("reference={full_name}"),
             "--quiet",
         ])
-        .map(|out| !out.trim().is_empty())
-        .unwrap_or(false)
+        .is_ok_and(|out| !out.trim().is_empty())
     }
 
     /// Pull an image inside the smolvm VM via `docker pull`.
@@ -192,7 +203,7 @@ impl ImageRegistry for SmolVmRegistry {
 // SmolVm Container Runtime Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`ContainerRuntime`].
+/// `SmolVM` implementation of [`ContainerRuntime`].
 ///
 /// Spawns container processes by running commands inside a smolvm VM via
 /// `smolvm machine run`. Each `spawn_process` call boots a fresh VM instance.
@@ -201,14 +212,20 @@ pub struct SmolVmRuntime {
     image: String,
     /// Optional injected executor used in tests.
     executor: Option<SmolVmExecutor>,
+    /// Exit code from the last synchronous smolvm execution.
+    /// smolvm runs commands synchronously in `spawn_process`, so
+    /// the exit code is available immediately rather than via waitpid.
+    last_exit_code: std::sync::Mutex<i32>,
 }
 
 impl SmolVmRuntime {
     /// Create a new runtime adapter using the default smolvm image.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             image: DEFAULT_IMAGE.to_string(),
             executor: None,
+            last_exit_code: std::sync::Mutex::new(0),
         }
     }
 
@@ -246,9 +263,14 @@ impl ContainerRuntime for SmolVmRuntime {
     ///
     /// Builds the command from `config.command` + `config.args`, passes
     /// environment variables and bind mounts, and runs via smolvm.
+    // qual:allow(complexity) reason: "smolvm CLI invocation with mount/env assembly"
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         let mut command = vec![config.command.as_str()];
-        let args: Vec<&str> = config.args.iter().map(|s| s.as_str()).collect();
+        let args: Vec<&str> = config
+            .args
+            .iter()
+            .map(std::string::String::as_str)
+            .collect();
         command.extend(&args);
 
         // Build volume and env args for smolvm.
@@ -281,18 +303,56 @@ impl ContainerRuntime for SmolVmRuntime {
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
 
-        if self.executor.is_some() {
+        let (stdout, exit_code) = if self.executor.is_some() {
             // Use the test executor — flatten command into a single arg list.
-            self.vm_exec(&command)?;
+            (self.vm_exec(&command)?, 0)
         } else {
-            smolvm_exec_full(&self.image, &command, &vol_refs, &env_refs, 60)?;
+            const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
+            let result = smolvm_exec_full(
+                &self.image,
+                &command,
+                &vol_refs,
+                &env_refs,
+                DEFAULT_EXEC_TIMEOUT_SECS,
+            )?;
+            (result.stdout, result.exit_code)
+        };
+
+        // Store exit code for wait_for_exit.
+        // Poisoned mutex is unrecoverable — the process that held the lock panicked.
+        {
+            #[allow(clippy::expect_used)]
+            let mut guard = self.last_exit_code.lock().expect("lock poisoned");
+            *guard = exit_code;
         }
+
+        // The command already ran synchronously. Pipe captured output into
+        // an OwnedFd so the handler's streaming loop can read it.
+        #[cfg(unix)]
+        let output_reader = {
+            let (read_fd, write_fd) =
+                nix::unistd::pipe().map_err(|e| anyhow!("pipe() failed: {e}"))?;
+            let stdout_bytes = stdout.as_bytes();
+            let _ = nix::unistd::write(&write_fd, stdout_bytes);
+            drop(write_fd);
+            Some(read_fd)
+        };
+        #[cfg(not(unix))]
+        let output_reader = None;
 
         Ok(SpawnResult {
             runtime_id: None,
             pid: 0,
-            output_reader: None,
+            output_reader,
         })
+    }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // The command already ran synchronously in spawn_process.
+        // Return the stored exit code.
+        #[allow(clippy::expect_used)]
+        let code = *self.last_exit_code.lock().expect("lock poisoned");
+        Ok(code)
     }
 }
 
@@ -300,15 +360,16 @@ impl ContainerRuntime for SmolVmRuntime {
 // SmolVm Filesystem Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`FilesystemProvider`].
+/// `SmolVM` implementation of [`FilesystemProvider`].
 ///
 /// Filesystem operations are handled inside the VM. All methods are no-ops
-/// on the host side — the VM's kernel manages overlay mounts and pivot_root.
+/// on the host side — the VM's kernel manages overlay mounts and `pivot_root`.
 pub struct SmolVmFilesystem;
 
 impl SmolVmFilesystem {
     /// Create a new filesystem adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -325,7 +386,7 @@ impl minibox_core::domain::RootfsSetup for SmolVmFilesystem {
             "smolvm: setup_rootfs delegated to in-VM kernel (no-op on host)"
         );
         Ok(RootfsLayout {
-            merged_dir: container_dir.to_path_buf(),
+            merged_dir: container_dir.to_path_buf().into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -342,7 +403,7 @@ impl minibox_core::domain::RootfsSetup for SmolVmFilesystem {
 }
 
 impl minibox_core::domain::ChildInit for SmolVmFilesystem {
-    /// pivot_root runs inside the VM, not on the host.
+    /// `pivot_root` runs inside the VM, not on the host.
     fn pivot_root(&self, new_root: &Path) -> Result<()> {
         tracing::debug!(
             new_root = %new_root.display(),
@@ -356,7 +417,7 @@ impl minibox_core::domain::ChildInit for SmolVmFilesystem {
 // SmolVm Resource Limiter Adapter
 // ============================================================================
 
-/// SmolVM implementation of [`ResourceLimiter`].
+/// `SmolVM` implementation of [`ResourceLimiter`].
 ///
 /// Cgroup operations are handled inside the VM's Linux kernel. All methods
 /// are no-ops on the host side.
@@ -364,7 +425,8 @@ pub struct SmolVmLimiter;
 
 impl SmolVmLimiter {
     /// Create a new resource limiter adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -421,13 +483,25 @@ mod tests {
     fn _assert_filesystem_provider<T: FilesystemProvider>() {}
     fn _assert_resource_limiter<T: ResourceLimiter>() {}
 
-    /// Compile-time check: all four adapters satisfy the required domain traits.
+    /// Compile-time and runtime check: all four adapters satisfy the required domain traits
+    /// and can be instantiated.
     #[test]
     fn adapter_implements_all_traits() {
+        // Compile-time trait satisfaction (fails to compile if a trait is not implemented).
         let _ = _assert_image_registry::<SmolVmRegistry>;
         let _ = _assert_container_runtime::<SmolVmRuntime>;
         let _ = _assert_filesystem_provider::<SmolVmFilesystem>;
         let _ = _assert_resource_limiter::<SmolVmLimiter>;
+        // Runtime: verify the adapters can be constructed.
+        let registry = SmolVmRegistry::new();
+        let runtime = SmolVmRuntime::new();
+        let filesystem = SmolVmFilesystem::new();
+        let limiter = SmolVmLimiter::new();
+        assert!(
+            !registry.image.is_empty(),
+            "SmolVmRegistry must have a non-empty default image"
+        );
+        drop((runtime, filesystem, limiter));
     }
 
     /// Registry with injected executor returns true when image exists.
@@ -471,7 +545,7 @@ mod tests {
         let fs = SmolVmFilesystem::new();
         let dir = PathBuf::from("/tmp/test-container");
         let layout = fs.setup_rootfs(&[], &dir).expect("setup_rootfs");
-        assert_eq!(layout.merged_dir, dir);
+        assert_eq!(&*layout.merged_dir, dir.as_path());
     }
 
     /// Limiter create returns the container ID.

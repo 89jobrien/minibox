@@ -2,27 +2,74 @@ name: Conformance
 
 on:
   push:
-    branches: [next, stable]
+    branches: [develop, next, staging]
+  pull_request:
+    branches: [develop, next, staging]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
-  conformance:
-    name: conformance suite
-    runs-on: [self-hosted, minibox]
+  detect-changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      core:        ${{ steps.dc.outputs.core }}
+      runtime:     ${{ steps.dc.outputs.runtime }}
+      conformance: ${{ steps.dc.outputs.conformance }}
     steps:
-      - name: trust workspace dir
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: detect changes
+        id: dc
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE="$BASE_REF"
+          elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            BASE="origin/main"
+          else
+            BASE="HEAD^"
+          fi
+          cargo xtask detect-changes "$BASE"
 
-      - uses: actions/checkout@v4
+  conformance:
+    name: conformance suite (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.conformance == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
 
-      - name: cargo xtask test-conformance
-        run: ~/.local/bin/mise exec -- cargo xtask test-conformance
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run conformance suite
+        run: cargo run -p minibox-testsuite --bin run-conformance
 
       - name: upload conformance report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: conformance-report
+          name: conformance-report-${{ matrix.os }}
           path: artifacts/conformance/
           retention-days: 30
 
@@ -31,6 +78,104 @@ jobs:
         run: |
           REPORT=artifacts/conformance/report.md
           if [ -f "$REPORT" ]; then
-            echo "## Conformance Report" >> "$GITHUB_STEP_SUMMARY"
-            python3 -c "import sys; sys.stdout.write(open('$REPORT').read())" >> "$GITHUB_STEP_SUMMARY"
+            echo "## Conformance Report (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
+            cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  property-tests:
+    name: property tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.conformance == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run property tests
+        run: cargo xtask test-property
+
+  krun-conformance:
+    name: krun conformance
+    runs-on: macos-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.conformance == 'true'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run krun conformance
+        run: cargo xtask test-krun-conformance
+
+  cli-conformance:
+    name: CLI conformance (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.conformance == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@nextest
+
+      - name: run CLI conformance
+        run: cargo nextest run -p mbx --test conformance_cli
+
+  borrow-fixtures:
+    name: borrow fixtures
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.conformance == 'true'
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run borrow fixtures
+        run: cargo xtask borrow-fixtures
+
+  quickcheck:
+    name: quickcheck (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.conformance == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: run quickcheck tests
+        run: cargo xtask test-quickcheck

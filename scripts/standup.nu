@@ -23,5 +23,5 @@ def main [
 
     let args = if $no_sessions { $args | append "--no-sessions" } else { $args }
 
-    ^uv run ($env.FILE_PWD | path join "scripts" "standup.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "standup.py") ...$args
 }

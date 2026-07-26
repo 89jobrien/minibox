@@ -1,4 +1,4 @@
-//! miniboxd library — re-exports from minibox::daemon for backward compatibility.
+//! miniboxd library — re-exports from `minibox::daemon` for backward compatibility.
 //!
 //! Also provides [`adapter_registry`] for centralized adapter suite discovery.
 //!
@@ -7,6 +7,7 @@
 //! to compile without changes.
 
 pub mod adapter_registry;
+pub mod config;
 #[cfg(unix)]
 pub mod listener;
 

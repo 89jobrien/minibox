@@ -1,0 +1,98 @@
+package llm
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"google.golang.org/genai"
+
+	"github.com/joe/minibox/agentbox/internal/config"
+	"github.com/joe/minibox/agentbox/internal/domain"
+)
+
+// GeminiProvider wraps the Google GenAI Go SDK.
+type GeminiProvider struct {
+	client *genai.Client
+	model  string
+}
+
+// NewGeminiProvider creates a provider with an explicit API key and model.
+func NewGeminiProvider(ctx context.Context, apiKey, model string) (*GeminiProvider, error) {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("gemini client: %w", err)
+	}
+	return &GeminiProvider{client: client, model: model}, nil
+}
+
+// NewGeminiFromConfig creates a provider from a centralized Config.
+// Returns nil if the API key is not set.
+func NewGeminiFromConfig(ctx context.Context, cfg config.Config) *GeminiProvider {
+	if cfg.GeminiKey == "" {
+		return nil
+	}
+	p, err := NewGeminiProvider(ctx, cfg.GeminiKey, cfg.GeminiModel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: gemini provider init failed: %v\n", err)
+		return nil
+	}
+	return p
+}
+
+// NewGeminiFromEnv creates a provider reading config from environment.
+// Returns nil if the key is not set.
+func NewGeminiFromEnv(ctx context.Context) *GeminiProvider {
+	return NewGeminiFromConfig(ctx, config.LoadFromEnv())
+}
+
+func (p *GeminiProvider) Name() string {
+	return fmt.Sprintf("gemini/%s", p.model)
+}
+
+func (p *GeminiProvider) Complete(ctx context.Context, req domain.CompletionRequest) (domain.CompletionResponse, error) {
+	config := &genai.GenerateContentConfig{}
+	if req.MaxTokens > 0 {
+		maxTokens := int32(req.MaxTokens)
+		config.MaxOutputTokens = maxTokens
+	}
+	if req.System != "" {
+		config.SystemInstruction = &genai.Content{
+			Parts: []*genai.Part{genai.NewPartFromText(req.System)},
+		}
+	}
+
+	start := time.Now()
+	resp, err := p.client.Models.GenerateContent(ctx, p.model, genai.Text(req.Prompt), config)
+	latencyMs := time.Since(start).Milliseconds()
+	if err != nil {
+		return domain.CompletionResponse{}, fmt.Errorf("gemini: %w", err)
+	}
+
+	var text string
+	if resp != nil && len(resp.Candidates) > 0 && resp.Candidates[0].Content != nil {
+		for _, part := range resp.Candidates[0].Content.Parts {
+			if part.Text != "" {
+				text += part.Text
+			}
+		}
+	}
+
+	var inputTokens, outputTokens int
+	if resp != nil && resp.UsageMetadata != nil {
+		inputTokens = int(resp.UsageMetadata.PromptTokenCount)
+		outputTokens = int(resp.UsageMetadata.CandidatesTokenCount)
+	}
+
+	return domain.CompletionResponse{
+		Text:         text,
+		Provider:     p.Name(),
+		LatencyMs:    latencyMs,
+		InputTokens:  inputTokens,
+		OutputTokens: outputTokens,
+	}, nil
+}

@@ -1,3 +1,6 @@
+// TODO(#414): add multi-provider synthesis — voting/ranking instead of
+//   first-success-wins for commit messages (council report item #5)
+
 package main
 
 import (
@@ -7,11 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/joe/minibox/agentbox/internal/agent"
+	"github.com/joe/minibox/agentbox/internal/config"
 	"github.com/joe/minibox/agentbox/internal/domain"
+	"github.com/joe/minibox/agentbox/internal/llm"
 	"github.com/joe/minibox/agentbox/internal/output"
+	"github.com/joe/minibox/agentbox/internal/synthesis"
 	"github.com/joe/minibox/agentbox/internal/tools"
 )
 
@@ -29,10 +35,10 @@ func main() {
 		exec.Command("git", "add", "-A").Run()
 	}
 
-	stagedDiff := gitRun("diff", "--cached")
-	stagedStat := gitRun("diff", "--cached", "--stat")
+	stagedDiff := gitRun("git", "diff", "--cached")
+	stagedStat := gitRun("git", "diff", "--cached", "--stat")
 	if strings.TrimSpace(stagedDiff) == "" {
-		status := gitRun("status", "--short")
+		status := gitRun("git", "status", "--short")
 		if status != "" {
 			fmt.Println("Nothing staged. Use -a to stage all, or `git add` files first.")
 		} else {
@@ -42,19 +48,21 @@ func main() {
 	}
 
 	ctx := context.Background()
-	runner := agent.NewClaudeSDKRunner()
 	writer := output.NewDualWriter()
 
+	// Build runners from env
+	runners := buildRunners(ctx)
+
 	input := tools.CommitMsgContext{
-		Branch:       gitRun("rev-parse", "--abbrev-ref", "HEAD"),
+		Branch:       gitRun("git", "rev-parse", "--abbrev-ref", "HEAD"),
 		StagedDiff:   stagedDiff,
 		StagedStat:   stagedStat,
-		UnstagedStat: gitRun("diff", "--stat"),
-		RecentLog:    gitRun("log", "-8", "--oneline"),
-		Status:       gitRun("status", "--short"),
+		UnstagedStat: gitRun("git", "diff", "--stat"),
+		RecentLog:    gitRun("git", "log", "-8", "--oneline"),
+		Status:       gitRun("git", "status", "--short"),
 	}
 
-	fmt.Printf("Generating commit message for %s...\n\n", input.StagedStat)
+	fmt.Printf("Generating commit message (%d providers)...\n\n", len(runners))
 
 	runID := time.Now().Format(time.RFC3339)
 	writer.WriteRun(ctx, domain.AgentRun{
@@ -63,18 +71,55 @@ func main() {
 	})
 	start := time.Now()
 
-	cm := tools.NewCommitMsg(runner)
-	msg, err := cm.Generate(ctx, input)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "generate: %v\n", err)
+	// Run all providers in parallel
+	type result struct {
+		provider string
+		msg      string
+		err      error
+	}
+	results := make(chan result, len(runners))
+	var wg sync.WaitGroup
+
+	for name, runner := range runners {
+		wg.Add(1)
+		go func(provName string, r domain.AgentRunner) {
+			defer wg.Done()
+			cm := tools.NewCommitMsg(r)
+			msg, err := cm.Generate(ctx, input)
+			results <- result{provider: provName, msg: msg, err: err}
+		}(name, runner)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	candidates := make(map[string]string)
+	for res := range results {
+		if res.err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %s failed: %v\n", res.provider, res.err)
+			continue
+		}
+		fmt.Printf("──── %s %s\n%s\n\n", res.provider, strings.Repeat("─", max(0, 56-len(res.provider))), res.msg)
+		candidates[res.provider] = res.msg
+	}
+
+	if len(candidates) == 0 {
+		fmt.Fprintln(os.Stderr, "error: all providers failed")
 		os.Exit(1)
 	}
 
-	fmt.Printf("%s\n%s\n%s\n", strings.Repeat("─", 60), msg, strings.Repeat("─", 60))
+	// Synthesize: quality-rank when multiple providers, passthrough for single.
+	strategy := synthesis.Default()
+	msg, selectedProvider := strategy.Select(candidates)
+	if len(candidates) > 1 {
+		fmt.Printf("Selected: %s (via quality ranking)\n", selectedProvider)
+	}
 
 	if *commit {
 		if !*yes {
-			fmt.Print("\nCommit with this message? [y/N] ")
+			fmt.Print("\nCommit with the selected message? [y/N] ")
 			var answer string
 			fmt.Scanln(&answer)
 			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
@@ -88,8 +133,7 @@ func main() {
 			}
 		}
 
-		fullMsg := msg + "\n\nCo-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
-		result := exec.Command("git", "commit", "-m", fullMsg)
+		result := exec.Command("git", "commit", "-m", msg)
 		result.Stdout = os.Stdout
 		result.Stderr = os.Stderr
 		if err := result.Run(); err != nil {
@@ -104,6 +148,21 @@ func main() {
 		Args:      map[string]any{"stage": *stageAll, "commit": *commit},
 		Status:    "complete", DurationS: time.Since(start).Seconds(), Output: msg,
 	})
+}
+
+func buildRunners(ctx context.Context) map[string]domain.AgentRunner {
+	cfg := config.LoadFromEnv()
+	retryCfg := llm.DefaultRetryConfig()
+	runners := make(map[string]domain.AgentRunner)
+
+	if p := llm.NewOpenAIFromConfig(cfg); p != nil {
+		runners["openai"] = llm.NewLlmRunner(llm.NewRetryingProvider(p, retryCfg))
+	}
+	if len(runners) == 0 {
+		fmt.Fprintln(os.Stderr, "error: no providers configured. Set OPENAI_API_KEY.")
+		os.Exit(1)
+	}
+	return runners
 }
 
 func gitRun(args ...string) string {

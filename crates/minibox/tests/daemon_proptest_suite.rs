@@ -72,7 +72,9 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store = Arc::new(minibox_core::image::ImageStore::new(tmp.join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.join("images2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -110,7 +112,9 @@ fn make_deps(tmp: &Path) -> Arc<HandlerDependencies> {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
@@ -145,6 +149,8 @@ fn make_record(id: &str) -> ContainerRecord {
         urgency: None,
         execution_context: None,
         creation_params: None,
+        manifest_path: None,
+        workload_digest: None,
     }
 }
 
@@ -168,7 +174,7 @@ proptest! {
         let found = runtime().block_on(state.get_container(&id));
 
         prop_assert!(found.is_some(), "get after add returned None for id={id}");
-        prop_assert_eq!(found.unwrap().info.id, id);
+        prop_assert_eq!(found.expect("unwrap in test").info.id, id);
     }
 }
 
@@ -284,6 +290,42 @@ proptest! {
         prop_assert!(
             matches!(resp, DaemonResponse::ContainerList { .. }),
             "expected ContainerList, got {resp:?}"
+        );
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_pause_unknown_id_is_error(id in arb_container_id()) {
+        let state = make_state(shared_tmp());
+        let event_sink: std::sync::Arc<dyn minibox_core::events::EventSink> =
+            std::sync::Arc::new(minibox_core::events::NoopEventSink);
+        let resp = runtime().block_on(
+            minibox::daemon::handler::handle_pause(id.clone(), state, event_sink)
+        );
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error for unknown id={id}, got {resp:?}"
+        );
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig { failure_persistence: None, ..ProptestConfig::default() })]
+    #[test]
+    fn handle_resume_unknown_id_is_error(id in arb_container_id()) {
+        let state = make_state(shared_tmp());
+        let event_sink: std::sync::Arc<dyn minibox_core::events::EventSink> =
+            std::sync::Arc::new(minibox_core::events::NoopEventSink);
+        let resp = runtime().block_on(
+            minibox::daemon::handler::handle_resume(id.clone(), state, event_sink)
+        );
+
+        prop_assert!(
+            matches!(resp, DaemonResponse::Error { .. }),
+            "expected Error for unknown id={id}, got {resp:?}"
         );
     }
 }

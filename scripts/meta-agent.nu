@@ -22,5 +22,5 @@ def main [
     let args = if $no_synthesis  { $args | append "--no-synthesis"  } else { $args }
     let args = if $refresh_docs  { $args | append "--refresh-docs"  } else { $args }
 
-    ^uv run ($env.FILE_PWD | path join "scripts" "meta-agent.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "meta-agent.py") ...$args
 }

@@ -1,4 +1,4 @@
-//! Linux namespace container runtime adapter implementing the ContainerRuntime trait.
+//! Linux namespace container runtime adapter implementing the `ContainerRuntime` trait.
 //!
 //! This adapter wraps the existing container process spawning logic from
 //! [`crate::container::process`] to implement the domain's
@@ -6,7 +6,7 @@
 
 use crate::container::namespace::NamespaceConfig;
 use crate::container::process::{ContainerConfig, spawn_container_process};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
@@ -80,14 +80,14 @@ use tracing::debug;
 ///     Ok(())
 /// }
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LinuxNamespaceRuntime;
 
 impl LinuxNamespaceRuntime {
     /// Create a new Linux namespace container runtime adapter.
     ///
     /// This is a zero-sized type, so construction is trivial.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -116,12 +116,12 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
 
         // Convert domain ContainerSpawnConfig to infrastructure ContainerConfig
         let container_config = ContainerConfig {
-            rootfs: config.rootfs.clone(),
+            rootfs: config.rootfs.clone().to_path_buf(),
             command: config.command.clone(),
             args: config.args.clone(),
             env: config.env.clone(),
             namespace_config: NamespaceConfig::all(), // All namespaces enabled
-            cgroup_path: config.cgroup_path.clone(),
+            cgroup_path: config.cgroup_path.clone().to_path_buf(),
             hostname: config.hostname.clone(),
             capture_output,
             pre_exec_hooks: config.hooks.pre_exec.clone(),
@@ -139,6 +139,12 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
         debug!("container process spawned with PID {}", spawn_result.pid);
         Ok(spawn_result)
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, pid: u32) -> Result<i32> {
+        tokio::task::spawn_blocking(move || crate::container::process::wait_for_exit(pid))
+            .await
+            .context("wait_for_exit: join error")?
+    }
 }
 
 #[cfg(test)]
@@ -148,13 +154,17 @@ mod tests {
     #[test]
     fn test_runtime_creation() {
         let runtime = LinuxNamespaceRuntime::new();
-        let _ = runtime;
+        // Verify the reported capabilities match the known Linux namespace feature set.
+        let caps = runtime.capabilities();
+        assert!(caps.supports_user_namespaces);
+        assert!(caps.supports_overlay_fs);
     }
 
     #[test]
     fn test_runtime_default() {
         let runtime = LinuxNamespaceRuntime;
-        let _ = runtime;
+        // Unit struct equality — new() and the literal form must be identical.
+        assert_eq!(runtime, LinuxNamespaceRuntime::new());
     }
 
     // Note: Actual spawn tests require Linux with root privileges
@@ -163,6 +173,7 @@ mod tests {
     #[test]
     fn spawn_config_fields_map_to_container_config() {
         use minibox_core::domain::{BindMount, ContainerHooks, ContainerSpawnConfig};
+        use minibox_core::path::InternalPath;
         use std::path::PathBuf;
 
         let bind = BindMount {
@@ -171,12 +182,12 @@ mod tests {
             read_only: true,
         };
         let spawn_config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/rootfs"),
+            rootfs: InternalPath::from("/rootfs"),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "test".to_string(),
-            cgroup_path: PathBuf::from("/cgroup"),
+            cgroup_path: InternalPath::from("/cgroup"),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -187,12 +198,12 @@ mod tests {
 
         // Build ContainerConfig the same way spawn_process does.
         let container_config = crate::container::process::ContainerConfig {
-            rootfs: spawn_config.rootfs.clone(),
+            rootfs: spawn_config.rootfs.clone().to_path_buf(),
             command: spawn_config.command.clone(),
             args: spawn_config.args.clone(),
             env: spawn_config.env.clone(),
             namespace_config: crate::container::namespace::NamespaceConfig::all(),
-            cgroup_path: spawn_config.cgroup_path.clone(),
+            cgroup_path: spawn_config.cgroup_path.clone().to_path_buf(),
             hostname: spawn_config.hostname.clone(),
             capture_output: spawn_config.capture_output,
             pre_exec_hooks: spawn_config.hooks.pre_exec.clone(),

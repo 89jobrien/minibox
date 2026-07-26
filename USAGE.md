@@ -148,7 +148,7 @@ Near-term work is concentrated in a few areas:
 - push commit/build/push parity further across `linux-native` and `colima`
 - let CI agents create and tear down their own minibox-managed test environments
 
-See `docs/ROADMAP.md` for the active roadmap.
+See `docs/ROADMAP.mbx.md` for the active roadmap.
 
 ## VM Image CAS Overlay
 
@@ -198,14 +198,18 @@ installed files match their expected hashes.
 
 ## Benchmark
 
+All criterion benchmarks live in `crates/minibox-bench`.
+
 ```bash
-cargo xtask bench                        # run locally, save to bench/results/
-cargo xtask bench-vps                    # run on VPS, fetch results
-./target/release/minibox-bench --suite codec    # protocol benchmarks
-./target/release/minibox-bench --suite adapter  # adapter overhead benchmarks
+just bench                               # run benches, save to bench/results/
+just bench-check                         # compare against the per-env baseline
+just bench-baseline                      # save results as the new per-env baseline
+cargo xtask bench                        # underlying command (--check / --save-baseline / --env)
 ```
 
-> Results are written to `bench/results/bench.jsonl` (append-only history) and `bench/results/latest.json`.
+> Results are written to `bench/results/` (gitignored). Tracked per-env baselines live at
+> `bench/baseline.{local,selfhosted,hosted}.json`; the nightly CI bench job produces the
+> canonical numbers.
 
 ```mmd
 graph TD

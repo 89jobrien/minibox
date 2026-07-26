@@ -1,104 +1,158 @@
 name: Merge
 
 on:
+  merge_group:
   push:
-    branches: [main, next, stable, "feature/*", "hotfix/*", "chore/*"]
+    branches: [develop, main, next, staging, "feature/*", "hotfix/*", "chore/*"]
+  workflow_dispatch:
+    inputs:
+      fail_fast:
+        description: "Stop on first test failure (nextest --fail-fast)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  security-events: write
+
 env:
   CARGO_INCREMENTAL: 0
+  MINIBOX_FAIL_FAST: ${{ inputs.fail_fast || false }}
 
 jobs:
+  detect-changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      core:      ${{ steps.dc.outputs.core }}
+      daemon:    ${{ steps.dc.outputs.daemon }}
+      cli:       ${{ steps.dc.outputs.cli }}
+      runtime:   ${{ steps.dc.outputs.runtime }}
+      xtask:     ${{ steps.dc.outputs.xtask }}
+      workflows: ${{ steps.dc.outputs.workflows }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: detect changes
+        id: dc
+        run: cargo xtask detect-changes HEAD^
+
   lint:
     name: lint + fmt (ubuntu)
     runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true' ||
+        needs.detect-changes.outputs.runtime == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true'
+      )
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: cargo fmt + clippy + check
-        run: |
-          cargo fmt --all --check
-          cargo clippy -p minibox -p minibox-macros -p mbx -p miniboxd -p minibox-core -p winbox -- -D warnings
-          cargo check --workspace
+      - name: cargo xtask lint
+        run: cargo xtask lint
+      - name: clippy SARIF
+        if: always()
+        run: cargo xtask clippy-sarif clippy.sarif
+      - name: upload clippy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: clippy.sarif
+          category: clippy
+      - name: install rustqual
+        if: always()
+        run: cargo install rustqual --locked
+      - name: rustqual SARIF
+        if: always()
+        run: rustqual . --format sarif --no-fail > rustqual.sarif
+      - name: upload rustqual SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: rustqual.sarif
+          category: rustqual
 
   test-unit:
     name: unit tests (ubuntu)
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [detect-changes, lint]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true' ||
+        needs.detect-changes.outputs.runtime == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true'
+      )
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
-      - name: cargo nextest run (unit tests)
-        run: cargo nextest run --workspace --exclude macbox --lib
+      - name: cargo xtask test-unit
+        run: cargo xtask test-unit
 
-  build-test-archive:
-    name: build test archive
+  lint-docs:
+    name: lint docs
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - name: cargo xtask lint-docs
+        run: cargo xtask lint-docs --sarif lint-docs.sarif
+      - name: upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          tool: cargo-nextest
-      - name: cargo build --locked
-        run: cargo build --locked --workspace
-      - name: cargo nextest archive
-        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
-      - name: upload test archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextest-archive
-          path: nextest-archive.tar.zst
-          retention-days: 1
+          sarif_file: lint-docs.sarif
+          category: lint-docs
 
-  test-archive:
-    name: test from archive (ubuntu)
+  check-protocol-drift:
+    name: check protocol drift
     runs-on: ubuntu-latest
-    needs: build-test-archive
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true'
+      )
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: nextest-archive
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
-      - name: run tests from archive
-        run: cargo nextest run --archive-file nextest-archive.tar.zst --workspace-remap .
-
-  test-all-features:
-    name: test with all features
-    runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
-    needs: build-test-archive
-    steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - name: cargo xtask check-protocol-drift
+        run: cargo xtask check-protocol-drift --sarif protocol-drift.sarif
+      - name: upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
         with:
-          tool: cargo-nextest
-      - name: cargo nextest --all-features (lib, exclude macOS-only crates)
-        run: cargo nextest run --all-features --workspace --exclude macbox --exclude miniboxd --lib
-      - name: cargo test --all-features (doc)
-        run: cargo test --all-features --workspace --exclude macbox --exclude miniboxd --doc
+          sarif_file: protocol-drift.sarif
+          category: protocol-drift
 
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-audit
@@ -107,90 +161,153 @@ jobs:
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   machete:
     name: cargo machete
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-machete
       - run: cargo machete
 
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: install actionlint
+        run: |
+          bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12
+          sudo mv actionlint /usr/local/bin/
+      - name: run actionlint
+        run: actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
+
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: cargo xtask test-e2e-suite
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask test-e2e-suite
 
   test-integration:
     name: integration tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: cargo xtask test-integration
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask test-integration
 
   test-protocol-e2e-linux:
     name: protocol e2e (Linux)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     steps:
-      - uses: actions/checkout@v4
-      - name: build daemon + cli
+      - uses: actions/checkout@v5
+      - name: cargo xtask test-e2e
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
-          cargo build --release -p miniboxd -p mbx
-      - name: protocol e2e tests
-        run: |
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1 --nocapture
+          cargo fetch --locked
+          cargo xtask test-e2e
+
+  test-protocol-e2e:
+    name: protocol e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true'
+      )
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build daemon and CLI
+        run: cargo build --release -p miniboxd -p mbx
+      - name: run protocol e2e tests
+        run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1
+
+  test-cli-e2e:
+    name: CLI e2e (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    needs: [detect-changes]
+    if: |
+      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+        needs.detect-changes.outputs.core == 'true' ||
+        needs.detect-changes.outputs.daemon == 'true' ||
+        needs.detect-changes.outputs.cli == 'true'
+      )
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build daemon and CLI
+        run: cargo build --release -p miniboxd -p mbx
+      - name: run CLI e2e tests
+        env:
+          MINIBOX_ADAPTER: smolvm
+        run: cargo test -p miniboxd --test cli_e2e_tests --release -- --test-threads=1
 
   ci-ok:
     name: CI passed
     runs-on: ubuntu-latest
     if: always()
     needs:
+      - detect-changes
       - lint
       - test-unit
-      - build-test-archive
-      - test-archive
-      - test-all-features
+      - lint-docs
+      - check-protocol-drift
       - audit
       - deny
       - machete
+      - actionlint
       - test-e2e
       - test-integration
       - test-protocol-e2e-linux
+      - test-protocol-e2e
+      - test-cli-e2e
     steps:
       - name: check job results
         run: |
           results=(
             "${{ needs.lint.result }}"
             "${{ needs.test-unit.result }}"
-            "${{ needs.build-test-archive.result }}"
-            "${{ needs.test-archive.result }}"
-            "${{ needs.test-all-features.result }}"
+            "${{ needs.lint-docs.result }}"
+            "${{ needs.check-protocol-drift.result }}"
             "${{ needs.audit.result }}"
             "${{ needs.deny.result }}"
             "${{ needs.machete.result }}"
+            "${{ needs.actionlint.result }}"
             "${{ needs.test-e2e.result }}"
             "${{ needs.test-integration.result }}"
             "${{ needs.test-protocol-e2e-linux.result }}"
+            "${{ needs.test-protocol-e2e.result }}"
+            "${{ needs.test-cli-e2e.result }}"
           )
           for r in "${results[@]}"; do
             if [[ "$r" == "failure" || "$r" == "cancelled" ]]; then
@@ -200,15 +317,124 @@ jobs:
           done
           echo "All jobs passed or were skipped"
 
+  promote-next:
+    name: promote develop -> next
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    needs: [ci-ok]
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: check if next is already up-to-date
+        id: check
+        run: |
+          git fetch origin next
+          BEHIND=$(git log --oneline origin/next..origin/develop | wc -l | tr -d ' ')
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" = "0" ]; then
+            echo "next is already up-to-date with develop"
+          else
+            echo "$BEHIND commit(s) to promote"
+          fi
+      - name: create or update develop -> next PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for develop -> next"
+          else
+            gh pr create \
+              --base next \
+              --head develop \
+              --title "promote(develop->next): auto-promote after CI passed" \
+              --body "Automated promotion from develop. CI passed on develop branch." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
+          fi
+
+  promote-staging:
+    name: promote next -> staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/next'
+    needs: [ci-ok]
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: check if staging is already up-to-date
+        id: check
+        run: |
+          git fetch origin staging
+          BEHIND=$(git log --oneline origin/staging..origin/next | wc -l | tr -d ' ')
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" = "0" ]; then
+            echo "staging is already up-to-date with next"
+          else
+            echo "$BEHIND commit(s) to promote"
+          fi
+      - name: create or update next -> staging PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for next -> staging"
+          else
+            gh pr create \
+              --base staging \
+              --head next \
+              --title "promote(next->staging): auto-promote after CI passed" \
+              --body "Automated promotion from next. CI passed on next branch." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
+          fi
+      - name: create or update staging -> main PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for staging -> main"
+          else
+            gh pr create \
+              --base main \
+              --head staging \
+              --title "promote(staging->main): auto-promote after CI passed" \
+              --body "Automated promotion from staging. Status checks must pass before merge." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
+          fi
+
   cleanup-linux:
     name: cleanup (Linux)
     runs-on: [self-hosted, minibox]
-    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/stable"]'), github.ref)
+    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
     needs: [test-e2e, test-integration, test-protocol-e2e-linux]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: clean build artifacts and test state
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fetch --locked
           cargo xtask clean-artifacts
           cargo xtask nuke-test-state

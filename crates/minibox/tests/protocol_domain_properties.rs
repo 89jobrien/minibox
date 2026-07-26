@@ -28,9 +28,9 @@ proptest! {
     ) {
         let image = format!("{prefix}\n{suffix}");
         let req = DaemonRequest::Pull { image, tag: None, platform: None };
-        let encoded = encode_request(&req).unwrap();
-        let decoded = decode_request(&encoded).unwrap();
-        let re_encoded = encode_request(&decoded).unwrap();
+        let encoded = encode_request(&req).expect("unwrap in test");
+        let decoded = decode_request(&encoded).expect("unwrap in test");
+        let re_encoded = encode_request(&decoded).expect("unwrap in test");
         prop_assert_eq!(encoded, re_encoded);
     }
 
@@ -45,9 +45,9 @@ proptest! {
             stream: OutputStreamKind::Stdout,
             data,
         };
-        let encoded = encode_response(&resp).unwrap();
-        let decoded = decode_response(&encoded).unwrap();
-        let re_encoded = encode_response(&decoded).unwrap();
+        let encoded = encode_response(&resp).expect("unwrap in test");
+        let decoded = decode_response(&encoded).expect("unwrap in test");
+        let re_encoded = encode_response(&decoded).expect("unwrap in test");
         prop_assert_eq!(encoded, re_encoded);
     }
 
@@ -62,9 +62,9 @@ proptest! {
             stream: OutputStreamKind::Stderr,
             data,
         };
-        let encoded = encode_response(&resp).unwrap();
-        let decoded = decode_response(&encoded).unwrap();
-        let re_encoded = encode_response(&decoded).unwrap();
+        let encoded = encode_response(&resp).expect("unwrap in test");
+        let decoded = decode_response(&encoded).expect("unwrap in test");
+        let re_encoded = encode_response(&decoded).expect("unwrap in test");
         prop_assert_eq!(encoded, re_encoded);
     }
 
@@ -72,9 +72,9 @@ proptest! {
     #[test]
     fn empty_command_vec_roundtrips(image in any::<String>()) {
         let req = minibox_macros::test_run!(image: image, command: Vec::<String>::new());
-        let encoded = encode_request(&req).unwrap();
-        let decoded = decode_request(&encoded).unwrap();
-        let re_encoded = encode_request(&decoded).unwrap();
+        let encoded = encode_request(&req).expect("unwrap in test");
+        let decoded = decode_request(&encoded).expect("unwrap in test");
+        let re_encoded = encode_request(&decoded).expect("unwrap in test");
         prop_assert_eq!(encoded, re_encoded);
     }
 
@@ -87,9 +87,9 @@ proptest! {
             memory_limit_bytes: Some(u64::MAX),
             cpu_weight: Some(u64::MAX),
         );
-        let encoded = encode_request(&req).unwrap();
-        let decoded = decode_request(&encoded).unwrap();
-        let re_encoded = encode_request(&decoded).unwrap();
+        let encoded = encode_request(&req).expect("unwrap in test");
+        let decoded = decode_request(&encoded).expect("unwrap in test");
+        let re_encoded = encode_request(&decoded).expect("unwrap in test");
         prop_assert_eq!(encoded, re_encoded);
     }
 

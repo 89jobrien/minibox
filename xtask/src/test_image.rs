@@ -15,10 +15,11 @@ use std::{
 use tempfile::TempDir;
 use xshell::{Shell, cmd};
 
-const TARGET: &str = "aarch64-unknown-linux-musl";
+use crate::xconfig::XConfig;
+
 const ALPINE_IMAGE: &str = "alpine";
 const ALPINE_TAG: &str = "3.21";
-const ALPINE_ARCH: &str = "arm64"; // Docker Hub arch name for aarch64
+const ALPINE_ARCH: &str = "arm64";
 const DOCKER_REGISTRY: &str = "https://registry-1.docker.io";
 const DOCKER_AUTH: &str = "https://auth.docker.io";
 
@@ -57,7 +58,10 @@ pub fn test_linux(sh: &Shell) -> Result<()> {
 }
 
 /// Entry point: build or refresh the test OCI tarball.
-pub fn build_test_image(force: bool) -> Result<()> {
+// qual:allow(iosp) reason: "xtask orchestration: fs cache checks + builds + network fetch + tar assembly"
+pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
+    let cfg = XConfig::load(workspace_root)?;
+    let target = &cfg.cross.target;
     let out_dir = default_test_image_dir();
     let tar_path = out_dir.join("minibox-tester.tar");
 
@@ -76,7 +80,7 @@ pub fn build_test_image(force: bool) -> Result<()> {
     let staging = staging_tmp.path().to_path_buf();
 
     // 1. Cross-compile binaries
-    let binaries = cross_compile_binaries(force)?;
+    let binaries = cross_compile_binaries(target, force)?;
 
     // 2. Fetch Alpine base layer
     println!("[2/4] fetching Alpine {ALPINE_TAG} {ALPINE_ARCH} layer …");
@@ -108,6 +112,7 @@ pub fn build_test_image(force: bool) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Returns true if the tarball is newer than all .rs sources in the workspace.
+// qual:allow(iosp) reason: "cache check mixes fs reads with control flow"
 fn is_up_to_date(tar_path: &Path) -> Result<bool> {
     if !tar_path.exists() {
         return Ok(false);
@@ -127,9 +132,10 @@ fn is_up_to_date(tar_path: &Path) -> Result<bool> {
     let crates_dir = workspace_root.join("crates");
 
     let newest_src = find_newest_rs_mtime(&crates_dir)?;
-    Ok(newest_src.map(|src| tar_mtime > src).unwrap_or(false))
+    Ok(newest_src.is_some_and(|src| tar_mtime > src))
 }
 
+// qual:allow(iosp) reason: "recursive fs scan"
 fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
     let mut newest = None;
     for entry in fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))? {
@@ -138,7 +144,7 @@ fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
         if path.is_dir() {
             let sub = find_newest_rs_mtime(&path)?;
             if let Some(t) = sub {
-                newest = Some(newest.map(|n: std::time::SystemTime| n.max(t)).unwrap_or(t));
+                newest = Some(newest.map_or(t, |n: std::time::SystemTime| n.max(t)));
             }
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             let mtime = path
@@ -146,11 +152,7 @@ fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
                 .with_context(|| format!("stat {}", path.display()))?
                 .modified()
                 .context("mtime")?;
-            newest = Some(
-                newest
-                    .map(|n: std::time::SystemTime| n.max(mtime))
-                    .unwrap_or(mtime),
-            );
+            newest = Some(newest.map_or(mtime, |n: std::time::SystemTime| n.max(mtime)));
         }
     }
     Ok(newest)
@@ -160,29 +162,28 @@ fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
 // Cross-compilation
 // ---------------------------------------------------------------------------
 
-fn cross_compile_binaries(force: bool) -> Result<Vec<(String, PathBuf)>> {
-    let target_base = std::env::var("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("target"));
+fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, PathBuf)>> {
+    let target_base =
+        std::env::var("CARGO_TARGET_DIR").map_or_else(|_| PathBuf::from("target"), PathBuf::from);
 
-    println!("[1/4] cross-compiling for {TARGET} …");
+    println!("[1/4] cross-compiling for {target} ...");
 
     let cc = "aarch64-linux-musl-gcc";
 
     // -- miniboxd binary --
-    let miniboxd_bin = target_base.join(TARGET).join("debug").join("miniboxd");
+    let miniboxd_bin = target_base.join(target).join("debug").join("miniboxd");
     if force || !miniboxd_bin.exists() {
-        println!("  cargo build miniboxd …");
-        run_cross(&["build", "--target", TARGET, "-p", "miniboxd"], cc)?;
+        println!("  cargo build miniboxd ...");
+        run_cross(&["build", "--target", target, "-p", "miniboxd"], cc, target)?;
     } else {
         println!("  cached  miniboxd");
     }
 
     // -- mbx (CLI) binary --
-    let cli_bin = target_base.join(TARGET).join("debug").join("mbx");
+    let cli_bin = target_base.join(target).join("debug").join("mbx");
     if force || !cli_bin.exists() {
-        println!("  cargo build mbx …");
-        run_cross(&["build", "--target", TARGET, "-p", "mbx"], cc)?;
+        println!("  cargo build mbx ...");
+        run_cross(&["build", "--target", target, "-p", "mbx"], cc, target)?;
     } else {
         println!("  cached  mbx");
     }
@@ -201,23 +202,28 @@ fn cross_compile_binaries(force: bool) -> Result<Vec<(String, PathBuf)>> {
     ];
 
     for (suite_name, pkg, test_name) in test_suites {
-        println!("  cargo test --no-run --test {test_name} …");
-        let bin_path = build_test_binary(pkg, test_name, cc, &target_base, force)?;
+        println!("  cargo test --no-run --test {test_name} ...");
+        let bin_path = build_test_binary(pkg, test_name, cc, &target_base, target, force)?;
         binaries.push((suite_name.to_string(), bin_path));
     }
 
     Ok(binaries)
 }
 
-fn run_cross(args: &[&str], cc: &str) -> Result<()> {
+fn run_cross(args: &[&str], cc: &str, target: &str) -> Result<()> {
+    let cc_env = format!("CC_{}", target.replace('-', "_"));
+    let linker_env = format!(
+        "CARGO_TARGET_{}_LINKER",
+        target.to_uppercase().replace('-', "_")
+    );
     let status = Command::new("cargo")
         .args(args)
-        .env("CC_aarch64_unknown_linux_musl", cc)
-        .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER", cc)
+        .env(&cc_env, cc)
+        .env(&linker_env, cc)
         .status()
         .context("spawning cargo")?;
     if !status.success() {
-        bail!("cargo {:?} failed", args);
+        bail!("cargo {args:?} failed");
     }
     Ok(())
 }
@@ -229,8 +235,14 @@ fn build_test_binary(
     test_name: &str,
     cc: &str,
     target_base: &Path,
+    target: &str,
     _force: bool,
 ) -> Result<PathBuf> {
+    let cc_env = format!("CC_{}", target.replace('-', "_"));
+    let linker_env = format!(
+        "CARGO_TARGET_{}_LINKER",
+        target.to_uppercase().replace('-', "_")
+    );
     // `cargo test --no-run` outputs a line like:
     //   Executable unittests src/lib.rs (target/.../deps/foo-abc123)
     // We capture stderr and parse it.
@@ -239,15 +251,15 @@ fn build_test_binary(
             "test",
             "--no-run",
             "--target",
-            TARGET,
+            target,
             "-p",
             pkg,
             "--test",
             test_name,
             "--message-format=json",
         ])
-        .env("CC_aarch64_unknown_linux_musl", cc)
-        .env("CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER", cc)
+        .env(&cc_env, cc)
+        .env(&linker_env, cc)
         .output()
         .context("spawning cargo test --no-run")?;
 
@@ -271,7 +283,7 @@ fn build_test_binary(
     }
 
     // Fallback: glob deps dir for a binary matching the test name prefix
-    let deps_dir = target_base.join(TARGET).join("debug").join("deps");
+    let deps_dir = target_base.join(target).join("debug").join("deps");
     let prefix = test_name.replace('-', "_");
     if deps_dir.exists() {
         for entry in
@@ -297,7 +309,7 @@ fn build_test_binary(
 // Alpine layer fetch via Docker Hub API
 // ---------------------------------------------------------------------------
 
-/// Fetch the Alpine aarch64 layer from Docker Hub and return (layer_tar_path, sha256_digest).
+/// Fetch the Alpine aarch64 layer from Docker Hub and return (`layer_tar_path`, `sha256_digest`).
 /// Uses `curl` for HTTP (no extra deps needed).
 fn fetch_alpine_layer(cache_dir: &Path, force: bool) -> Result<(PathBuf, String)> {
     let layer_path = cache_dir.join(format!("alpine-{ALPINE_TAG}-{ALPINE_ARCH}-layer.tar"));
@@ -357,7 +369,7 @@ fn docker_auth_token(image: &str) -> Result<String> {
         serde_json::from_slice(&out.stdout).context("parsing auth token JSON")?;
     json["token"]
         .as_str()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .context("no token field in auth response")
 }
 
@@ -396,7 +408,7 @@ fn get_alpine_layer_digest(token: &str) -> Result<String> {
                 && m["platform"]["os"].as_str() == Some("linux")
         })
         .and_then(|m| m["digest"].as_str())
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .context("aarch64 linux manifest not found in manifest list")?;
 
     // Fetch the arch-specific manifest to get the layer digest
@@ -430,7 +442,7 @@ fn get_alpine_layer_digest(token: &str) -> Result<String> {
         .first()
         .context("empty layers array")?["digest"]
         .as_str()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .context("layer digest not a string")
 }
 
@@ -465,7 +477,7 @@ fn curl_download_with_auth(url: &str, dest: &Path, token: &str) -> Result<()> {
 /// Build a tar layer containing:
 ///   usr/local/bin/<binary>  for each binary
 ///   run-tests.sh
-/// Returns (layer_tar_path, sha256_digest_string).
+/// Returns (`layer_tar_path`, `sha256_digest_string`).
 fn build_binaries_layer(
     staging: &Path,
     binaries: &[(String, PathBuf)],
@@ -517,7 +529,7 @@ fn build_binaries_layer(
     Ok((layer_tar, format!("sha256:{digest}")))
 }
 
-fn entrypoint_script() -> &'static str {
+const fn entrypoint_script() -> &'static str {
     r#"#!/bin/sh
 set -e
 MINIBOX_ADAPTER=native
@@ -563,14 +575,16 @@ fn sha256_of_file(path: &Path) -> Result<String> {
     stdout
         .split_whitespace()
         .next()
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .context("empty sha256 output")
 }
 
 fn sha256_of_bytes(data: &[u8]) -> String {
     // Write to a temp file then hash it — avoids pulling in sha2 crate
     let tmp = std::env::temp_dir().join(format!("xtask-sha-{}", std::process::id()));
+    #[allow(clippy::expect_used)]
     std::fs::write(&tmp, data).expect("writing tmp for sha256");
+    #[allow(clippy::expect_used)]
     let digest = sha256_of_file(&tmp).expect("sha256 of tmp");
     let _ = std::fs::remove_file(&tmp);
     digest

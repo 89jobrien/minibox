@@ -2,11 +2,13 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 2 * * *"
+    - cron: "0 2 * * *"       # daily — geiger, tag, extended tests
+    - cron: "0 3 * * 0"       # weekly (Sunday) — mutants
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
   geiger:
@@ -14,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: install cargo-geiger
@@ -28,6 +30,11 @@ jobs:
             crates/minibox/Cargo.toml \
             crates/minibox-macros/Cargo.toml \
             crates/mbx/Cargo.toml \
+            crates/minibox-core/Cargo.toml \
+            crates/macbox/Cargo.toml \
+            crates/winbox/Cargo.toml \
+            crates/minibox-crux-plugin/Cargo.toml \
+            crates/minibox-testsuite/Cargo.toml \
             crates/miniboxd/Cargo.toml
           do
             printf '\n## %s\n' "$manifest" | tee -a geiger-report.txt
@@ -37,10 +44,12 @@ jobs:
               geiger_status="$status"
             fi
           done
-          echo "## cargo geiger report" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -30 geiger-report.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## cargo geiger report"
+            echo '```'
+            tail -30 geiger-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
           exit "$geiger_status"
       - name: upload geiger report
         if: always()
@@ -50,6 +59,155 @@ jobs:
           path: geiger-report.txt
           retention-days: 30
 
+  mutants:
+    name: mutation testing (cargo-mutants)
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 3 * * 0'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: install cargo-mutants
+        run: cargo install cargo-mutants --locked
+      - name: run cargo-mutants on security modules
+        run: |
+          cargo mutants -- \
+            --file crates/minibox-core/src/image/layer.rs \
+            --file crates/minibox/src/daemon/server.rs \
+            --file crates/minibox-core/src/domain/execution_manifest.rs \
+            --file crates/minibox/src/container/process.rs \
+            --file crates/minibox-core/src/image/registry.rs \
+            --file crates/minibox/src/adapters/ghcr.rs
+      - name: upload mutants report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutants-report
+          path: mutants.out/
+          retention-days: 30
+      - name: summary
+        if: always()
+        run: |
+          if [ -f mutants.out/caught.txt ]; then
+            {
+              echo "## cargo-mutants security scan"
+              echo "### Caught"
+              echo '```'
+              head -50 mutants.out/caught.txt
+              echo '```'
+              if [ -f mutants.out/missed.txt ] && [ -s mutants.out/missed.txt ]; then
+                echo "### Missed"
+                echo '```'
+                cat mutants.out/missed.txt
+                echo '```'
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # --- Extended test suites (moved from merge/conformance to reduce push latency) ---
+
+  coverage-check:
+    name: coverage check
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo xtask coverage-check
+        run: cargo xtask coverage-check
+
+  build-test-archive:
+    name: build test archive
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo build --locked
+        run: cargo build --locked --workspace
+      - name: cargo nextest archive
+        run: cargo nextest archive --workspace --archive-file nextest-archive.tar.zst
+      - name: upload test archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive
+          path: nextest-archive.tar.zst
+          retention-days: 1
+
+  test-archive:
+    name: test from archive (ubuntu)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: run tests from archive
+        run: >-
+          cargo nextest run
+          --archive-file nextest-archive.tar.zst
+          --workspace-remap .
+          -E 'not package(minibox-crux-plugin)
+          and not binary_id(miniboxd::cli_e2e_tests)
+          and not binary_id(miniboxd::smolvm_e2e_tests)
+          and not binary_id(miniboxd::protocol_e2e_tests)'
+
+  test-all-features:
+    name: test with all features
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: build-test-archive
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: cargo nextest --all-features (lib, exclude macOS-only crates)
+        run: cargo nextest run --all-features --workspace --exclude macbox --exclude miniboxd --lib
+      - name: cargo test --all-features (doc)
+        run: cargo test --all-features --workspace --exclude macbox --exclude miniboxd --doc
+
+  shuttle:
+    name: shuttle
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: run shuttle tests
+        run: cargo xtask test-shuttle
+
+  turmoil:
+    name: turmoil
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: run turmoil tests
+        run: cargo xtask test-turmoil
+
   tag-nightly:
     name: tag nightly release
     runs-on: ubuntu-latest
@@ -57,9 +215,78 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: push nightly tag
         run: |
           TAG="nightly/$(date -u +%Y%m%d)"
           git tag "$TAG"
           git push origin "$TAG"
+
+  # --- Bench pipeline: prefer the self-hosted `minibox` runner when online, else fall
+  # --- back to GitHub-hosted ubuntu-latest. ---
+
+  bench-runner-check:
+    name: bench runner check
+    runs-on: ubuntu-latest
+    outputs:
+      selfhosted: ${{ steps.probe.outputs.selfhosted }}
+    steps:
+      # ACTIONS_RUNNER_READ_TOKEN is a fine-grained PAT with Administration: read
+      # (GITHUB_TOKEN cannot read runner status). If the secret is missing or the
+      # API call fails, selfhosted=false and bench always falls back to the
+      # GitHub-hosted runner.
+      - name: probe self-hosted runner
+        id: probe
+        env:
+          RUNNER_TOKEN: ${{ secrets.ACTIONS_RUNNER_READ_TOKEN }}
+        run: |
+          ok=false
+          if [ -n "$RUNNER_TOKEN" ]; then
+            online=$(curl -sf -H "Authorization: Bearer $RUNNER_TOKEN" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runners" \
+              | jq '[.runners[] | select(.status == "online") | select(any(.labels[]; .name == "minibox"))] | length' \
+              || echo 0)
+            if [ "${online:-0}" -gt 0 ]; then
+              ok=true
+            fi
+          fi
+          echo "selfhosted=$ok" >> "$GITHUB_OUTPUT"
+
+  bench-selfhosted:
+    name: bench check (self-hosted)
+    runs-on: [self-hosted, minibox]
+    continue-on-error: true
+    needs: bench-runner-check
+    if: needs.bench-runner-check.outputs.selfhosted == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      # mise is not on the runner service's default PATH; the full path is required.
+      - name: cargo xtask bench --check (selfhosted)
+        run: ~/.local/bin/mise exec -- cargo xtask bench --check --env selfhosted
+      - name: upload bench results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-selfhosted
+          path: bench/results/
+          retention-days: 30
+
+  bench-hosted:
+    name: bench check (hosted fallback)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    needs: bench-runner-check
+    if: needs.bench-runner-check.outputs.selfhosted != 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo xtask bench --check (hosted)
+        run: cargo xtask bench --check --env hosted
+      - name: upload bench results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-hosted
+          path: bench/results/
+          retention-days: 30

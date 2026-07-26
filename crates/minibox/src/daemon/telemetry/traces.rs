@@ -1,4 +1,6 @@
 //! OTEL trace exporter setup.
+// Static directive strings cannot fail to parse.
+#![allow(clippy::unwrap_used)]
 //!
 //! Replaces the bare `tracing_subscriber::fmt().init()` in main.rs with a
 //! layered subscriber that optionally adds OTLP trace export.
@@ -27,7 +29,13 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
     // on top of an already-layered Layered<EnvFilter, Registry>.
     let mut layers: Vec<Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>> = vec![
         tracing_subscriber::EnvFilter::from_default_env()
-            .add_directive("miniboxd=info".parse().unwrap())
+            .add_directive({
+                #[allow(clippy::expect_used)]
+                // SAFETY: static string is a valid directive
+                "miniboxd=info"
+                    .parse()
+                    .expect("static directive string is valid")
+            })
             .boxed(),
         tracing_subscriber::fmt::layer().boxed(),
     ];
@@ -40,6 +48,7 @@ pub fn init_tracing(otlp_endpoint: Option<&str>) -> OtelGuard {
             }
             Err(e) => {
                 // Fall back to fmt-only if OTEL init fails.
+                // eprintln because tracing subscriber is not yet initialized at this point.
                 eprintln!("[minibox] OTEL trace init failed, falling back to fmt-only: {e}");
                 None
             }
@@ -98,6 +107,7 @@ impl Drop for OtelGuard {
         if let Some(provider) = self.provider.take()
             && let Err(e) = provider.shutdown()
         {
+            // eprintln because the tracing subscriber may already be torn down.
             eprintln!("[minibox] OTEL tracer shutdown error: {e}");
         }
     }

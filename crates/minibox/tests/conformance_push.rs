@@ -55,7 +55,7 @@ fn minibox_push_backend(store: Arc<ImageStore>) -> (BackendDescriptor, DynImageP
 /// A backend wired with a pusher factory must declare `PushToRegistry` capability.
 #[tokio::test]
 async fn push_backend_declares_capability() {
-    let tmp = tempfile::TempDir::new().unwrap();
+    let tmp = tempfile::TempDir::new().expect("unwrap in test");
     let store = make_image_store(&tmp);
     let (descriptor, _) = minibox_push_backend(store);
 
@@ -106,7 +106,7 @@ async fn push_krun_backend_skips_cleanly() {
 /// `make_pusher` invocation must return a fresh `DynImagePusher` each call.
 #[tokio::test]
 async fn push_make_pusher_returns_fresh_instance() {
-    let tmp = tempfile::TempDir::new().unwrap();
+    let tmp = tempfile::TempDir::new().expect("unwrap in test");
     let store = make_image_store(&tmp);
     let (descriptor, _) = minibox_push_backend(store);
 
@@ -128,7 +128,7 @@ async fn push_make_pusher_returns_fresh_instance() {
 /// Verifies the factory closure has no single-use invariants (e.g. moved captures).
 #[tokio::test]
 async fn push_descriptor_factory_is_reentrant() {
-    let tmp = tempfile::TempDir::new().unwrap();
+    let tmp = tempfile::TempDir::new().expect("unwrap in test");
     let store = make_image_store(&tmp);
     let (descriptor, _) = minibox_push_backend(store);
 

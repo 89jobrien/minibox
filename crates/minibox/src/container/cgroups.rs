@@ -10,7 +10,7 @@
 //!
 //! A cgroup cannot simultaneously hold processes **and** child cgroups. Tests
 //! that need to write to cgroup limit files must therefore run in a dedicated
-//! leaf cgroup (e.g. via `scripts/run-cgroup-tests.sh`) rather than directly
+//! leaf cgroup (e.g. via `cargo xtask run-cgroup-tests`) rather than directly
 //! in the service's own cgroup.
 
 use crate::error::CgroupError;
@@ -64,6 +64,27 @@ fn cgroup_root() -> PathBuf {
     }
 }
 
+/// Validate that a cgroup parent path is under `/sys/fs/cgroup/`.
+///
+/// Rejects relative paths, paths outside the cgroupfs mount, and paths
+/// containing `..` components to prevent directory traversal.
+pub fn validate_cgroup_parent(path: &str) -> anyhow::Result<()> {
+    let p = std::path::Path::new(path);
+    if !p.is_absolute() {
+        anyhow::bail!("--cgroup-parent must be an absolute path, got {path:?}");
+    }
+    // Reject `..` components before canonicalization to prevent traversal.
+    for component in p.components() {
+        if component == std::path::Component::ParentDir {
+            anyhow::bail!("--cgroup-parent must not contain '..': {path:?}");
+        }
+    }
+    if !path.starts_with("/sys/fs/cgroup/") && path != "/sys/fs/cgroup" {
+        anyhow::bail!("--cgroup-parent must be under /sys/fs/cgroup/, got {path:?}");
+    }
+    Ok(())
+}
+
 impl CgroupManager {
     /// Create a new manager for `container_id` with the given resource limits.
     ///
@@ -71,6 +92,19 @@ impl CgroupManager {
     /// create the directory and write the limits.
     pub fn new(container_id: &str, config: CgroupConfig) -> Self {
         let cgroup_path = cgroup_root().join(container_id);
+        Self {
+            id: container_id.to_string(),
+            cgroup_path,
+            config,
+        }
+    }
+
+    /// Create a manager with an explicit cgroup root instead of the default.
+    ///
+    /// The container cgroup is placed at `root/{container_id}`. Subtree
+    /// controllers are enabled on `root` during [`create`](Self::create).
+    pub fn with_root(container_id: &str, config: CgroupConfig, root: PathBuf) -> Self {
+        let cgroup_path = root.join(container_id);
         Self {
             id: container_id.to_string(),
             cgroup_path,
@@ -92,31 +126,38 @@ impl CgroupManager {
         // Enable controllers on the parent cgroup so child cgroups can use them.
         // Without this, writing pids.max/memory.max/etc. in the child fails with
         // Permission denied because the controllers aren't delegated.
-        let root = cgroup_root();
-        enable_subtree_controllers(&root)?;
+        // Derive from self.cgroup_path so with_root() delegates the custom parent.
+        let parent = self
+            .cgroup_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("/sys/fs/cgroup"));
+        enable_subtree_controllers(parent)?;
 
         // Memory limit
+        const MIN_MEMORY_BYTES: u64 = 4096;
         if let Some(mem) = self.config.memory_limit_bytes {
             // SECURITY: Validate minimum memory (kernel minimum is typically 4KB)
-            if mem < 4096 {
-                anyhow::bail!("memory limit must be >= 4096 bytes, got {}", mem);
+            if mem < MIN_MEMORY_BYTES {
+                anyhow::bail!("memory limit must be >= {MIN_MEMORY_BYTES} bytes, got {mem}");
             }
             self.write_file("memory.max", &mem.to_string())?;
             debug!(memory_max = mem, "cgroup: set memory.max");
         }
 
         // CPU weight
+        const MAX_CPU_WEIGHT: u64 = 10000;
         if let Some(cpu) = self.config.cpu_weight {
             // SECURITY: Validate range (kernel range is 1-10000)
-            if !(1..=10000).contains(&cpu) {
-                anyhow::bail!("cpu_weight must be 1-10000, got {}", cpu);
+            if !(1..=MAX_CPU_WEIGHT).contains(&cpu) {
+                anyhow::bail!("cpu_weight must be 1-{MAX_CPU_WEIGHT}, got {cpu}");
             }
             self.write_file("cpu.weight", &cpu.to_string())?;
             debug!(cpu_weight = cpu, "cgroup: set cpu.weight");
         }
 
         // SECURITY: PID limit to prevent fork bombs
-        let pids_limit = self.config.pids_max.unwrap_or(1024);
+        const DEFAULT_PIDS_MAX: u64 = 1024;
+        let pids_limit = self.config.pids_max.unwrap_or(DEFAULT_PIDS_MAX);
         self.write_file("pids.max", &pids_limit.to_string())?;
         debug!(pids_max = pids_limit, "cgroup: set pids.max");
 
@@ -127,7 +168,7 @@ impl CgroupManager {
             // on VMs using virtio (vda/253:0) as well as bare-metal (sda/8:0).
             match find_first_block_device() {
                 Some(dev) => {
-                    let io_max_line = format!("{} rbps={} wbps={}", dev, io_limit, io_limit);
+                    let io_max_line = format!("{dev} rbps={io_limit} wbps={io_limit}");
                     self.write_file("io.max", &io_max_line)?;
                     debug!(io_max_bytes_per_sec = io_limit, device = %dev, "cgroup: set io.max");
                 }
@@ -152,7 +193,7 @@ impl CgroupManager {
         }
         debug!(pid = pid, cgroup_path = %self.cgroup_path.display(), "cgroup: adding process");
         let path = self.cgroup_path.join("cgroup.procs");
-        fs::write(&path, format!("{}\n", pid)).map_err(|source| CgroupError::AddProcessFailed {
+        fs::write(&path, format!("{pid}\n")).map_err(|source| CgroupError::AddProcessFailed {
             pid,
             path: path.display().to_string(),
             source,
@@ -280,6 +321,69 @@ fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Cgroup delegation (nested container support)
+// ---------------------------------------------------------------------------
+
+/// Paths for cgroup subtree delegation (nested container support).
+#[derive(Debug, Clone)]
+pub struct DelegationPaths {
+    /// The delegated subtree root (e.g. `.../minibox/<id>`).
+    pub subtree: PathBuf,
+    /// Leaf cgroup where the container process lives
+    /// (required by cgroups v2 "no internal processes" rule).
+    pub init_leaf: PathBuf,
+}
+
+/// Compute delegation paths under the default cgroup root.
+pub fn delegation_paths(container_id: &str) -> DelegationPaths {
+    delegation_paths_under(container_id, &cgroup_root())
+}
+
+/// Compute delegation paths under a custom parent.
+pub fn delegation_paths_under(container_id: &str, parent: &std::path::Path) -> DelegationPaths {
+    let subtree = parent.join(container_id);
+    let init_leaf = subtree.join("init");
+    DelegationPaths { subtree, init_leaf }
+}
+
+/// Set up a delegated cgroup subtree for nested container support.
+///
+/// Creates the subtree directory, enables controllers on it via
+/// `cgroup.subtree_control`, and creates the `init` leaf cgroup.
+/// The container process should be placed in `init_leaf` so it can
+/// create child cgroups in sibling directories.
+///
+/// Only called for privileged containers. Non-privileged containers
+/// use the flat cgroup model (no delegation).
+pub fn delegate_subtree(paths: &DelegationPaths) -> anyhow::Result<()> {
+    // Create the subtree directory.
+    fs::create_dir_all(&paths.subtree).with_context(|| {
+        format!(
+            "cgroup: failed to create delegation subtree {}",
+            paths.subtree.display()
+        )
+    })?;
+
+    // Enable controllers on the subtree so child cgroups can use them.
+    enable_subtree_controllers(&paths.subtree)?;
+
+    // Create the init leaf where the container process will live.
+    fs::create_dir_all(&paths.init_leaf).with_context(|| {
+        format!(
+            "cgroup: failed to create init leaf {}",
+            paths.init_leaf.display()
+        )
+    })?;
+
+    info!(
+        subtree = %paths.subtree.display(),
+        init_leaf = %paths.init_leaf.display(),
+        "cgroup: delegated subtree created"
+    );
+    Ok(())
+}
+
 /// Build the cgroup path for a container without constructing a full manager.
 ///
 /// Useful when only the path is needed (e.g., to pass to `ContainerConfig`
@@ -292,6 +396,73 @@ pub fn cgroup_path_for(container_id: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validate_cgroup_parent_rejects_relative_path() {
+        assert!(super::validate_cgroup_parent("minibox-dind").is_err());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_rejects_outside_cgroupfs() {
+        assert!(super::validate_cgroup_parent("/tmp/cgroup-fake").is_err());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_rejects_dotdot() {
+        assert!(super::validate_cgroup_parent("/sys/fs/cgroup/../../tmp").is_err());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_accepts_valid_path() {
+        assert!(super::validate_cgroup_parent("/sys/fs/cgroup/minibox-dind").is_ok());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_accepts_nested_path() {
+        assert!(super::validate_cgroup_parent("/sys/fs/cgroup/user.slice/minibox").is_ok());
+    }
+
+    #[test]
+    fn with_root_uses_custom_root() {
+        let mgr = CgroupManager::with_root(
+            "test-id",
+            CgroupConfig::default(),
+            std::path::PathBuf::from("/sys/fs/cgroup/custom-slice"),
+        );
+        assert_eq!(
+            mgr.cgroup_path(),
+            std::path::Path::new("/sys/fs/cgroup/custom-slice/test-id")
+        );
+    }
+
+    #[test]
+    fn delegate_subtree_builds_correct_paths() {
+        let result = delegation_paths("test-container-id");
+        assert_eq!(
+            result.subtree.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/minibox/test-container-id")
+        );
+        assert_eq!(
+            result.init_leaf.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/minibox/test-container-id/init")
+        );
+    }
+
+    #[test]
+    fn delegate_subtree_with_custom_parent() {
+        let result = delegation_paths_under(
+            "test-id",
+            &std::path::PathBuf::from("/sys/fs/cgroup/user.slice/minibox"),
+        );
+        assert_eq!(
+            result.subtree.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/user.slice/minibox/test-id")
+        );
+        assert_eq!(
+            result.init_leaf.as_path(),
+            std::path::Path::new("/sys/fs/cgroup/user.slice/minibox/test-id/init")
+        );
+    }
 
     #[cfg(target_os = "linux")]
     #[test]

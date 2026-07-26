@@ -1,0 +1,28 @@
+# Minibox minimal test VM — smallest footprint for kernel-feature tests.
+#
+# For unit and conformance tests that only need a Linux kernel
+# (cgroups, namespaces, overlay FS) without pulling container images.
+#
+# Note: net = true is required for smolvm to pull the base OCI image
+# at machine creation time. The VM itself does not need outbound access
+# after boot.
+#
+# Usage:
+#   smolvm machine create minibox-minimal --smolfile tests/smolfiles/minimal.smolfile
+#   smolvm machine start --name minibox-minimal
+#   smolvm machine exec --name minibox-minimal -- cargo nextest run -p minibox --lib
+
+image = "alpine:3.20"
+cpus = 1
+memory = 512
+net = true
+storage = 5
+overlay = 1
+workdir = "/workspace"
+
+[dev]
+init = [
+    "apk add --no-cache bash coreutils util-linux mount shadow",
+    "mkdir -p /var/lib/minibox /run/minibox",
+]
+volumes = ["./:/workspace"]

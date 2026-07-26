@@ -47,13 +47,13 @@ fn miniboxd_lib_exposes_server_module() {
 
 #[test]
 fn handler_dependencies_can_be_constructed_with_mocks() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let _deps = make_mock_deps(&tmp);
 }
 
 #[test]
 fn handler_dependencies_policy_fields_accessible() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let deps = make_mock_deps(&tmp);
     // make_mock_deps sets allow_privileged: true, allow_bind_mounts: true
     assert!(deps.policy.allow_privileged);
@@ -80,14 +80,14 @@ fn container_policy_default_denies_bind_mounts() {
 
 #[tokio::test]
 async fn daemon_state_list_empty_on_creation() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let state = make_mock_state(tmp.path());
     assert!(state.list_containers().await.is_empty());
 }
 
 #[tokio::test]
 async fn daemon_state_get_missing_returns_none() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let state = make_mock_state(tmp.path());
     assert!(state.get_container("no-such-id").await.is_none());
 }
@@ -98,7 +98,7 @@ async fn daemon_state_get_missing_returns_none() {
 
 #[tokio::test]
 async fn handle_list_empty_state_returns_container_list() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let state = make_mock_state(tmp.path());
     let response = miniboxd::handler::handle_list(state).await;
     assert!(
@@ -113,7 +113,7 @@ async fn handle_list_empty_state_returns_container_list() {
 
 #[tokio::test]
 async fn handle_pull_failure_returns_error_response() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let state = make_mock_state(tmp.path());
     let deps = minibox::testing::helpers::make_mock_deps_with_registry(
         MockRegistry::new().with_pull_failure(),
@@ -141,7 +141,7 @@ async fn handle_pull_failure_returns_error_response() {
 
 #[tokio::test]
 async fn handle_stop_nonexistent_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let state = make_mock_state(tmp.path());
     let deps = make_mock_deps(&tmp);
     let response =
@@ -154,7 +154,7 @@ async fn handle_stop_nonexistent_returns_error() {
 
 #[tokio::test]
 async fn handle_remove_nonexistent_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("create temp dir");
     let state = make_mock_state(tmp.path());
     let deps = make_mock_deps(&tmp);
     let response =

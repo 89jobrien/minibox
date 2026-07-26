@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageRef {
     pub registry: String,
     pub namespace: String,
@@ -9,7 +9,7 @@ pub struct ImageRef {
     pub tag: String,
 }
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum ImageRefError {
     #[error("empty image reference")]
     Empty,
@@ -18,6 +18,12 @@ pub enum ImageRefError {
 }
 
 impl ImageRef {
+    /// Parse an image reference string into an [`ImageRef`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ImageRefError::Empty`] for empty input or [`ImageRefError::Invalid`]
+    /// if the reference cannot be parsed.
     pub fn parse(s: &str) -> Result<Self, ImageRefError> {
         if s.is_empty() {
             return Err(ImageRefError::Empty);
@@ -54,7 +60,7 @@ impl ImageRef {
             return Err(ImageRefError::Invalid(format!("empty image name in: {s}")));
         }
 
-        Ok(ImageRef {
+        Ok(Self {
             registry,
             namespace,
             name,
@@ -62,6 +68,25 @@ impl ImageRef {
         })
     }
 
+    /// Format as a fully-qualified image reference string.
+    ///
+    /// For docker.io with the `library` namespace, emits the short form
+    /// (e.g. `alpine:latest`). Otherwise emits `registry/namespace/name:tag`.
+    #[must_use]
+    pub fn to_canonical_string(&self) -> String {
+        if self.registry == "docker.io" && self.namespace == "library" {
+            format!("{}:{}", self.name, self.tag)
+        } else if self.registry == "docker.io" {
+            format!("{}/{}:{}", self.namespace, self.name, self.tag)
+        } else {
+            format!(
+                "{}/{}/{}:{}",
+                self.registry, self.namespace, self.name, self.tag
+            )
+        }
+    }
+
+    #[must_use]
     pub fn registry_host(&self) -> &str {
         match self.registry.as_str() {
             "docker.io" => "registry-1.docker.io",
@@ -69,12 +94,14 @@ impl ImageRef {
         }
     }
 
+    #[must_use]
     pub fn repository(&self) -> String {
         format!("{}/{}", self.namespace, self.name)
     }
 
-    /// Storage key for ImageStore. Backward compat: docker.io returns "namespace/name"
+    /// Storage key for `ImageStore`. Backward compat: docker.io returns "namespace/name"
     /// (no registry prefix) to preserve existing caches. All others prefix with registry.
+    #[must_use]
     pub fn cache_name(&self) -> String {
         if self.registry == "docker.io" {
             format!("{}/{}", self.namespace, self.name)
@@ -83,6 +110,7 @@ impl ImageRef {
         }
     }
 
+    #[must_use]
     pub fn cache_path(&self, images_dir: &Path) -> PathBuf {
         if self.registry == "docker.io" {
             // Backward compat: docker.io omits registry prefix to preserve existing caches.
@@ -97,6 +125,12 @@ impl ImageRef {
                 .join(&self.name)
                 .join(&self.tag)
         }
+    }
+}
+
+impl std::fmt::Display for ImageRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.to_canonical_string())
     }
 }
 

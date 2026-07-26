@@ -15,6 +15,8 @@ use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tempfile::TempDir;
 
+mod daemon_handler_common;
+
 // ---------------------------------------------------------------------------
 // Shared helpers (mirror handler_tests.rs patterns exactly)
 // ---------------------------------------------------------------------------
@@ -33,18 +35,23 @@ async fn handle_run_once(
 ) -> DaemonResponse {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        image,
-        tag,
-        command,
-        memory_limit_bytes,
-        cpu_weight,
-        ephemeral,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+        handler::RunParams {
+            image: image,
+            tag: tag,
+            command: command,
+            memory_limit_bytes: memory_limit_bytes,
+            cpu_weight: cpu_weight,
+            ephemeral: ephemeral,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+            cgroup_parent: None,
+            priority: None,
+            policy_override: None,
+        },
         state,
         deps,
         tx,
@@ -81,8 +88,9 @@ fn make_deps(
     use minibox_core::adapters::HostnameRegistryRouter;
     use minibox_core::domain::DynImageRegistry;
 
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -120,13 +128,16 @@ fn make_deps(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(tmp.path().join("images")).unwrap();
+    let image_store =
+        minibox::image::ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 
@@ -138,13 +149,14 @@ fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
 async fn test_run_with_all_success_adapters() {
     use minibox_core::domain::DynImageRegistry;
 
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     // Keep an Arc to the mock registry so we can inspect pull_count() after the run.
     let mock_registry = Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest"));
 
     // Rebuild deps with the Arc we're holding so pull_count is observable.
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"),
+    );
     let deps = {
         use minibox::daemon::handler::{BuildDeps, EventDeps, ExecDeps, ImageDeps, LifecycleDeps};
         use minibox_core::adapters::HostnameRegistryRouter;
@@ -185,7 +197,9 @@ async fn test_run_with_all_success_adapters() {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     };
@@ -209,8 +223,15 @@ async fn test_run_with_all_success_adapters() {
             assert_eq!(id.len(), 16);
 
             // Verify container landed in state
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            assert!(state.get_container(&id).await.is_some());
+            assert!(
+                daemon_handler_common::wait_for_container(
+                    &state,
+                    &id,
+                    std::time::Duration::from_secs(2)
+                )
+                .await,
+                "container should appear in state"
+            );
         }
         other => panic!("expected ContainerCreated, got {other:?}"),
     }
@@ -225,7 +246,7 @@ async fn test_run_with_all_success_adapters() {
 
 #[tokio::test]
 async fn test_run_with_registry_pull_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     // Registry has no cached image AND will fail on pull — handler must propagate the error.
     let deps = make_deps(
         Arc::new(MockRegistry::new().with_pull_failure()),
@@ -265,7 +286,7 @@ async fn test_run_with_registry_pull_failure() {
 
 #[tokio::test]
 async fn test_run_with_filesystem_setup_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = make_deps(
         Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new().with_setup_failure(),
@@ -304,7 +325,7 @@ async fn test_run_with_filesystem_setup_failure() {
 
 #[tokio::test]
 async fn test_run_with_limiter_create_failure() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let deps = make_deps(
         Arc::new(MockRegistry::new().with_cached_image("library/alpine", "latest")),
         MockFilesystem::new(),
@@ -343,7 +364,7 @@ async fn test_run_with_limiter_create_failure() {
 
 #[tokio::test]
 async fn test_list_works_with_failing_adapters() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     // All adapters configured to fail — list should still return an empty list
     // because it only touches DaemonState, not any infrastructure adapter.
     let _deps = make_deps(
@@ -371,7 +392,7 @@ async fn test_list_works_with_failing_adapters() {
 
 #[tokio::test]
 async fn test_stop_unknown_container_returns_error() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
     let state = make_state(&tmp);
 
     let deps = make_deps(
@@ -403,7 +424,7 @@ async fn test_stop_unknown_container_returns_error() {
 
 #[tokio::test]
 async fn test_pull_success_then_pull_failure_different_deps() {
-    let tmp = TempDir::new().unwrap();
+    let tmp = TempDir::new().expect("unwrap in test");
 
     // First request: registry succeeds (image not cached, pulled on demand).
     // Hold an Arc to the registry so we can inspect pull_count() after the run.
@@ -413,8 +434,10 @@ async fn test_pull_success_then_pull_failure_different_deps() {
         use minibox_core::adapters::HostnameRegistryRouter;
         use minibox_core::domain::DynImageRegistry;
 
-        let image_store =
-            Arc::new(minibox_core::image::ImageStore::new(tmp.path().join("images2")).unwrap());
+        let image_store = Arc::new(
+            minibox_core::image::ImageStore::new(tmp.path().join("images2"))
+                .expect("unwrap in test"),
+        );
         Arc::new(minibox::daemon::handler::HandlerDependencies {
             image: ImageDeps {
                 registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -452,7 +475,9 @@ async fn test_pull_success_then_pull_failure_different_deps() {
             policy: minibox::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         })
     };
@@ -482,7 +507,7 @@ async fn test_pull_success_then_pull_failure_different_deps() {
     );
 
     // Second request: registry fails on pull — completely separate deps.
-    let tmp2 = TempDir::new().unwrap();
+    let tmp2 = TempDir::new().expect("unwrap in test");
     let deps_fail = make_deps(
         Arc::new(MockRegistry::new().with_pull_failure()),
         MockFilesystem::new(),

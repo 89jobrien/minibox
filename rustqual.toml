@@ -1,0 +1,138 @@
+# rustqual.toml — Tailored configuration for your project
+# Generated from analysis of 344 file(s), 4260 function(s).
+#
+# Thresholds are set to your current maximums + 20% headroom.
+# Tighten them over time as you improve code quality.
+
+# ── Function Classification ──────────────────────────────────────────────
+
+exclude_files = [
+    "*/tests/*",
+    "*/benches/*",
+    "*/examples/*",
+    "*/src/adapters/mocks.rs",
+    "*/src/testing/*",
+    # minibox-testsuite is pure test infrastructure — .expect()/.unwrap() is
+    # expected and acceptable in test harness code.
+    "minibox-testsuite/src/*",
+    "*/minibox-testsuite/src/*",
+    # xtask is CLI tooling — functions are integration-tested via `cargo xtask`,
+    # not unit-testable in isolation.
+    "xtask/src/*",
+    "*/xtask/src/*",
+    # rust-script files — standalone scripts, not unit-testable in-crate.
+    "scripts/*.rs",
+    "*/scripts/*.rs",
+    # minibox-crux-plugin is a thin integration shim — tested via crux pipelines.
+    "minibox-crux-plugin/src/*",
+    "*/minibox-crux-plugin/src/*",
+    # miniboxd binary — daemon entrypoints are integration-tested, not unit-testable.
+    "miniboxd/src/*",
+    "*/miniboxd/src/*",
+]
+strict_closures = false
+strict_iterator_chains = false
+allow_recursion = false
+strict_error_propagation = false
+
+# ── Suppression Health ───────────────────────────────────────────────────
+
+max_suppression_ratio = 0.05
+fail_on_warnings = false
+
+# ── Complexity Analysis ──────────────────────────────────────────────────
+
+[complexity]
+enabled = true
+max_cognitive = 80           # current max: 66
+max_cyclomatic = 38          # current max: 31
+max_nesting_depth = 14            # current max: 11
+max_function_lines = 429         # current max: 357
+include_nesting_penalty = true
+detect_magic_numbers = true
+detect_unsafe = true
+detect_error_handling = true
+# 3: splitn/len checks; 4: channel sizes; 8: radix, buffer sizes;
+# 10: retry counts; 16: buffer sizes; 24/80: terminal fallback;
+# 30/60/100: timeouts (secs/ms); 384/493: Unix 0o600/0o755 perms;
+# 511/512: tar mode masks / block size; 1024: byte multiplier;
+# 4096/8192/16384/65536: buffer/read sizes.
+allowed_magic_numbers = [
+    "0", "1", "-1", "2", "3", "4", "5", "8", "10", "16",
+    "24", "30", "42", "60", "64", "73", "80", "100",
+    "128", "250", "256", "384", "420", "493", "500", "511", "512",
+    "1024", "2000", "4096", "8192", "10485760", "16384", "65536",
+    "0.0", "0.5", "1.0",
+]
+
+# ── DRY / Duplicate Detection ───────────────────────────────────────────
+
+[duplicates]
+enabled = true
+similarity_threshold = 0.85
+min_tokens = 30
+min_lines = 5
+min_statements = 3
+ignore_tests = true
+ignore_trait_impls = true
+# Cross-crate pub API usage is invisible to rustqual — all 621 findings
+# are false positives from workspace consumers.
+detect_dead_code = false
+# All 13 wildcard findings are `use super::*` in inline #[cfg(test)] modules —
+# standard Rust convention, not a code quality issue.
+detect_wildcard_imports = false
+detect_repeated_matches = true
+
+# ── Boilerplate Detection ───────────────────────────────────────────────
+
+[boilerplate]
+enabled = true
+suggest_crates = true
+
+# ── SRP (Single Responsibility) ─────────────────────────────────────────
+
+[srp]
+enabled = true
+smell_threshold = 0.6
+max_fields = 12
+max_methods = 20
+max_fan_out = 10
+lcom4_threshold = 2
+weights = [0.4, 0.25, 0.15, 0.2]
+file_length_baseline = 400
+file_length_ceiling = 900
+max_independent_clusters = 2
+min_cluster_statements = 5
+# handler/ module exception: daemon handlers use dependency-injection signatures
+# that structurally require >5 parameters (state, deps, tx, plus request fields).
+# Refactoring to a builder/context struct is tracked in #421. Per-function
+# #[allow(clippy::too_many_arguments)] attrs are consolidated at file level instead.
+# rustqual: complexity-override handler_module
+max_parameters = 5
+
+# ── Coupling Analysis ───────────────────────────────────────────────────
+
+[coupling]
+enabled = true
+max_instability = 0.8
+max_fan_in = 15
+max_fan_out = 12
+check_sdp = true
+
+# ── Test Quality Analysis ──────────────────────────────────────────────
+
+[test_quality]
+enabled = true
+# coverage_file = "lcov.info"
+
+# ── Quality Score Weights ──────────────────────────────────────────────
+# Must sum to approximately 1.0.
+
+[weights]
+iosp         = 0.22
+complexity   = 0.18
+dry          = 0.13
+srp          = 0.18
+coupling     = 0.09
+test_quality = 0.10
+architecture = 0.10

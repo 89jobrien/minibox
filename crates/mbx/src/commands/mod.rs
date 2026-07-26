@@ -4,13 +4,72 @@
 //! to communicate with the daemon. The [`DaemonClient`] abstraction handles socket
 //! connection and protocol formatting.
 
+use anyhow::Context as _;
+use miette::Diagnostic;
+use minibox_core::client::DaemonClient;
+use minibox_core::protocol::{DaemonRequest, DaemonResponse};
+use thiserror::Error;
+
+/// Errors returned when a daemon request produces an unexpected or error response.
+#[derive(Debug, Error, Diagnostic)]
+pub enum RequestError {
+    #[error("{message}")]
+    #[diagnostic(code(mbx::daemon_error), help("check container state with: mbx ps"))]
+    DaemonError { message: String },
+
+    #[error("unexpected response from daemon: {response}")]
+    #[diagnostic(code(mbx::unexpected_response))]
+    UnexpectedResponse { response: String },
+
+    #[error("no response from daemon")]
+    #[diagnostic(
+        code(mbx::no_response),
+        help("check that miniboxd is running: systemctl status miniboxd")
+    )]
+    NoResponse,
+}
+
+/// Send a single request to the daemon and handle the standard
+/// `Success / Error / unexpected / no-response` response pattern.
+///
+/// Used by simple one-shot commands (stop, rm, pause, resume, rmi) that
+/// differ only in which [`DaemonRequest`] variant they send.
+pub async fn send_request(
+    request: DaemonRequest,
+    socket_path: &std::path::Path,
+) -> anyhow::Result<()> {
+    let client = DaemonClient::with_socket(socket_path);
+    let mut stream = client
+        .call(request)
+        .await
+        .context("failed to call daemon")?;
+
+    if let Some(response) = stream.next().await.context("stream error")? {
+        match response {
+            DaemonResponse::Success { message } => {
+                println!("{message}");
+                Ok(())
+            }
+            DaemonResponse::Error { message } => Err(RequestError::DaemonError { message }.into()),
+            other => Err(RequestError::UnexpectedResponse {
+                response: format!("{other:?}"),
+            }
+            .into()),
+        }
+    } else {
+        Err(RequestError::NoResponse.into())
+    }
+}
+
 pub mod diagnose;
 pub mod doctor;
 pub mod events;
 pub mod exec;
 pub mod load;
 pub mod logs;
+pub mod manifest;
 pub mod pause;
+pub mod pipeline;
 pub mod prune;
 pub mod ps;
 pub mod pull;

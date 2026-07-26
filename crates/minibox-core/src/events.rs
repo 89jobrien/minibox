@@ -78,6 +78,7 @@ pub struct BroadcastEventBroker {
 }
 
 impl BroadcastEventBroker {
+    #[must_use]
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1024);
         Self { tx }
@@ -125,7 +126,7 @@ mod tests {
             timestamp: SystemTime::now(),
         });
 
-        let evt = rx.recv().await.unwrap();
+        let evt = rx.recv().await.expect("event received");
         assert!(matches!(evt, ContainerEvent::Created { id, .. } if id == "abc"));
     }
 
@@ -150,8 +151,8 @@ mod tests {
             timestamp: SystemTime::now(),
         });
 
-        let e1 = rx1.recv().await.unwrap();
-        let e2 = rx2.recv().await.unwrap();
+        let e1 = rx1.recv().await.expect("rx1 event received");
+        let e2 = rx2.recv().await.expect("rx2 event received");
         assert!(matches!(e1, ContainerEvent::Paused { .. }));
         assert!(matches!(e2, ContainerEvent::Paused { .. }));
     }

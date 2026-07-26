@@ -50,8 +50,7 @@ impl RegistryRouter for HostnameRegistryRouter {
         let hostname = image_ref.registry.to_lowercase();
         self.overrides
             .get(&hostname)
-            .map(Arc::as_ref)
-            .unwrap_or_else(|| self.default.as_ref())
+            .map_or_else(|| self.default.as_ref(), Arc::as_ref)
     }
 }
 
@@ -79,14 +78,14 @@ mod tests {
             &self,
             _image_ref: &ImageRef,
         ) -> anyhow::Result<crate::domain::ImageMetadata> {
-            unimplemented!()
+            Err(anyhow::anyhow!("not supported by this registry backend"))
         }
         fn get_image_layers(
             &self,
             _name: &str,
             _tag: &str,
         ) -> anyhow::Result<Vec<std::path::PathBuf>> {
-            unimplemented!()
+            Err(anyhow::anyhow!("not supported by this registry backend"))
         }
     }
 
@@ -104,7 +103,7 @@ mod tests {
     #[test]
     fn routes_ghcr() {
         let (router, _, ghcr_ptr) = make_router();
-        let image_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").unwrap();
+        let image_ref = ImageRef::parse("ghcr.io/org/minibox-rust-ci:stable").expect("valid ref");
         let selected = router.route(&image_ref) as *const dyn ImageRegistry as *const ();
         assert_eq!(selected, ghcr_ptr);
     }
@@ -112,7 +111,7 @@ mod tests {
     #[test]
     fn routes_ghcr_case_insensitive() {
         let (router, _, ghcr_ptr) = make_router();
-        let image_ref = ImageRef::parse("GHCR.IO/org/image:tag").unwrap();
+        let image_ref = ImageRef::parse("GHCR.IO/org/image:tag").expect("valid ref");
         let selected = router.route(&image_ref) as *const dyn ImageRegistry as *const ();
         assert_eq!(selected, ghcr_ptr);
     }
@@ -120,7 +119,7 @@ mod tests {
     #[test]
     fn routes_default_for_docker_hub() {
         let (router, docker_ptr, _) = make_router();
-        let image_ref = ImageRef::parse("alpine").unwrap();
+        let image_ref = ImageRef::parse("alpine").expect("valid ref");
         let selected = router.route(&image_ref) as *const dyn ImageRegistry as *const ();
         assert_eq!(selected, docker_ptr);
     }
@@ -128,7 +127,8 @@ mod tests {
     #[test]
     fn routes_default_for_unknown_hostname() {
         let (router, docker_ptr, _) = make_router();
-        let image_ref = ImageRef::parse("quay.io/prometheus/alertmanager:latest").unwrap();
+        let image_ref =
+            ImageRef::parse("quay.io/prometheus/alertmanager:latest").expect("valid ref");
         let selected = router.route(&image_ref) as *const dyn ImageRegistry as *const ();
         assert_eq!(selected, docker_ptr);
     }

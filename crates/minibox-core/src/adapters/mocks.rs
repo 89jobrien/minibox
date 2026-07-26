@@ -1,4 +1,15 @@
 //! Mock adapters for testing.
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::missing_panics_doc,
+    clippy::missing_errors_doc,
+    clippy::return_self_not_must_use,
+    clippy::significant_drop_tightening,
+    clippy::items_after_statements,
+    clippy::struct_excessive_bools
+)]
 //!
 //! This module provides in-process mock implementations of all four domain
 //! traits ([`ImageRegistry`], [`FilesystemProvider`], [`ResourceLimiter`],
@@ -65,16 +76,20 @@ struct MockRegistryState {
     pull_should_succeed: bool,
     /// Running count of `pull_image` invocations.
     pull_count: usize,
+    /// Whether `get_image_layers` should return an empty list.
+    return_empty_layers: bool,
 }
 
 impl MockRegistry {
     /// Create a new mock registry with no cached images and pull success enabled.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockRegistryState {
                 cached_images: Vec::new(),
                 pull_should_succeed: true,
                 pull_count: 0,
+                return_empty_layers: false,
             })),
         }
     }
@@ -82,34 +97,53 @@ impl MockRegistry {
     /// Configure the registry to report `name:tag` as already cached locally.
     ///
     /// May be called multiple times to seed multiple images.
+    #[must_use]
     pub fn with_cached_image(self, name: &str, tag: &str) -> Self {
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .cached_images
             .push((name.to_string(), tag.to_string()));
         self
     }
 
     /// Configure all subsequent `pull_image` calls to return an error.
+    #[must_use]
     pub fn with_pull_failure(self) -> Self {
-        self.state.lock().unwrap().pull_should_succeed = false;
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .pull_should_succeed = false;
+        self
+    }
+
+    /// Configure `get_image_layers` to return an empty layer list.
+    ///
+    /// Used to exercise the `EmptyImage` error path in `run_inner`.
+    #[must_use]
+    pub fn with_empty_layers(self) -> Self {
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .return_empty_layers = true;
         self
     }
 
     /// Return the number of times `pull_image` has been called.
+    #[must_use]
     pub fn pull_count(&self) -> usize {
-        self.state.lock().unwrap().pull_count
+        self.state.lock().expect("mock: poisoned lock").pull_count
     }
 
     /// Synchronous variant of `has_image` — bypasses async machinery.
     ///
     /// Useful in benchmarks and synchronous test helpers where an async
     /// executor is not available.
+    #[must_use]
     pub fn has_image_sync(&self, image: &str, tag: &str) -> bool {
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .cached_images
             .iter()
             .any(|(n, t)| n == image && t == tag)
@@ -122,7 +156,7 @@ impl ImageRegistry for MockRegistry {
     async fn has_image(&self, name: &str, tag: &str) -> bool {
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .cached_images
             .iter()
             .any(|(n, t)| n == name && t == tag)
@@ -140,7 +174,7 @@ impl ImageRegistry for MockRegistry {
     ) -> Result<ImageMetadata> {
         let name = image_ref.cache_name();
         let tag = image_ref.tag.clone();
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.pull_count += 1;
 
         if !state.pull_should_succeed {
@@ -167,7 +201,14 @@ impl ImageRegistry for MockRegistry {
     }
 
     /// Return two fixed mock layer paths regardless of the image name or tag.
+    ///
+    /// Returns an empty vec if configured via [`with_empty_layers`], which
+    /// triggers the `EmptyImage` error path in `run_inner`.
     fn get_image_layers(&self, _name: &str, _tag: &str) -> Result<Vec<PathBuf>> {
+        let state = self.state.lock().expect("mock: poisoned lock");
+        if state.return_empty_layers {
+            return Ok(vec![]);
+        }
         Ok(vec![
             PathBuf::from("/mock/layer1"),
             PathBuf::from("/mock/layer2"),
@@ -205,6 +246,7 @@ struct MockFilesystemState {
 
 impl MockFilesystem {
     /// Create a new mock filesystem with all operations succeeding by default.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockFilesystemState {
@@ -218,19 +260,40 @@ impl MockFilesystem {
     }
 
     /// Configure `setup_rootfs` to return an error on the next call.
+    #[must_use]
     pub fn with_setup_failure(self) -> Self {
-        self.state.lock().unwrap().setup_should_succeed = false;
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .setup_should_succeed = false;
+        self
+    }
+
+    /// Configure `cleanup` to return an error.
+    ///
+    /// Used to exercise the best-effort filesystem cleanup path in `remove_inner`.
+    #[must_use]
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .cleanup_should_succeed = false;
         self
     }
 
     /// Return the number of times `setup_rootfs` has been called.
+    #[must_use]
     pub fn setup_count(&self) -> usize {
-        self.state.lock().unwrap().setup_count
+        self.state.lock().expect("mock: poisoned lock").setup_count
     }
 
     /// Return the number of times `cleanup` has been called.
+    #[must_use]
     pub fn cleanup_count(&self) -> usize {
-        self.state.lock().unwrap().cleanup_count
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .cleanup_count
     }
 }
 
@@ -240,7 +303,7 @@ impl crate::domain::RootfsSetup for MockFilesystem {
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.setup_count += 1;
 
         if !state.setup_should_succeed {
@@ -248,7 +311,7 @@ impl crate::domain::RootfsSetup for MockFilesystem {
         }
 
         Ok(RootfsLayout {
-            merged_dir: container_dir.join("merged"),
+            merged_dir: container_dir.join("merged").into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -259,7 +322,7 @@ impl crate::domain::RootfsSetup for MockFilesystem {
     /// Increments the cleanup counter. Returns an error if the mock is
     /// configured to fail cleanup.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.cleanup_count += 1;
 
         if !state.cleanup_should_succeed {
@@ -272,7 +335,7 @@ impl crate::domain::RootfsSetup for MockFilesystem {
 impl crate::domain::ChildInit for MockFilesystem {
     /// Simulate `pivot_root` — succeeds unless configured to fail.
     fn pivot_root(&self, _new_root: &Path) -> Result<()> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().expect("mock: poisoned lock");
         if !state.pivot_should_succeed {
             anyhow::bail!("mock pivot_root failure");
         }
@@ -311,6 +374,7 @@ struct MockLimiterState {
 
 impl MockLimiter {
     /// Create a new mock resource limiter with all operations succeeding by default.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockLimiterState {
@@ -325,19 +389,40 @@ impl MockLimiter {
     }
 
     /// Configure `create` to return an error.
+    #[must_use]
     pub fn with_create_failure(self) -> Self {
-        self.state.lock().unwrap().create_should_succeed = false;
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .create_should_succeed = false;
+        self
+    }
+
+    /// Configure `cleanup` to return an error.
+    ///
+    /// Used to exercise the best-effort cgroup cleanup path in `remove_inner`.
+    #[must_use]
+    pub fn with_cleanup_failure(self) -> Self {
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .cleanup_should_succeed = false;
         self
     }
 
     /// Return the number of times `create` has been called.
+    #[must_use]
     pub fn create_count(&self) -> usize {
-        self.state.lock().unwrap().create_count
+        self.state.lock().expect("mock: poisoned lock").create_count
     }
 
     /// Return the number of times `cleanup` has been called.
+    #[must_use]
     pub fn cleanup_count(&self) -> usize {
-        self.state.lock().unwrap().cleanup_count
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .cleanup_count
     }
 }
 
@@ -347,7 +432,7 @@ impl ResourceLimiter for MockLimiter {
     /// Increments the create counter and records the container ID. Returns
     /// `/mock/cgroup/<container_id>` on success.
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.create_count += 1;
 
         if !state.create_should_succeed {
@@ -360,7 +445,7 @@ impl ResourceLimiter for MockLimiter {
 
     /// Simulate adding a process to a cgroup — succeeds unless configured to fail.
     fn add_process(&self, _container_id: &str, _pid: u32) -> Result<()> {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().expect("mock: poisoned lock");
         if !state.add_process_should_succeed {
             anyhow::bail!("mock add_process failure");
         }
@@ -372,7 +457,7 @@ impl ResourceLimiter for MockLimiter {
     /// Increments the cleanup counter. Returns an error if the mock is
     /// configured to fail cleanup.
     fn cleanup(&self, _container_id: &str) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.cleanup_count += 1;
 
         if !state.cleanup_should_succeed {
@@ -403,29 +488,58 @@ struct MockRuntimeState {
     next_pid: u32,
     /// Running count of `spawn_process` invocations (both sync and async).
     spawn_count: usize,
+    /// When true, `spawn_process` creates an OS pipe and returns the read end as
+    /// `output_reader`.  The write end is closed immediately, so the reader sees
+    /// EOF at once.  This enables testing of streaming/ephemeral container paths
+    /// without a real container process.
+    provide_output_pipe: bool,
 }
 
 impl MockRuntime {
     /// Create a new mock runtime with spawn succeeding and PIDs starting at 10000.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockRuntimeState {
                 spawn_should_succeed: true,
                 next_pid: 10000,
                 spawn_count: 0,
+                provide_output_pipe: false,
             })),
         }
     }
 
+    /// Configure spawn to return a real OS pipe as `output_reader`.
+    ///
+    /// The write end of the pipe is closed immediately after creation, so the
+    /// reader sees EOF at once.  This allows tests that exercise the streaming
+    /// (ephemeral) container path without running a real container process.
+    ///
+    /// Only has effect on Unix targets where `OwnedFd` is available.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn with_output_pipe(self) -> Self {
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .provide_output_pipe = true;
+        self
+    }
+
     /// Configure all subsequent `spawn_process` calls to return an error.
+    #[must_use]
     pub fn with_spawn_failure(self) -> Self {
-        self.state.lock().unwrap().spawn_should_succeed = false;
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .spawn_should_succeed = false;
         self
     }
 
     /// Return the total number of spawn attempts (successful and failed).
+    #[must_use]
     pub fn spawn_count(&self) -> usize {
-        self.state.lock().unwrap().spawn_count
+        self.state.lock().expect("mock: poisoned lock").spawn_count
     }
 
     /// Synchronous variant of `spawn_process` — bypasses async machinery.
@@ -433,7 +547,7 @@ impl MockRuntime {
     /// Useful in benchmarks and synchronous test helpers where an async
     /// executor is not available. Shares state with the async variant.
     pub fn spawn_process_sync(&self, _cfg: &ContainerSpawnConfig) -> Result<SpawnResult> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.spawn_count += 1;
         if !state.spawn_should_succeed {
             anyhow::bail!("mock spawn failure");
@@ -464,9 +578,12 @@ impl ContainerRuntime for MockRuntime {
     /// Simulate spawning a container process and return a fake PID.
     ///
     /// Increments the spawn counter and the internal PID counter on success.
-    /// The `output_reader` field is always `None`.
+    /// When `provide_output_pipe` is set (via [`MockRuntime::with_output_pipe`]),
+    /// creates a real OS pipe on Unix and returns the read end as `output_reader`
+    /// (the write end is closed immediately, so the reader sees EOF at once).
+    /// Otherwise `output_reader` is `None`.
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.spawn_count += 1;
 
         if !state.spawn_should_succeed {
@@ -475,11 +592,40 @@ impl ContainerRuntime for MockRuntime {
 
         let pid = state.next_pid;
         state.next_pid += 1;
+
+        #[cfg(unix)]
+        let output_reader = if state.provide_output_pipe {
+            use std::os::fd::{FromRawFd, OwnedFd};
+            // Create a pipe: read_fd -> returned as output_reader; write_fd closed immediately
+            // so the reader sees EOF at once.
+            let mut fds = [0i32; 2];
+            // SAFETY: `pipe` is a standard POSIX syscall. `fds` is valid storage for 2 fds.
+            // We own both fds after the call and wrap them in OwnedFd for drop safety.
+            unsafe {
+                if libc::pipe(fds.as_mut_ptr()) != 0 {
+                    anyhow::bail!("MockRuntime: pipe() syscall failed");
+                }
+                let read_fd = OwnedFd::from_raw_fd(fds[0]);
+                // Close write end immediately -- causes reader to see EOF.
+                let _write_fd = OwnedFd::from_raw_fd(fds[1]);
+                Some(read_fd)
+            }
+        } else {
+            None
+        };
+
+        #[cfg(not(unix))]
+        let output_reader = None;
+
         Ok(SpawnResult {
             runtime_id: None,
             pid,
-            output_reader: None,
+            output_reader,
         })
+    }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        Ok(0)
     }
 }
 
@@ -511,6 +657,7 @@ struct MockNetworkState {
 
 impl MockNetwork {
     /// Create a new mock network with all operations succeeding by default.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(MockNetworkState {
@@ -523,25 +670,38 @@ impl MockNetwork {
     }
 
     /// Configure `setup` to return an error.
+    #[must_use]
     pub fn with_setup_failure(self) -> Self {
-        self.state.lock().unwrap().setup_should_succeed = false;
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .setup_should_succeed = false;
         self
     }
 
     /// Configure `cleanup` to return an error.
+    #[must_use]
     pub fn with_cleanup_failure(self) -> Self {
-        self.state.lock().unwrap().cleanup_should_succeed = false;
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .cleanup_should_succeed = false;
         self
     }
 
     /// Return the number of times `setup` has been called.
+    #[must_use]
     pub fn setup_count(&self) -> usize {
-        self.state.lock().unwrap().setup_count
+        self.state.lock().expect("mock: poisoned lock").setup_count
     }
 
     /// Return the number of times `cleanup` has been called.
+    #[must_use]
     pub fn cleanup_count(&self) -> usize {
-        self.state.lock().unwrap().cleanup_count
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .cleanup_count
     }
 }
 
@@ -552,7 +712,7 @@ impl NetworkProvider for MockNetwork {
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
     async fn setup(&self, _container_id: &str, _config: &NetworkConfig) -> Result<String> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.setup_count += 1;
 
         if !state.setup_should_succeed {
@@ -572,7 +732,7 @@ impl NetworkProvider for MockNetwork {
     /// Increments the cleanup counter. Returns an error if configured via
     /// [`with_cleanup_failure`].
     async fn cleanup(&self, _container_id: &str) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.cleanup_count += 1;
         if !state.cleanup_should_succeed {
             anyhow::bail!("mock network cleanup failure");
@@ -621,7 +781,8 @@ pub struct FailableFilesystemMock {
 
 impl FailableFilesystemMock {
     /// Create a new mock with both operations succeeding by default.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             should_fail_setup: AtomicBool::new(false),
             should_fail_cleanup: AtomicBool::new(false),
@@ -663,7 +824,7 @@ impl crate::domain::RootfsSetup for FailableFilesystemMock {
             anyhow::bail!("injected setup failure");
         }
         Ok(RootfsLayout {
-            merged_dir: container_dir.join("merged"),
+            merged_dir: container_dir.join("merged").into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -714,6 +875,7 @@ struct RecordingMetricsState {
 
 impl RecordingMetricsRecorder {
     /// Create a new recorder with empty state.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             state: Arc::new(Mutex::new(RecordingMetricsState::default())),
@@ -721,18 +883,33 @@ impl RecordingMetricsRecorder {
     }
 
     /// Return all recorded counter increments as `(name, labels)` pairs.
+    #[must_use]
     pub fn counters(&self) -> Vec<(String, Labels)> {
-        self.state.lock().unwrap().counters.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .counters
+            .clone()
     }
 
     /// Return all recorded histogram observations as `(name, value, labels)` triples.
+    #[must_use]
     pub fn histograms(&self) -> Vec<(String, f64, Labels)> {
-        self.state.lock().unwrap().histograms.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .histograms
+            .clone()
     }
 
     /// Return all recorded gauge settings as `(name, value, labels)` triples.
+    #[must_use]
     pub fn gauges(&self) -> Vec<(String, f64, Labels)> {
-        self.state.lock().unwrap().gauges.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .gauges
+            .clone()
     }
 }
 
@@ -746,11 +923,11 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
     fn increment_counter(&self, name: &str, labels: &[(&str, &str)]) {
         let owned_labels: Vec<(String, String)> = labels
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .counters
             .push((name.to_string(), owned_labels));
     }
@@ -758,11 +935,11 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
     fn record_histogram(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
         let owned_labels: Vec<(String, String)> = labels
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .histograms
             .push((name.to_string(), value, owned_labels));
     }
@@ -770,11 +947,11 @@ impl crate::domain::MetricsRecorder for RecordingMetricsRecorder {
     fn set_gauge(&self, name: &str, value: f64, labels: &[(&str, &str)]) {
         let owned_labels: Vec<(String, String)> = labels
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .gauges
             .push((name.to_string(), value, owned_labels));
     }
@@ -797,12 +974,12 @@ mod tests {
         use crate::domain::{ContainerHooks, ContainerSpawnConfig};
         let runtime = MockRuntime::new();
         let cfg = ContainerSpawnConfig {
-            rootfs: std::path::PathBuf::from("/mock/rootfs"),
+            rootfs: std::path::PathBuf::from("/mock/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "mock".to_string(),
-            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -874,12 +1051,12 @@ mod tests {
         assert_eq!(runtime.spawn_count(), 0);
 
         let config = ContainerSpawnConfig {
-            rootfs: PathBuf::from("/mock/rootfs"),
+            rootfs: PathBuf::from("/mock/rootfs").into(),
             command: "/bin/sh".to_string(),
             args: vec![],
             env: vec![],
             hostname: "mock-host".to_string(),
-            cgroup_path: PathBuf::from("/mock/cgroup"),
+            cgroup_path: PathBuf::from("/mock/cgroup").into(),
             capture_output: false,
             hooks: ContainerHooks::default(),
             skip_network_namespace: false,
@@ -1078,7 +1255,8 @@ pub struct MockContainerCommitter {
 
 impl MockContainerCommitter {
     /// Create a new, unconfigured mock committer.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
             should_fail: std::sync::atomic::AtomicBool::new(false),
@@ -1152,7 +1330,8 @@ pub struct MockImageBuilder {
 
 impl MockImageBuilder {
     /// Create a new mock builder.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             call_count: AtomicUsize::new(0),
             should_fail: std::sync::atomic::AtomicBool::new(false),
@@ -1186,7 +1365,7 @@ impl ImageBuilder for MockImageBuilder {
         &self,
         _context: &BuildContext,
         config: &BuildConfig,
-        progress_tx: tokio::sync::mpsc::Sender<BuildProgress>,
+        progress_tx: crate::domain::DynProgressSink<BuildProgress>,
     ) -> anyhow::Result<ImageMetadata> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail.load(std::sync::atomic::Ordering::SeqCst) {
@@ -1242,7 +1421,8 @@ pub struct MockImagePusher {
 
 impl MockImagePusher {
     /// Create a new mock pusher with no recorded state.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             state: Mutex::new(MockImagePusherState {
                 pushed_tags: vec![],
@@ -1256,19 +1436,23 @@ impl MockImagePusher {
     pub fn has_tag(&self, image_ref: &str) -> bool {
         self.state
             .lock()
-            .unwrap()
+            .expect("mock: poisoned lock")
             .pushed_tags
             .contains(&image_ref.to_string())
     }
 
     /// Returns the digest reported by the most recent push, or `None`.
     pub fn last_pushed_digest(&self) -> Option<String> {
-        self.state.lock().unwrap().last_digest.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .last_digest
+            .clone()
     }
 
     /// Configure all subsequent `push_image` calls to return an error.
     pub fn with_failure(self) -> Self {
-        self.state.lock().unwrap().should_fail = true;
+        self.state.lock().expect("mock: poisoned lock").should_fail = true;
         self
     }
 }
@@ -1287,10 +1471,10 @@ impl ImagePusher for MockImagePusher {
         &self,
         image_ref: &crate::image::reference::ImageRef,
         _credentials: &RegistryCredentials,
-        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+        progress_tx: Option<crate::domain::DynProgressSink<PushProgress>>,
     ) -> anyhow::Result<PushResult> {
         {
-            let state = self.state.lock().unwrap();
+            let state = self.state.lock().expect("mock: poisoned lock");
             if state.should_fail {
                 anyhow::bail!("mock push failure");
             }
@@ -1302,23 +1486,24 @@ impl ImagePusher for MockImagePusher {
             image_ref.registry, image_ref.namespace, image_ref.name, image_ref.tag
         );
 
+        const MOCK_PUSH_SIZE: u64 = 1024;
         if let Some(tx) = progress_tx {
             let _ = tx
                 .send(PushProgress {
                     layer_digest: digest.clone(),
-                    bytes_uploaded: 1024,
-                    total_bytes: 1024,
+                    bytes_uploaded: MOCK_PUSH_SIZE,
+                    total_bytes: MOCK_PUSH_SIZE,
                 })
                 .await;
         }
 
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.pushed_tags.push(ref_str);
         state.last_digest = Some(digest.clone());
 
         Ok(PushResult {
             digest,
-            size_bytes: 1024,
+            size_bytes: MOCK_PUSH_SIZE,
         })
     }
 }

@@ -1,6 +1,6 @@
 pipeline: minibox_preflight
 # Validate the minibox development environment.
-# No input required — run with: cruxx run .crux/preflight.crux
+# No input required — run with: crux run .crux/preflight.crux
 # Each check is a named step in the trace, pass/fail visible in output.
 budget: { calls: 12 }
 

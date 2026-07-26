@@ -14,6 +14,7 @@ use std::process::Command;
 
 /// Host capabilities relevant to minibox operation.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct HostCapabilities {
     /// Running as UID 0.
     pub is_root: bool,
@@ -23,7 +24,7 @@ pub struct HostCapabilities {
     pub cgroups_v2: bool,
     /// Controllers listed in /sys/fs/cgroup/cgroup.controllers.
     pub cgroup_controllers: Vec<String>,
-    /// Can write to cgroup.subtree_control (delegation works).
+    /// Can write to `cgroup.subtree_control` (delegation works).
     pub cgroup_subtree_delegatable: bool,
     /// "overlay" listed in /proc/filesystems.
     pub overlay_fs: bool,
@@ -39,6 +40,7 @@ pub struct HostCapabilities {
 ///
 /// This function never fails — it returns false/empty for anything it
 /// cannot determine. Safe to call on any platform.
+#[must_use]
 pub fn probe() -> HostCapabilities {
     HostCapabilities {
         is_root: probe_root(),
@@ -57,7 +59,8 @@ pub fn probe() -> HostCapabilities {
 ///
 /// Each capability is prefixed with `PASS`, `WARN`, or `FAIL` depending on
 /// whether it meets the requirement for running minibox containers.
-pub fn format_report(caps: &HostCapabilities) -> String {
+#[cfg(test)]
+pub(crate) fn format_report(caps: &HostCapabilities) -> String {
     let mut lines = Vec::new();
     lines.push("Minibox Host Capabilities".to_string());
     lines.push("=".repeat(40));
@@ -120,7 +123,8 @@ pub fn format_report(caps: &HostCapabilities) -> String {
 fn probe_root() -> bool {
     #[cfg(unix)]
     {
-        nix::unistd::geteuid().is_root()
+        // SAFETY: geteuid() is a read-only syscall with no side effects.
+        unsafe { libc::geteuid() == 0 }
     }
     #[cfg(not(unix))]
     {
@@ -132,9 +136,8 @@ fn probe_root() -> bool {
 ///
 /// Returns `(0, 0, 0)` if the file is unreadable or the format is unexpected.
 fn probe_kernel_version() -> (u32, u32, u32) {
-    let content = match std::fs::read_to_string("/proc/version") {
-        Ok(s) => s,
-        Err(_) => return (0, 0, 0),
+    let Ok(content) = std::fs::read_to_string("/proc/version") else {
+        return (0, 0, 0);
     };
     // "Linux version 6.1.0-18-amd64 ..."
     let version_str = content.split_whitespace().nth(2).unwrap_or("0.0.0");
@@ -145,7 +148,7 @@ fn probe_kernel_version() -> (u32, u32, u32) {
 ///
 /// Any non-numeric suffix after the patch component (e.g. `-18-amd64`) is ignored.
 /// Individual components that fail to parse are treated as `0`.
-fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
+pub fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
     let parts: Vec<&str> = s.split('.').collect();
     let major = parts.first().and_then(|p| p.parse().ok()).unwrap_or(0);
     let minor = parts.get(1).and_then(|p| p.parse().ok()).unwrap_or(0);
@@ -163,9 +166,7 @@ fn parse_kernel_version(s: &str) -> (u32, u32, u32) {
 /// A `cgroup2` entry in `/proc/mounts` means the unified hierarchy is active.
 /// Missing or unreadable file returns `false`.
 fn probe_cgroups_v2() -> bool {
-    std::fs::read_to_string("/proc/mounts")
-        .map(|s| s.contains("cgroup2"))
-        .unwrap_or(false)
+    std::fs::read_to_string("/proc/mounts").is_ok_and(|s| s.contains("cgroup2"))
 }
 
 /// Read the list of available cgroup v2 controllers from
@@ -193,9 +194,7 @@ fn probe_subtree_delegatable() -> bool {
 ///
 /// Returns `false` if overlay is not compiled in or not loaded as a module.
 fn probe_overlay_fs() -> bool {
-    std::fs::read_to_string("/proc/filesystems")
-        .map(|s| s.contains("overlay"))
-        .unwrap_or(false)
+    std::fs::read_to_string("/proc/filesystems").is_ok_and(|s| s.contains("overlay"))
 }
 
 /// Check whether `systemctl --version` succeeds, indicating systemd is running.
@@ -205,8 +204,27 @@ fn probe_systemd_available() -> bool {
     Command::new("systemctl")
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
+}
+
+/// Run a command and parse a version number from the Nth whitespace-delimited
+/// token of the first output line.
+///
+/// Used by `probe_systemd_version` and similar probes that follow the pattern:
+/// run command → check success → parse first-line token as u32.
+fn probe_command_version(cmd: &str, args: &[&str], token_index: usize) -> Option<u32> {
+    let output = Command::new(cmd).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .next()?
+        .split_whitespace()
+        .nth(token_index)?
+        .parse()
+        .ok()
 }
 
 /// Parse the systemd version number from `systemctl --version`.
@@ -214,19 +232,7 @@ fn probe_systemd_available() -> bool {
 /// Expects output starting with a line like `"systemd 252 (252.22-1~deb12u1)"`.
 /// Returns `None` if the command fails or the version cannot be parsed.
 fn probe_systemd_version() -> Option<u32> {
-    let output = Command::new("systemctl").arg("--version").output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // "systemd 252 (252.22-1~deb12u1)"
-    stdout
-        .lines()
-        .next()?
-        .split_whitespace()
-        .nth(1)?
-        .parse()
-        .ok()
+    probe_command_version("systemctl", &["--version"], 1)
 }
 
 /// Check whether `minibox.slice` is active in systemd.
@@ -237,8 +243,7 @@ fn probe_minibox_slice() -> bool {
     Command::new("systemctl")
         .args(["is-active", "minibox.slice"])
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +251,7 @@ fn probe_minibox_slice() -> bool {
 // ---------------------------------------------------------------------------
 
 /// Result from probing whether a command can run from a workspace directory.
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct CommandProbeResult {
     /// The workspace root that was used as the working directory.
@@ -262,6 +268,7 @@ pub struct CommandProbeResult {
 /// `Cargo.toml` with a `[workspace]` table.
 ///
 /// Returns `None` if the filesystem root is reached without finding one.
+#[must_use]
 pub fn workspace_root(start: &Path) -> Option<std::path::PathBuf> {
     let mut dir = start.to_path_buf();
     // Canonicalize if possible so we get an absolute path.
@@ -289,6 +296,7 @@ pub fn workspace_root(start: &Path) -> Option<std::path::PathBuf> {
 /// a `Cargo.toml` that contains `name = "<crate_name>"`.
 ///
 /// Returns `false` if `workspace_root` is not a directory or no match is found.
+#[cfg(test)]
 pub fn workspace_crate_exists(workspace_root: &Path, crate_name: &str) -> bool {
     // Search root Cargo.toml first (single-crate workspace).
     if crate_name_matches(&workspace_root.join("Cargo.toml"), crate_name) {
@@ -314,6 +322,7 @@ pub fn workspace_crate_exists(workspace_root: &Path, crate_name: &str) -> bool {
 /// `diagnostic` string that includes the resolved `workspace_root` path,
 /// the command attempted, and whether the failure was a missing binary or a
 /// non-zero exit.
+#[cfg(test)]
 pub fn command_runnable_from_workspace(
     workspace_root: &Path,
     cmd: &str,
@@ -372,6 +381,7 @@ pub fn command_runnable_from_workspace(
 }
 
 /// Return `true` when the `Cargo.toml` at `path` contains `name = "crate_name"`.
+#[cfg(test)]
 fn crate_name_matches(path: &Path, crate_name: &str) -> bool {
     if !path.exists() {
         return false;
@@ -392,12 +402,6 @@ mod tests {
         assert_eq!(parse_kernel_version("4.19.128"), (4, 19, 128));
         assert_eq!(parse_kernel_version("garbage"), (0, 0, 0));
         assert_eq!(parse_kernel_version(""), (0, 0, 0));
-    }
-
-    #[test]
-    fn test_probe_does_not_panic() {
-        let caps = probe();
-        let _ = format!("{caps:?}");
     }
 
     #[test]

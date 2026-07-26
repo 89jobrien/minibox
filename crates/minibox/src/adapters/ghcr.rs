@@ -1,4 +1,4 @@
-//! GitHub Container Registry (ghcr.io) adapter implementing the ImageRegistry trait.
+//! GitHub Container Registry (ghcr.io) adapter implementing the `ImageRegistry` trait.
 //!
 //! Authenticates via `WWW-Authenticate` Bearer challenge. Pass a personal access
 //! token (PAT) with `read:packages` scope as `GHCR_TOKEN` to access private images;
@@ -35,6 +35,62 @@ const ACCEPT_MANIFESTS: &str = concat!(
 );
 
 // ---------------------------------------------------------------------------
+// RegistryTransport — port for HTTP requests (swappable in tests)
+// ---------------------------------------------------------------------------
+
+/// HTTP transport port for registry communication.
+///
+/// Wraps the subset of `reqwest::Client` that `GhcrRegistry` uses so tests can
+/// substitute a deterministic in-memory implementation without spawning a real
+/// HTTP server.
+///
+/// # Production implementation
+///
+/// [`reqwest::Client`] implements this trait. Pass a `reqwest::Client` when
+/// constructing `GhcrRegistry` for real traffic.
+///
+/// # Test implementation
+///
+/// Use `MockTransport` (defined in `#[cfg(test)]`) to inject canned responses
+/// without a network.
+#[async_trait]
+pub trait RegistryTransport: Send + Sync + 'static {
+    /// Perform a GET request to `url` with the given `bearer_token` (empty
+    /// string = no `Authorization` header) and `accept` header value.
+    ///
+    /// Returns the raw `reqwest::Response` so callers can inspect status,
+    /// headers, and stream the body.
+    async fn get(
+        &self,
+        url: &str,
+        bearer_token: Option<&str>,
+        accept: Option<&str>,
+    ) -> Result<reqwest::Response>;
+}
+
+/// [`reqwest::Client`] is the production [`RegistryTransport`].
+#[async_trait]
+impl RegistryTransport for reqwest::Client {
+    async fn get(
+        &self,
+        url: &str,
+        bearer_token: Option<&str>,
+        accept: Option<&str>,
+    ) -> Result<reqwest::Response> {
+        let mut req = self.get(url);
+        if let Some(tok) = bearer_token {
+            req = req.bearer_auth(tok);
+        }
+        if let Some(acc) = accept {
+            req = req.header("Accept", acc);
+        }
+        req.send()
+            .await
+            .with_context(|| format!("transport: GET {url}"))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Auth token response
 // ---------------------------------------------------------------------------
 
@@ -69,9 +125,10 @@ impl GhcrRegistry {
     ///
     /// Reads `GHCR_TOKEN` from the environment if present.
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
+        const MAX_REDIRECTS: usize = 10;
         let token = std::env::var("GHCR_TOKEN").ok();
         let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .https_only(true)
             .min_tls_version(reqwest::tls::Version::TLS_1_2)
             .build()?;
@@ -102,8 +159,9 @@ impl GhcrRegistry {
     /// Create a test adapter pointed at a plain-HTTP mock server.
     #[cfg(test)]
     fn for_test(store: Arc<ImageStore>, base_url: &str, token: Option<&str>) -> Self {
+        const MAX_REDIRECTS: usize = 10;
         let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::limited(10))
+            .redirect(reqwest::redirect::Policy::limited(MAX_REDIRECTS))
             .build()
             .expect("test reqwest client");
         Self {
@@ -292,16 +350,23 @@ impl GhcrRegistry {
 /// or starts with one followed by `/`.
 ///
 /// Example: `GHCR_ORG_ALLOWLIST=myorg,myorg/private-image`
+/// Pure matching kernel for GHCR org allowlist checks.
+///
+/// Returns `true` when `repo` exactly matches a list entry or starts with
+/// `entry/` (slash-bounded prefix). The slash boundary prevents `"org"` from
+/// matching `"orgmalicious/image"`.
+fn allowlist_permits(repo: &str, list: &str) -> bool {
+    list.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")))
+}
+
 fn check_ghcr_allowlist(repo: &str) -> Result<()> {
     let Ok(list) = std::env::var("GHCR_ORG_ALLOWLIST") else {
         return Ok(()); // no allowlist configured → allow all
     };
-    let permitted = list
-        .split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .any(|prefix| repo == prefix || repo.starts_with(&format!("{prefix}/")));
-    if permitted {
+    if allowlist_permits(repo, &list) {
         Ok(())
     } else {
         anyhow::bail!(
@@ -325,6 +390,7 @@ impl ImageRegistry for GhcrRegistry {
         self.store.has_image(name, tag)
     }
 
+    // qual:allow(iosp) reason: "adapter I/O boundary — auth, fetch manifest, download layers"
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
@@ -355,10 +421,12 @@ impl ImageRegistry for GhcrRegistry {
                 .await
                 .with_context(|| format!("ghcr: pull layer {digest}"))?;
 
-            // Stream the blob body directly into ImageStore without buffering.
+            // Stream the blob body through a size-limited reader, then into
+            // verified layer storage (HashingReader + tmp dir + digest check +
+            // atomic rename).
             let stream = resp.bytes_stream().map_err(io::Error::other);
             let async_reader = StreamReader::new(stream);
-            // Capture the runtime handle before entering spawn_blocking — inside
+            // Capture the runtime handle before entering spawn_blocking -- inside
             // a blocking thread there is no Tokio context to call Handle::current().
             let handle = Handle::current();
             let store = Arc::clone(&self.store);
@@ -368,7 +436,7 @@ impl ImageRegistry for GhcrRegistry {
             tokio::task::spawn_blocking(move || {
                 let sync_reader = SyncIoBridge::new_with_handle(async_reader, handle);
                 store
-                    .store_layer(&store_key2, &tag2, &digest2, sync_reader)
+                    .store_layer_verified(&store_key2, &tag2, &digest2, sync_reader)
                     .with_context(|| format!("ghcr: store layer {digest2}"))
             })
             .await
@@ -407,6 +475,7 @@ impl ImageRegistry for GhcrRegistry {
 /// Parse a `WWW-Authenticate: Bearer ...` header into `(realm, service, scope)`.
 ///
 /// Returns empty strings for any missing fields.
+#[must_use]
 pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
     let mut realm = String::new();
     let mut service = String::new();
@@ -428,34 +497,26 @@ pub fn parse_www_authenticate(header: &str) -> (String, String, String) {
         // Parse the (possibly quoted) value.
         let value = if remaining.starts_with('"') {
             remaining = &remaining[1..];
-            match remaining.find('"') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    if remaining.starts_with(',') {
-                        remaining = &remaining[1..];
-                    }
-                    val
+            if let Some(end) = remaining.find('"') {
+                let val = remaining[..end].to_owned();
+                remaining = &remaining[end + 1..];
+                if remaining.starts_with(',') {
+                    remaining = &remaining[1..];
                 }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
+                val
+            } else {
+                let val = remaining.to_owned();
+                remaining = "";
+                val
             }
+        } else if let Some(end) = remaining.find(',') {
+            let val = remaining[..end].to_owned();
+            remaining = &remaining[end + 1..];
+            val
         } else {
-            match remaining.find(',') {
-                Some(end) => {
-                    let val = remaining[..end].to_owned();
-                    remaining = &remaining[end + 1..];
-                    val
-                }
-                None => {
-                    let val = remaining.to_owned();
-                    remaining = "";
-                    val
-                }
-            }
+            let val = remaining.to_owned();
+            remaining = "";
+            val
         };
 
         match key {
@@ -532,6 +593,30 @@ mod tests {
         unsafe { std::env::set_var("GHCR_ORG_ALLOWLIST", "allowedorg") };
         assert!(check_ghcr_allowlist("otherog/img").is_err());
         unsafe { std::env::remove_var("GHCR_ORG_ALLOWLIST") };
+    }
+
+    // Executable mirrors of kani proof 36 (allowlist_slash_boundary) — pure
+    // function, no env mutation. A failure here is a real prefix-squatting
+    // vulnerability, not a test bug.
+    #[test]
+    fn allowlist_rejects_prefix_squatting() {
+        // "org" must not permit "orgevil/image" — slash-bounded prefix only.
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("org", "org"));
+    }
+
+    #[test]
+    fn allowlist_entry_with_repo_component_is_exact_or_slash_bounded() {
+        assert!(allowlist_permits(
+            "myorg/private-image",
+            "myorg/private-image"
+        ));
+        assert!(!allowlist_permits(
+            "myorg/private-image-extra",
+            "myorg/private-image"
+        ));
     }
 
     #[test]
@@ -742,6 +827,85 @@ mod tests {
         // ------------------------------------------------------------------
 
         #[tokio::test]
+        async fn pull_image_rejects_digest_mismatch() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+            let (layer_bytes, _real_digest) = make_test_layer();
+            let size = layer_bytes.len();
+
+            // Use a fake digest that does NOT match the layer bytes.
+            let fake_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+            let manifest = serde_json::to_vec(&manifest_json(fake_digest, size)).unwrap();
+            mount_auth_with_manifest(&server, "org/bad", "latest", "bad_tok", manifest).await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"^/v2/org/bad/blobs/sha256:.*"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(layer_bytes))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(Arc::clone(&store), &base, None);
+            let image_ref =
+                crate::image::reference::ImageRef::parse("ghcr.io/org/bad:latest").expect("ref");
+            let err = reg.pull_image(&image_ref).await;
+            assert!(err.is_err(), "expected digest mismatch error");
+            let err = err.unwrap_err();
+            let chain = format!("{err:#}");
+            assert!(
+                chain.contains("mismatch") || chain.contains("digest"),
+                "expected digest error, got: {chain}"
+            );
+        }
+
+        #[tokio::test]
+        async fn pull_image_cleans_tmp_on_digest_mismatch() {
+            let dir = TempDir::new().unwrap();
+            let store = make_store(&dir);
+            let server = MockServer::start().await;
+            let base = format!("{}/v2", server.uri());
+            let (layer_bytes, _real_digest) = make_test_layer();
+            let size = layer_bytes.len();
+
+            let fake_digest =
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000";
+            let manifest = serde_json::to_vec(&manifest_json(fake_digest, size)).unwrap();
+            mount_auth_with_manifest(&server, "org/dirty", "latest", "dirty_tok", manifest).await;
+
+            Mock::given(method("GET"))
+                .and(path_regex(r"^/v2/org/dirty/blobs/sha256:.*"))
+                .respond_with(ResponseTemplate::new(200).set_body_bytes(layer_bytes))
+                .expect(1)
+                .mount(&server)
+                .await;
+
+            let reg = GhcrRegistry::for_test(Arc::clone(&store), &base, None);
+            let image_ref =
+                crate::image::reference::ImageRef::parse("ghcr.io/org/dirty:latest").expect("ref");
+            let _ = reg.pull_image(&image_ref).await;
+
+            // No layer directory or tmp directory should remain after a failed pull.
+            let layers_dir = dir
+                .path()
+                .join("images")
+                .join("ghcr.io_org_dirty")
+                .join("latest")
+                .join("layers");
+            if layers_dir.exists() {
+                let entries: Vec<_> = std::fs::read_dir(&layers_dir)
+                    .expect("read layers dir")
+                    .collect();
+                assert!(
+                    entries.is_empty(),
+                    "layers dir should be empty after digest mismatch, found: {entries:?}"
+                );
+            }
+        }
+
+        #[tokio::test]
         async fn pull_image_stores_layer_on_disk() {
             let dir = TempDir::new().unwrap();
             let store = make_store(&dir);
@@ -773,5 +937,227 @@ mod tests {
             assert!(!layers.is_empty(), "expected at least one layer dir");
             assert!(layers[0].exists(), "layer dir should exist on disk");
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // MockTransport — RegistryTransport failure tests
+    // -------------------------------------------------------------------------
+    //
+    // These tests exercise the RegistryTransport trait contract using an
+    // in-memory mock that returns canned responses without network I/O.
+
+    mod mock_transport {
+        use super::super::{ACCEPT_MANIFESTS, RegistryTransport};
+        use anyhow::Result;
+        use async_trait::async_trait;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        // ------------------------------------------------------------------
+        // MockTransport helpers
+        // ------------------------------------------------------------------
+
+        /// A transport that always returns a network-level error.
+        struct FailingTransport {
+            message: String,
+        }
+
+        #[async_trait]
+        impl RegistryTransport for FailingTransport {
+            async fn get(
+                &self,
+                _url: &str,
+                _bearer_token: Option<&str>,
+                _accept: Option<&str>,
+            ) -> Result<reqwest::Response> {
+                anyhow::bail!("{}", self.message)
+            }
+        }
+
+        /// A transport that sleeps briefly then returns an error (simulates slow registry).
+        struct SlowFailingTransport {
+            delay: Duration,
+        }
+
+        #[async_trait]
+        impl RegistryTransport for SlowFailingTransport {
+            async fn get(
+                &self,
+                _url: &str,
+                _bearer_token: Option<&str>,
+                _accept: Option<&str>,
+            ) -> Result<reqwest::Response> {
+                tokio::time::sleep(self.delay).await;
+                anyhow::bail!("slow registry: timed out")
+            }
+        }
+
+        /// A transport that records whether it was called.
+        struct RecordingTransport {
+            called: Arc<AtomicBool>,
+            inner: FailingTransport,
+        }
+
+        #[async_trait]
+        impl RegistryTransport for RecordingTransport {
+            async fn get(
+                &self,
+                url: &str,
+                bearer_token: Option<&str>,
+                accept: Option<&str>,
+            ) -> Result<reqwest::Response> {
+                self.called.store(true, Ordering::SeqCst);
+                self.inner.get(url, bearer_token, accept).await
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // Tests
+        // ------------------------------------------------------------------
+
+        /// registry_503: MockTransport returns a network error (simulates 503).
+        #[tokio::test]
+        async fn registry_503_transport_error_propagates() {
+            let transport = FailingTransport {
+                message: "connection refused (503 simulation)".to_owned(),
+            };
+
+            let err = transport
+                .get(
+                    "https://ghcr.io/v2/org/img/manifests/latest",
+                    None,
+                    Some(ACCEPT_MANIFESTS),
+                )
+                .await;
+
+            assert!(err.is_err(), "expected transport error");
+            let msg = format!("{}", err.unwrap_err());
+            assert!(
+                msg.contains("connection refused"),
+                "unexpected error message: {msg}"
+            );
+        }
+
+        /// slow_registry: transport sleeps then fails, caller receives error.
+        #[tokio::test]
+        async fn slow_registry_returns_error_after_delay() {
+            let transport = SlowFailingTransport {
+                delay: Duration::from_millis(10),
+            };
+
+            let err = transport
+                .get("https://ghcr.io/v2/org/img/manifests/latest", None, None)
+                .await;
+
+            assert!(err.is_err(), "expected timeout error");
+            let msg = format!("{}", err.unwrap_err());
+            assert!(msg.contains("slow registry"), "unexpected message: {msg}");
+        }
+
+        /// partial_layer_body: transport is invoked and caller detects the error.
+        #[tokio::test]
+        async fn partial_layer_body_transport_invoked() {
+            let called = Arc::new(AtomicBool::new(false));
+            let transport = RecordingTransport {
+                called: Arc::clone(&called),
+                inner: FailingTransport {
+                    message: "partial body: connection reset".to_owned(),
+                },
+            };
+
+            let blob_url =
+                "https://ghcr.io/v2/org/img/blobs/sha256:deadbeef000000000000000000000000";
+            let err = transport.get(blob_url, Some("tok"), None).await;
+
+            assert!(
+                called.load(Ordering::SeqCst),
+                "transport.get must be called"
+            );
+            assert!(err.is_err(), "expected body truncation error");
+            let msg = format!("{}", err.unwrap_err());
+            assert!(msg.contains("partial body"), "unexpected message: {msg}");
+        }
+
+        /// Verify the trait is object-safe and can be used as `Box<dyn RegistryTransport>`.
+        #[test]
+        fn registry_transport_is_object_safe() {
+            let _t: Box<dyn RegistryTransport> = Box::new(FailingTransport {
+                message: "test".to_owned(),
+            });
+        }
+
+        /// Verify `reqwest::Client` correctly implements `RegistryTransport`.
+        #[test]
+        fn reqwest_client_implements_registry_transport() {
+            // Compile-time check — no runtime assertion needed.
+            fn assert_impl<T: RegistryTransport>() {}
+            assert_impl::<reqwest::Client>();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 36: allowlist_permits requires a '/' boundary — a prefix "org"
+    /// must NOT match "orgmalicious/image". This is the critical security
+    /// invariant preventing org-squatting bypasses.
+    #[kani::proof]
+    fn allowlist_slash_boundary() {
+        // Pre-built repos avoid format! overhead in CBMC.
+        // "orgevil/image" must NOT match allowlist "org".
+        assert!(!allowlist_permits("orgevil/image", "org"));
+        assert!(!allowlist_permits("orgother/image", "org"));
+        assert!(!allowlist_permits("myorgx/image", "myorg"));
+
+        // "org/image" MUST match allowlist "org".
+        assert!(allowlist_permits("org/image", "org"));
+        assert!(allowlist_permits("myorg/image", "myorg"));
+        assert!(allowlist_permits("ab/image", "ab"));
+    }
+
+    /// Proof 37: allowlist_permits with exact match always returns true.
+    #[kani::proof]
+    #[kani::unwind(32)]
+    fn allowlist_exact_match() {
+        let repos: [&str; 3] = ["myorg", "other/image", "single"];
+        let i: usize = kani::any();
+        kani::assume(i < repos.len());
+        assert!(
+            allowlist_permits(repos[i], repos[i]),
+            "exact match must permit"
+        );
+    }
+
+    /// Proof 38: empty allowlist string permits nothing.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn allowlist_empty_permits_nothing() {
+        let repos: [&str; 3] = ["org/image", "anything", ""];
+        let i: usize = kani::any();
+        kani::assume(i < repos.len());
+        assert!(
+            !allowlist_permits(repos[i], ""),
+            "empty allowlist must deny all"
+        );
+    }
+
+    /// Proof 39: allowlist with only commas/whitespace permits nothing.
+    #[kani::proof]
+    #[kani::unwind(16)]
+    fn allowlist_whitespace_only_permits_nothing() {
+        let lists: [&str; 3] = [",", " , , ", "  "];
+        let i: usize = kani::any();
+        kani::assume(i < lists.len());
+        assert!(
+            !allowlist_permits("org/image", lists[i]),
+            "whitespace-only allowlist must deny all"
+        );
     }
 }

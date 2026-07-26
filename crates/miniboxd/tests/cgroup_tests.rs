@@ -68,12 +68,13 @@ impl CgroupTestGuard {
         // Create a leaf cgroup for our test process first (so the parent
         // is free to enable subtree_control).
         let test_leaf = base.join(format!("{name}-leaf"));
-        let _ = std::fs::create_dir_all(&test_leaf);
+        std::fs::create_dir_all(&test_leaf).expect("test fixture: failed to create cgroup leaf");
         // Move ourselves into the leaf
-        let _ = std::fs::write(
+        std::fs::write(
             test_leaf.join("cgroup.procs"),
             std::process::id().to_string(),
-        );
+        )
+        .expect("test fixture: failed to move process into cgroup leaf");
 
         // Now create the test root as a sibling
         let root = base.join(name);
@@ -83,7 +84,9 @@ impl CgroupTestGuard {
         // Enable controllers on parent so our test root can use them
         let subtree_ctl = base.join("cgroup.subtree_control");
         for controller in ["+memory", "+cpu", "+pids", "+io"] {
-            let _ = std::fs::write(&subtree_ctl, controller);
+            if let Err(e) = std::fs::write(&subtree_ctl, controller) {
+                eprintln!("warning: could not enable {controller}: {e}");
+            }
         }
 
         root
@@ -104,41 +107,48 @@ impl Drop for CgroupTestGuard {
             None => unsafe { std::env::remove_var("MINIBOX_CGROUP_ROOT") },
         }
 
-        // Clean up: remove child cgroups first, then the root.
-        // cgroupfs only supports rmdir — recurse two levels for nested cgroups.
-        if self.root.exists() {
-            if let Ok(entries) = std::fs::read_dir(&self.root) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        // Recurse one level for nested cgroups (e.g., supervisor/)
-                        if let Ok(sub_entries) = std::fs::read_dir(&path) {
-                            for sub in sub_entries.flatten() {
-                                if sub.path().is_dir() {
-                                    let _ = std::fs::remove_dir(sub.path());
-                                }
-                            }
-                        }
-                        let _ = std::fs::remove_dir(&path);
-                    }
-                }
-            }
-            let _ = std::fs::remove_dir(&self.root);
-        }
+        // Recursively remove our test cgroup subtree.
+        cleanup_cgroup_dir(&self.root);
 
-        // Also clean up the leaf cgroup we created for ourselves
+        // Also clean up the leaf cgroup we created for ourselves.
         let leaf_name = self
             .root
             .file_name()
             .map(|n| format!("{}-leaf", n.to_string_lossy()))
             .unwrap_or_default();
         let leaf = self.root.parent().unwrap_or(Path::new("/")).join(leaf_name);
-        // Move ourselves back to the parent first
+        // Move ourselves back to the parent first so the leaf becomes empty.
         if let Some(parent) = self.root.parent() {
             let procs = parent.join("cgroup.procs");
-            let _ = std::fs::write(&procs, std::process::id().to_string());
+            if let Err(e) = std::fs::write(&procs, std::process::id().to_string()) {
+                eprintln!("test teardown: failed to move process out of leaf: {e}");
+            }
         }
-        let _ = std::fs::remove_dir(&leaf);
+        if let Err(e) = std::fs::remove_dir(&leaf) {
+            eprintln!("test teardown: failed to remove {}: {e}", leaf.display());
+        }
+    }
+}
+
+/// Recursively remove a cgroup directory tree.
+///
+/// cgroupfs only allows `rmdir` on empty directories, so children must be
+/// removed depth-first before their parent. Unlike the xtask variant we do
+/// not attempt to move processes to the root — the test processes are already
+/// gone by the time Drop runs.
+fn cleanup_cgroup_dir(dir: &Path) {
+    if !dir.exists() {
+        return;
+    }
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.file_type().ok().is_some_and(|t| t.is_dir()) {
+                cleanup_cgroup_dir(&entry.path());
+            }
+        }
+    }
+    if let Err(e) = std::fs::remove_dir(dir) {
+        eprintln!("test teardown: failed to remove {}: {e}", dir.display());
     }
 }
 

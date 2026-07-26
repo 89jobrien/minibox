@@ -24,6 +24,25 @@ pub enum NetworkMode {
     Tailnet,
 }
 
+impl std::fmt::Display for NetworkMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl NetworkMode {
+    /// Returns the lowercase wire name for this mode.
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Bridge => "bridge",
+            Self::Host => "host",
+            Self::Tailnet => "tailnet",
+        }
+    }
+}
+
 /// Selects between gateway and per-container Tailscale device allocation.
 ///
 /// **Default is `Gateway`** — the daemon joins the tailnet once and containers
@@ -199,9 +218,9 @@ pub enum Protocol {
 impl std::fmt::Display for Protocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Protocol::Tcp => write!(f, "tcp"),
-            Protocol::Udp => write!(f, "udp"),
-            Protocol::Sctp => write!(f, "sctp"),
+            Self::Tcp => write!(f, "tcp"),
+            Self::Udp => write!(f, "udp"),
+            Self::Sctp => write!(f, "sctp"),
         }
     }
 }
@@ -299,5 +318,14 @@ mod tests {
     fn network_config_default_has_none_mode() {
         let config = NetworkConfig::default();
         assert_eq!(config.mode, NetworkMode::None);
+    }
+
+    #[test]
+    fn network_mode_display_and_as_str() {
+        assert_eq!(NetworkMode::None.as_str(), "none");
+        assert_eq!(NetworkMode::Bridge.as_str(), "bridge");
+        assert_eq!(NetworkMode::Host.as_str(), "host");
+        assert_eq!(NetworkMode::Tailnet.as_str(), "tailnet");
+        assert_eq!(NetworkMode::Host.to_string(), "host");
     }
 }

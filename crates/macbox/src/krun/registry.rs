@@ -1,4 +1,6 @@
-//! KrunRegistry — ImageRegistry adapter for the krun VM backend.
+//! `KrunRegistry` — `ImageRegistry` adapter for the krun VM backend.
+// Static platform string parse cannot fail.
+#![allow(clippy::expect_used)]
 //!
 //! `KrunRegistry` is a thin newtype wrapper over [`DockerHubRegistry`] from
 //! `minibox-core`. The krun adapter uses standard Docker Hub image pulls; this
@@ -10,6 +12,7 @@ use async_trait::async_trait;
 use minibox_core::adapters::DockerHubRegistry;
 use minibox_core::domain::{AsAny, ImageMetadata, ImageRegistry};
 use minibox_core::image::ImageStore;
+use minibox_core::image::manifest::TargetPlatform;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -29,16 +32,25 @@ pub struct KrunRegistry {
 
 impl KrunRegistry {
     /// Create a new `KrunRegistry` backed by the given image store.
+    ///
+    /// Always pulls `linux/arm64` images regardless of host OS — krun always
+    /// runs Linux VMs, so the host platform (`macos/arm64`) must not be used
+    /// to resolve OCI manifest lists.
+    // qual:allow(complexity) reason: "infallible const parse of hardcoded platform"
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
-        let inner = DockerHubRegistry::new(store)?;
+        let platform =
+            TargetPlatform::parse("linux/arm64").expect("linux/arm64 is a valid platform string");
+        let inner = DockerHubRegistry::with_platform(store, platform)?;
         Ok(Self { inner })
     }
 
     /// Return the manifest size cap enforced by the underlying registry client.
     ///
     /// Used by K-I-05 to verify the size limit configuration is present.
+    #[must_use]
     pub const fn manifest_size_limit_bytes() -> u64 {
-        10 * 1024 * 1024 // 10 MiB — matches MAX_MANIFEST_SIZE in minibox-core
+        const TEN_MIB: u64 = 10 * 1024 * 1024;
+        TEN_MIB // matches MAX_MANIFEST_SIZE in minibox-core
     }
 }
 

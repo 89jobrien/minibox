@@ -45,7 +45,7 @@ impl ImageGc {
 impl ImageGarbageCollector for ImageGc {
     async fn prune(&self, dry_run: bool, in_use: &[String]) -> Result<PruneReport> {
         let all = self.store.list_all_images().await?;
-        let in_use_set: HashSet<&str> = in_use.iter().map(|s| s.as_str()).collect();
+        let in_use_set: HashSet<&str> = in_use.iter().map(std::string::String::as_str).collect();
 
         let mut report = PruneReport {
             dry_run,
@@ -63,9 +63,8 @@ impl ImageGarbageCollector for ImageGc {
             }
 
             // Parse "name:tag"
-            let (name, tag) = match image_ref.rsplit_once(':') {
-                Some(pair) => pair,
-                None => continue,
+            let Some((name, tag)) = image_ref.rsplit_once(':') else {
+                continue;
             };
 
             let size = self.store.image_size_bytes(name, tag).await.unwrap_or(0);

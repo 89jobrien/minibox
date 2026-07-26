@@ -28,9 +28,10 @@ use minibox::image::ImageStore;
 use minibox::protocol::DaemonResponse;
 use miniboxd::handler::{
     self, BuildDeps, ContainerPolicy, EventDeps, ExecDeps, HandlerDependencies, ImageDeps,
-    LifecycleDeps, PtySessionRegistry,
+    LifecycleDeps, PtySessionRegistry, RunParams,
 };
 use miniboxd::state::DaemonState;
+use serial_test::serial;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -63,24 +64,24 @@ async fn handle_run_once(
     deps: Arc<HandlerDependencies>,
 ) -> DaemonResponse {
     let (tx, mut rx) = mpsc::channel::<DaemonResponse>(4);
-    handler::handle_run(
+    let params = RunParams {
         image,
         tag,
         command,
         memory_limit_bytes,
         cpu_weight,
-        false,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
-        state,
-        deps,
-        tx,
-    )
-    .await;
+        ephemeral: false,
+        network: None,
+        mounts: vec![],
+        privileged: false,
+        env: vec![],
+        name: None,
+        platform: None,
+        cgroup_parent: None,
+        priority: None,
+        policy_override: None,
+    };
+    handler::handle_run(params, state, deps, tx).await;
     rx.recv().await.expect("handler sent no response")
 }
 
@@ -127,6 +128,7 @@ fn create_real_deps() -> (Arc<HandlerDependencies>, Arc<DaemonState>, TempDir) {
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 
@@ -138,6 +140,12 @@ fn require_root() {
     if unsafe { libc::geteuid() } != 0 {
         panic!("Integration tests require root privileges. Run with: sudo -E cargo test");
     }
+}
+
+/// Non-panicking root check for tests that soft-skip when not root.
+fn is_root() -> bool {
+    // SAFETY: geteuid(2) has no preconditions and cannot fail.
+    unsafe { libc::geteuid() == 0 }
 }
 
 /// Check if cgroups v2 is available.
@@ -356,7 +364,7 @@ async fn test_container_removal_cleanup() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Mark as stopped (normally done by reaper)
-    state
+    let _ = state
         .update_container_state(
             &container_id,
             minibox::daemon::state::ContainerState::Stopped,
@@ -501,7 +509,7 @@ async fn test_complete_container_lifecycle() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // 6. Mark as stopped and remove
-    state
+    let _ = state
         .update_container_state(
             &container_id,
             minibox::daemon::state::ContainerState::Stopped,
@@ -589,9 +597,107 @@ async fn test_multiple_concurrent_containers() {
     // Cleanup all containers
     tokio::time::sleep(Duration::from_millis(1500)).await;
     for id in container_ids {
-        state
+        let _ = state
             .update_container_state(&id, minibox::daemon::state::ContainerState::Stopped)
             .await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Nesting support
+// ---------------------------------------------------------------------------
+
+/// Minimal standard-alphabet base64 decoder for `ContainerOutput.data`.
+///
+/// Avoids adding a `base64` dev-dependency to miniboxd for this one
+/// Linux-gated test. Skips padding and any non-alphabet byte.
+fn decode_base64(input: &str) -> Vec<u8> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut lut = [255u8; 256];
+    for (i, &c) in ALPHABET.iter().enumerate() {
+        lut[c as usize] = u8::try_from(i).expect("alphabet index fits in u8");
+    }
+    let mut out = Vec::new();
+    let mut acc: u32 = 0;
+    let mut bits: u32 = 0;
+    for &c in input.as_bytes() {
+        let v = lut[c as usize];
+        if v == 255 {
+            continue; // padding, whitespace, or invalid byte
+        }
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(u8::try_from((acc >> bits) & 0xFF).expect("masked to one byte"));
+        }
+    }
+    out
+}
+
+#[tokio::test]
+#[serial]
+async fn test_container_receives_nesting_env_vars() {
+    if !is_root() {
+        eprintln!("SKIP: test_container_receives_nesting_env_vars (not root)");
+        return;
+    }
+
+    let (deps, state, _tmp) = create_real_deps();
+
+    // Pull a minimal image.
+    let pull_response = handler::handle_pull(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        None,
+        state.clone(),
+        deps.clone(),
+    )
+    .await;
+    if let DaemonResponse::Error { message } = &pull_response {
+        panic!("pull failed: {message}");
+    }
+
+    // Ephemeral run that prints the nesting env vars: the handler streams
+    // zero or more ContainerOutput chunks then a terminal ContainerStopped.
+    let (tx, mut rx) = mpsc::channel::<DaemonResponse>(64);
+    let params = RunParams {
+        image: "alpine".to_string(),
+        tag: Some("latest".to_string()),
+        command: vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo DEPTH=$MINIBOX_NEST_DEPTH MAX=$MINIBOX_MAX_NEST_DEPTH".to_string(),
+        ],
+        ephemeral: true,
+        ..Default::default()
+    };
+    handler::handle_run(params, state.clone(), deps.clone(), tx).await;
+
+    let mut output = String::new();
+    while let Some(resp) = rx.recv().await {
+        match resp {
+            DaemonResponse::ContainerOutput { data, .. } => {
+                output.push_str(&String::from_utf8_lossy(&decode_base64(&data)));
+            }
+            DaemonResponse::ContainerStopped { .. } => break,
+            DaemonResponse::Error { message } => panic!("run failed: {message}"),
+            _ => {}
+        }
+    }
+
+    // The container should see MINIBOX_NEST_DEPTH=1 (child of host depth 0).
+    let depth_line = output
+        .lines()
+        .find(|l| l.contains("DEPTH="))
+        .expect("should have DEPTH= line in output");
+    assert!(
+        depth_line.contains("DEPTH=1"),
+        "expected DEPTH=1, got: {depth_line}"
+    );
+    assert!(
+        depth_line.contains("MAX=4"),
+        "expected MAX=4, got: {depth_line}"
+    );
 }

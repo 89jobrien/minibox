@@ -31,6 +31,26 @@ const SURFACES: &[Surface] = &[
         name: "lifecycle-events",
         path: "crates/minibox-core/src/events.rs",
     },
+    Surface {
+        name: "execution-manifest",
+        path: "crates/minibox-core/src/domain/execution_manifest.rs",
+    },
+    Surface {
+        name: "execution-policy",
+        path: "crates/minibox-core/src/domain/execution_policy.rs",
+    },
+    Surface {
+        name: "error-types",
+        path: "crates/minibox-core/src/error.rs",
+    },
+    Surface {
+        name: "client-api",
+        path: "crates/minibox-core/src/client/mod.rs",
+    },
+    Surface {
+        name: "typestate",
+        path: "crates/minibox-core/src/typestate.rs",
+    },
 ];
 
 #[derive(Debug, Clone, Copy)]
@@ -71,7 +91,13 @@ struct HookToolInput {
     file_path: Option<PathBuf>,
 }
 
-pub fn run(root: &Path, update: bool, warn_only: bool, hook: bool) -> Result<()> {
+pub fn run(
+    root: &Path,
+    update: bool,
+    warn_only: bool,
+    hook: bool,
+    sarif_path: Option<&Path>,
+) -> Result<()> {
     let hook_path = if hook { read_hook_file_path()? } else { None };
 
     if let Some(path) = &hook_path {
@@ -100,6 +126,10 @@ pub fn run(root: &Path, update: bool, warn_only: bool, hook: bool) -> Result<()>
     let expected = read_lockfile(&lock_path)?;
     let drift = compare_lockfiles(&expected, &current);
 
+    if let Some(sarif_out) = sarif_path {
+        write_sarif(&drift, sarif_out)?;
+    }
+
     if drift.is_empty() {
         if !hook {
             eprintln!(
@@ -120,6 +150,47 @@ pub fn run(root: &Path, update: bool, warn_only: bool, hook: bool) -> Result<()>
     }
 
     bail!("core contract drift detected");
+}
+
+fn write_sarif(drift: &[Drift], path: &Path) -> Result<()> {
+    use crate::sarif::{Level, ReportingDescriptor, SarifLog, SarifResult};
+
+    let mut log = SarifLog::new("minibox-protocol-drift", env!("CARGO_PKG_VERSION"));
+    let run = log.run_mut();
+
+    // Register one rule per surface.
+    for surface in SURFACES {
+        let rule_id = format!("minibox/protocol-drift/{}", surface.name);
+        run.add_rule(
+            ReportingDescriptor::new(&rule_id, format!("Hash mismatch: {}", surface.name))
+                .with_level(Level::Error),
+        );
+    }
+
+    for item in drift {
+        let rule_id = format!("minibox/protocol-drift/{}", item.name);
+        let message = match (&item.expected, &item.actual) {
+            (Some(expected), Some(actual)) => {
+                format!("expected {expected}, got {actual}")
+            }
+            (Some(expected), None) => {
+                format!("expected {expected}, surface missing from current build")
+            }
+            (None, Some(actual)) => {
+                format!("new surface not in lockfile, hash {actual}")
+            }
+            (None, None) => "unknown drift".to_string(),
+        };
+
+        let rule_index = SURFACES.iter().position(|s| s.name == item.name);
+        let mut result = SarifResult::new(&rule_id, Level::Error, &message).with_file(&item.path);
+        if let Some(idx) = rule_index {
+            result = result.with_rule_index(idx);
+        }
+        run.add_result(result);
+    }
+
+    log.write_to(path)
 }
 
 fn calculate_lockfile(root: &Path) -> Result<Lockfile> {
@@ -402,6 +473,34 @@ mod tests {
     }
 
     #[test]
+    fn all_expected_surfaces_are_tracked() {
+        let expected = [
+            "wire-protocol",
+            "domain-ports",
+            "domain-networking",
+            "domain-extensions",
+            "lifecycle-events",
+            "execution-manifest",
+            "execution-policy",
+            "error-types",
+            "client-api",
+            "typestate",
+        ];
+        let tracked: Vec<&str> = SURFACES.iter().map(|s| s.name).collect();
+        for name in &expected {
+            assert!(
+                tracked.contains(name),
+                "expected surface '{name}' is not tracked"
+            );
+        }
+        assert_eq!(
+            tracked.len(),
+            expected.len(),
+            "surface count mismatch: tracked {tracked:?} vs expected {expected:?}"
+        );
+    }
+
+    #[test]
     fn identifies_tracked_surface_paths() {
         let root = Path::new("/repo");
 
@@ -412,6 +511,14 @@ mod tests {
         assert!(is_tracked_surface_path(
             root,
             Path::new("crates/minibox-core/src/domain/networking.rs")
+        ));
+        assert!(is_tracked_surface_path(
+            root,
+            Path::new("/repo/crates/minibox-core/src/domain/execution_manifest.rs")
+        ));
+        assert!(is_tracked_surface_path(
+            root,
+            Path::new("/repo/crates/minibox-core/src/typestate.rs")
         ));
         assert!(!is_tracked_surface_path(
             root,

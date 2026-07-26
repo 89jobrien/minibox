@@ -34,7 +34,7 @@ use std::path::PathBuf;
 pub trait TtyProvider: AsAny + Send + Sync {
     /// Create a pseudo-terminal for a container.
     ///
-    /// Returns (master_fd, slave_fd) file descriptors.
+    /// Returns (`master_fd`, `slave_fd`) file descriptors.
     ///
     /// # Arguments
     ///
@@ -129,7 +129,7 @@ pub trait ExecProvider: AsAny + Send + Sync {
     ///
     /// # Arguments
     ///
-    /// * `exec_id` - Exec session identifier from create()
+    /// * `exec_id` - Exec session identifier from `create()`
     ///
     /// # Returns
     ///
@@ -224,6 +224,7 @@ pub trait LogProvider: AsAny + Send + Sync {
 
 /// Log retrieval configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct LogConfig {
     /// Follow log output (tail -f behavior)
     pub follow: bool,

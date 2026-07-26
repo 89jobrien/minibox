@@ -49,6 +49,9 @@ pub enum MacboxError {
     NoBackendAvailable,
 }
 
+// TODO(#161): centralize adapter registration — this function duplicates
+// `build_colima_handler_dependencies` in `crates/miniboxd/src/main.rs`.
+// Consolidate both into a shared builder module when refactoring adapters.
 #[allow(clippy::too_many_arguments)]
 pub fn build_colima_handler_dependencies(
     state: Arc<DaemonState>,
@@ -61,7 +64,7 @@ pub fn build_colima_handler_dependencies(
 ) -> Result<Arc<HandlerDependencies>> {
     let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let registry_port: DynImageRegistry = registry.clone();
-    let image_loader: DynImageLoader = registry.clone();
+    let image_loader: DynImageLoader = registry;
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
@@ -124,6 +127,7 @@ pub fn build_colima_handler_dependencies(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -136,51 +140,6 @@ pub fn build_colima_handler_dependencies(
 /// `None` for `PeerCreds`). This means the UID-based root-auth guard is
 /// disabled on macOS — container operations are delegated to the Colima VM
 /// anyway, so the attack surface is limited to whoever can reach the socket.
-/// Extract peer credentials from a connected Unix socket fd.
-///
-/// On macOS, uses `getpeereid(2)` (pid unavailable, returns 0 sentinel).
-/// On Linux, uses `SO_PEERCRED` via `getsockopt`.
-#[cfg(target_os = "macos")]
-fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<minibox::daemon::server::PeerCreds> {
-    let mut uid: libc::uid_t = 0;
-    let mut gid: libc::gid_t = 0;
-    // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
-    // call on any connected Unix domain socket.
-    if unsafe { libc::getpeereid(fd, &mut uid, &mut gid) } == 0 {
-        Some(minibox::daemon::server::PeerCreds { uid, pid: 0 })
-    } else {
-        tracing::warn!("getpeereid failed: {}", std::io::Error::last_os_error());
-        None
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<minibox::daemon::server::PeerCreds> {
-    use std::mem;
-    let mut cred: libc::ucred = unsafe { mem::zeroed() };
-    let mut len = mem::size_of::<libc::ucred>() as libc::socklen_t;
-    // SAFETY: fd is a valid connected Unix socket fd. getsockopt with
-    // SO_PEERCRED is safe on any connected Unix domain socket.
-    let ret = unsafe {
-        libc::getsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_PEERCRED,
-            &mut cred as *mut _ as *mut libc::c_void,
-            &mut len,
-        )
-    };
-    if ret == 0 {
-        Some(minibox::daemon::server::PeerCreds {
-            uid: cred.uid,
-            pid: cred.pid,
-        })
-    } else {
-        tracing::warn!("SO_PEERCRED failed: {}", std::io::Error::last_os_error());
-        None
-    }
-}
-
 struct MacUnixListener(UnixListener);
 
 impl minibox::daemon::server::ServerListener for MacUnixListener {
@@ -191,7 +150,7 @@ impl minibox::daemon::server::ServerListener for MacUnixListener {
     ) -> anyhow::Result<(Self::Stream, Option<minibox::daemon::server::PeerCreds>)> {
         let (stream, _addr) = self.0.accept().await?;
         use std::os::unix::io::AsRawFd;
-        let creds = get_peer_creds(stream.as_raw_fd());
+        let creds = minibox::daemon::server::get_peer_creds(stream.as_raw_fd());
         Ok((stream, creds))
     }
 }
@@ -212,6 +171,7 @@ impl minibox::daemon::server::ServerListener for MacUnixListener {
 /// 6. Removes any stale socket file, binds a new Unix socket, and runs the
 ///    [`minibox::daemon::server::run_server`] accept loop with root-auth disabled.
 /// 7. Cleans up the socket file on graceful shutdown (Ctrl-C).
+// qual:allow(iosp) reason: "daemon entrypoint — init tracing, build deps, run server"
 pub async fn start() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -220,15 +180,11 @@ pub async fn start() -> Result<()> {
     info!("miniboxd (macOS) starting");
 
     // ── Paths ────────────────────────────────────────────────────────────
-    let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::data_dir());
-    let run_dir = std::env::var("MINIBOX_RUN_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::run_dir());
-    let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| paths::socket_path());
+    let data_dir =
+        std::env::var("MINIBOX_DATA_DIR").map_or_else(|_| paths::data_dir(), PathBuf::from);
+    let run_dir = std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| paths::run_dir(), PathBuf::from);
+    let socket_path =
+        std::env::var("MINIBOX_SOCKET_PATH").map_or_else(|_| paths::socket_path(), PathBuf::from);
 
     let images_dir = data_dir.join("images");
     let containers_dir = data_dir.join("containers");
@@ -364,6 +320,10 @@ pub async fn start() -> Result<()> {
 ///
 /// The krun backend delegates container execution to `smolvm` (a thin
 /// wrapper over libkrun) rather than Linux namespaces or Colima.
+// TODO: extract socket bind/chmod/stale-removal boilerplate shared by `start()` and
+// `start_krun()` (and any future adapter entrypoints) into a `bind_socket(path) -> Result<UnixListener>`
+// helper to eliminate 3x duplication (lines ~270-308, ~381-415).
+// qual:allow(iosp) reason: "daemon entrypoint — build krun deps, bind socket, run server"
 async fn start_krun(
     socket_path: std::path::PathBuf,
     _images_dir: std::path::PathBuf,
@@ -415,6 +375,7 @@ async fn start_krun(
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
         },
         policy: minibox::daemon::handler::ContainerPolicy::default(),
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     });
 

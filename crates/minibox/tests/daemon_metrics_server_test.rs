@@ -10,7 +10,7 @@ async fn metrics_endpoint_returns_prometheus_format() {
     let recorder = Arc::new(PrometheusMetricsRecorder::new());
     recorder.increment_counter("test_counter_total", &[("label", "value")]);
 
-    let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
+    let addr: SocketAddr = "127.0.0.1:0".parse().expect("unwrap in test");
 
     let (actual_addr, server_handle) = run_metrics_server(addr, recorder)
         .await

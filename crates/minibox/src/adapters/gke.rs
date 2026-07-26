@@ -52,7 +52,8 @@ pub struct NoopLimiter;
 
 #[allow(dead_code)]
 impl NoopLimiter {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -88,7 +89,8 @@ pub struct CopyFilesystem;
 
 #[allow(dead_code)]
 impl CopyFilesystem {
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -116,7 +118,7 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
         }
 
         Ok(RootfsLayout {
-            merged_dir: merged,
+            merged_dir: merged.into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })
@@ -124,6 +126,19 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
 
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
         debug!("copy filesystem: removing {:?}", container_dir);
+        // SECURITY: defensive check — reject paths that contain parent traversal
+        // or point at the filesystem root to prevent accidental recursive deletion.
+        if container_dir
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+            || container_dir == Path::new("/")
+        {
+            warn!(
+                path = %container_dir.display(),
+                "copy filesystem: refusing to remove suspicious path"
+            );
+            anyhow::bail!("container_dir contains path traversal or is root: {container_dir:?}");
+        }
         if container_dir.exists() {
             std::fs::remove_dir_all(container_dir)
                 .with_context(|| format!("removing container dir {container_dir:?}"))?;
@@ -236,6 +251,7 @@ impl ProotRuntime {
     /// Create a proot runtime from environment.
     ///
     /// Checks `MINIBOX_PROOT_PATH` first, then searches `PATH` for `proot`.
+    // qual:allow(iosp) reason: "I/O boundary — env var + PATH probe"
     pub fn from_env() -> Result<Self> {
         if let Ok(path) = std::env::var("MINIBOX_PROOT_PATH") {
             return Self::new(&path)
@@ -288,7 +304,7 @@ impl ContainerRuntime for ProotRuntime {
 
                 // proot flags: fake root, bind /proc and /dev, set working dir
                 cmd.arg("-r")
-                    .arg(&rootfs)
+                    .arg(&*rootfs)
                     .arg("-0")
                     .arg("-b")
                     .arg("/proc:/proc")
@@ -361,6 +377,11 @@ impl ContainerRuntime for ProotRuntime {
             output_reader,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // PRoot manages process lifecycle; the reaper thread handles cleanup.
+        Ok(0)
+    }
 }
 
 // ============================================================================
@@ -404,8 +425,11 @@ mod tests {
 
     #[test]
     fn noop_limiter_default() {
-        let limiter = NoopLimiter;
-        let _ = limiter;
+        let limiter = NoopLimiter::new();
+        // Verify that the noop cgroup path is derived from the container ID.
+        let result = limiter.create("test-container", &Default::default());
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "noop:test-container");
     }
 
     // -- CopyFilesystem tests -----------------------------------------------
@@ -532,8 +556,13 @@ mod tests {
 
     #[test]
     fn copy_filesystem_default() {
-        let fs = CopyFilesystem;
-        let _ = fs;
+        let fs = CopyFilesystem::new();
+        // Verify that setup_rootfs creates the merged directory when given no layers.
+        let dir = tempfile::TempDir::new().unwrap();
+        let container_dir = dir.path().join("container");
+        std::fs::create_dir_all(&container_dir).unwrap();
+        let result = minibox_core::domain::RootfsSetup::setup_rootfs(&fs, &[], &container_dir);
+        assert!(result.is_ok(), "setup_rootfs with no layers must succeed");
     }
 
     // -- ProotRuntime tests -------------------------------------------------
@@ -584,19 +613,16 @@ mod tests {
     #[test]
     fn proot_runtime_from_env_uses_env_var() {
         let _guard = ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
-        unsafe { std::env::set_var("MINIBOX_PROOT_PATH", "/bin/sh") };
+        minibox_macros::unsafe_set_var!("MINIBOX_PROOT_PATH", "/bin/sh");
         let result = ProotRuntime::from_env();
-        // SAFETY: same mutex guard; restoring env before any other test runs.
-        unsafe { std::env::remove_var("MINIBOX_PROOT_PATH") };
+        minibox_macros::unsafe_remove_var!("MINIBOX_PROOT_PATH");
         assert!(result.is_ok(), "expected ProotRuntime, got {result:?}");
     }
 
     #[test]
     fn proot_runtime_from_env_fails_when_proot_not_found() {
         let _guard = ENV_MUTEX.lock().unwrap();
-        // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
-        unsafe { std::env::remove_var("MINIBOX_PROOT_PATH") };
+        minibox_macros::unsafe_remove_var!("MINIBOX_PROOT_PATH");
 
         // Only run this assertion when proot is genuinely absent; skip otherwise.
         let proot_on_path = std::process::Command::new("which")

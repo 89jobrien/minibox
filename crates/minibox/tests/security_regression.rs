@@ -37,13 +37,16 @@ fn tar_gz_regular_file(name: &str, content: &[u8], mode: u32) -> Vec<u8> {
     let gz = GzEncoder::new(Vec::new(), Compression::default());
     let mut ar = Builder::new(gz);
     let mut h = Header::new_gnu();
-    h.set_path(name).unwrap();
+    h.set_path(name).expect("unwrap in test");
     h.set_size(content.len() as u64);
     h.set_entry_type(EntryType::Regular);
     h.set_mode(mode);
     h.set_cksum();
-    ar.append(&h, content).unwrap();
-    ar.into_inner().unwrap().finish().unwrap()
+    ar.append(&h, content).expect("unwrap in test");
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a tar.gz containing a device node entry.
@@ -51,13 +54,16 @@ fn tar_gz_device_node(name: &str, kind: EntryType) -> Vec<u8> {
     let gz = GzEncoder::new(Vec::new(), Compression::default());
     let mut ar = Builder::new(gz);
     let mut h = Header::new_gnu();
-    h.set_path(name).unwrap();
+    h.set_path(name).expect("unwrap in test");
     h.set_size(0);
     h.set_entry_type(kind);
     h.set_mode(0o644);
     h.set_cksum();
-    ar.append(&h, &[][..]).unwrap();
-    ar.into_inner().unwrap().finish().unwrap()
+    ar.append(&h, &[][..]).expect("unwrap in test");
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a tar.gz containing a symlink entry.
@@ -65,14 +71,17 @@ fn tar_gz_symlink(name: &str, target: &str) -> Vec<u8> {
     let gz = GzEncoder::new(Vec::new(), Compression::default());
     let mut ar = Builder::new(gz);
     let mut h = Header::new_gnu();
-    h.set_path(name).unwrap();
+    h.set_path(name).expect("unwrap in test");
     h.set_size(0);
     h.set_entry_type(EntryType::Symlink);
-    h.set_link_name(target).unwrap();
+    h.set_link_name(target).expect("unwrap in test");
     h.set_mode(0o777);
     h.set_cksum();
-    ar.append(&h, &[][..]).unwrap();
-    ar.into_inner().unwrap().finish().unwrap()
+    ar.append(&h, &[][..]).expect("unwrap in test");
+    ar.into_inner()
+        .expect("unwrap in test")
+        .finish()
+        .expect("unwrap in test")
 }
 
 /// Build a raw tar.gz with a manually crafted header so we can embed filenames
@@ -104,8 +113,8 @@ fn raw_tar_gz_with_traversal_filename(filename: &str) -> Vec<u8> {
     tar_bytes.extend_from_slice(&[0u8; 1024]); // two end-of-archive zero blocks
 
     let mut gz = GzEncoder::new(Vec::new(), Compression::default());
-    gz.write_all(&tar_bytes).unwrap();
-    gz.finish().unwrap()
+    gz.write_all(&tar_bytes).expect("unwrap in test");
+    gz.finish().expect("unwrap in test")
 }
 
 // ---------------------------------------------------------------------------
@@ -118,9 +127,10 @@ fn raw_tar_gz_with_traversal_filename(filename: &str) -> Vec<u8> {
 /// tar archive hoping to write a file outside the container rootfs.
 ///
 /// Guards: commit `8ea4f73` — `validate_tar_entry_path` rejects `..` components.
+// Invariant: 1 — Zip Slip / Path Traversal Prevention
 #[test]
 fn regression_zip_slip_dotdot_prefix_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = raw_tar_gz_with_traversal_filename("../escape.txt");
 
     let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -132,7 +142,7 @@ fn regression_zip_slip_dotdot_prefix_is_rejected() {
     );
 
     // Confirm nothing escaped the destination directory.
-    let parent = dest.path().parent().unwrap();
+    let parent = dest.path().parent().expect("unwrap in test");
     assert!(
         !parent.join("escape.txt").exists(),
         "file must not have been written outside the container rootfs"
@@ -144,9 +154,10 @@ fn regression_zip_slip_dotdot_prefix_is_rejected() {
 /// Example: `foo/../../etc/cron.d/evil` — looks like a sub-path but resolves above dest.
 ///
 /// Guards: commit `8ea4f73`.
+// Invariant: 1 — Zip Slip / Path Traversal Prevention
 #[test]
 fn regression_zip_slip_dotdot_in_middle_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     // Use the raw builder because the tar crate sanitises paths before our check.
     let tar_gz = raw_tar_gz_with_traversal_filename("foo/../../etc/passwd");
 
@@ -170,9 +181,10 @@ fn regression_zip_slip_dotdot_in_middle_is_rejected() {
 ///
 /// Guards: commit `8ea4f73` — `EntryType::Block` / `EntryType::Char` are
 /// rejected before `unpack_in` is called.
+// Invariant: 2 — Device Node Extraction Rejection
 #[test]
 fn regression_block_device_node_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = tar_gz_device_node("dev/sda", EntryType::Block);
 
     let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -195,9 +207,10 @@ fn regression_block_device_node_is_rejected() {
 /// access serial devices.
 ///
 /// Guards: commit `8ea4f73`.
+// Invariant: 2 — Device Node Extraction Rejection
 #[test]
 fn regression_char_device_node_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = tar_gz_device_node("dev/null", EntryType::Char);
 
     let err = extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -222,10 +235,11 @@ fn regression_char_device_node_is_rejected() {
 ///
 /// Guards: commit `2fc7036` — `has_parent_dir_component` check on the
 /// relativised target rejects these before the symlink is created.
+// Invariant: 3 — Absolute Symlink Host Leakage Prevention
 #[cfg(unix)]
 #[test]
 fn regression_absolute_symlink_with_traversal_is_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     // Target `/../../../etc/shadow` strips to `../../etc/shadow` — still has `..`.
     let tar_gz = tar_gz_symlink("evil_link", "/../../etc/shadow");
 
@@ -250,10 +264,11 @@ fn regression_absolute_symlink_with_traversal_is_rejected() {
 ///
 /// Guards: commit `2fc7036` — `relative_path()` computes the correct relative
 /// target so the symlink works after `pivot_root`.
+// Invariant: 3 — Absolute Symlink Host Leakage Prevention
 #[cfg(unix)]
 #[test]
 fn regression_busybox_applet_symlink_is_rewritten_not_rejected() {
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     let tar_gz = tar_gz_symlink("bin/echo", "/bin/busybox");
 
     extract_layer(&mut tar_gz.as_slice(), dest.path())
@@ -289,12 +304,13 @@ fn regression_busybox_applet_symlink_is_rewritten_not_rejected() {
 /// production code calls `entry.header_mut().set_mode(safe_mode)` before
 /// `unpack_in`. This test verifies the end-to-end behaviour: a file shipped
 /// with mode `04755` (setuid + rwxr-xr-x) must land with mode `0755`.
+// Invariant: 4 — Setuid / Setgid Bit Stripping
 #[cfg(unix)]
 #[test]
 fn regression_setuid_bits_stripped_on_extraction() {
     use std::os::unix::fs::PermissionsExt;
 
-    let dest = TempDir::new().unwrap();
+    let dest = TempDir::new().expect("unwrap in test");
     // 04755 = setuid + rwxr-xr-x
     let tar_gz = tar_gz_regular_file("usr/bin/setuid_binary", b"#!/bin/sh", 0o4755);
 
@@ -336,6 +352,7 @@ fn regression_setuid_bits_stripped_on_extraction() {
 ///
 /// The actual FD closure is Linux-only (requires `/proc/self/fd` or
 /// `close_range` syscall) so we test the contract via source inspection.
+// Invariant: 5 — FD-Leak Prevention in Child Init
 #[test]
 fn regression_close_extra_fds_uses_close_range_syscall() {
     let source = include_str!("../src/container/process.rs");
@@ -346,7 +363,7 @@ fn regression_close_extra_fds_uses_close_range_syscall() {
         "close_extra_fds must use close_range syscall as fast path"
     );
     assert!(
-        source.contains("3u32"),
+        source.contains("FIRST_NON_STDIO_FD: u32 = 3"),
         "close_range must start from FD 3 (preserving stdin/stdout/stderr)"
     );
 
@@ -377,6 +394,7 @@ fn regression_close_extra_fds_uses_close_range_syscall() {
 ///
 /// This is a critical security invariant: if someone changes the exec call
 /// to `execvp`, this test must fail.
+// Invariant: 6 — Environment Isolation (execve not execvp)
 #[test]
 fn regression_child_init_uses_execve_not_execvp() {
     let source = include_str!("../src/container/process.rs");
@@ -409,6 +427,7 @@ fn regression_child_init_uses_execve_not_execvp() {
 
 /// Verify that the envp vector in child_init is built from `config.env`,
 /// not from `std::env::vars()` or any other host-environment source.
+// Invariant: 6 — Environment Isolation (execve not execvp)
 #[test]
 fn regression_envp_built_from_config_env_only() {
     let source = include_str!("../src/container/process.rs");
@@ -436,6 +455,7 @@ fn regression_envp_built_from_config_env_only() {
 /// by blocking reads during extraction. While the current implementation
 /// allows FIFOs through `unpack_in`, this test documents the behaviour
 /// and ensures no regression if FIFO rejection is added later.
+// Invariant: 9 — FIFO / Named Pipe Non-Crash Guarantee
 #[test]
 fn regression_fifo_entry_does_not_crash() {
     let dest = TempDir::new().expect("failed to create temp dir");
@@ -466,6 +486,7 @@ fn regression_fifo_entry_does_not_crash() {
 /// directory. Without the skip, `validate_tar_entry_path` would reject
 /// them because `Path::join("./")` normalises away the CurDir component,
 /// causing a confusing false-positive path-escape error.
+// Invariant: 8 — Tar Root Entry Skip
 #[test]
 fn regression_root_dot_entries_are_silently_skipped() {
     let dest = TempDir::new().expect("failed to create temp dir");
@@ -479,4 +500,259 @@ fn regression_root_dot_entries_are_silently_skipped() {
     let tar_gz_dot_slash = tar_gz_regular_file("./", b"", 0o644);
     extract_layer(&mut tar_gz_dot_slash.as_slice(), dest.path())
         .expect("'./' root entry must be silently skipped, not rejected");
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 10 — Request Size Limit
+// ---------------------------------------------------------------------------
+
+/// Verify that MAX_REQUEST_SIZE is defined and enforced in the daemon server.
+///
+/// Removing or raising this constant beyond 1 MB would allow malicious clients
+/// to exhaust daemon memory with oversized JSON payloads.
+///
+/// Guard location: `crates/minibox/src/daemon/server.rs` — `MAX_REQUEST_SIZE`.
+// Invariant: 10 — Request Size Limit
+#[test]
+fn mutation_audit_request_size_limit_exists() {
+    let source = include_str!("../src/daemon/server.rs");
+
+    // The constant must exist.
+    assert!(
+        source.contains("MAX_REQUEST_SIZE"),
+        "MAX_REQUEST_SIZE constant must be defined in server.rs"
+    );
+
+    // The constant must be used in bounded_read_line call.
+    assert!(
+        source.contains("bounded_read_line") && source.contains("MAX_REQUEST_SIZE"),
+        "MAX_REQUEST_SIZE must be passed to bounded_read_line"
+    );
+
+    // The limit must be 1 MB (1_048_576 bytes). Detect if someone raises it.
+    assert!(
+        source.contains("1024 * 1024") || source.contains("1_048_576"),
+        "MAX_REQUEST_SIZE must be 1 MB (1024 * 1024 or 1_048_576)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 11 — Image Pull Resource Limits
+// ---------------------------------------------------------------------------
+
+/// Verify that image pull size limit constants exist and are enforced in the
+/// registry client.
+///
+/// Removing these constants would allow unbounded manifest/layer downloads,
+/// enabling DoS via oversized image pulls.
+///
+/// Guard location: `crates/minibox-core/src/image/registry.rs`.
+// Invariant: 11 — Image Pull Resource Limits
+#[test]
+fn mutation_audit_image_pull_size_limits_exist() {
+    let source = include_str!("../../minibox-core/src/image/registry.rs");
+
+    // All three constants must exist.
+    assert!(
+        source.contains("MAX_MANIFEST_SIZE"),
+        "MAX_MANIFEST_SIZE constant must be defined in registry.rs"
+    );
+    assert!(
+        source.contains("MAX_LAYER_SIZE"),
+        "MAX_LAYER_SIZE constant must be defined in registry.rs"
+    );
+    assert!(
+        source.contains("MAX_TOTAL_IMAGE_SIZE"),
+        "MAX_TOTAL_IMAGE_SIZE constant must be defined in registry.rs"
+    );
+
+    // LimitedStream must exist as the enforcement mechanism.
+    assert!(
+        source.contains("LimitedStream"),
+        "LimitedStream streaming limiter must be present in registry.rs"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 12 — Execution Manifest Integrity
+// ---------------------------------------------------------------------------
+
+/// Verify that execution manifest env var hashing and seal logic exist.
+///
+/// Removing the SHA-256 hashing of env values would expose secrets in
+/// plaintext in the manifest file. Removing seal() would break workload
+/// digest computation.
+///
+/// Guard location: `crates/minibox-core/src/domain/execution_manifest.rs`.
+// Invariant: 12 — Execution Manifest Integrity
+#[test]
+fn mutation_audit_execution_manifest_env_hashing() {
+    let source = include_str!("../../minibox-core/src/domain/execution_manifest.rs");
+
+    // Env values must be hashed with SHA-256, never stored as plaintext.
+    assert!(
+        source.contains("Sha256") || source.contains("sha2"),
+        "execution manifest must use SHA-256 for env value hashing"
+    );
+
+    // The seal() method must exist for workload digest computation.
+    assert!(
+        source.contains("fn seal("),
+        "ExecutionManifest must have a seal() method"
+    );
+
+    // The digest must exclude volatile fields.
+    assert!(
+        source.contains("workload_digest") && source.contains("created_at"),
+        "manifest must reference workload_digest and created_at fields"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 1 — Zip Slip guard exists in source
+// ---------------------------------------------------------------------------
+
+/// Verify that `validate_tar_entry_path` exists and checks for `ParentDir`
+/// components in `layer.rs`.
+///
+/// The behavioral tests (regression_zip_slip_*) confirm the guard works.
+/// This test confirms the guard mechanism itself is present in source,
+/// catching refactors that might remove the function or its core check.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 1 — Zip Slip / Path Traversal Prevention
+#[test]
+fn mutation_audit_zip_slip_guard_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // The validation function must exist.
+    assert!(
+        source.contains("fn validate_tar_entry_path"),
+        "validate_tar_entry_path function must exist in layer.rs"
+    );
+
+    // It must check for ParentDir components.
+    assert!(
+        source.contains("ParentDir"),
+        "validate_tar_entry_path must check for ParentDir (dotdot) components"
+    );
+
+    // It must be called during extraction.
+    assert!(
+        source.contains("validate_tar_entry_path(&entry_path"),
+        "validate_tar_entry_path must be called during layer extraction"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 2 — Device node rejection guard exists in source
+// ---------------------------------------------------------------------------
+
+/// Verify that device node rejection logic exists in `layer.rs`.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 2 — Device Node Extraction Rejection
+#[test]
+fn mutation_audit_device_node_rejection_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // Must reference Block and Char entry types for rejection.
+    assert!(
+        source.contains("Block") && source.contains("Char"),
+        "layer.rs must check for Block and Char entry types"
+    );
+
+    // Must reference the DeviceNodeRejected error.
+    assert!(
+        source.contains("DeviceNodeRejected"),
+        "layer.rs must return DeviceNodeRejected error for device nodes"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 3 — Absolute symlink rewrite guard exists
+// ---------------------------------------------------------------------------
+
+/// Verify that absolute symlink rewriting and traversal rejection exist
+/// in `layer.rs`.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 3 — Absolute Symlink Host Leakage Prevention
+#[test]
+fn mutation_audit_symlink_rewrite_guard_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // Must have the relative_path function for rewriting absolute targets.
+    assert!(
+        source.contains("fn relative_path"),
+        "relative_path function must exist in layer.rs for symlink rewriting"
+    );
+
+    // Must check for parent dir components in rewritten targets.
+    assert!(
+        source.contains("has_parent_dir_component"),
+        "has_parent_dir_component must be used to reject traversal in rewritten symlinks"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 4 — Setuid bit stripping guard exists
+// ---------------------------------------------------------------------------
+
+/// Verify that setuid/setgid bit stripping logic exists in `layer.rs`.
+///
+/// The mode mask `0o777` strips bits above the permission triad (setuid,
+/// setgid, sticky). Removing this mask would allow privilege escalation
+/// via setuid binaries in OCI layers.
+///
+/// Guard location: `crates/minibox-core/src/image/layer.rs`.
+// Invariant: 4 — Setuid / Setgid Bit Stripping
+#[test]
+fn mutation_audit_setuid_strip_guard_exists() {
+    let source = include_str!("../../minibox-core/src/image/layer.rs");
+
+    // Must contain the 0o777 mode mask that strips setuid/setgid/sticky bits.
+    assert!(
+        source.contains("0o777"),
+        "layer.rs must contain 0o777 mode mask for setuid stripping"
+    );
+
+    // Must call set_mode on the header before unpacking.
+    assert!(
+        source.contains("set_mode"),
+        "layer.rs must call set_mode to apply the stripped mode"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutation audit: Invariant 7 — SO_PEERCRED guard called in handler
+// ---------------------------------------------------------------------------
+
+/// Verify that `is_authorized` is called in the connection handler in
+/// `server.rs`, not just defined.
+///
+/// The behavioral tests in `daemon_security_regression.rs` verify the
+/// function's logic. This test verifies the function is actually invoked
+/// in the request processing path.
+///
+/// Guard location: `crates/minibox/src/daemon/server.rs`.
+// Invariant: 7 — SO_PEERCRED Unix Socket Authentication
+#[test]
+fn mutation_audit_peercred_guard_called_in_handler() {
+    let source = include_str!("../src/daemon/server.rs");
+
+    // is_authorized must be called (not just defined).
+    let call_count = source.matches("is_authorized(").count();
+    // At least 2: 1 definition + 1 call site in handler.
+    assert!(
+        call_count >= 2,
+        "is_authorized must be called in the connection handler, \
+         found {call_count} occurrences (need >= 2: definition + call)"
+    );
+
+    // The handler must reject unauthorized connections.
+    assert!(
+        source.contains("!is_authorized("),
+        "connection handler must check !is_authorized to reject unauthorized clients"
+    );
 }

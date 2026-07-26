@@ -287,7 +287,7 @@ fn conformance_mock_filesystem_rootfs_setup_success() {
     assert_eq!(filesystem.setup_count(), 1);
 
     let layout = result.expect("setup_rootfs returned Ok");
-    assert_eq!(layout.merged_dir, container_dir.join("merged"));
+    assert_eq!(&*layout.merged_dir, container_dir.join("merged").as_path());
 }
 
 #[test]
@@ -357,12 +357,12 @@ async fn conformance_mock_runtime_spawn_increments_pid() {
 
     let runtime = MockRuntime::new();
     let config = ContainerSpawnConfig {
-        rootfs: PathBuf::from("/rootfs"),
+        rootfs: PathBuf::from("/rootfs").into(),
         command: "sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "container".to_string(),
-        cgroup_path: PathBuf::from("/sys/fs/cgroup/test"),
+        cgroup_path: PathBuf::from("/sys/fs/cgroup/test").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,
@@ -388,12 +388,12 @@ async fn conformance_mock_runtime_spawn_failure() {
 
     let runtime = MockRuntime::new().with_spawn_failure();
     let config = ContainerSpawnConfig {
-        rootfs: PathBuf::from("/rootfs"),
+        rootfs: PathBuf::from("/rootfs").into(),
         command: "sh".to_string(),
         args: vec![],
         env: vec![],
         hostname: "container".to_string(),
-        cgroup_path: PathBuf::from("/sys/fs/cgroup/test"),
+        cgroup_path: PathBuf::from("/sys/fs/cgroup/test").into(),
         capture_output: false,
         hooks: ContainerHooks::default(),
         skip_network_namespace: false,

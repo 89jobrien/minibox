@@ -1,0 +1,16 @@
+---
+source: crates/minibox-core/tests/protocol_evolution.rs
+expression: req
+---
+{
+  "type": "RunPipeline",
+  "pipeline_path": "work.crux",
+  "input": null,
+  "image": null,
+  "budget": null,
+  "env": [],
+  "max_depth": 3,
+  "priority": null,
+  "urgency": null,
+  "execution_context": null
+}

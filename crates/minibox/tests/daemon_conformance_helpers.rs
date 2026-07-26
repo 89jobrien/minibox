@@ -46,12 +46,15 @@ use tempfile::TempDir;
 // TestBackendDescriptor
 // ---------------------------------------------------------------------------
 
+/// Factory closure that builds a fresh [`HandlerDependencies`] rooted in the
+/// given temporary directory.
+pub type HandlerDepsFactory = Box<dyn Fn(&TempDir) -> Arc<HandlerDependencies> + Send + Sync>;
+
 /// Describes a daemon handler-level backend under conformance test.
 ///
 /// Boolean capability flags control which conformance tests are exercised.
 /// Tests must check the relevant flag and return early when it is `false`
 /// (skip, not fail).
-#[allow(clippy::type_complexity)]
 pub struct TestBackendDescriptor {
     /// Human-readable name used in test failure messages.
     pub name: &'static str,
@@ -75,7 +78,7 @@ pub struct TestBackendDescriptor {
     ///
     /// The closure receives a `&TempDir` so all path-based fields can be
     /// rooted in a single temporary directory owned by the caller.
-    pub make_deps: Box<dyn Fn(&TempDir) -> Arc<HandlerDependencies> + Send + Sync>,
+    pub make_deps: HandlerDepsFactory,
 }
 
 impl TestBackendDescriptor {
@@ -140,8 +143,9 @@ pub fn make_mock_deps_with_registry(
     registry: MockRegistry,
     temp_dir: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store =
-        Arc::new(minibox_core::image::ImageStore::new(temp_dir.path().join("img")).unwrap());
+    let image_store = Arc::new(
+        minibox_core::image::ImageStore::new(temp_dir.path().join("img")).expect("unwrap in test"),
+    );
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -177,13 +181,15 @@ pub fn make_mock_deps_with_registry(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
 
 /// Build mock [`DaemonState`] rooted under `base`.
 pub fn make_mock_state(base: &Path) -> Arc<DaemonState> {
-    let image_store = minibox::image::ImageStore::new(base.join("images")).unwrap();
+    let image_store = minibox::image::ImageStore::new(base.join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, base))
 }

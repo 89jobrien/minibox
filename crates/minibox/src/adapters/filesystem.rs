@@ -1,4 +1,4 @@
-//! Overlay filesystem adapter implementing the FilesystemProvider trait.
+//! Overlay filesystem adapter implementing the `FilesystemProvider` trait.
 //!
 //! This adapter wraps the existing overlay filesystem implementation from
 //! [`crate::container::filesystem`] to implement the domain's
@@ -89,9 +89,9 @@ impl minibox_core::domain::RootfsSetup for OverlayFilesystem {
             filesystem::setup_overlay_with_base(image_layers, container_dir, &self.images_base)?;
 
         Ok(RootfsLayout {
-            merged_dir,
+            merged_dir: merged_dir.into(),
             rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
-                upper_dir: container_dir.join("upper"),
+                upper_dir: container_dir.join("upper").into(),
                 metadata: std::collections::HashMap::new(),
             }),
             source_image_ref: None,
@@ -131,7 +131,11 @@ mod tests {
     #[test]
     fn test_filesystem_default() {
         let fs = OverlayFilesystem::default();
-        let _ = fs;
+        assert_eq!(
+            fs.images_base,
+            std::path::PathBuf::from("/var/lib/minibox/images"),
+            "default images_base should be /var/lib/minibox/images"
+        );
     }
 
     // Note: Actual setup_rootfs tests require Linux with root privileges

@@ -1,6 +1,6 @@
 [gitflow "branch"]
 	main = main
-	develop = next
+	develop = develop
 
 [gitflow "prefix"]
 	feature = feature/
@@ -13,3 +13,4 @@
 
 [gitflow "path"]
 	hooks = .git/hooks
+

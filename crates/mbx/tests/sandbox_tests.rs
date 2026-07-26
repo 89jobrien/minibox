@@ -9,6 +9,9 @@ use tempfile::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 
+mod test_helpers;
+use test_helpers::wait_for_socket;
+
 /// Accept one connection, read the request, send ContainerCreated, then hang
 /// forever (never send ContainerStopped). Simulates a container that exceeds
 /// the timeout.
@@ -40,7 +43,7 @@ async fn sandbox_times_out_when_container_hangs() {
 
     let sp = socket_path.clone();
     tokio::spawn(async move { serve_hang(&sp).await });
-    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+    wait_for_socket(&socket_path, 2000).await;
 
     let request = test_run!(
         image: "minibox-sandbox".to_string(),
@@ -98,7 +101,7 @@ async fn sandbox_receives_exit_code_from_stopped_container() {
         }
         write_half.flush().await.unwrap();
     });
-    tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+    wait_for_socket(&socket_path, 2000).await;
 
     let client = DaemonClient::with_socket(&socket_path);
     let request = test_run!(

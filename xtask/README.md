@@ -8,7 +8,7 @@ builds, and test infrastructure as a compiled Rust binary (not shell scripts).
 ### Quality Gates
 
 ```bash
-cargo xtask pre-commit        # Markdown/Rust fmt + lint + docs-lint (macOS-safe)
+cargo xtask pre-commit        # fmt-check + lint + release build (macOS-safe)
 cargo xtask prepush           # fast lib tests (debug, incremental)
 cargo xtask test-unit         # all unit + conformance tests
 cargo xtask test-conformance  # commit+build+push conformance suite + artifact reports
@@ -25,8 +25,16 @@ cargo xtask check-repo-clean  # warn if generated artifacts (target/, traces/, *
 
 ### Benchmarks
 
+All criterion benches live in `crates/minibox-bench`. Results go to `bench/results/`
+(gitignored); tracked per-env baselines live at `bench/baseline.{local,selfhosted,hosted}.json`.
+
 ```bash
-cargo xtask bench             # run criterion benchmarks, save to bench/results/
+cargo xtask bench                  # run criterion benchmarks, save to bench/results/
+cargo xtask bench --check          # compare against the per-env baseline, fail on regression
+cargo xtask bench --save-baseline  # save results as the new per-env baseline
+cargo xtask bench --skip-bench     # re-parse existing criterion output without re-running
+cargo xtask bench --env <name>     # baseline environment: local (default), selfhosted, hosted
+cargo xtask bench --threshold <pct> # regression threshold percentage for --check
 ```
 
 ### VM Image (macOS/vz adapter)
@@ -81,7 +89,7 @@ cargo xtask clean-artifacts   # remove non-critical build outputs
 | Module              | Responsibility                                                |
 | ------------------- | ------------------------------------------------------------- |
 | `gates.rs`          | Quality gate implementations (fmt, clippy, nextest, coverage) |
-| `bench.rs`          | Benchmark run and result persistence                          |
+| `bench.rs`          | Benchmark run, result persistence, per-env baseline checking  |
 | `vm_image.rs`       | Alpine download, agent cross-compile, VM image assembly       |
 | `vm_run.rs`         | VM boot: interactive shell or test execution under QEMU       |
 | `test_image.rs`     | OCI test image build and Linux dogfood test runner            |

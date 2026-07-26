@@ -5,27 +5,52 @@
     {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "42fabd64525a97e49930b7db16ee728a0a079bd45741eb7ad6b22fd0bccea9b3"
+      "hash": "b06d2fbbc7ef0b4e438f9819c2efd55cebc2d796d3662cf29465f82ca0f8e45e"
     },
     {
       "name": "domain-ports",
       "path": "crates/minibox-core/src/domain.rs",
-      "hash": "fb6a86ea8f8caf3b0a79e7f78e13d9f716ac670c392d704e5aeb6c3ad1722a9e"
+      "hash": "8439863046f4b38c8a77d8b59a6b5a2405362a7f68432f764cdee0798c79ff24"
     },
     {
       "name": "domain-networking",
       "path": "crates/minibox-core/src/domain/networking.rs",
-      "hash": "71e2fd83d8b18e086cc13589a1bbfade36d848c415294cb6540a57d0ccab30e4"
+      "hash": "cbce5ff883a5e85b90e9eae5b68202fd50b4c31a2fe75f8664cfcc8938e14e99"
     },
     {
       "name": "domain-extensions",
       "path": "crates/minibox-core/src/domain/extensions.rs",
-      "hash": "e956b9d635eced32dbcd8deacea490245ecd5cfa6287fcd78a4dd0d92a00fad9"
+      "hash": "1b0dbb6e523aa62f042c5a4e8ed37a1ad0a29b8f57cd6294f19816784365c2d7"
     },
     {
       "name": "lifecycle-events",
       "path": "crates/minibox-core/src/events.rs",
-      "hash": "b5847f7a6bb123ef698845eeb294c875d7ece0d8f99f2ee08115a349ba379b97"
+      "hash": "2c4b3d7767426f89398a2528bbb437299d8536abf9f1aaf384d124b0e41d25e1"
+    },
+    {
+      "name": "execution-manifest",
+      "path": "crates/minibox-core/src/domain/execution_manifest.rs",
+      "hash": "75d16466ae715816e28d9b98b83ebc2d60028096496fa01d7920009a1e478d98"
+    },
+    {
+      "name": "execution-policy",
+      "path": "crates/minibox-core/src/domain/execution_policy.rs",
+      "hash": "c6b57567e59cb8369e3d7e5084da61c03669aa9b9311b3131918b3ee1ee77fef"
+    },
+    {
+      "name": "error-types",
+      "path": "crates/minibox-core/src/error.rs",
+      "hash": "1920e4357dd7217a69db2ac81c3d09ac2c4bcd8fe891576a171b4e5ab341da71"
+    },
+    {
+      "name": "client-api",
+      "path": "crates/minibox-core/src/client/mod.rs",
+      "hash": "54e32877a532df223c1d73107499316dd964477df3b91cca1b0d31e760a36f84"
+    },
+    {
+      "name": "typestate",
+      "path": "crates/minibox-core/src/typestate.rs",
+      "hash": "6b66ab5cc68f481380bc809bf7b9229d2315cd1a04af4c8271229a55ca0d49e6"
     }
   ]
 }

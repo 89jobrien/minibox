@@ -22,8 +22,11 @@ type CompletionRequest struct {
 
 // CompletionResponse is the output from an LLM provider.
 type CompletionResponse struct {
-	Text     string `json:"text"`
-	Provider string `json:"provider"`
+	Text         string `json:"text"`
+	Provider     string `json:"provider"`
+	LatencyMs    int64  `json:"latency_ms"`
+	InputTokens  int    `json:"input_tokens,omitempty"`
+	OutputTokens int    `json:"output_tokens,omitempty"`
 }
 
 // MessageBroker provides pub/sub messaging.

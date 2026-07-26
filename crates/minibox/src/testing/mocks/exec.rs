@@ -1,11 +1,13 @@
 //! Mock implementation of [`ExecRuntime`].
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use anyhow::Result;
 use async_trait::async_trait;
-use minibox_core::domain::{AsAny, ContainerId, ExecHandle, ExecRuntime, ExecSpec};
+use minibox_core::domain::{
+    AsAny, ContainerId, DynProgressSink, ExecHandle, ExecRuntime, ExecSpec,
+};
 use minibox_core::protocol::DaemonResponse;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc::Sender;
 
 // ---------------------------------------------------------------------------
 // MockExecRuntime
@@ -48,23 +50,31 @@ impl MockExecRuntime {
 
     /// Configure all subsequent `run_in_container` calls to return an error.
     pub fn with_failure(self) -> Self {
-        self.state.lock().unwrap().should_fail = true;
+        self.state.lock().expect("mock: poisoned lock").should_fail = true;
         self
     }
 
     /// Return the total number of `run_in_container` invocations.
     pub fn call_count(&self) -> usize {
-        self.state.lock().unwrap().call_count
+        self.state.lock().expect("mock: poisoned lock").call_count
     }
 
     /// Return a clone of the last `ExecSpec` received, or `None` if never called.
     pub fn last_spec(&self) -> Option<ExecSpec> {
-        self.state.lock().unwrap().last_spec.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .last_spec
+            .clone()
     }
 
     /// Return a clone of the last container ID received, or `None` if never called.
     pub fn last_container_id(&self) -> Option<ContainerId> {
-        self.state.lock().unwrap().last_container_id.clone()
+        self.state
+            .lock()
+            .expect("mock: poisoned lock")
+            .last_container_id
+            .clone()
     }
 }
 
@@ -79,12 +89,12 @@ impl ExecRuntime for MockExecRuntime {
         &self,
         container_id: &ContainerId,
         spec: ExecSpec,
-        _tx: Sender<DaemonResponse>,
+        _tx: DynProgressSink<DaemonResponse>,
     ) -> Result<ExecHandle> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().expect("mock: poisoned lock");
         state.call_count += 1;
         state.last_container_id = Some(container_id.clone());
-        state.last_spec = Some(spec.clone());
+        state.last_spec = Some(spec);
 
         if state.should_fail {
             anyhow::bail!("mock exec failure");
@@ -129,7 +139,10 @@ mod tests {
             tty: false,
         };
 
-        let handle = mock.run_in_container(&id, spec.clone(), tx).await.unwrap();
+        let handle = mock
+            .run_in_container(&id, spec.clone(), Arc::new(tx))
+            .await
+            .unwrap();
         assert_eq!(mock.call_count(), 1);
         assert_eq!(mock.last_container_id().unwrap(), id);
         assert_eq!(mock.last_spec().unwrap().cmd, spec.cmd);
@@ -148,7 +161,11 @@ mod tests {
             tty: false,
         };
 
-        assert!(mock.run_in_container(&id, spec, tx).await.is_err());
+        assert!(
+            mock.run_in_container(&id, spec, Arc::new(tx))
+                .await
+                .is_err()
+        );
         assert_eq!(mock.call_count(), 1);
     }
 
@@ -163,7 +180,7 @@ mod tests {
             working_dir: None,
             tty: false,
         };
-        let _ = mock.run_in_container(&id, spec, tx).await;
+        let _ = mock.run_in_container(&id, spec, Arc::new(tx)).await;
         assert_eq!(mock.call_count(), 1);
     }
 }

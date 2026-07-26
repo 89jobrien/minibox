@@ -23,6 +23,7 @@ impl SmolvmProcess {
     }
 
     /// Spawn using an explicit binary path (useful for testing missing-binary path).
+    #[allow(clippy::unused_async)]
     pub async fn spawn_with_bin(
         bin: &Path,
         image: &str,
@@ -30,7 +31,12 @@ impl SmolvmProcess {
         env: &[(String, String)],
     ) -> Result<Self> {
         let mut cmd = Command::new(bin);
-        cmd.arg("machine").arg("run").arg("--image").arg(image);
+        // --net enables VM networking; required for image pulls from registries.
+        cmd.arg("machine")
+            .arg("run")
+            .arg("--net")
+            .arg("--image")
+            .arg(image);
 
         for (k, v) in env {
             cmd.arg("--env").arg(format!("{k}={v}"));
@@ -59,13 +65,12 @@ impl SmolvmProcess {
             .await
             .context("smolvm process wait failed")?;
         use std::os::unix::process::ExitStatusExt;
-        match status.code() {
-            Some(code) => Ok(code),
-            None => {
-                let sig = status.signal().unwrap_or(0);
-                tracing::debug!(signal = sig, "smolvm: process killed by signal");
-                Ok(-sig)
-            }
+        if let Some(code) = status.code() {
+            Ok(code)
+        } else {
+            let sig = status.signal().unwrap_or(0);
+            tracing::debug!(signal = sig, "smolvm: process killed by signal");
+            Ok(-sig)
         }
     }
 
@@ -84,7 +89,7 @@ impl SmolvmProcess {
     /// Take the piped stdout from the child process, returning the raw fd.
     ///
     /// Converts the async `ChildStdout` back to its underlying `OwnedFd` so
-    /// the caller can pass it through the `SpawnResult` output_reader channel.
+    /// the caller can pass it through the `SpawnResult` `output_reader` channel.
     /// Returns `None` if stdout was not piped or was already taken.
     #[cfg(unix)]
     pub fn take_stdout_fd(&mut self) -> Option<std::os::fd::OwnedFd> {
@@ -165,12 +170,13 @@ mod tests {
                     .collect_stdout()
                     .await
                     .expect("collect_stdout should work");
-                // echo prints: machine run --image test-image --env KEY=VAL -- cmd1 cmd2
+                // echo prints: machine run --net --image test-image --env KEY=VAL -- cmd1 cmd2
                 assert!(
                     output.contains("machine"),
                     "should contain 'machine': {output}"
                 );
                 assert!(output.contains("run"), "should contain 'run': {output}");
+                assert!(output.contains("--net"), "should contain '--net': {output}");
                 assert!(
                     output.contains("--image"),
                     "should contain '--image': {output}"

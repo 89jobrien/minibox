@@ -1,7 +1,7 @@
 //! Transport-agnostic daemon connection handler.
 //!
 //! Callers provide a [`ServerListener`] impl — Unix socket or Named Pipe.
-//! [`PeerCreds`] from `accept()` carries SO_PEERCRED data when available.
+//! [`PeerCreds`] from `accept()` carries `SO_PEERCRED` data when available.
 //!
 //! The protocol is line-oriented JSON: the client writes one JSON line per
 //! request and the daemon responds with one or more JSON lines per response.
@@ -19,6 +19,20 @@ use super::state::DaemonState;
 
 // SECURITY: Maximum request size to prevent memory exhaustion
 const MAX_REQUEST_SIZE: usize = 1024 * 1024; // 1 MB
+
+/// A bidirectional async byte stream that can be used as a daemon connection.
+///
+/// This trait is a named alias for the `AsyncRead + AsyncWrite + Unpin + Send`
+/// bound required by [`handle_connection`].  It is implemented for:
+///
+/// - [`tokio::net::UnixStream`] — production Unix socket connections
+/// - [`tokio::io::DuplexStream`] — in-memory test doubles
+///
+/// Any type implementing all four super-traits satisfies this bound
+/// automatically via the blanket impl below.
+pub trait AsyncStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> AsyncStream for T {}
 
 /// Peer credentials from an accepted connection.
 #[derive(Debug, Clone)]
@@ -44,10 +58,60 @@ pub trait ServerListener: Send + 'static {
     ) -> impl std::future::Future<Output = Result<(Self::Stream, Option<PeerCreds>)>> + Send;
 }
 
+/// Extract peer credentials from a connected Unix socket raw file descriptor.
+///
+/// - **Linux**: Uses `SO_PEERCRED` via `getsockopt` (returns uid + pid).
+/// - **macOS**: Uses `getpeereid(2)` (returns uid; pid = 0 sentinel).
+///
+/// Returns `None` if the syscall fails.
+#[cfg(target_os = "linux")]
+pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
+    use std::mem;
+    let mut cred: nix::libc::ucred = unsafe { mem::zeroed() };
+    let mut len = mem::size_of::<nix::libc::ucred>() as nix::libc::socklen_t;
+    // SAFETY: fd is a valid connected Unix socket fd. getsockopt with
+    // SO_PEERCRED is safe on any connected Unix domain socket.
+    let ret = unsafe {
+        nix::libc::getsockopt(
+            fd,
+            nix::libc::SOL_SOCKET,
+            nix::libc::SO_PEERCRED,
+            (&raw mut cred).cast::<nix::libc::c_void>(),
+            &raw mut len,
+        )
+    };
+    if ret == 0 {
+        Some(PeerCreds {
+            uid: cred.uid,
+            pid: cred.pid,
+        })
+    } else {
+        warn!("SO_PEERCRED failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
+/// Extract peer credentials from a connected Unix socket raw file descriptor.
+///
+/// macOS variant using `getpeereid(2)`.
+#[cfg(target_os = "macos")]
+pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
+    let mut uid: nix::libc::uid_t = 0;
+    let mut gid: nix::libc::gid_t = 0;
+    // SAFETY: fd is a valid connected Unix socket fd. getpeereid is safe to
+    // call on any connected Unix domain socket.
+    if unsafe { nix::libc::getpeereid(fd, &raw mut uid, &raw mut gid) } == 0 {
+        Some(PeerCreds { uid, pid: 0 })
+    } else {
+        warn!("getpeereid failed: {}", std::io::Error::last_os_error());
+        None
+    }
+}
+
 /// Determine whether a connection should be accepted given peer credentials
 /// and the `require_root_auth` flag.
 ///
-/// This is the single source of truth for the SO_PEERCRED gate so the logic
+/// This is the single source of truth for the `SO_PEERCRED` gate so the logic
 /// can be unit-tested without a real socket.
 ///
 /// # Rules
@@ -58,7 +122,8 @@ pub trait ServerListener: Send + 'static {
 /// | `true`              | None          | denied  |
 /// | `true`              | Some(uid = 0) | allowed |
 /// | `true`              | Some(uid > 0) | denied  |
-pub fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
+#[must_use]
+pub const fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
     if !require_root_auth {
         return true;
     }
@@ -160,13 +225,63 @@ where
                     Err(e) => error!("server: accept error: {e}"),
                 }
             }
-            _ = &mut shutdown => {
+            () = &mut shutdown => {
                 info!("server: shutdown signal received");
                 break;
             }
         }
     }
     Ok(())
+}
+
+/// Read a newline-delimited frame from `reader` into `buf`, rejecting frames
+/// that exceed `max_bytes` **before** they are fully buffered.
+///
+/// Returns the number of bytes read (0 = EOF). Returns an error if the frame
+/// exceeds the limit or contains invalid UTF-8.
+async fn bounded_read_line<R: tokio::io::AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+    buf: &mut String,
+    max_bytes: usize,
+) -> Result<usize> {
+    let mut total = 0usize;
+    loop {
+        let available = reader.fill_buf().await.context("reading from client")?;
+        if available.is_empty() {
+            return Ok(total);
+        }
+
+        let (chunk_len, found_newline) = match available.iter().position(|&b| b == b'\n') {
+            Some(pos) => (pos + 1, true),
+            None => (available.len(), false),
+        };
+
+        if total + chunk_len > max_bytes {
+            let oversize = total + chunk_len;
+            reader.consume(chunk_len);
+            // Drain until newline or EOF to resync the stream.
+            if !found_newline {
+                let mut drain = Vec::new();
+                let _ = reader.read_until(b'\n', &mut drain).await;
+            }
+            anyhow::bail!("request too large: at least {oversize} bytes (max {max_bytes})");
+        }
+
+        let chunk = &available[..chunk_len];
+        match std::str::from_utf8(chunk) {
+            Ok(s) => buf.push_str(s),
+            Err(e) => {
+                reader.consume(chunk_len);
+                anyhow::bail!("invalid UTF-8 in request: {e}");
+            }
+        }
+        total += chunk_len;
+        reader.consume(chunk_len);
+
+        if found_newline {
+            return Ok(total);
+        }
+    }
 }
 
 /// Handle a single client connection, generic over stream type.
@@ -177,6 +292,7 @@ where
 ///
 /// Streaming responses (`ContainerOutput`) are forwarded until the terminal
 /// `ContainerStopped` message closes the exchange.
+// qual:allow(iosp) reason: "server I/O boundary: read/parse/dispatch loop mixes control flow with handler calls"
 pub async fn handle_connection<S>(
     stream: S,
     state: Arc<DaemonState>,
@@ -192,10 +308,28 @@ where
 
     loop {
         line.clear();
-        let bytes_read = reader
-            .read_line(&mut line)
-            .await
-            .context("reading from client")?;
+
+        // SECURITY: Read one newline-delimited frame, rejecting frames that
+        // exceed MAX_REQUEST_SIZE BEFORE they are fully buffered. This
+        // prevents a malicious client from forcing unbounded memory allocation.
+        let bytes_read = match bounded_read_line(&mut reader, &mut line, MAX_REQUEST_SIZE).await {
+            Ok(n) => n,
+            Err(e) => {
+                warn!(
+                    max = MAX_REQUEST_SIZE,
+                    error = %e,
+                    "rejecting oversized or malformed request"
+                );
+                let error_response = DaemonResponse::Error {
+                    message: format!("{e}"),
+                };
+                let mut error_json = serde_json::to_string(&error_response)?;
+                error_json.push('\n');
+                writer.write_all(error_json.as_bytes()).await?;
+                writer.flush().await?;
+                continue;
+            }
+        };
 
         if bytes_read == 0 {
             // Client closed the connection.
@@ -203,31 +337,21 @@ where
             break;
         }
 
-        // SECURITY: Reject requests exceeding size limit
-        if bytes_read > MAX_REQUEST_SIZE {
-            warn!("rejecting oversized request: {bytes_read} bytes (max {MAX_REQUEST_SIZE})");
-            let error_response = DaemonResponse::Error {
-                message: format!("request too large: {bytes_read} bytes (max {MAX_REQUEST_SIZE})"),
-            };
-            let mut error_json = serde_json::to_string(&error_response)?;
-            error_json.push('\n');
-            writer.write_all(error_json.as_bytes()).await?;
-            writer.flush().await?;
-            continue;
-        }
-
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        debug!("received request: {} bytes", trimmed.len());
+        debug!(bytes = trimmed.len(), "received request");
 
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(64);
+        const RESPONSE_CHANNEL_CAPACITY: usize = 64;
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(RESPONSE_CHANNEL_CAPACITY);
 
         match serde_json::from_str::<DaemonRequest>(trimmed) {
             Ok(request) => {
-                info!("dispatching request: {request:?}");
+                // SECURITY: Log only the request type tag, never the full
+                // payload — it may contain credentials, env vars, or secrets.
+                info!(request_type = request.type_tag(), "dispatching request");
                 let state_c = Arc::clone(&state);
                 let deps_c = Arc::clone(&deps);
                 tokio::spawn(async move {
@@ -235,7 +359,13 @@ where
                 });
             }
             Err(e) => {
-                warn!("failed to parse request '{trimmed}': {e}");
+                // SECURITY: Log parse error and byte length only — never the
+                // raw request body, which may contain credentials or secrets.
+                warn!(
+                    bytes = trimmed.len(),
+                    error = %e,
+                    "failed to parse request"
+                );
                 send_terminal_response(
                     &tx,
                     "parse_error",
@@ -272,30 +402,13 @@ where
 
 /// Returns true for response types that terminate a request/response exchange.
 ///
-/// `ContainerCreated` is intentionally non-terminal: ephemeral runs send it
-/// as the first message, followed by `ContainerOutput` chunks and then
-/// `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so the
-/// server loop exits naturally when `rx.recv()` returns `None`.
-fn is_terminal_response(r: &DaemonResponse) -> bool {
-    matches!(
-        r,
-        DaemonResponse::ContainerStopped { .. }
-            | DaemonResponse::Error { .. }
-            | DaemonResponse::Success { .. }
-            | DaemonResponse::ContainerList { .. }
-            | DaemonResponse::ImageLoaded { .. }
-            | DaemonResponse::BuildComplete { .. }
-            | DaemonResponse::ContainerPaused { .. }
-            | DaemonResponse::ContainerResumed { .. }
-            | DaemonResponse::Pruned { .. }
-            | DaemonResponse::PipelineComplete { .. }
-            | DaemonResponse::SnapshotSaved { .. }
-            | DaemonResponse::SnapshotRestored { .. }
-            | DaemonResponse::SnapshotList { .. }
-            | DaemonResponse::ImageList { .. }
-    )
-    // ContainerOutput, LogLine, ContainerCreated, ExecStarted, PushProgress, BuildOutput,
-    // Event, and UpdateProgress are non-terminal.
+/// Delegates to the canonical [`DaemonResponse::is_terminal`] predicate in
+/// `minibox-core`. `ContainerCreated` is intentionally non-terminal: ephemeral
+/// runs send it as the first message, followed by `ContainerOutput` chunks and
+/// then `ContainerStopped`. Non-ephemeral runs send it and then drop `tx`, so
+/// the server loop exits naturally when `rx.recv()` returns `None`.
+const fn is_terminal_response(r: &DaemonResponse) -> bool {
+    r.is_terminal()
 }
 
 /// Send a single terminal [`DaemonResponse`] on `tx`, emitting a `warn!` log
@@ -329,6 +442,7 @@ async fn send_terminal_response(
 /// Each variant maps 1-to-1 to a handler function in [`crate::handler`].
 /// The `Run` variant is the only one that may produce multiple responses
 /// (streaming output chunks); all others produce exactly one response.
+// qual:allow(iosp) reason: "request router: match-based dispatch is orchestration by design"
 async fn dispatch(
     request: DaemonRequest,
     state: Arc<DaemonState>,
@@ -350,9 +464,11 @@ async fn dispatch(
             name,
             tty: _,
             platform,
+            cgroup_parent,
+            priority,
             ..
         } => {
-            handler::handle_run(
+            let params = handler::RunParams {
                 image,
                 tag,
                 command,
@@ -365,11 +481,11 @@ async fn dispatch(
                 env,
                 name,
                 platform,
-                state,
-                deps,
-                tx,
-            )
-            .await;
+                cgroup_parent,
+                priority,
+                policy_override: None,
+            };
+            handler::handle_run(params, state, deps, tx).await;
         }
         DaemonRequest::Stop { id } => {
             let response = handler::handle_stop(id, state, deps).await;
@@ -535,8 +651,27 @@ async fn dispatch(
             env,
             ..
         } => {
-            handler::handle_pipeline(pipeline_path, input, image, budget, env, state, deps, tx)
-                .await;
+            handler::handle_pipeline(
+                handler::PipelineParams {
+                    pipeline_path,
+                    input,
+                    image,
+                    budget,
+                    env,
+                },
+                state,
+                deps,
+                tx,
+            )
+            .await;
+        }
+        DaemonRequest::ListPipelines { limit, pipeline } => {
+            let response = handler::handle_list_pipelines(limit, pipeline, state).await;
+            send_terminal_response(&tx, "ListPipelines", response).await;
+        }
+        DaemonRequest::ShowPipeline { id } => {
+            let response = handler::handle_show_pipeline(id, state).await;
+            send_terminal_response(&tx, "ShowPipeline", response).await;
         }
         DaemonRequest::Update {
             images,
@@ -545,14 +680,43 @@ async fn dispatch(
             restart,
         } => {
             tokio::spawn(handler::handle_update(
-                images,
-                all,
-                containers,
-                restart,
+                handler::UpdateParams {
+                    images,
+                    all,
+                    containers,
+                    restart,
+                },
                 Arc::clone(&state),
                 Arc::clone(&deps),
                 tx,
             ));
+        }
+        DaemonRequest::GetManifest { id } => {
+            tokio::spawn(handler::handle_get_manifest(
+                id,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
+        }
+        DaemonRequest::VerifyManifest { id, policy_json } => {
+            tokio::spawn(handler::handle_verify_manifest(
+                id,
+                policy_json,
+                Arc::clone(&state),
+                Arc::clone(&deps),
+                tx,
+            ));
+        }
+        DaemonRequest::RunWorkflow(_) => {
+            send_terminal_response(
+                &tx,
+                "RunWorkflow",
+                DaemonResponse::Error {
+                    message: "RunWorkflow not yet implemented".to_string(),
+                },
+            )
+            .await;
         }
     }
 }
@@ -643,7 +807,9 @@ mod tests {
             policy: crate::daemon::handler::ContainerPolicy {
                 allow_bind_mounts: true,
                 allow_privileged: true,
+                ..Default::default()
             },
+            execution_policy: None,
             checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
         });
         (state, deps)
@@ -686,22 +852,51 @@ mod tests {
         assert_eq!(q.pid, 1);
     }
 
+    /// Exhaustive table-driven test for `is_authorized`.
+    ///
+    /// Covers every combination of:
+    /// - `require_root_auth`: true / false
+    /// - `creds`: None, uid=0, uid=1, uid=1000, uid=u32::MAX
+    ///
+    /// The domain is small (2 x 5 = 10 cases) so we enumerate all of them.
     #[test]
-    fn is_authorized_requires_root_when_enabled() {
-        assert!(is_authorized(None, false));
-        assert!(is_authorized(
-            Some(&PeerCreds { uid: 1000, pid: 42 }),
-            false
-        ));
-        assert!(is_authorized(Some(&PeerCreds { uid: 0, pid: 42 }), true));
-        assert!(!is_authorized(
-            Some(&PeerCreds { uid: 1000, pid: 42 }),
-            true
-        ));
-        assert!(
-            !is_authorized(None, true),
-            "root-auth mode must fail closed when peer credentials are unavailable"
-        );
+    fn exhaustive_is_authorized_table() {
+        let creds_root = PeerCreds { uid: 0, pid: 1 };
+        let creds_uid1 = PeerCreds { uid: 1, pid: 2 };
+        let creds_regular = PeerCreds { uid: 1000, pid: 3 };
+        let creds_max = PeerCreds {
+            uid: u32::MAX,
+            pid: 4,
+        };
+
+        // (creds, require_root_auth, expected)
+        let cases: &[(Option<&PeerCreds>, bool, bool)] = &[
+            // require_root_auth=false: always allowed regardless of creds
+            (None, false, true),
+            (Some(&creds_root), false, true),
+            (Some(&creds_uid1), false, true),
+            (Some(&creds_regular), false, true),
+            (Some(&creds_max), false, true),
+            // require_root_auth=true: only uid=0 allowed
+            (None, true, false),              // fail closed
+            (Some(&creds_root), true, true),  // root allowed
+            (Some(&creds_uid1), true, false), // non-root denied
+            (Some(&creds_regular), true, false),
+            (Some(&creds_max), true, false), // u32::MAX boundary
+        ];
+
+        for (i, &(creds, require_root, expected)) in cases.iter().enumerate() {
+            let uid_desc = match creds {
+                None => "None".to_string(),
+                Some(c) => format!("uid={}", c.uid),
+            };
+            assert_eq!(
+                is_authorized(creds, require_root),
+                expected,
+                "case {i}: is_authorized({uid_desc}, require_root={require_root}) \
+                 expected {expected}"
+            );
+        }
     }
 
     // ─── is_terminal_response ────────────────────────────────────────────────
@@ -836,6 +1031,30 @@ mod tests {
                 },
                 true, // terminal: complete list returned in one response
             ),
+            (
+                DaemonResponse::Manifest {
+                    manifest: serde_json::json!({}),
+                },
+                true, // terminal: single manifest returned
+            ),
+            (
+                DaemonResponse::VerifyResult {
+                    allowed: true,
+                    reason: None,
+                },
+                true, // terminal: single verify result returned
+            ),
+            (
+                DaemonResponse::PipelineList { pipelines: vec![] },
+                true, // terminal: complete list returned
+            ),
+            (
+                DaemonResponse::PipelineDetail {
+                    id: "trace-1".to_string(),
+                    trace: serde_json::json!({}),
+                },
+                true, // terminal: single trace returned
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -873,6 +1092,12 @@ mod tests {
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
                 DaemonResponse::ImageList { .. } => true,
+                DaemonResponse::Manifest { .. } => true,
+                DaemonResponse::VerifyResult { .. } => true,
+                DaemonResponse::WorkflowStepComplete { .. } => true,
+                DaemonResponse::WorkflowComplete { .. } => true,
+                DaemonResponse::PipelineList { .. } => true,
+                DaemonResponse::PipelineDetail { .. } => true,
             };
         }
     }
@@ -1389,5 +1614,145 @@ mod tests {
             matches!(received, DaemonResponse::Success { ref message } if message == "delivered"),
             "unexpected response: {received:?}"
         );
+    }
+
+    // ─── MockStream failure tests ────────────────────────────────────────────
+    //
+    // These tests exercise `handle_connection` via `tokio::io::duplex` streams
+    // (the in-memory `AsyncStream` double) to verify protocol-level failure
+    // modes without a real Unix socket.
+
+    /// half_frame_request: `MockStream` read_buf contains truncated JSON (no
+    /// newline terminator).  `handle_connection` must not panic — it should
+    /// exit either cleanly (`Ok`) or with an I/O error (broken pipe / write
+    /// on closed) when trying to send a parse-error response back to a
+    /// client that has already closed its read end.
+    #[tokio::test]
+    async fn mock_stream_half_frame_request_exits_cleanly() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (mut client, server) = tokio::io::duplex(4096);
+        let join = tokio::spawn(async move { handle_connection(server, state, deps).await });
+
+        // Write a truncated JSON line — no trailing newline, so `bounded_read_line`
+        // returns the partial content as-is at EOF.
+        client
+            .write_all(b"{\"List\":")
+            .await
+            .expect("write half-frame");
+
+        // Drop the entire client — signals EOF on the server's read side.
+        // The server will attempt to parse the incomplete JSON, produce a parse
+        // error response, and fail to write it (broken pipe).  Both outcomes
+        // (Ok and Err(broken pipe)) are acceptable — the key invariant is no
+        // panic/task failure.
+        drop(client);
+
+        let task_result = tokio::time::timeout(std::time::Duration::from_secs(2), join)
+            .await
+            .expect("server task should not time out")
+            .expect("task did not panic");
+
+        // Accept Ok(()) or an I/O error from writing the error response back.
+        // A panic would be caught above; reaching here means the server handled
+        // the truncated frame gracefully.
+        match &task_result {
+            Ok(()) => {}
+            Err(e) => {
+                let msg = format!("{e:#}");
+                assert!(
+                    msg.contains("broken pipe")
+                        || msg.contains("flushing")
+                        || msg.contains("writing"),
+                    "unexpected error from half-frame handling: {msg}"
+                );
+            }
+        }
+    }
+
+    /// oversized_request_via_mock_stream: send a 2 MB payload through a duplex
+    /// stream.  The server must respond with an `Error` containing
+    /// "request too large" rather than buffering the entire payload.
+    ///
+    /// This is a duplicate of `test_handle_connection_oversized_request` but
+    /// explicitly documents the `MockStream` (duplex) path.
+    #[tokio::test]
+    async fn mock_stream_oversized_request_returns_error() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        // Buffer must be large enough to hold the oversized write.
+        let (client, server) = tokio::io::duplex(3 * 1024 * 1024);
+        let state_c = Arc::clone(&state);
+        let deps_c = Arc::clone(&deps);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state_c, deps_c).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // 2 MB payload — exceeds MAX_REQUEST_SIZE (1 MB).
+        let big_value = "y".repeat(2 * 1024 * 1024);
+        let oversized = format!("{{\"__pad\":\"{big_value}\"}}\n");
+        write_half
+            .write_all(oversized.as_bytes())
+            .await
+            .expect("write oversized payload");
+
+        let resp = read_response(&mut reader).await;
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    message.contains("request too large"),
+                    "expected 'request too large', got: {message}"
+                );
+            }
+            other => panic!("expected Error for 2 MB payload, got {other:?}"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Proof 5: is_authorized matches the behaviour table in
+    /// SECURITY_INVARIANTS.md:
+    ///
+    /// | require_root_auth | creds         | Result  |
+    /// |-------------------|---------------|---------|
+    /// | false             | any / None    | allowed |
+    /// | true              | None          | denied  |
+    /// | true              | Some(uid = 0) | allowed |
+    /// | true              | Some(uid > 0) | denied  |
+    #[kani::proof]
+    fn is_authorized_matches_truth_table() {
+        let require_root: bool = kani::any();
+        let has_creds: bool = kani::any();
+        let uid: u32 = kani::any();
+
+        let creds = if has_creds {
+            Some(PeerCreds { uid, pid: 1 })
+        } else {
+            None
+        };
+
+        let result = is_authorized(creds.as_ref(), require_root);
+
+        if !require_root {
+            assert!(result, "auth disabled => always allowed");
+        } else if !has_creds {
+            assert!(!result, "auth required + no creds => denied");
+        } else if uid == 0 {
+            assert!(result, "auth required + root => allowed");
+        } else {
+            assert!(!result, "auth required + non-root => denied");
+        }
     }
 }

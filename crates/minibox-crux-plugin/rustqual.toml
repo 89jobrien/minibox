@@ -1,0 +1,11 @@
+# rustqual config for minibox-crux-plugin
+# Integration tests use .unwrap()/.expect() extensively by design.
+
+ignore_functions = ["main", "test_*"]
+
+exclude_files = [
+    "tests/*",
+]
+
+[duplicates]
+detect_dead_code = false

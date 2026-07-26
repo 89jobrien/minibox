@@ -240,6 +240,11 @@ impl ContainerRuntime for Wsl2Runtime {
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // WSL2 manages process lifecycle inside the Linux VM.
+        Ok(0)
+    }
 }
 
 /// WSL2-based implementation of [`FilesystemProvider`].
@@ -306,7 +311,7 @@ impl minibox_core::domain::RootfsSetup for Wsl2Filesystem {
         let response: Wsl2FilesystemSetupResponse = serde_json::from_str(&output)?;
 
         Ok(RootfsLayout {
-            merged_dir: Path::new(&response.merged_path).to_path_buf(),
+            merged_dir: Path::new(&response.merged_path).to_path_buf().into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })

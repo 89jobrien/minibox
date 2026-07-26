@@ -1,0 +1,86 @@
+# Human-facing task aliases. All delegate to cargo xtask run <script>.
+
+[tasks.council]
+description = "Multi-role AI code review (OpenAI + Gemini)"
+run = "cargo xtask council"
+
+[tasks.meta-agent]
+description = "Parallel agent task decomposition (OpenAI + Gemini)"
+run = "cargo xtask run agentbox-meta-agent {{arg(name='task')}}"
+
+[tasks.commit-msg]
+description = "AI commit message from staged changes (OpenAI + Gemini)"
+run = "cargo xtask run agentbox-commit-msg"
+
+[tasks.standup]
+description = "Git activity standup report"
+run = "cargo xtask run standup"
+
+[tasks.promote]
+description = "Cascade-merge: develop -> next -> staging -> main"
+run = "cargo xtask run promote"
+
+[tasks.dashboard]
+description = "Agent run history and bench results"
+run = "cargo xtask run dashboard"
+
+[tasks.doctor]
+description = "Host capabilities and preflight checks"
+run = "cargo xtask run preflight"
+
+[tasks.daemon]
+description = "Start miniboxd from release binary"
+run = "cargo xtask run start-daemon"
+
+[tasks.diagnose]
+description = "Diagnose container failure from logs + cgroup state"
+run = "cargo xtask run diagnose"
+
+[tasks.vm-setup]
+description = "Bootstrap a Linux VM for minibox development"
+run = "cargo xtask run vm-setup"
+
+[tasks.sync-check]
+description = "Fetch and check sync vs origin"
+run = "cargo xtask run sync-check"
+
+[tasks.ci-watch]
+description = "Watch latest GHA run with job-level detail"
+run = "cargo xtask run ci-watch"
+
+[tasks.bench-agent]
+description = "AI bench analysis: report, compare, regress"
+run = "cargo xtask run bench-agent"
+
+[tasks.ai-review]
+description = "Security + correctness review of staged changes"
+run = "cargo xtask run ai-review"
+
+[tasks.kani]
+description = "Run Kani formal verification proofs across the workspace"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+PACKAGES=("minibox-core" "minibox" "miniboxd")
+FAILED=0
+
+for pkg in "${PACKAGES[@]}"; do
+  echo "=== kani: $pkg ==="
+  if ! cargo kani --package "$pkg" "$@"; then
+    FAILED=1
+    echo "FAIL: $pkg"
+  fi
+done
+
+if [ "$FAILED" -eq 0 ]; then
+  echo "All Kani proofs passed."
+else
+  echo "Some Kani proofs failed."
+  exit 1
+fi
+"""
+
+[tasks.kani-quick]
+description = "Run fast Kani proofs only (skips slow parse_volume harnesses)"
+run = "scripts/kani-quick.sh"

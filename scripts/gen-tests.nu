@@ -13,5 +13,5 @@ def main [
         $args
     }
 
-    ^uv run ($env.FILE_PWD | path join "scripts" "gen-tests.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "gen-tests.py") ...$args
 }

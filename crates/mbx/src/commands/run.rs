@@ -26,74 +26,38 @@ use minibox_core::client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};
+#[cfg(test)]
 use std::path::PathBuf;
 
 /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
 pub fn parse_volume(s: &str) -> anyhow::Result<BindMount> {
-    let parts: Vec<&str> = s.splitn(3, ':').collect();
-    if parts.len() < 2 {
-        anyhow::bail!(
-            "invalid volume format {:?}: expected src:dst or src:dst:ro",
-            s
-        );
-    }
-    let host_path = PathBuf::from(parts[0]);
-    let container_path = PathBuf::from(parts[1]);
-    if !container_path.is_absolute() {
-        anyhow::bail!(
-            "container path {:?} must be absolute (start with /)",
-            container_path
-        );
-    }
-    let read_only = parts.get(2).map(|f| *f == "ro").unwrap_or(false);
-    Ok(BindMount {
-        host_path,
-        container_path,
-        read_only,
-    })
+    BindMount::parse_volume(s)
 }
 
 /// Parse a `--mount type=bind,src=PATH,dst=PATH[,readonly]` spec into a `BindMount`.
 pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
-    let mut mount_type = None::<String>;
-    let mut src = None::<PathBuf>;
-    let mut dst = None::<PathBuf>;
-    let mut read_only = false;
+    BindMount::parse_mount(s)
+}
 
-    for kv in s.split(',') {
-        if kv == "readonly" || kv == "ro" {
-            read_only = true;
-            continue;
-        }
-        let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
-        match k {
-            "type" => mount_type = Some(v.to_string()),
-            "src" | "source" => src = Some(PathBuf::from(v)),
-            "dst" | "target" | "destination" => dst = Some(PathBuf::from(v)),
-            // Unknown keys are silently ignored by design — forward-compatible parsing.
-            _ => {}
-        }
-    }
-
-    match mount_type.as_deref() {
-        Some("bind") | None => {}
-        Some(t) => anyhow::bail!("unsupported mount type {:?}: only 'bind' is supported", t),
-    }
-
-    let host_path = src.ok_or_else(|| anyhow::anyhow!("--mount missing 'src' key"))?;
-    let container_path = dst.ok_or_else(|| anyhow::anyhow!("--mount missing 'dst' key"))?;
-    if !container_path.is_absolute() {
-        anyhow::bail!(
-            "container path {:?} must be absolute (start with /)",
-            container_path
-        );
-    }
-
-    Ok(BindMount {
-        host_path,
-        container_path,
-        read_only,
-    })
+/// Options for the `run` subcommand, bundled to avoid a long parameter list.
+pub struct RunOpts {
+    pub image: String,
+    pub tag: String,
+    pub command: Vec<String>,
+    pub memory_limit_bytes: Option<u64>,
+    pub cpu_weight: Option<u64>,
+    pub network: String,
+    pub privileged: bool,
+    pub volumes: Vec<String>,
+    pub mount_specs: Vec<String>,
+    pub name: Option<String>,
+    pub tty: bool,
+    pub env: Vec<String>,
+    pub entrypoint: Option<String>,
+    pub user: Option<String>,
+    pub auto_remove: bool,
+    pub platform: Option<String>,
+    pub cgroup_parent: Option<String>,
 }
 
 /// Execute the `run` subcommand.
@@ -101,26 +65,26 @@ pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
 /// streams `ContainerOutput` chunks to stdout/stderr until `ContainerStopped`
 /// is received.  Exits with the container's exit code.
-#[allow(clippy::too_many_arguments)]
-pub async fn execute(
-    image: String,
-    tag: String,
-    command: Vec<String>,
-    memory_limit_bytes: Option<u64>,
-    cpu_weight: Option<u64>,
-    network: String,
-    privileged: bool,
-    volumes: Vec<String>,
-    mount_specs: Vec<String>,
-    name: Option<String>,
-    tty: bool,
-    env: Vec<String>,
-    entrypoint: Option<String>,
-    user: Option<String>,
-    auto_remove: bool,
-    platform: Option<String>,
-    socket_path: &std::path::Path,
-) -> Result<()> {
+pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()> {
+    let RunOpts {
+        image,
+        tag,
+        command,
+        memory_limit_bytes,
+        cpu_weight,
+        network,
+        privileged,
+        volumes,
+        mount_specs,
+        name,
+        tty,
+        env,
+        entrypoint,
+        user,
+        auto_remove,
+        platform,
+        cgroup_parent,
+    } = opts;
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
         "bridge" => NetworkMode::Bridge,
@@ -134,11 +98,11 @@ pub async fn execute(
     // Parse -v shorthand mounts.
     let mut mounts: Vec<BindMount> = Vec::new();
     for v in &volumes {
-        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {:?}", v))?);
+        mounts.push(parse_volume(v).with_context(|| format!("invalid -v flag {v:?}"))?);
     }
     // Parse --mount long-form mounts.
     for m in &mount_specs {
-        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {:?}", m))?);
+        mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {m:?}"))?);
     }
 
     let tty = tty && std::io::stdout().is_terminal();
@@ -163,6 +127,7 @@ pub async fn execute(
         urgency: None,
         execution_context: None,
         platform,
+        cgroup_parent,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -248,22 +213,25 @@ mod tests {
         })
         .await;
         let result = execute(
-            "alpine".to_string(),
-            "latest".to_string(),
-            vec!["/bin/sh".to_string()],
-            None,
-            None,
-            "none".to_string(),
-            false,
-            vec![],
-            vec![],
-            None,
-            false,
-            vec![],
-            None,
-            None,
-            false,
-            None,
+            RunOpts {
+                image: "alpine".to_string(),
+                tag: "latest".to_string(),
+                command: vec!["/bin/sh".to_string()],
+                memory_limit_bytes: None,
+                cpu_weight: None,
+                network: "none".to_string(),
+                privileged: false,
+                volumes: vec![],
+                mount_specs: vec![],
+                name: None,
+                tty: false,
+                env: vec![],
+                entrypoint: None,
+                user: None,
+                auto_remove: false,
+                platform: None,
+                cgroup_parent: None,
+            },
             &socket_path,
         )
         .await;
@@ -394,7 +362,7 @@ mod tests {
 
     /// Verify that a base64-encoded stdout chunk round-trips correctly.
     #[test]
-    fn decode_output_chunk() {
+    fn daemon_response_decode_output_chunk() {
         let encoded = base64::engine::general_purpose::STANDARD.encode(b"hello world\n");
         let response = DaemonResponse::ContainerOutput {
             stream: OutputStreamKind::Stdout,
@@ -535,7 +503,7 @@ mod tests {
     /// Verify that a base64-encoded stderr chunk round-trips and retains the
     /// correct stream kind discriminant.
     #[test]
-    fn decode_stderr_chunk() {
+    fn daemon_response_decode_stderr_chunk() {
         let encoded =
             base64::engine::general_purpose::STANDARD.encode(b"error: something went wrong\n");
         let response = DaemonResponse::ContainerOutput {

@@ -19,9 +19,9 @@
 //! - **colima**: uses `MockRegistry` + `ColimaRuntime::with_executor` +
 //!   `ColimaFilesystem` + `ColimaLimiter` + `NoopNetwork`.
 
-use minibox::adapters::mocks::{
-    MockFilesystem, MockLimiter, MockNetwork, MockRegistry, MockRuntime,
-};
+use minibox::adapters::mocks::{MockFilesystem, MockRegistry, MockRuntime};
+#[cfg(target_os = "linux")]
+use minibox::adapters::mocks::{MockLimiter, MockNetwork};
 use minibox::daemon::handler::{
     self, BuildDeps, EventDeps, ExecDeps, HandlerDependencies, ImageDeps, LifecycleDeps,
     NoopImageLoader,
@@ -66,18 +66,23 @@ async fn handle_run_once(
 ) -> DaemonResponse {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
     handler::handle_run(
-        image,
-        tag,
-        command,
-        None, // memory_limit_bytes
-        None, // cpu_weight
+        handler::RunParams {
+            image: image,
+            tag: tag,
+            command: command,
+            memory_limit_bytes: None,
+            cpu_weight: // memory_limit_bytes
+        None,
+            ephemeral: // cpu_weight
         false,
-        None,
-        vec![],
-        false,
-        vec![],
-        None,
-        None,
+            network: None,
+            mounts: vec![],
+            privileged: false,
+            env: vec![],
+            name: None,
+            platform: None,
+            cgroup_parent: None, priority: None, policy_override: None,
+        },
         state,
         deps,
         tx,
@@ -87,7 +92,7 @@ async fn handle_run_once(
 }
 
 fn make_state(tmp: &TempDir) -> Arc<DaemonState> {
-    let image_store = ImageStore::new(tmp.path().join("images")).unwrap();
+    let image_store = ImageStore::new(tmp.path().join("images")).expect("unwrap in test");
     Arc::new(DaemonState::new(image_store, tmp.path()))
 }
 
@@ -99,7 +104,8 @@ fn make_deps_from_parts(
     network: impl minibox_core::domain::NetworkProvider + 'static,
     tmp: &TempDir,
 ) -> Arc<HandlerDependencies> {
-    let image_store = Arc::new(ImageStore::new(tmp.path().join("images2")).unwrap());
+    let image_store =
+        Arc::new(ImageStore::new(tmp.path().join("images2")).expect("unwrap in test"));
     Arc::new(HandlerDependencies {
         image: ImageDeps {
             registry_router: Arc::new(HostnameRegistryRouter::new(
@@ -137,7 +143,9 @@ fn make_deps_from_parts(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
+            ..Default::default()
         },
+        execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     })
 }
@@ -308,7 +316,7 @@ async fn test_colima_adapter_suite_run_returns_container_created() {
 
     // Inject a fake executor so ColimaRuntime never shells out to limactl/nerdctl.
     let colima_runtime =
-        ColimaRuntime::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
+        ColimaRuntime::new().with_executor(Arc::new(|_args: &[&str]| Ok("42\n".to_string())));
 
     let colima_limiter =
         ColimaLimiter::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));

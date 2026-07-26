@@ -1,4 +1,12 @@
-[alias]
-x = "run -p xtask --"
-xtask = "run -p xtask --"
+[profile.dev]
+debug = "line-tables-only"
 
+[profile.dev.package."*"]
+debug = false
+
+[profile.debugging]
+inherits = "dev"
+debug = true
+
+[alias]
+xtask = "run -p xtask --"

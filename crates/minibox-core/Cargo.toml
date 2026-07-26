@@ -8,12 +8,14 @@ description = "Cross-platform shared types, domain traits, and protocol for the 
 repository.workspace = true
 homepage.workspace = true
 
+[lints]
+workspace = true
 [features]
 # Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use in
 # dev-dependencies of other crates without cfg(test) restrictions.
 # tempfile is pulled in as a real dependency because test_fixtures.rs and
 # conformance.rs compile as library code (not cfg(test)) under this feature.
-test-utils = ["dep:tempfile"]
+test-utils = ["dep:tempfile", "dep:inventory"]
 # Exposes internal functions needed by the cargo-fuzz harnesses in fuzz/.
 # Never enable in production builds.
 fuzzing = []
@@ -23,6 +25,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
+miette = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -31,6 +34,7 @@ async-trait = { workspace = true }
 uuid = { workspace = true }
 minibox-macros = { workspace = true }
 tempfile = { workspace = true, optional = true }
+inventory = { workspace = true, optional = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 sha2 = { workspace = true }
@@ -42,9 +46,10 @@ pin-project-lite = { workspace = true }
 slashcrux = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true }
+libc = { workspace = true }
 
 [dev-dependencies]
+minibox-core = { path = ".", features = ["test-utils"] }
 wiremock = { workspace = true }
 proptest = "1"
 base64 = { workspace = true }

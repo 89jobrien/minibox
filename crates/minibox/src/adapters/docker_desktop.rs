@@ -149,7 +149,7 @@ impl DockerDesktopRuntime {
         macos_path
             .to_str()
             .context("invalid path")
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
     }
 }
 
@@ -227,6 +227,11 @@ impl ContainerRuntime for DockerDesktopRuntime {
             output_reader: None,
         })
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        // Docker Desktop manages process lifecycle via the Docker API.
+        Ok(0)
+    }
 }
 
 /// Docker Desktop-based filesystem provider.
@@ -271,7 +276,7 @@ impl minibox_core::domain::RootfsSetup for DockerDesktopFilesystem {
 
         // Docker paths map directly back to macOS
         Ok(RootfsLayout {
-            merged_dir: PathBuf::from(response.merged_path),
+            merged_dir: PathBuf::from(response.merged_path).into(),
             rootfs_metadata: None,
             source_image_ref: None,
         })

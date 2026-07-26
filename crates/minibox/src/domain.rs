@@ -318,13 +318,6 @@ impl BackendRootfsMetadata {
         }
     }
 
-    /// Return the Lima instance name for `ColimaOverlay` backends, or `None`.
-    pub fn colima_instance(&self) -> Option<&str> {
-        match self {
-            Self::ColimaOverlay { instance, .. } => Some(instance.as_str()),
-            _ => None,
-        }
-    }
 }
 
 /// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
@@ -512,38 +505,14 @@ pub trait ContainerRuntime: AsAny + Send + Sync {
 
     /// Wait for a container process to exit and return its exit code.
     ///
-    /// The default implementation uses `waitpid` which works when the daemon
-    /// directly fork/cloned the child (native Linux adapter). Adapters that
-    /// manage processes externally (krun/smolvm, Colima) must override this
-    /// to use their own wait mechanism.
-    async fn wait_for_exit(&self, _runtime_id: Option<&str>, pid: u32) -> Result<i32> {
-        #[cfg(unix)]
-        {
-            use anyhow::Context as _;
-            use nix::sys::wait::{WaitStatus, waitpid};
-            use nix::unistd::Pid;
-            let nix_pid = Pid::from_raw(pid as i32);
-            let result = tokio::task::spawn_blocking(move || waitpid(nix_pid, None))
-                .await
-                .context("wait_for_exit: join error")?;
-            match result {
-                Ok(WaitStatus::Exited(_, code)) => Ok(code),
-                Ok(WaitStatus::Signaled(_, sig, _)) => Ok(-(sig as i32)),
-                Ok(other) => {
-                    tracing::warn!(pid = pid, status = ?other, "wait_for_exit: unexpected status");
-                    Ok(-1)
-                }
-                Err(e) => {
-                    tracing::warn!(pid = pid, error = %e, "wait_for_exit: waitpid error");
-                    Ok(-1)
-                }
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = pid;
-            Ok(-1)
-        }
+    /// There is no default implementation — each adapter must override this
+    /// with platform-specific wait logic (e.g. `waitpid` on Linux, VM-level
+    /// wait on krun/smolvm, Docker API on Colima).
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        anyhow::bail!(
+            "wait_for_exit: no default implementation — \
+             adapter must override with platform-specific wait logic"
+        )
     }
 }
 
@@ -706,6 +675,26 @@ pub enum DomainError {
     InfrastructureError(#[from] anyhow::Error),
 }
 
+impl DomainError {
+    /// Return a short machine-readable identifier for this error variant.
+    ///
+    /// Useful for metrics labels and structured log fields.
+    pub fn error_kind(&self) -> &'static str {
+        match self {
+            Self::ImageNotFound { .. } => "image_not_found",
+            Self::ImagePullFailed { .. } => "image_pull_failed",
+            Self::EmptyImage { .. } => "empty_image",
+            Self::ContainerNotFound { .. } => "container_not_found",
+            Self::ContainerSpawnFailed { .. } => "container_spawn_failed",
+            Self::AlreadyRunning { .. } => "already_running",
+            Self::InvalidConfig(_) => "invalid_config",
+            Self::InvalidResourceLimits(_) => "invalid_resource_limits",
+            Self::ResourceLimitExceeded { .. } => "resource_limit_exceeded",
+            Self::InfrastructureError(_) => "infrastructure_error",
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Domain Types
 // ---------------------------------------------------------------------------
@@ -766,11 +755,12 @@ impl ContainerId {
     /// - Alphanumeric (a-z, A-Z, 0-9)
     /// - Between 1 and 64 characters
     pub fn new(id: String) -> Result<Self> {
+        const MAX_CONTAINER_ID_LEN: usize = 64;
         if id.is_empty() {
             anyhow::bail!("container ID cannot be empty");
         }
-        if id.len() > 64 {
-            anyhow::bail!("container ID too long: {} (max 64)", id.len());
+        if id.len() > MAX_CONTAINER_ID_LEN {
+            anyhow::bail!("container ID too long: {} (max {MAX_CONTAINER_ID_LEN})", id.len());
         }
         if !id.chars().all(|c| c.is_ascii_alphanumeric()) {
             anyhow::bail!("container ID must be alphanumeric");
@@ -901,30 +891,33 @@ mod tests {
     // --- DomainError tests ---
 
     #[test]
-    fn test_domain_error_display_image_not_found() {
+    fn domain_error_display_image_not_found() {
         let err = DomainError::ImageNotFound {
             name: "library/ubuntu".to_string(),
             tag: "22.04".to_string(),
         };
-        assert_eq!(format!("{err}"), "image library/ubuntu:22.04 not found");
+        assert_eq!(err.error_kind(), "image_not_found");
+        assert_eq!(err.to_string(), "image library/ubuntu:22.04 not found");
     }
 
     #[test]
-    fn test_domain_error_display_container_not_found() {
+    fn domain_error_display_container_not_found() {
         let err = DomainError::ContainerNotFound {
             id: "abc123".to_string(),
         };
-        assert_eq!(format!("{err}"), "container 'abc123' not found");
+        assert_eq!(err.error_kind(), "container_not_found");
+        assert_eq!(err.to_string(), "container 'abc123' not found");
     }
 
     #[test]
-    fn test_domain_error_display_resource_limit_exceeded() {
+    fn domain_error_display_resource_limit_exceeded() {
         let err = DomainError::ResourceLimitExceeded {
             limit: "memory_bytes".to_string(),
             value: 9999,
             max: 1024,
         };
-        let msg = format!("{err}");
+        assert_eq!(err.error_kind(), "resource_limit_exceeded");
+        let msg = err.to_string();
         assert!(msg.contains("memory_bytes"), "should contain limit name");
         assert!(msg.contains("9999"), "should contain value");
         assert!(msg.contains("1024"), "should contain max");

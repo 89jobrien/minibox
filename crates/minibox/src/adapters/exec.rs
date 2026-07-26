@@ -8,7 +8,9 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use base64::Engine as _;
 use minibox_core::as_any;
-use minibox_core::domain::{ContainerId, DynExecRuntime, ExecHandle, ExecRuntime, ExecSpec};
+use minibox_core::domain::{
+    ContainerId, DynExecRuntime, DynProgressSink, ExecHandle, ExecRuntime, ExecSpec, ProgressSink,
+};
 use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
 use std::path::Path;
 use std::sync::Arc;
@@ -18,7 +20,7 @@ use uuid::Uuid;
 
 /// Send a [`DaemonResponse`] from a blocking context using the current Tokio handle.
 /// Logs a warning if the receiver has been dropped.
-fn send_blocking(tx: &mpsc::Sender<DaemonResponse>, msg: DaemonResponse) {
+fn send_blocking(tx: &dyn ProgressSink<DaemonResponse>, msg: DaemonResponse) {
     let rt = tokio::runtime::Handle::current();
     if rt.block_on(tx.send(msg)).is_err() {
         warn!("exec: client disconnected before response could be sent");
@@ -58,7 +60,7 @@ impl ExecRuntime for NativeExecRuntime {
         &self,
         container_id: &ContainerId,
         spec: ExecSpec,
-        tx: mpsc::Sender<DaemonResponse>,
+        tx: DynProgressSink<DaemonResponse>,
     ) -> Result<ExecHandle> {
         validate_exec_spec(&spec)?;
         let id = container_id.as_str().to_string();
@@ -107,7 +109,7 @@ fn run_exec_blocking(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
-    tx: mpsc::Sender<DaemonResponse>,
+    tx: DynProgressSink<DaemonResponse>,
 ) {
     if config.spec.tty {
         run_pty_exec(container_pid, exec_id, config, tx);
@@ -205,7 +207,7 @@ fn run_pipe_exec_command(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
-    tx: mpsc::Sender<DaemonResponse>,
+    tx: DynProgressSink<DaemonResponse>,
 ) {
     let mut child = match build_nsenter_command(
         container_pid,
@@ -259,11 +261,12 @@ fn run_pipe_exec_command(
 ///
 /// The parent reads PTY output from the master fd and forwards resize events
 /// via `TIOCSWINSZ`.
+// qual:allow(complexity) reason: "PTY setup with nsenter, master fd, and resize forwarding"
 fn run_pty_exec(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
-    tx: mpsc::Sender<DaemonResponse>,
+    tx: DynProgressSink<DaemonResponse>,
 ) {
     use std::os::fd::IntoRawFd as _;
 
@@ -362,12 +365,13 @@ fn run_pty_exec(
     info!(exec_id = %exec_id, exit_code, "exec: pty process exited");
 }
 
-fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &mpsc::Sender<DaemonResponse>) {
+fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &dyn ProgressSink<DaemonResponse>) {
     use std::io::{ErrorKind, Read};
     use std::os::fd::FromRawFd;
     // SAFETY: fd is the read end of a pipe or PTY master created above; caller transfers ownership.
     let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
-    let mut buf = [0u8; 4096];
+    const READ_BUFFER_SIZE: usize = 4096;
+    let mut buf = [0u8; READ_BUFFER_SIZE];
     loop {
         match file.read(&mut buf) {
             Ok(0) => break,
@@ -540,6 +544,7 @@ mod tests {
 
         let rt = tokio::runtime::Runtime::new().unwrap();
         let (tx, mut rx) = mpsc::channel::<DaemonResponse>(32);
+        let tx: minibox_core::domain::DynProgressSink<DaemonResponse> = std::sync::Arc::new(tx);
         let (_resize_tx, resize_rx) = tokio::sync::mpsc::channel::<(u16, u16)>(8);
         let config = ExecConfig {
             spec: ExecSpec {

@@ -33,7 +33,8 @@ pub struct VfRuntime;
 
 impl VfRuntime {
     /// Create a new (stub) VF runtime adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -60,18 +61,23 @@ impl ContainerRuntime for VfRuntime {
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         anyhow::bail!("VfRuntime: not yet implemented (Phase 2)")
     }
+
+    async fn wait_for_exit(&self, _runtime_id: Option<&str>, _pid: u32) -> Result<i32> {
+        anyhow::bail!("VfRuntime: not yet implemented (Phase 2)")
+    }
 }
 
 // ── VfFilesystem ─────────────────────────────────────────────────────────────
 
 /// Apple Virtualization.framework implementation of [`FilesystemProvider`] (Phase 2 stub).
 ///
-/// Will provide rootfs setup via VirtioFS or similar when implemented.
+/// Will provide rootfs setup via `VirtioFS` or similar when implemented.
 pub struct VfFilesystem;
 
 impl VfFilesystem {
     /// Create a new (stub) VF filesystem adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -108,7 +114,8 @@ pub struct VfLimiter;
 
 impl VfLimiter {
     /// Create a new (stub) VF resource limiter adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }
@@ -139,7 +146,8 @@ pub struct VfRegistry;
 
 impl VfRegistry {
     /// Create a new (stub) VF image registry adapter.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self
     }
 }

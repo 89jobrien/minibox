@@ -4,24 +4,24 @@
 //! FROM, RUN, COPY, ADD, ENV, ARG, WORKDIR, CMD, ENTRYPOINT, EXPOSE, LABEL, USER.
 //!
 //! Does NOT support: HEALTHCHECK, VOLUME, ONBUILD, SHELL, STOPSIGNAL,
-//! BuildKit --mount syntax, multi-stage (only first FROM is used).
+//! `BuildKit` --mount syntax, multi-stage (only first FROM is used).
 
 use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShellOrExec {
     Shell(String),
     Exec(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddSource {
     Local(PathBuf),
     Url(String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
     From {
         image: String,
@@ -57,6 +57,9 @@ pub enum Instruction {
     Comment(String),
 }
 
+/// # Errors
+///
+/// Returns an error if the Dockerfile contains unknown or malformed instructions.
 pub fn parse(input: &str) -> Result<Vec<Instruction>> {
     let lines = join_continuations(input);
     let mut instructions = Vec::new();
@@ -93,12 +96,12 @@ pub fn parse(input: &str) -> Result<Vec<Instruction>> {
             "ENTRYPOINT" => Instruction::Entrypoint(parse_shell_or_exec(rest)?),
             "COPY" => parse_copy(rest)?,
             "ADD" => parse_add(rest)?,
-            "ENV" => Instruction::Env(parse_env(rest)?),
-            "ARG" => parse_arg(rest)?,
+            "ENV" => Instruction::Env(parse_env(rest)),
+            "ARG" => parse_arg(rest),
             "WORKDIR" => Instruction::Workdir(PathBuf::from(rest)),
             "EXPOSE" => parse_expose(rest)?,
-            "LABEL" => Instruction::Label(parse_env(rest)?),
-            "USER" => parse_user(rest)?,
+            "LABEL" => Instruction::Label(parse_env(rest)),
+            "USER" => parse_user(rest),
             other => bail!("line {}: unsupported instruction: {}", line_num + 1, other),
         };
 
@@ -131,11 +134,8 @@ fn join_continuations(input: &str) -> Vec<String> {
 }
 
 fn split_keyword(line: &str) -> (&str, &str) {
-    if let Some(pos) = line.find(char::is_whitespace) {
-        (&line[..pos], line[pos..].trim())
-    } else {
-        (line, "")
-    }
+    line.find(char::is_whitespace)
+        .map_or((line, ""), |pos| (&line[..pos], line[pos..].trim()))
 }
 
 fn parse_shell_or_exec(s: &str) -> Result<ShellOrExec> {
@@ -188,7 +188,7 @@ fn parse_add(s: &str) -> Result<Instruction> {
     let srcs = parts[..parts.len() - 1]
         .iter()
         .map(|p| {
-            let s = p.to_string();
+            let s = (*p).to_string();
             if s.starts_with("http://") || s.starts_with("https://") {
                 AddSource::Url(s)
             } else {
@@ -199,7 +199,7 @@ fn parse_add(s: &str) -> Result<Instruction> {
     Ok(Instruction::Add { srcs, dest })
 }
 
-fn parse_env(s: &str) -> Result<Vec<(String, String)>> {
+fn parse_env(s: &str) -> Vec<(String, String)> {
     let mut pairs = Vec::new();
     if s.contains('=') {
         // KEY=VALUE form (possibly multiple pairs)
@@ -214,20 +214,20 @@ fn parse_env(s: &str) -> Result<Vec<(String, String)>> {
             pairs.push((k.to_string(), v.trim().to_string()));
         }
     }
-    Ok(pairs)
+    pairs
 }
 
-fn parse_arg(s: &str) -> Result<Instruction> {
+fn parse_arg(s: &str) -> Instruction {
     if let Some((name, default)) = s.split_once('=') {
-        Ok(Instruction::Arg {
+        Instruction::Arg {
             name: name.trim().to_string(),
             default: Some(default.trim().to_string()),
-        })
+        }
     } else {
-        Ok(Instruction::Arg {
+        Instruction::Arg {
             name: s.trim().to_string(),
             default: None,
-        })
+        }
     }
 }
 
@@ -244,17 +244,17 @@ fn parse_expose(s: &str) -> Result<Instruction> {
     Ok(Instruction::Expose { port, proto })
 }
 
-fn parse_user(s: &str) -> Result<Instruction> {
+fn parse_user(s: &str) -> Instruction {
     if let Some((name, group)) = s.split_once(':') {
-        Ok(Instruction::User {
+        Instruction::User {
             name: name.to_string(),
             group: Some(group.to_string()),
-        })
+        }
     } else {
-        Ok(Instruction::User {
+        Instruction::User {
             name: s.to_string(),
             group: None,
-        })
+        }
     }
 }
 
@@ -264,7 +264,7 @@ mod tests {
 
     #[test]
     fn parse_from_with_tag() {
-        let instrs = parse("FROM alpine:3.18\n").unwrap();
+        let instrs = parse("FROM alpine:3.18\n").expect("valid dockerfile");
         assert!(matches!(
             &instrs[0],
             Instruction::From { image, tag, .. } if image == "alpine" && tag == "3.18"
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn parse_from_no_tag_defaults_latest() {
-        let instrs = parse("FROM alpine\n").unwrap();
+        let instrs = parse("FROM alpine\n").expect("valid dockerfile");
         assert!(matches!(
             &instrs[0],
             Instruction::From { tag, .. } if tag == "latest"
@@ -282,13 +282,13 @@ mod tests {
 
     #[test]
     fn parse_run_shell_form() {
-        let instrs = parse("FROM alpine\nRUN echo hello\n").unwrap();
+        let instrs = parse("FROM alpine\nRUN echo hello\n").expect("valid dockerfile");
         assert!(matches!(&instrs[1], Instruction::Run(ShellOrExec::Shell(s)) if s == "echo hello"));
     }
 
     #[test]
     fn parse_run_exec_form() {
-        let instrs = parse("FROM alpine\nRUN [\"echo\", \"hello\"]\n").unwrap();
+        let instrs = parse("FROM alpine\nRUN [\"echo\", \"hello\"]\n").expect("valid dockerfile");
         assert!(matches!(
             &instrs[1],
             Instruction::Run(ShellOrExec::Exec(args)) if args[0] == "echo"
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn parse_copy() {
-        let instrs = parse("FROM alpine\nCOPY src/ /app/\n").unwrap();
+        let instrs = parse("FROM alpine\nCOPY src/ /app/\n").expect("valid dockerfile");
         assert!(
             matches!(&instrs[1], Instruction::Copy { dest, .. } if dest.to_string_lossy() == "/app/")
         );
@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn parse_env_equals_form() {
-        let instrs = parse("FROM alpine\nENV FOO=bar BAZ=qux\n").unwrap();
+        let instrs = parse("FROM alpine\nENV FOO=bar BAZ=qux\n").expect("valid dockerfile");
         assert!(
             matches!(&instrs[1], Instruction::Env(pairs) if pairs[0] == ("FOO".to_string(), "bar".to_string()))
         );
@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn parse_comment_skipped_but_from_present() {
-        let instrs = parse("# comment\nFROM alpine\n").unwrap();
+        let instrs = parse("# comment\nFROM alpine\n").expect("valid dockerfile");
         assert!(instrs.iter().any(|i| matches!(i, Instruction::From { .. })));
     }
 
@@ -325,13 +325,13 @@ mod tests {
 
     #[test]
     fn parse_workdir() {
-        let instrs = parse("FROM alpine\nWORKDIR /app\n").unwrap();
+        let instrs = parse("FROM alpine\nWORKDIR /app\n").expect("valid dockerfile");
         assert!(matches!(&instrs[1], Instruction::Workdir(p) if p.to_string_lossy() == "/app"));
     }
 
     #[test]
     fn parse_arg_with_default() {
-        let instrs = parse("FROM alpine\nARG VERSION=1.0\n").unwrap();
+        let instrs = parse("FROM alpine\nARG VERSION=1.0\n").expect("valid dockerfile");
         assert!(
             matches!(&instrs[1], Instruction::Arg { name, default } if name == "VERSION" && default.as_deref() == Some("1.0"))
         );

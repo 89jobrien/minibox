@@ -1,0 +1,32 @@
+#!/usr/bin/env nu
+# agentlint — validate agent config files on Claude Edit/Write
+#
+# Checks files in .claude/, .codex/, .agents/, .cursor/:
+#   .json → JSON parse validity
+#   .md   → required frontmatter keys (name, description)
+
+let input = open --raw /dev/stdin | from json
+
+let file_path = (
+    try { $input | get tool_input.file_path }
+    | default (try { $input | get input.file_path } | default "")
+)
+
+let agent_dirs = [".claude/" ".codex/" ".agents/" ".cursor/"]
+let is_agent_file = ($agent_dirs | any { |d| $file_path | str contains $d })
+
+if not $is_agent_file {
+    exit 0
+}
+
+if not ($file_path | path exists) {
+    exit 0
+}
+
+let result = do { agentlint --format gnu $file_path } | complete
+if $result.exit_code != 0 {
+    print $result.stdout
+    print $"agentlint: ($file_path) failed"
+    exit 1
+}
+print $"agentlint: ($file_path) OK"

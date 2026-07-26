@@ -37,15 +37,42 @@ pub fn detect_interpreter(path: &Path) -> Result<(String, Vec<String>)> {
     }
 }
 
+/// Default memory limit for sandbox containers (bytes).
+const DEFAULT_SANDBOX_MEMORY_BYTES: u64 = 1024 * 1024; // 1 MiB per memory_mb unit
+/// Default CPU weight for sandbox containers.
+const DEFAULT_SANDBOX_CPU_WEIGHT: u64 = 100;
+
+/// Parameters for [`build_request`].
+pub struct SandboxBuildParams<'a> {
+    pub script: &'a Path,
+    pub image: &'a str,
+    pub tag: &'a str,
+    pub memory_mb: u64,
+    pub extra_mounts: Vec<BindMount>,
+    pub network: bool,
+}
+
+/// Parameters for [`execute`].
+pub struct SandboxExecParams {
+    pub script: PathBuf,
+    pub image: String,
+    pub tag: String,
+    pub memory_mb: u64,
+    pub timeout_secs: u64,
+    pub extra_mounts: Vec<BindMount>,
+    pub network: bool,
+}
+
 /// Build the `DaemonRequest::Run` for a sandbox execution.
-pub fn build_request(
-    script: &Path,
-    image: &str,
-    tag: &str,
-    memory_mb: u64,
-    extra_mounts: Vec<BindMount>,
-    network: bool,
-) -> Result<DaemonRequest> {
+pub fn build_request(params: SandboxBuildParams<'_>) -> Result<DaemonRequest> {
+    let SandboxBuildParams {
+        script,
+        image,
+        tag,
+        memory_mb,
+        extra_mounts,
+        network,
+    } = params;
     let script = script
         .canonicalize()
         .with_context(|| format!("script not found: {}", script.display()))?;
@@ -79,8 +106,8 @@ pub fn build_request(
         image: image.to_string(),
         tag: Some(tag.to_string()),
         command,
-        memory_limit_bytes: Some(memory_mb * 1024 * 1024),
-        cpu_weight: Some(100),
+        memory_limit_bytes: Some(memory_mb * DEFAULT_SANDBOX_MEMORY_BYTES),
+        cpu_weight: Some(DEFAULT_SANDBOX_CPU_WEIGHT),
         ephemeral: true,
         network: Some(network_mode),
         mounts,
@@ -95,6 +122,7 @@ pub fn build_request(
         urgency: None,
         execution_context: None,
         platform: None,
+        cgroup_parent: None,
     })
 }
 
@@ -103,18 +131,24 @@ pub fn build_request(
 /// Returns `Ok(())` on success (container exited 0) or an error. Non-zero
 /// container exit codes are returned as errors — the caller in `main.rs`
 /// translates to `std::process::exit`.
-#[allow(clippy::too_many_arguments)]
-pub async fn execute(
-    script: PathBuf,
-    image: String,
-    tag: String,
-    memory_mb: u64,
-    timeout_secs: u64,
-    extra_mounts: Vec<BindMount>,
-    network: bool,
-    socket_path: &Path,
-) -> Result<()> {
-    let request = build_request(&script, &image, &tag, memory_mb, extra_mounts, network)?;
+pub async fn execute(params: SandboxExecParams, socket_path: &Path) -> Result<()> {
+    let SandboxExecParams {
+        script,
+        image,
+        tag,
+        memory_mb,
+        timeout_secs,
+        extra_mounts,
+        network,
+    } = params;
+    let request = build_request(SandboxBuildParams {
+        script: &script,
+        image: &image,
+        tag: &tag,
+        memory_mb,
+        extra_mounts,
+        network,
+    })?;
 
     info!(
         script = %script.display(),
@@ -227,10 +261,27 @@ mod tests {
         assert!(err.to_string().contains("unsupported"));
     }
 
+    fn br(
+        tmp: &tempfile::NamedTempFile,
+        image: &str,
+        memory_mb: u64,
+        mounts: Vec<BindMount>,
+        network: bool,
+    ) -> Result<DaemonRequest> {
+        build_request(SandboxBuildParams {
+            script: tmp.path(),
+            image,
+            tag: "latest",
+            memory_mb,
+            extra_mounts: mounts,
+            network,
+        })
+    }
+
     #[test]
     fn build_request_sets_ephemeral() {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
-        let req = build_request(tmp.path(), "minibox-sandbox", "latest", 512, vec![], false);
+        let req = br(&tmp, "minibox-sandbox", 512, vec![], false);
         assert!(req.is_ok());
         if let Ok(DaemonRequest::Run { ephemeral, .. }) = req {
             assert!(ephemeral);
@@ -242,7 +293,7 @@ mod tests {
     #[test]
     fn build_request_enforces_no_privileged() {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
-        let req = build_request(tmp.path(), "sandbox", "latest", 256, vec![], false).unwrap();
+        let req = br(&tmp, "sandbox", 256, vec![], false).unwrap();
         if let DaemonRequest::Run { privileged, .. } = req {
             assert!(!privileged);
         } else {
@@ -253,7 +304,7 @@ mod tests {
     #[test]
     fn build_request_memory_conversion() {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
-        let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], false).unwrap();
+        let req = br(&tmp, "sandbox", 512, vec![], false).unwrap();
         if let DaemonRequest::Run {
             memory_limit_bytes, ..
         } = req
@@ -267,7 +318,7 @@ mod tests {
     #[test]
     fn build_request_network_off_by_default() {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
-        let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], false).unwrap();
+        let req = br(&tmp, "sandbox", 512, vec![], false).unwrap();
         if let DaemonRequest::Run { network, .. } = req {
             assert_eq!(network, Some(NetworkMode::None));
         } else {
@@ -278,7 +329,7 @@ mod tests {
     #[test]
     fn build_request_network_bridge_when_enabled() {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
-        let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], true).unwrap();
+        let req = br(&tmp, "sandbox", 512, vec![], true).unwrap();
         if let DaemonRequest::Run { network, .. } = req {
             assert_eq!(network, Some(NetworkMode::Bridge));
         } else {
@@ -289,7 +340,7 @@ mod tests {
     #[test]
     fn build_request_mounts_script_readonly() {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
-        let req = build_request(tmp.path(), "sandbox", "latest", 512, vec![], false).unwrap();
+        let req = br(&tmp, "sandbox", 512, vec![], false).unwrap();
         if let DaemonRequest::Run { mounts, .. } = req {
             assert!(!mounts.is_empty());
             let script_mount = &mounts[0];
@@ -311,7 +362,7 @@ mod tests {
             container_path: PathBuf::from("/data"),
             read_only: false,
         }];
-        let req = build_request(tmp.path(), "sandbox", "latest", 512, extra, false).unwrap();
+        let req = br(&tmp, "sandbox", 512, extra, false).unwrap();
         if let DaemonRequest::Run { mounts, .. } = req {
             assert_eq!(mounts.len(), 2);
         } else {
@@ -321,14 +372,14 @@ mod tests {
 
     #[test]
     fn build_request_missing_script_errors() {
-        let err = build_request(
-            Path::new("/nonexistent/script.py"),
-            "sandbox",
-            "latest",
-            512,
-            vec![],
-            false,
-        )
+        let err = build_request(SandboxBuildParams {
+            script: Path::new("/nonexistent/script.py"),
+            image: "sandbox",
+            tag: "latest",
+            memory_mb: 512,
+            extra_mounts: vec![],
+            network: false,
+        })
         .unwrap_err();
         assert!(err.to_string().contains("script not found"));
     }

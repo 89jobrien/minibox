@@ -41,7 +41,7 @@ impl crate::domain::ExecRuntime for NoopExecRuntime {
         &self,
         _container_id: &crate::domain::ContainerId,
         _spec: crate::domain::ExecSpec,
-        _tx: tokio::sync::mpsc::Sender<crate::protocol::DaemonResponse>,
+        _tx: crate::domain::DynProgressSink<crate::protocol::DaemonResponse>,
     ) -> anyhow::Result<crate::domain::ExecHandle> {
         anyhow::bail!(
             "exec is not supported on the '{}' adapter",
@@ -54,6 +54,7 @@ impl crate::domain::ExecRuntime for NoopExecRuntime {
 mod tests {
     use super::NoopExecRuntime;
     use crate::domain::{ContainerId, ExecRuntime, ExecSpec};
+    use std::sync::Arc;
 
     /// Issue #134: non-native adapters (GKE, Colima, macOS VZ) must return a
     /// clear error when `exec` is called — they must NOT panic or silently succeed.
@@ -62,7 +63,7 @@ mod tests {
     #[tokio::test]
     async fn noop_exec_runtime_returns_not_supported_error() {
         let exec = NoopExecRuntime::new("gke");
-        let id = ContainerId::new("testcontainerid".to_string()).unwrap();
+        let id = ContainerId::new("testcontainerid".to_string()).expect("valid container id");
         let spec = ExecSpec {
             cmd: vec!["/bin/sh".to_string()],
             env: vec![],
@@ -71,7 +72,7 @@ mod tests {
         };
         let (tx, _rx) = tokio::sync::mpsc::channel(8);
 
-        let result = exec.run_in_container(&id, spec, tx).await;
+        let result = exec.run_in_container(&id, spec, Arc::new(tx)).await;
 
         assert!(result.is_err(), "NoopExecRuntime must always return Err");
         let msg = result.unwrap_err().to_string();
@@ -94,14 +95,14 @@ mod tests {
             let (tx, _rx) = tokio::sync::mpsc::channel(8);
             let result = exec
                 .run_in_container(
-                    &ContainerId::new("cid1234".to_string()).unwrap(),
+                    &ContainerId::new("cid1234".to_string()).expect("valid container id"),
                     ExecSpec {
                         cmd: vec!["ls".to_string()],
                         env: vec![],
                         working_dir: None,
                         tty: false,
                     },
-                    tx,
+                    Arc::new(tx),
                 )
                 .await;
 

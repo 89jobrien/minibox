@@ -1,14 +1,13 @@
 pipeline: minibox_snap_notify
 # Detect new insta snapshot files after a nextest run and list them.
-# Input: { "workspace": "<path to workspace root>" }
-# Run via post-nextest hook: cruxx run .crux/snap-notify.crux --input '{"workspace":"/Users/joe/dev/minibox"}'
+# Run: crux run .crux/snap-notify.crux
 budget: { calls: 4 }
 
 steps:
   - step: list_snaps
     handler: shell::exec
     args:
-      cmd: "git -C {{ input.workspace }} ls-files --others --exclude-standard '**/*.snap.new'"
+      cmd: "git ls-files --others --exclude-standard '**/*.snap.new'"
 
   - step: report
     handler: ctrl::log

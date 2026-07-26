@@ -2,11 +2,14 @@
 
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
+> **Status**: Stabilization freeze active — see [CONTRIBUTING.md](CONTRIBUTING.md) and
+> [docs/core/STABILITY_CHECKLIST.mbx.md](docs/core/STABILITY_CHECKLIST.mbx.md).
+
 A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.
 
-**Status:** Active development — `v0.24.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.30.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -34,9 +37,10 @@ structured tracing, property testing.
 
 ### Experimental-ish
 
-- **Container exec** — `setns`-based exec with PTY support (`-it`)
-- **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`)
-- **macOS adapters** — run/stop/ps via Colima, smolvm, or krun; exec/logs limited
+- **Container exec** — `setns`-based exec with PTY support (`-it`); Linux (`native`) only
+- **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`); Linux only
+- **macOS adapters** — run/stop/ps via smolvm or krun (VM-backed); exec/logs not supported;
+  Colima available as an alternative via Lima VM
 
 ---
 
@@ -69,16 +73,16 @@ sudo ./target/release/mbx rm <id>
 
 ## Platform Support
 
-| Platform              | Status         | Adapter        | Notes                                     |
-| --------------------- | -------------- | -------------- | ----------------------------------------- |
-| Linux x86_64          | **Production** | `native`       | Full namespace/cgroup v2/overlay          |
-| Linux aarch64         | **Production** | `native`       | Same as x86_64                            |
-| Linux (GKE)           | **Production** | `gke`          | Unprivileged pods via proot + copy-FS     |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun`| exec/logs limited; VZ blocked by Apple bug|
-| macOS (Intel)         | Experimental   | `colima`       | exec/logs limited                         |
-| Windows               | Planned        | `winbox` stub  | Returns error unconditionally             |
+| Platform              | Status         | Adapter         | Notes                                      |
+| --------------------- | -------------- | --------------- | ------------------------------------------ |
+| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay           |
+| Linux aarch64         | **Production** | `native`        | Same as x86_64                             |
+| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS      |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ blocked by Apple bug |
+| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                          |
+| Windows               | Planned        | `winbox` stub   | Returns error unconditionally              |
 
-See [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) for the full per-adapter capability
+See [`docs/core/FEATURE_MATRIX.mbx.md`](docs/core/FEATURE_MATRIX.mbx.md) for the full per-adapter capability
 breakdown.
 
 ---
@@ -100,7 +104,7 @@ miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
-minibox-conformance     conformance test harness for adapter trait contracts
+minibox-testsuite       conformance test harness for adapter trait contracts
 xtask                   CI gates, test runners, bench, VM image build
 ```
 
@@ -111,10 +115,10 @@ Tests use mock adapters — no real HTTP or filesystem required.
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
-**Protocol.** JSON-over-newline on a Unix socket. 24 request variants, 22 response variants.
+**Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
 Canonical source: `minibox-core/src/protocol.rs`.
 
-Full architecture reference: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITECTURE.mbx.md).
 
 ---
 
@@ -136,13 +140,34 @@ rootless support.
 
 ## Configuration
 
-| Variable              | Default                                         | Purpose                   |
-| --------------------- | ----------------------------------------------- | ------------------------- |
-| `MINIBOX_ADAPTER`     | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection   |
-| `MINIBOX_DATA_DIR`    | `/var/lib/minibox`                              | Image + container storage |
-| `MINIBOX_RUN_DIR`     | `/run/minibox`                                  | Socket + runtime state    |
-| `MINIBOX_CGROUP_ROOT` | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
-| `RUST_LOG`            | —                                               | Tracing log level         |
+Configuration is layered: TOML config file → environment variables → defaults.
+
+**Config files** (later overrides earlier):
+
+1. `/etc/minibox/config.toml` (system)
+2. `~/.config/minibox/config.toml` (user)
+
+```toml
+adapter = "smolvm"
+log_level = "info"
+
+[policy]
+allow_privileged = false
+allow_bind_mounts = false
+max_image_size_mb = 2048
+```
+
+**Environment variables** (override config file values):
+
+| Variable                    | Default                                         | Purpose                   |
+| --------------------------- | ----------------------------------------------- | ------------------------- |
+| `MINIBOX_ADAPTER`           | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection   |
+| `MINIBOX_DATA_DIR`          | `/var/lib/minibox`                              | Image + container storage |
+| `MINIBOX_RUN_DIR`           | `/run/minibox`                                  | Socket + runtime state    |
+| `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
+| `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                         | Permit `-v` bind mounts   |
+| `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                         | Permit `--privileged`     |
+| `RUST_LOG`                  | —                                               | Tracing log level         |
 
 ---
 
@@ -156,7 +181,7 @@ just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```
 
 The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`docs/TEST_INFRASTRUCTURE.md`](docs/TEST_INFRASTRUCTURE.md).
+macOS without root. See [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md).
 
 ---
 
@@ -189,18 +214,18 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature               | Status       |
-| --------------------- | ------------ |
-| Bridge networking     | Experimental |
-| OCI push/commit/build | Experimental |
-| macOS VZ.framework    | Blocked (Apple bug on ARM64 macOS 26) |
-| Seccomp / capabilities| Planned      |
-| Rootless support      | Planned      |
-| Port forwarding / DNS | Planned      |
-| Windows (WSL2)        | Planned      |
-| MCP control surface   | Planned      |
+| Feature                | Status                                |
+| ---------------------- | ------------------------------------- |
+| Bridge networking      | Experimental                          |
+| OCI push/commit/build  | Experimental                          |
+| macOS VZ.framework     | Blocked (Apple bug on ARM64 macOS 26) |
+| Seccomp / capabilities | Planned                               |
+| Rootless support       | Planned                               |
+| Port forwarding / DNS  | Planned                               |
+| Windows (WSL2)         | Planned                               |
+| MCP control surface    | Planned                               |
 
-Full details: [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 
 ---
 
@@ -208,4 +233,4 @@ Full details: [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
 
-<sup>Previously named `linuxbox` and `mbx` during early development.</sup>
+<sup>Previously named `mbx` during early development.</sup>

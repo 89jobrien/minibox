@@ -24,7 +24,7 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    DynImagePusher, ImagePusher, PushProgress, PushResult, RegistryCredentials,
+    DynImagePusher, DynProgressSink, ImagePusher, PushProgress, PushResult, RegistryCredentials,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::registry::{PushAuth, RegistryClient};
@@ -38,7 +38,8 @@ pub struct OciPushAdapter {
 }
 
 impl OciPushAdapter {
-    pub fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
+    #[must_use]
+    pub const fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
         Self { client, store }
     }
 }
@@ -51,7 +52,7 @@ impl ImagePusher for OciPushAdapter {
         &self,
         image_ref: &minibox_core::image::reference::ImageRef,
         credentials: &RegistryCredentials,
-        progress_tx: Option<tokio::sync::mpsc::Sender<PushProgress>>,
+        progress_tx: Option<DynProgressSink<PushProgress>>,
     ) -> Result<PushResult> {
         let repo = image_ref.repository();
         let registry_host = image_ref.registry_host();
@@ -232,6 +233,7 @@ fn registry_scheme(registry_host: &str) -> &'static str {
 }
 
 /// Construct an [`OciPushAdapter`] as a [`DynImagePusher`].
+#[must_use]
 pub fn oci_push_adapter(client: RegistryClient, store: Arc<ImageStore>) -> DynImagePusher {
     Arc::new(OciPushAdapter::new(client, store))
 }

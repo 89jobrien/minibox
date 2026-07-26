@@ -1,5 +1,16 @@
 #!/usr/bin/env nu
-# preflight.nu — minibox environment validation
+# preflight.nu — minibox environment validation (SessionStart hook)
+# TODO(#96): add automated test coverage for preflight.nu behavior
+#
+# CANONICAL PREFLIGHT COMMAND: `cargo xtask doctor`
+#   - Checks all required tools (cargo, just, rustup, cargo-nextest, gh, op)
+#   - Reports CARGO_TARGET_DIR status
+#   - On Linux: checks cgroups v2, overlay FS, and kernel version
+#
+# This script is a lightweight SessionStart hook that surfaces obvious
+# missing dependencies at shell startup. For a full diagnostic run:
+#   cargo xtask doctor          # tool + env checks
+#   mbx doctor                  # adapter selection + tool + env checks
 
 def check [label: string, pass: bool, detail: string = ""] {
     if $pass {
@@ -31,11 +42,18 @@ let results = [
     (check "CARGO_TARGET_DIR set" ($env | get -o CARGO_TARGET_DIR | is-not-empty)),
     (check "xtask available" (
         ((do { cargo metadata --no-deps --format-version 1 } | complete | get exit_code) == 0)
-        and ("crates/xtask/Cargo.toml" | path exists)
+        and ("xtask/Cargo.toml" | path exists)
     )),
     (check "op on PATH" ((which op | length) > 0)),
     (check "1Password authed" ((do { op account list } | complete | get exit_code) == 0)),
 ]
+
+let smolvm_found = (which smolvm | length) > 0
+if $smolvm_found {
+    note "smolvm on PATH" "default adapter available"
+} else {
+    note "smolvm not on PATH" "will fall back to native (Linux) or krun (macOS)"
+}
 
 let git_status = (do { git status --porcelain } | complete | get stdout | str trim)
 if ($git_status | is-empty) {

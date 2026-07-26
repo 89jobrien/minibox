@@ -11,5 +11,5 @@ def main [
     let args = if $commit { $args | append "-c" }  else { $args }
     let args = if $yes    { $args | append "-y" }  else { $args }
 
-    ^uv run ($env.FILE_PWD | path join "scripts" "commit-msg.py") ...$args
+    ^uv run ($env.FILE_PWD | path join "commit-msg.py") ...$args
 }

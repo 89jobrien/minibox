@@ -38,7 +38,7 @@ fn has_parent_dir_component(path: &Path) -> bool {
 ///
 /// Prevents path traversal attacks by applying two independent checks:
 ///
-/// 1. **Component scan** — rejects paths that contain any `..` (ParentDir)
+/// 1. **Component scan** — rejects paths that contain any `..` (`ParentDir`)
 ///    component before any filesystem access occurs.
 /// 2. **Canonicalization** — resolves symlinks and verifies that the resulting
 ///    absolute path has `base_dir` (also canonicalized) as a prefix, catching
@@ -50,16 +50,13 @@ fn has_parent_dir_component(path: &Path) -> bool {
 pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Result<()> {
     // Reject paths with parent directory components
     if has_parent_dir_component(path) {
-        anyhow::bail!(
-            "path traversal attempt: layer path contains '..' component: {:?}",
-            path
-        );
+        anyhow::bail!("path traversal attempt: layer path contains '..' component: {path:?}");
     }
 
     // Canonicalize both paths to resolve symlinks
     let canonical_path = path
         .canonicalize()
-        .with_context(|| format!("canonicalizing layer path {:?}", path))?;
+        .with_context(|| format!("canonicalizing layer path {path:?}"))?;
 
     let canonical_base = base_dir
         .canonicalize()
@@ -68,14 +65,12 @@ pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Resul
             fs::create_dir_all(base_dir)?;
             base_dir.canonicalize()
         })
-        .with_context(|| format!("canonicalizing base dir {:?}", base_dir))?;
+        .with_context(|| format!("canonicalizing base dir {base_dir:?}"))?;
 
     // Verify the layer path is within the base directory
     if !canonical_path.starts_with(&canonical_base) {
         anyhow::bail!(
-            "path traversal attempt: layer {:?} is outside allowed directory {:?}",
-            canonical_path,
-            canonical_base
+            "path traversal attempt: layer {canonical_path:?} is outside allowed directory {canonical_base:?}"
         );
     }
 
@@ -129,7 +124,7 @@ pub fn setup_overlay_with_base(
     // SECURITY: Validate all layer paths to prevent path traversal.
     for layer_path in image_layers {
         validate_layer_path(layer_path, images_base)
-            .with_context(|| format!("validating layer path {:?}", layer_path))?;
+            .with_context(|| format!("validating layer path {layer_path:?}"))?;
     }
 
     // overlayfs lowerdir lists layers from **top** (most recent) to **bottom**
@@ -163,6 +158,64 @@ pub fn setup_overlay_with_base(
     .with_context(|| "overlay mount failed")?;
 
     info!(merged = %merged.display(), "filesystem: overlay mounted");
+    Ok(merged)
+}
+
+/// Set up a container filesystem, falling back to tmpfs copy if overlay-on-overlay
+/// fails (common in nested containers).
+///
+/// Tries `setup_overlay_with_base` first. On failure, if `allow_tmpfs_fallback` is
+/// true, copies the lowest image layer to a tmpfs mount and returns that as the rootfs.
+pub fn setup_overlay_or_tmpfs(
+    image_layers: &[PathBuf],
+    container_dir: &Path,
+    images_base: &Path,
+    allow_tmpfs_fallback: bool,
+) -> anyhow::Result<PathBuf> {
+    match setup_overlay_with_base(image_layers, container_dir, images_base) {
+        Ok(merged) => Ok(merged),
+        Err(e) if allow_tmpfs_fallback => {
+            warn!(
+                error = %e,
+                "filesystem: overlay mount failed, falling back to tmpfs copy"
+            );
+            setup_tmpfs_fallback(image_layers, container_dir)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Mount a tmpfs at `container_dir/merged` and copy the top image layer into it.
+///
+/// This is a degraded-mode fallback for nested containers where overlay-on-overlay
+/// is unsupported. Writes inside the container are lost on unmount.
+fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyhow::Result<PathBuf> {
+    let merged = container_dir.join("merged");
+    fs::create_dir_all(&merged).map_err(|source| FilesystemError::CreateDir {
+        path: merged.display().to_string(),
+        source,
+    })?;
+
+    mount(
+        Some("tmpfs"),
+        &merged,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+        Some("size=512m"),
+    )
+    .with_context(|| format!("tmpfs mount at {}", merged.display()))?;
+
+    // Copy all layers bottom-to-top into the tmpfs rootfs, simulating
+    // overlay merge order. Later layers overwrite earlier ones.
+    if image_layers.is_empty() {
+        anyhow::bail!("no image layers for tmpfs fallback");
+    }
+    for layer in image_layers {
+        crate::fs_util::copy_dir_recursive(layer, &merged)
+            .with_context(|| format!("copy layer {} to tmpfs", layer.display()))?;
+    }
+
+    info!(merged = %merged.display(), "filesystem: tmpfs fallback mounted");
     Ok(merged)
 }
 
@@ -260,22 +313,8 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
         source,
     })?;
 
-    // Mount devtmpfs inside new_root.
-    // SECURITY: Mount with nosuid and noexec to prevent privilege escalation
-    let dev_dir = new_root.join("dev");
-    fs::create_dir_all(&dev_dir).ok();
-    mount(
-        Some("devtmpfs"),
-        &dev_dir,
-        Some("devtmpfs"),
-        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
-        None::<&str>,
-    )
-    .map_err(|source| FilesystemError::Mount {
-        fs: "devtmpfs".into(),
-        target: dev_dir.display().to_string(),
-        source,
-    })?;
+    // Set up /dev with tmpfs + mknod (works at any nesting depth).
+    setup_container_dev(new_root).with_context(|| "pivot_root: setup_container_dev")?;
 
     // Create the put_old directory for the old root.
     let put_old = new_root.join(".put_old");
@@ -369,16 +408,16 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
     if !target.exists() {
         if host_canonical.is_dir() {
             fs::create_dir_all(&target).with_context(|| {
-                format!("failed to create bind mount target directory {:?}", target)
+                format!("failed to create bind mount target directory {target:?}")
             })?;
         } else {
             if let Some(parent) = target.parent() {
                 fs::create_dir_all(parent).with_context(|| {
-                    format!("failed to create parent for bind mount target {:?}", target)
+                    format!("failed to create parent for bind mount target {target:?}")
                 })?;
             }
             fs::write(&target, b"")
-                .with_context(|| format!("failed to create bind mount target file {:?}", target))?;
+                .with_context(|| format!("failed to create bind mount target file {target:?}"))?;
         }
     }
 
@@ -386,10 +425,10 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
     // traversal through an existing container layer before pivot_root).
     let canonical_rootfs = rootfs
         .canonicalize()
-        .with_context(|| format!("failed to canonicalize rootfs {:?}", rootfs))?;
+        .with_context(|| format!("failed to canonicalize rootfs {rootfs:?}"))?;
     let canonical_target = target
         .canonicalize()
-        .with_context(|| format!("failed to canonicalize bind mount target {:?}", target))?;
+        .with_context(|| format!("failed to canonicalize bind mount target {target:?}"))?;
     if !canonical_target.starts_with(&canonical_rootfs) {
         anyhow::bail!(
             "path traversal attempt: bind mount target {:?} escapes rootfs {:?}",
@@ -411,7 +450,7 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
         target: target.display().to_string(),
         source,
     })
-    .with_context(|| format!("bind mount {:?} -> {:?} failed", host_canonical, target))?;
+    .with_context(|| format!("bind mount {host_canonical:?} -> {target:?} failed"))?;
 
     if m.read_only {
         mount(
@@ -426,7 +465,7 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
             target: target.display().to_string(),
             source,
         })
-        .with_context(|| format!("read-only remount of bind mount {:?} failed", target))?;
+        .with_context(|| format!("read-only remount of bind mount {target:?} failed"))?;
     }
 
     debug!(
@@ -461,6 +500,99 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
             );
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// /dev setup (tmpfs + mknod, runc-compatible)
+// ---------------------------------------------------------------------------
+
+// Re-use cross-platform types from fs_util.
+use crate::fs_util::{default_dev_symlinks, default_device_nodes};
+
+/// Set up /dev inside the container rootfs using tmpfs + mknod.
+///
+/// Called in the child init path after `CLONE_NEWNS`, before `pivot_root`.
+/// Uses the same approach as runc/libcontainer: tmpfs mount + explicit
+/// mknod calls. Works reliably at any nesting depth.
+pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
+    let dev_dir = rootfs.join("dev");
+    fs::create_dir_all(&dev_dir).ok();
+
+    // Mount tmpfs at /dev
+    mount(
+        Some("tmpfs"),
+        &dev_dir,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
+        Some("mode=0755,size=65536k"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs".into(),
+        target: dev_dir.display().to_string(),
+        source,
+    })
+    .with_context(|| "setup_container_dev: mount tmpfs at /dev")?;
+
+    // Create device nodes
+    for node in default_device_nodes() {
+        let path = dev_dir.join(node.name);
+        let dev = nix::sys::stat::makedev(u64::from(node.major), u64::from(node.minor));
+        nix::sys::stat::mknod(
+            &path,
+            nix::sys::stat::SFlag::S_IFCHR,
+            nix::sys::stat::Mode::from_bits_truncate(node.mode),
+            dev,
+        )
+        .with_context(|| format!("mknod /dev/{}", node.name))?;
+    }
+
+    // Create /dev/pts and mount devpts
+    let pts_dir = dev_dir.join("pts");
+    fs::create_dir_all(&pts_dir).ok();
+    mount(
+        Some("devpts"),
+        &pts_dir,
+        Some("devpts"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
+        Some("newinstance,ptmxmode=0666,mode=0620"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "devpts".into(),
+        target: pts_dir.display().to_string(),
+        source,
+    })
+    .with_context(|| "setup_container_dev: mount devpts")?;
+
+    // Create /dev/shm
+    let shm_dir = dev_dir.join("shm");
+    fs::create_dir_all(&shm_dir).ok();
+    mount(
+        Some("tmpfs"),
+        &shm_dir,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV | MsFlags::MS_NOEXEC,
+        Some("mode=1777,size=65536k"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs-shm".into(),
+        target: shm_dir.display().to_string(),
+        source,
+    })
+    .with_context(|| "setup_container_dev: mount /dev/shm")?;
+
+    // Create symlinks
+    for link in default_dev_symlinks() {
+        let path = dev_dir.join(link.name);
+        // Remove existing file/symlink if present (e.g. ptmx placeholder)
+        if path.exists() || path.symlink_metadata().is_ok() {
+            fs::remove_file(&path).ok();
+        }
+        std::os::unix::fs::symlink(link.target, &path)
+            .with_context(|| format!("symlink /dev/{} -> {}", link.name, link.target))?;
+    }
+
+    debug!(dev_dir = %dev_dir.display(), "filesystem: container /dev setup complete");
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -644,6 +776,11 @@ mod tests {
         }
     }
 
+    // device node/symlink and copy_dir_recursive tests live in
+    // crate::fs_util::tests (cross-platform, runs on macOS).
+    // Verified: fs_util::tests has device_nodes_complete, dev_symlinks_complete,
+    // and device_node_majmin_matches_linux_standard with equivalent coverage.
+
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
     // Run with: sudo cargo test -p minibox container::filesystem::tests
@@ -657,6 +794,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_mounts_directory() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -684,6 +823,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_read_only() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -757,6 +898,8 @@ mod tests {
 
         #[test]
         fn apply_bind_mounts_creates_target_dir() {
+            // SAFETY: geteuid() is a pure read of the process credential with no
+            // side effects; always safe to call.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -775,6 +918,70 @@ mod tests {
             assert!(rootfs.path().join("nested/dir/target").is_dir());
 
             cleanup_bind_mounts(&mounts, rootfs.path());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kani formal verification proofs (cfg-gated, never compiled in normal builds)
+// ---------------------------------------------------------------------------
+
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+    use std::path::Path;
+
+    /// Proof 40: has_parent_dir_component detects ".." in any position of a
+    /// symbolic 3-segment path. Mirrors proof 2 in minibox-core/image/layer.rs
+    /// for this crate's local copy of the function.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn has_parent_dir_detects_dotdot() {
+        let segments: [&str; 5] = ["a", "b", "..", ".", "c"];
+        let i: usize = kani::any();
+        let j: usize = kani::any();
+        let k: usize = kani::any();
+        kani::assume(i < segments.len());
+        kani::assume(j < segments.len());
+        kani::assume(k < segments.len());
+
+        let path_str = format!("{}/{}/{}", segments[i], segments[j], segments[k]);
+        let path = Path::new(&path_str);
+
+        let result = has_parent_dir_component(path);
+        let manual = path
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir));
+
+        assert_eq!(
+            result, manual,
+            "has_parent_dir_component must match manual scan"
+        );
+    }
+
+    /// Proof 41: has_parent_dir_component is monotone — if a path has "..",
+    /// prepending or appending a segment cannot remove it.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn has_parent_dir_monotone() {
+        let segments: [&str; 4] = ["x", "..", "y", "z"];
+        let i: usize = kani::any();
+        let j: usize = kani::any();
+        let extra: usize = kani::any();
+        kani::assume(i < segments.len());
+        kani::assume(j < segments.len());
+        kani::assume(extra < segments.len());
+
+        let base_str = format!("{}/{}", segments[i], segments[j]);
+        let extended_str = format!("{}/{}/{}", segments[i], segments[j], segments[extra]);
+        let base = Path::new(&base_str);
+        let extended = Path::new(&extended_str);
+
+        if has_parent_dir_component(base) {
+            assert!(
+                has_parent_dir_component(extended),
+                "appending a segment must not remove existing .."
+            );
         }
     }
 }
