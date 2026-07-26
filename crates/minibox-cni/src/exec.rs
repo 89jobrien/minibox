@@ -203,4 +203,46 @@ mod tests {
 
         assert!(matches!(result, Err(CniError::PluginNotFound { .. })));
     }
+
+    #[tokio::test]
+    async fn exec_plugin_structured_error_returns_plugin_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("fake-host-local");
+        let script = "#!/bin/sh\necho '{\"code\":7,\"msg\":\"no IPs available\",\"details\":\"pool exhausted\"}'\nexit 1\n";
+        std::fs::write(&path, script).expect("write fixture plugin");
+        let mut perms = std::fs::metadata(&path).expect("stat").permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&path, perms).expect("chmod");
+
+        let plugin = PluginConfig {
+            plugin_type: "fake-host-local".to_string(),
+            raw: json!({"type": "fake-host-local"}),
+        };
+
+        let result = exec_plugin(
+            &[dir.path().to_path_buf()],
+            &plugin,
+            "ADD",
+            "/fake/netns",
+            "container-1",
+            "eth0",
+            None,
+        )
+        .await;
+
+        match result {
+            Err(CniError::PluginError {
+                plugin,
+                code,
+                msg,
+                details,
+            }) => {
+                assert_eq!(plugin, "fake-host-local");
+                assert_eq!(code, Some(7));
+                assert_eq!(msg, "no IPs available");
+                assert_eq!(details.as_deref(), Some("pool exhausted"));
+            }
+            other => panic!("expected PluginError, got {other:?}"),
+        }
+    }
 }
