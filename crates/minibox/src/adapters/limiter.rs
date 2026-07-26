@@ -1,4 +1,4 @@
-//! cgroups v2 resource limiter adapter implementing the ResourceLimiter trait.
+//! cgroups v2 resource limiter adapter implementing the `ResourceLimiter` trait.
 //!
 //! This adapter wraps the existing [`CgroupManager`] from
 //! [`crate::container::cgroups`] to implement the domain's
@@ -60,14 +60,14 @@ use tracing::debug;
 /// // Later, cleanup
 /// limiter.cleanup("container-abc123")?;
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CgroupV2Limiter;
 
 impl CgroupV2Limiter {
     /// Create a new cgroups v2 resource limiter adapter.
     ///
     /// This is a zero-sized type, so construction is trivial.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 }

@@ -1,0 +1,3 @@
+[pipeline]
+stages = ["develop", "next", "staging", "main"]
+release_branch = "main"

@@ -1,0 +1,12 @@
+[book]
+title = "minibox"
+description = "Agentic container runtime."
+authors = ["Joseph O'Brien"]
+language = "en"
+src = "docs/core"
+
+[build]
+build-dir = "book"
+
+[output.html]
+git-repository-url = "https://github.com/89jobrien/minibox"

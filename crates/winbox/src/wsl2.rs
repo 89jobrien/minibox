@@ -24,6 +24,7 @@ use anyhow::Result;
 ///
 /// # Returns
 /// The PID of the started container process on success.
+#[allow(clippy::unused_async)]
 pub async fn start_container(_image: &str, _command: &[&str]) -> Result<u32> {
     anyhow::bail!("WSL2 backend not yet implemented (Phase 2)")
 }

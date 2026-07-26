@@ -129,7 +129,7 @@ impl RunConfig {
         }))
     }
 
-    fn mode_name(&self) -> &'static str {
+    const fn mode_name(&self) -> &'static str {
         match self {
             Self::Local { .. } => "local",
             Self::Ci(_) => "ci",
@@ -248,7 +248,7 @@ Workflow:
 }
 
 impl CiOutput {
-    fn instruction(self) -> &'static str {
+    const fn instruction(self) -> &'static str {
         match self {
             Self::StepSummary => {
                 "the file named by `GITHUB_STEP_SUMMARY` when it is set; otherwise stdout"

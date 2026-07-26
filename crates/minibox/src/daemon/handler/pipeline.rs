@@ -1,4 +1,6 @@
 //! Pipeline handler: run a crux pipeline inside an ephemeral container.
+// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
+#![allow(clippy::too_many_arguments)]
 
 use minibox_core::domain::BindMount;
 use minibox_core::protocol::DaemonResponse;
@@ -10,7 +12,16 @@ use tracing::{debug, info, warn};
 use crate::daemon::state::DaemonState;
 
 use super::run::{RunParams, handle_run};
-use super::{HandlerDependencies, send_error};
+use super::{HandlerDependencies, PolicyOverride, send_error};
+
+/// Bundled user-supplied parameters for a pipeline run request.
+pub struct PipelineParams {
+    pub pipeline_path: String,
+    pub input: Option<serde_json::Value>,
+    pub image: Option<String>,
+    pub budget: Option<serde_json::Value>,
+    pub env: Vec<(String, String)>,
+}
 
 /// Run a crux pipeline inside an ephemeral container.
 ///
@@ -37,17 +48,53 @@ use super::{HandlerDependencies, send_error};
 /// If the file is present it is parsed as JSON and included in `PipelineComplete.trace`.
 /// If absent or unparseable, a synthetic empty trace `{"steps":[]}` is used —
 /// the pipeline still completes successfully (the exit code determines success).
-#[allow(clippy::too_many_arguments)]
+/// Build the container env list for a pipeline run: inherit caller pairs,
+/// inject `CRUX_PLUGIN_PATH`, and optionally `CRUX_BUDGET_JSON` / `CRUX_INPUT_JSON`.
+fn build_pipeline_env(
+    caller_env: Vec<(String, String)>,
+    budget: Option<&serde_json::Value>,
+    input: Option<&serde_json::Value>,
+) -> Vec<String> {
+    let mut env: Vec<String> = caller_env
+        .into_iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect();
+    env.push("CRUX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
+    if let Some(b) = budget
+        && let Ok(s) = serde_json::to_string(b)
+    {
+        env.push(format!("CRUX_BUDGET_JSON={s}"));
+    }
+    if let Some(inp) = input
+        && let Ok(s) = serde_json::to_string(inp)
+    {
+        env.push(format!("CRUX_INPUT_JSON={s}"));
+    }
+    env
+}
+
+/// Build the bind mount that maps the host pipeline file into the container.
+fn build_pipeline_mount(host_pipeline: std::path::PathBuf) -> BindMount {
+    BindMount {
+        host_path: host_pipeline,
+        container_path: std::path::PathBuf::from("/pipeline.crux"),
+        read_only: true,
+    }
+}
+
 pub async fn handle_pipeline(
-    pipeline_path: String,
-    input: Option<serde_json::Value>,
-    image: Option<String>,
-    budget: Option<serde_json::Value>,
-    env: Vec<(String, String)>,
+    params: PipelineParams,
     state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
+    let PipelineParams {
+        pipeline_path,
+        input,
+        image,
+        budget,
+        env,
+    } = params;
     #[cfg(not(unix))]
     {
         let _ = (pipeline_path, input, image, budget, env, state, deps);
@@ -76,35 +123,8 @@ pub async fn handle_pipeline(
             return;
         }
 
-        // Build the bind mount: pipeline file → /pipeline.crux (read-only).
-        let pipeline_mount = BindMount {
-            host_path: host_pipeline,
-            container_path: std::path::PathBuf::from("/pipeline.crux"),
-            read_only: true,
-        };
-
-        // Build env list: inherit caller env, add CRUX_PLUGIN_PATH and optional budget.
-        let mut container_env: Vec<String> =
-            env.into_iter().map(|(k, v)| format!("{k}={v}")).collect();
-        container_env.push("CRUX_PLUGIN_PATH=/usr/local/bin/minibox-crux-plugin".to_string());
-        if let Some(ref b) = budget
-            && let Ok(s) = serde_json::to_string(b)
-        {
-            container_env.push(format!("CRUX_BUDGET_JSON={s}"));
-        }
-        if let Some(inp) = &input
-            && let Ok(s) = serde_json::to_string(inp)
-        {
-            container_env.push(format!("CRUX_INPUT_JSON={s}"));
-        }
-
-        // Clone deps and override policy to permit bind mounts for this
-        // internal pipeline run.  Pipeline requests originate from the daemon
-        // (not from an end user), so the bind-mount policy exception is safe.
-        // TODO(#431): replace clone+mutate with explicit PolicyOverride
-        let mut pipeline_deps = (*deps).clone();
-        pipeline_deps.policy.allow_bind_mounts = true;
-        let pipeline_deps = Arc::new(pipeline_deps);
+        let pipeline_mount = build_pipeline_mount(host_pipeline);
+        let container_env = build_pipeline_env(env, budget.as_ref(), input.as_ref());
 
         // Bridge channel: collect all streaming responses from handle_run internally.
         const PIPELINE_CHANNEL_CAPACITY: usize = 64;
@@ -112,7 +132,7 @@ pub async fn handle_pipeline(
             tokio::sync::mpsc::channel::<DaemonResponse>(PIPELINE_CHANNEL_CAPACITY);
 
         let pipeline_state = Arc::clone(&state);
-        let pipeline_deps_clone = Arc::clone(&pipeline_deps);
+        let pipeline_deps_clone = Arc::clone(&deps);
 
         // Spawn handle_run in the background; we drain inner_rx below.
         tokio::spawn(async move {
@@ -136,6 +156,11 @@ pub async fn handle_pipeline(
                 name: None,
                 platform: None,
                 cgroup_parent: None,
+                priority: None,
+                policy_override: Some(PolicyOverride {
+                    allow_bind_mounts: Some(true),
+                    ..Default::default()
+                }),
             };
             handle_run(params, pipeline_state, pipeline_deps_clone, inner_tx).await;
         });

@@ -3,12 +3,12 @@
 //! The [`preflight`] function probes for Windows Containers (HCS) and WSL2
 //! independently and returns a [`WinboxStatus`] reflecting what is available.
 //! The injectable [`Executor`] type lets tests substitute fake subprocess
-//! results without running PowerShell or `wsl.exe`.
+//! results without running `PowerShell` or `wsl.exe`.
 
 use anyhow::Result;
 
 /// The Windows container backend(s) detected during preflight.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WinboxStatus {
     /// The Windows Containers optional feature (HCS) is enabled, but WSL2
     /// is not available.
@@ -38,6 +38,7 @@ pub type Executor = Box<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
 /// Spawns a child process using [`std::process::Command`] and returns its
 /// stdout. Stderr is not captured. Returns an error if the process cannot
 /// be spawned or if stdout is not valid UTF-8.
+#[must_use]
 pub fn default_executor() -> Executor {
     Box::new(|args: &[&str]| {
         let out = std::process::Command::new(args[0])
@@ -52,15 +53,14 @@ pub fn default_executor() -> Executor {
 /// Runs `powershell -Command "Get-WindowsOptionalFeature -Online
 /// -FeatureName Containers | Select-Object -ExpandProperty State"` and checks
 /// whether the trimmed output equals `"Enabled"`. Returns `false` on any
-/// executor error (e.g., PowerShell not found, feature not present).
+/// executor error (e.g., `PowerShell` not found, feature not present).
 fn check_hcs(exec: &Executor) -> bool {
     exec(&[
         "powershell",
         "-Command",
         "Get-WindowsOptionalFeature -Online -FeatureName Containers | Select-Object -ExpandProperty State",
     ])
-    .map(|o| o.trim() == "Enabled")
-    .unwrap_or(false)
+    .is_ok_and(|o| o.trim() == "Enabled")
 }
 
 /// Check whether WSL2 is installed and available.
@@ -69,9 +69,7 @@ fn check_hcs(exec: &Executor) -> bool {
 /// is present. Returns `false` on any executor error (e.g., `wsl.exe` not
 /// found or WSL not enabled in Windows Features).
 fn check_wsl2(exec: &Executor) -> bool {
-    exec(&["wsl", "--status"])
-        .map(|o| !o.is_empty())
-        .unwrap_or(false)
+    exec(&["wsl", "--status"]).is_ok_and(|o| !o.is_empty())
 }
 
 /// Probe for available container backends and return the combined status.
@@ -79,6 +77,7 @@ fn check_wsl2(exec: &Executor) -> bool {
 /// Runs [`check_hcs`] and [`check_wsl2`] independently and maps the results
 /// to the appropriate [`WinboxStatus`] variant. Both checks are always
 /// performed regardless of the outcome of the first.
+#[must_use]
 pub fn preflight(exec: &Executor) -> WinboxStatus {
     match (check_hcs(exec), check_wsl2(exec)) {
         (true, true) => WinboxStatus::HcsAndWsl2,

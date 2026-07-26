@@ -1,4 +1,6 @@
 //! `KrunLimiter` — resource limiter adapter for the krun/smolvm VM backend.
+// Mutex poison is unrecoverable; .expect() is the correct pattern here.
+#![allow(clippy::expect_used)]
 //!
 //! krun sets resource limits at VM creation time via libkrun configuration
 //! rather than through host-side cgroups.  This adapter stores the config
@@ -21,6 +23,7 @@ pub struct KrunLimiter {
 
 impl KrunLimiter {
     /// Create a new `KrunLimiter` with an empty config registry.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             configs: Arc::new(Mutex::new(HashMap::new())),
@@ -65,6 +68,7 @@ impl ResourceLimiter for KrunLimiter {
         Ok(())
     }
 
+    // qual:allow(complexity) reason: "poisoned mutex is irrecoverable"
     /// Remove the stored config, if any.  Always returns `Ok`.
     fn cleanup(&self, container_id: &str) -> Result<()> {
         self.configs

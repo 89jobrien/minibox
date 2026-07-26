@@ -1,6 +1,7 @@
 name: Stability Gates
 
 on:
+  merge_group:
   push:
     branches: [main, next, staging, "feature/*", "hotfix/*", "chore/*", "feat/*"]
   pull_request:

@@ -1,0 +1,32 @@
+pipeline: minibox_prepush
+# Local mirror of `cargo xtask prepush` — release build + lib tests +
+# conformance suite. One release compile covers both nextest and the
+# conformance harness.
+#
+# Run: crux run .crux/prepush.crux
+budget: { calls: 8 }
+
+steps:
+  - step: release_build
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo build --release
+        -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd
+
+  - step: lib_tests
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo nextest run --release
+        -p minibox -p minibox-macros -p mbx -p minibox-core --lib
+
+  - step: conformance
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-conformance"
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "pre-push gates passed"

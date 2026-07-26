@@ -1,0 +1,12 @@
+# rustqual config for minibox-testsuite
+# All code is test infrastructure — ERROR_HANDLING and MAGIC_NUMBER
+# findings are expected and acceptable in test assertions and setup.
+
+ignore_functions = ["main", "test_*"]
+
+[complexity]
+detect_error_handling = false
+detect_magic_numbers = false
+
+[duplicates]
+detect_dead_code = false

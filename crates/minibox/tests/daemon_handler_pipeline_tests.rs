@@ -24,11 +24,13 @@ async fn test_handle_pipeline_rejects_relative_path() {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
 
     handler::handle_pipeline(
-        "relative/path.crux".to_string(),
-        None,
-        None,
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: "relative/path.crux".to_string(),
+            input: None,
+            image: None,
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -70,11 +72,13 @@ async fn test_handle_pipeline_pull_failure_returns_error() {
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
-        pipeline_file.to_str().expect("unwrap in test").to_string(),
-        None,
-        Some("crux-runtime:latest".to_string()),
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: None,
+            image: Some("crux-runtime:latest".to_string()),
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -102,11 +106,13 @@ async fn test_handle_pipeline_completes_with_empty_trace_when_no_trace_file() {
     std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
 
     handler::handle_pipeline(
-        pipeline_file.to_str().expect("unwrap in test").to_string(),
-        None,
-        None,
-        None,
-        vec![],
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: None,
+            image: None,
+            budget: None,
+            env: vec![],
+        },
         state,
         deps,
         tx,
@@ -184,11 +190,13 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
     // dir structure — if it does not, trace falls back to {"steps":[]}.
     // We assert either the planted trace OR the fallback are returned.
     handler::handle_pipeline(
-        pipeline_file.to_str().expect("unwrap in test").to_string(),
-        Some(serde_json::json!({"prompt": "hello"})),
-        None,
-        None,
-        vec![("CRUX_LOG".to_string(), "debug".to_string())],
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: Some(serde_json::json!({"prompt": "hello"})),
+            image: None,
+            budget: None,
+            env: vec![("CRUX_LOG".to_string(), "debug".to_string())],
+        },
         state,
         deps,
         tx,
@@ -217,6 +225,58 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
                 return;
             }
             Some(other) => panic!("unexpected: {other:?}"),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+
+/// Regression (moa-review H5): pipeline runs mount `/pipeline.crux` via
+/// `policy_override`; with the default deny policy this must NOT be rejected
+/// by `validate_policy`.
+#[tokio::test]
+async fn pipeline_run_passes_policy_gate_under_default_deny_policy() {
+    let temp_dir = TempDir::new().expect("unwrap in test");
+    let state = create_test_state_with_dir(&temp_dir);
+    let deps = make_deps_with_policy(
+        &temp_dir,
+        minibox::daemon::handler::ContainerPolicy::default(),
+    );
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+
+    // Pipeline file must exist and be absolute.
+    let pipeline_file = temp_dir.path().join("work.crux");
+    std::fs::write(&pipeline_file, b"steps: []").expect("unwrap in test");
+
+    handler::handle_pipeline(
+        handler::PipelineParams {
+            pipeline_path: pipeline_file.to_str().expect("unwrap in test").to_string(),
+            input: None,
+            image: None,
+            budget: None,
+            env: vec![],
+        },
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    // Drain all responses. Non-policy errors (e.g. streaming unsupported on
+    // this platform with MockRuntime) are acceptable; a policy violation is
+    // the regression under test.
+    while let Some(resp) = rx.recv().await {
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    !message.contains("policy violation"),
+                    "pipeline run must pass the policy gate under default deny policy, got: {message}"
+                );
+                return;
+            }
+            DaemonResponse::PipelineComplete { .. } => return,
+            _ => continue,
         }
     }
 }

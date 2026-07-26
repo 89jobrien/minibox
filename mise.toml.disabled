@@ -249,8 +249,8 @@ devkit standup --since "${HOURS}h"
 """
 
 [tasks."all:dash"]
-description = "Launch dashbox TUI dashboard"
-run = "cargo run -p dashbox --release"
+description = "Launch minibox TUI dashboard"
+run = "cargo run -p minibox-dash --release"
 
 [tasks."all:dashboard"]
 description = "Agent run history and metrics dashboard (legacy Rich)"

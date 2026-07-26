@@ -1,0 +1,86 @@
+pipeline: minibox_full_gate
+# Everything: lint + unit tests + protocol drift + actionlint + release
+# build + protocol e2e + CLI e2e. The most comprehensive local gate.
+#
+# Run: crux run .crux/full-gate.crux
+budget: { calls: 18 }
+
+steps:
+  - step: fmt_check
+    handler: shell::exec
+    args:
+      cmd: "cargo fmt --all --check"
+
+  - step: clippy
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo clippy
+        -p minibox -p minibox-macros -p mbx -p minibox-core
+        -p macbox -p miniboxd -p winbox
+        -- -D warnings
+
+  - step: workspace_check
+    handler: shell::exec
+    args:
+      cmd: "cargo check --workspace"
+
+  - step: test_unit
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-unit"
+
+  - step: borrow_fixtures
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask borrow-fixtures"
+
+  - step: docs_lint
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint-docs"
+
+  - step: check_protocol_drift
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask check-protocol-drift"
+
+  - step: actionlint
+    handler: shell::exec
+    args:
+      cmd: >-
+        which actionlint > /dev/null 2>&1 || {
+          echo "actionlint not found, skipping";
+          exit 0;
+        };
+        actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
+
+  - step: release_build
+    handler: shell::exec
+    args:
+      cmd: "cargo build --release -p miniboxd -p mbx"
+
+  - step: protocol_e2e
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo test -p miniboxd --test protocol_e2e_tests --release
+        -- --test-threads=1
+
+  - step: cli_e2e
+    handler: shell::exec
+    args:
+      cmd: >-
+        MINIBOX_ADAPTER=smolvm
+        cargo test -p miniboxd --test cli_e2e_tests --release
+        -- --test-threads=1
+
+  - step: conformance
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-conformance"
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "full gate passed"

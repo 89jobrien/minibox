@@ -31,6 +31,7 @@ use miniboxd::handler::{
     LifecycleDeps, PtySessionRegistry, RunParams,
 };
 use miniboxd::state::DaemonState;
+use serial_test::serial;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -77,6 +78,8 @@ async fn handle_run_once(
         name: None,
         platform: None,
         cgroup_parent: None,
+        priority: None,
+        policy_override: None,
     };
     handler::handle_run(params, state, deps, tx).await;
     rx.recv().await.expect("handler sent no response")
@@ -137,6 +140,12 @@ fn require_root() {
     if unsafe { libc::geteuid() } != 0 {
         panic!("Integration tests require root privileges. Run with: sudo -E cargo test");
     }
+}
+
+/// Non-panicking root check for tests that soft-skip when not root.
+fn is_root() -> bool {
+    // SAFETY: geteuid(2) has no preconditions and cannot fail.
+    unsafe { libc::geteuid() == 0 }
 }
 
 /// Check if cgroups v2 is available.
@@ -355,7 +364,7 @@ async fn test_container_removal_cleanup() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Mark as stopped (normally done by reaper)
-    state
+    let _ = state
         .update_container_state(
             &container_id,
             minibox::daemon::state::ContainerState::Stopped,
@@ -500,7 +509,7 @@ async fn test_complete_container_lifecycle() {
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
     // 6. Mark as stopped and remove
-    state
+    let _ = state
         .update_container_state(
             &container_id,
             minibox::daemon::state::ContainerState::Stopped,
@@ -588,7 +597,7 @@ async fn test_multiple_concurrent_containers() {
     // Cleanup all containers
     tokio::time::sleep(Duration::from_millis(1500)).await;
     for id in container_ids {
-        state
+        let _ = state
             .update_container_state(&id, minibox::daemon::state::ContainerState::Stopped)
             .await;
         let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
@@ -599,6 +608,34 @@ async fn test_multiple_concurrent_containers() {
 // Nesting support
 // ---------------------------------------------------------------------------
 
+/// Minimal standard-alphabet base64 decoder for `ContainerOutput.data`.
+///
+/// Avoids adding a `base64` dev-dependency to miniboxd for this one
+/// Linux-gated test. Skips padding and any non-alphabet byte.
+fn decode_base64(input: &str) -> Vec<u8> {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut lut = [255u8; 256];
+    for (i, &c) in ALPHABET.iter().enumerate() {
+        lut[c as usize] = u8::try_from(i).expect("alphabet index fits in u8");
+    }
+    let mut out = Vec::new();
+    let mut acc: u32 = 0;
+    let mut bits: u32 = 0;
+    for &c in input.as_bytes() {
+        let v = lut[c as usize];
+        if v == 255 {
+            continue; // padding, whitespace, or invalid byte
+        }
+        acc = (acc << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(u8::try_from((acc >> bits) & 0xFF).expect("masked to one byte"));
+        }
+    }
+    out
+}
+
 #[tokio::test]
 #[serial]
 async fn test_container_receives_nesting_env_vars() {
@@ -607,52 +644,52 @@ async fn test_container_receives_nesting_env_vars() {
         return;
     }
 
-    let (state, deps) = create_test_deps().await;
+    let (deps, state, _tmp) = create_real_deps();
 
     // Pull a minimal image.
-    let _ = handler::handle_pull("alpine:latest".to_string(), deps.clone(), state.clone()).await;
-
-    // Run a container that prints MINIBOX_NEST_DEPTH.
-    let response = handler::handle_run(
-        handler::RunParams {
-            image: "alpine:latest".to_string(),
-            command: vec![
-                "/bin/sh".to_string(),
-                "-c".to_string(),
-                "echo DEPTH=$MINIBOX_NEST_DEPTH MAX=$MINIBOX_MAX_NEST_DEPTH".to_string(),
-            ],
-            env: vec![],
-            mounts: vec![],
-            privileged: false,
-            network_mode: None,
-            capture_output: true,
-            cgroup_parent: None,
-        },
+    let pull_response = handler::handle_pull(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        None,
         state.clone(),
         deps.clone(),
     )
     .await;
+    if let DaemonResponse::Error { message } = &pull_response {
+        panic!("pull failed: {message}");
+    }
 
-    // Collect output lines.
-    let mut output_lines = Vec::new();
-    match response {
-        DaemonResponse::ContainerStarted { id, .. } => {
-            // Wait for container to finish.
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            if let Some(output) = state.get_captured_output(&id).await {
-                output_lines.extend(output.lines().map(String::from));
+    // Ephemeral run that prints the nesting env vars: the handler streams
+    // zero or more ContainerOutput chunks then a terminal ContainerStopped.
+    let (tx, mut rx) = mpsc::channel::<DaemonResponse>(64);
+    let params = RunParams {
+        image: "alpine".to_string(),
+        tag: Some("latest".to_string()),
+        command: vec![
+            "/bin/sh".to_string(),
+            "-c".to_string(),
+            "echo DEPTH=$MINIBOX_NEST_DEPTH MAX=$MINIBOX_MAX_NEST_DEPTH".to_string(),
+        ],
+        ephemeral: true,
+        ..Default::default()
+    };
+    handler::handle_run(params, state.clone(), deps.clone(), tx).await;
+
+    let mut output = String::new();
+    while let Some(resp) = rx.recv().await {
+        match resp {
+            DaemonResponse::ContainerOutput { data, .. } => {
+                output.push_str(&String::from_utf8_lossy(&decode_base64(&data)));
             }
-            state
-                .update_container_state(&id, minibox::daemon::state::ContainerState::Stopped)
-                .await;
-            let _ = handler::handle_remove(id, state.clone(), deps.clone()).await;
+            DaemonResponse::ContainerStopped { .. } => break,
+            DaemonResponse::Error { message } => panic!("run failed: {message}"),
+            _ => {}
         }
-        other => panic!("expected ContainerStarted, got: {other:?}"),
     }
 
     // The container should see MINIBOX_NEST_DEPTH=1 (child of host depth 0).
-    let depth_line = output_lines
-        .iter()
+    let depth_line = output
+        .lines()
         .find(|l| l.contains("DEPTH="))
         .expect("should have DEPTH= line in output");
     assert!(

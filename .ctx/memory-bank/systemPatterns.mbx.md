@@ -2,13 +2,14 @@
 
 ## High-level layout
 
-10-crate Rust 2024 workspace (v0.29.10):
+11-crate Rust 2024 workspace (v0.30.0):
 
 ```
 minibox-macros       proc-macro (~300 LOC)
 minibox-core         cross-platform types, domain traits, protocol (~12.6k LOC)
 minibox              Linux adapters, daemon handler/server/state (~21.5k LOC)
-macbox               macOS backends (colima/krun/smolvm)
+macbox               macOS backend wiring (delegates to smolbox)
+smolbox              smolvm + krun adapter implementations
 winbox               Windows stub (WSL2, ~40% scaffolded)
 miniboxd             daemon entry point, adapter DI composition root (~1.6k LOC)
 mbx                  CLI client (~3.2k LOC)

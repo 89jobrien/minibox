@@ -22,7 +22,8 @@ pub async fn execute(dry_run: bool, socket_path: &Path) -> anyhow::Result<()> {
                 for r in &removed {
                     println!("{prefix}Deleted: {r}");
                 }
-                let freed_mb = freed_bytes as f64 / 1_048_576.0;
+                const BYTES_PER_MB: f64 = 1_048_576.0;
+                let freed_mb = freed_bytes as f64 / BYTES_PER_MB;
                 println!(
                     "{prefix}Total freed: {freed_mb:.1} MB ({} image{})",
                     removed.len(),

@@ -9,7 +9,7 @@ use tracing::warn;
 /// Subscribes to the event broker and forwards each [`ContainerEvent`] as a
 /// [`DaemonResponse::Event`] message until the client disconnects (channel
 /// send fails) or the broker is shut down.
-pub(crate) async fn handle_subscribe_events(
+pub async fn handle_subscribe_events(
     event_source: Arc<dyn minibox_core::events::EventSource>,
     tx: tokio::sync::mpsc::Sender<DaemonResponse>,
 ) {

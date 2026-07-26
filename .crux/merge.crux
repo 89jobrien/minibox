@@ -1,0 +1,69 @@
+pipeline: minibox_merge
+# Local mirror of .github/workflows/merge.yml (develop-branch gates).
+# Runs the same checks CI would: fmt, clippy, unit tests, doc lint,
+# protocol drift, and actionlint. Skips self-hosted-only jobs
+# (test-e2e, test-integration, test-protocol-e2e-linux) and promotion.
+#
+# Run: crux run .crux/merge.crux
+budget: { calls: 16 }
+
+steps:
+  - step: detect_changes
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask detect-changes HEAD^"
+
+  - step: lint
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint"
+
+  - step: test_unit
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask test-unit"
+
+  - step: lint_docs
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask lint-docs"
+
+  - step: check_protocol_drift
+    handler: shell::exec
+    args:
+      cmd: "cargo xtask check-protocol-drift"
+
+  - step: actionlint
+    handler: shell::exec
+    args:
+      cmd: >-
+        which actionlint > /dev/null 2>&1 || {
+          echo "actionlint not found, skipping";
+          exit 0;
+        };
+        actionlint -config-file .github/actionlint.yaml .github/workflows/*.yml
+
+  - step: build_protocol_e2e
+    handler: shell::exec
+    args:
+      cmd: "cargo build --release -p miniboxd -p mbx"
+
+  - step: protocol_e2e
+    handler: shell::exec
+    args:
+      cmd: >-
+        cargo test -p miniboxd --test protocol_e2e_tests --release
+        -- --test-threads=1
+
+  - step: cli_e2e
+    handler: shell::exec
+    args:
+      cmd: >-
+        MINIBOX_ADAPTER=smolvm
+        cargo test -p miniboxd --test cli_e2e_tests --release
+        -- --test-threads=1
+
+  - step: ci_ok
+    handler: ctrl::log
+    args:
+      msg: "All merge gates passed"
