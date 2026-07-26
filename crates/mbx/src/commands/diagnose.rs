@@ -1,21 +1,24 @@
 //! `mbx diagnose` — gather diagnostic context for a container.
 //!
 //! Queries the daemon for the container list, finds the target by ID prefix,
-//! then inspects host-side state (cgroup path, /proc/<pid>/status on Linux)
-//! and prints a structured text report.  LLM integration is intentionally
-//! absent; this command produces the raw data a human or downstream tool
-//! can feed to an AI.
+//! fetches recent log output, then inspects host-side state (cgroup path,
+//! /proc/<pid>/status on Linux) and prints a structured text report.  LLM
+//! integration is intentionally absent; this command produces the raw data a
+//! human or downstream tool can feed to an AI.
 
 use anyhow::Context;
 use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse};
 
+/// Maximum number of recent log lines included in the diagnose report.
+const LOG_TAIL_LINES: usize = 20;
+
 /// Execute the `diagnose` subcommand.
 ///
 /// Fetches the container list from the daemon, locates the requested container
-/// by exact ID or unambiguous prefix, and prints a diagnostic report to
-/// stdout.  On Linux, host-visible state (cgroup path, `/proc/<pid>/status`)
-/// is also included when accessible.
+/// by exact ID or unambiguous prefix, fetches recent log output, and prints a
+/// diagnostic report to stdout.  On Linux, host-visible state (cgroup path,
+/// `/proc/<pid>/status`) is also included when accessible.
 pub async fn execute(container_id: &str, socket_path: &std::path::Path) -> anyhow::Result<()> {
     let client = DaemonClient::with_socket(socket_path);
     let mut stream = client
@@ -42,8 +45,43 @@ pub async fn execute(container_id: &str, socket_path: &std::path::Path) -> anyho
     let info = find_container(container_id, &containers)
         .ok_or_else(|| anyhow::anyhow!("container not found: {container_id}"))?;
 
-    print_report(info);
+    let log_lines = fetch_logs(info.id.as_str(), socket_path).await;
+
+    print_report(info, &log_lines);
     Ok(())
+}
+
+/// Fetch the last [`LOG_TAIL_LINES`] log lines for a container.
+///
+/// Returns an empty `Vec` on any error (logs are best-effort in diagnostics).
+async fn fetch_logs(container_id: &str, socket_path: &std::path::Path) -> Vec<String> {
+    let client = DaemonClient::with_socket(socket_path);
+    let request = DaemonRequest::ContainerLogs {
+        container_id: container_id.to_string(),
+        follow: false,
+    };
+
+    let mut stream = match client.call(request).await {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    let mut lines: Vec<String> = Vec::new();
+
+    loop {
+        match stream.next().await {
+            Ok(Some(DaemonResponse::LogLine { line, .. })) => {
+                lines.push(line);
+            }
+            Ok(Some(DaemonResponse::Success { .. } | DaemonResponse::Error { .. }) | None)
+            | Err(_) => break,
+            Ok(Some(_)) => {}
+        }
+    }
+
+    // Keep only the last LOG_TAIL_LINES entries.
+    trim_log_lines(&mut lines, LOG_TAIL_LINES);
+    lines
 }
 
 /// Find a container by exact ID or unambiguous prefix.
@@ -61,10 +99,23 @@ fn find_container<'a>(id: &str, containers: &'a [ContainerInfo]) -> Option<&'a C
     }
 }
 
+/// Trim `lines` in place so at most `limit` entries remain (keeping the tail).
+///
+/// Extracted from [`fetch_logs`] so tests can call the logic directly.
+pub fn trim_log_lines(lines: &mut Vec<String>, limit: usize) {
+    if lines.len() > limit {
+        lines.drain(..lines.len() - limit);
+    }
+}
+
+/// Format the diagnose report header line.
+pub fn format_header(container_id: &str) -> String {
+    format!("=== Container {container_id} ===")
+}
+
 /// Print the diagnostic report.
-fn print_report(info: &ContainerInfo) {
-    println!("=== minibox diagnose ===");
-    println!("container_id : {}", info.id);
+fn print_report(info: &ContainerInfo, log_lines: &[String]) {
+    println!("{}", format_header(&info.id));
     if let Some(name) = &info.name {
         println!("name         : {name}");
     }
@@ -80,6 +131,16 @@ fn print_report(info: &ContainerInfo) {
         }
         None => {
             println!("pid          : (none)");
+        }
+    }
+
+    println!();
+    println!("=== Recent Logs ===");
+    if log_lines.is_empty() {
+        println!("(no log output available)");
+    } else {
+        for line in log_lines {
+            println!("{line}");
         }
     }
 }
@@ -141,6 +202,26 @@ mod tests {
         }
     }
 
+    // ── format_header ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn format_header_contains_container_id() {
+        let header = format_header("abc123");
+        assert!(
+            header.contains("abc123"),
+            "header should include container ID: {header}"
+        );
+        assert!(
+            header.starts_with("==="),
+            "header should start with ===: {header}"
+        );
+    }
+
+    #[test]
+    fn format_header_matches_expected_format() {
+        assert_eq!(format_header("deadbeef"), "=== Container deadbeef ===");
+    }
+
     // ── find_container ────────────────────────────────────────────────────────
 
     #[test]
@@ -148,7 +229,7 @@ mod tests {
         let containers = vec![make_info("abc123", "running", Some(42))];
         let result = find_container("abc123", &containers);
         assert!(result.is_some());
-        assert_eq!(result.unwrap().id, "abc123");
+        assert_eq!(result.expect("should find container").id, "abc123");
     }
 
     #[test]
@@ -175,6 +256,25 @@ mod tests {
         assert!(result.is_none());
     }
 
+    // ── log tail logic ────────────────────────────────────────────────────────
+
+    #[test]
+    fn log_tail_trims_to_limit() {
+        let mut lines: Vec<String> = (0..30).map(|i| format!("line {i}")).collect();
+        trim_log_lines(&mut lines, LOG_TAIL_LINES);
+        assert_eq!(lines.len(), LOG_TAIL_LINES);
+        assert_eq!(lines[0], "line 10");
+    }
+
+    #[test]
+    fn empty_log_lines_produce_no_panic() {
+        let info = make_info("test001", "stopped", None);
+        // print_report with empty log slice should not panic.
+        // We capture nothing — just assert it completes.
+        let lines: Vec<String> = vec![];
+        print_report(&info, &lines);
+    }
+
     // ── execute (daemon integration via mock socket) ──────────────────────────
 
     #[cfg(unix)]
@@ -195,10 +295,18 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn execute_succeeds_for_known_container() {
-        let (_tmp, socket_path) = setup(DaemonResponse::ContainerList {
-            containers: vec![make_info("abc123", "running", Some(42))],
-        })
-        .await;
+        use super::super::test_helpers::setup_multi;
+
+        let info = make_info("abc123", "running", Some(42));
+        let responses = vec![
+            DaemonResponse::ContainerList {
+                containers: vec![info],
+            },
+            // Second connection (for logs) — we don't mock it; fetch_logs
+            // returns empty on connection error, which is fine.
+        ];
+        let (_tmp, socket_path) = setup_multi(responses).await;
+        // execute makes two connections; the second (logs) will fail gracefully.
         let result = execute("abc123", &socket_path).await;
         assert!(
             result.is_ok(),

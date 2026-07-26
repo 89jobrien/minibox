@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[lints]
+workspace = true
 [package.metadata.cargo-machete]
 ignored = ["tracing-subscriber"]
 
@@ -33,13 +35,14 @@ minibox = { workspace = true }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
-toml = "0.8"
+toml = "1.1"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 minibox-core = { workspace = true }
 macbox = { workspace = true }
+smolbox = { workspace = true }
 nix = { workspace = true }
 libc = { workspace = true }
 
@@ -57,3 +60,4 @@ minibox-core = { workspace = true, features = ["test-utils"] }
 minibox = { workspace = true, features = ["test-utils"] }
 proptest = "1"
 turmoil = { workspace = true }
+minibox-macros = { workspace = true }

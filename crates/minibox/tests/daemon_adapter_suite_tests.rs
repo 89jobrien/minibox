@@ -81,7 +81,7 @@ async fn handle_run_once(
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, priority: None, policy_override: None,
         },
         state,
         deps,
@@ -143,6 +143,7 @@ fn make_deps_from_parts(
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),

@@ -5,7 +5,7 @@
 //! Usage:
 //!   cargo xtask fuzz                         # both targets, 60 s each
 //!   cargo xtask fuzz --time 300              # 5 min each
-//!   cargo xtask fuzz --target fuzz_decode_request
+//!   cargo xtask fuzz --target `fuzz_decode_request`
 //!   cargo xtask fuzz --jobs 1               # sequential (default: parallel)
 
 use anyhow::{Context, Result, bail};

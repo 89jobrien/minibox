@@ -5,6 +5,9 @@
 
 use std::fmt::Debug;
 
+use minibox_core::adapters::conformance::BackendDescriptor;
+use minibox_core::domain::BackendCapability;
+
 use super::traits::TestResult;
 
 /// Structured log entry captured during a test run.
@@ -29,24 +32,51 @@ pub enum LogKind {
 ///
 /// Collects assertion failures and structured log output. At the end of a test,
 /// call `ctx.result()` to obtain the aggregate `TestResult`.
-pub struct TestContext {
+pub struct TestContext<'d> {
     failures: Vec<String>,
     log: Vec<LogEntry>,
+    descriptor: Option<&'d BackendDescriptor>,
 }
 
-impl Default for TestContext {
+impl Default for TestContext<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl TestContext {
+impl<'d> TestContext<'d> {
     /// Create a fresh context with no recorded state.
-    pub fn new() -> Self {
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             failures: Vec::new(),
             log: Vec::new(),
+            descriptor: None,
         }
+    }
+
+    /// Create a context bound to a backend descriptor.
+    #[must_use]
+    pub const fn with_descriptor(descriptor: &'d BackendDescriptor) -> Self {
+        Self {
+            failures: Vec::new(),
+            log: Vec::new(),
+            descriptor: Some(descriptor),
+        }
+    }
+
+    /// Check if the backend supports a capability.
+    /// Returns `false` if no descriptor is set.
+    #[must_use]
+    pub fn supports(&self, cap: BackendCapability) -> bool {
+        self.descriptor
+            .is_some_and(|d| d.capabilities.supports(cap))
+    }
+
+    /// Access the backend descriptor, if set.
+    #[must_use]
+    pub const fn descriptor(&self) -> Option<&BackendDescriptor> {
+        self.descriptor
     }
 
     // -----------------------------------------------------------------------
@@ -90,6 +120,7 @@ impl TestContext {
     }
 
     /// Return all log entries accumulated so far.
+    #[must_use]
     pub fn log_entries(&self) -> &[LogEntry] {
         &self.log
     }
@@ -118,13 +149,13 @@ impl TestContext {
         actual: T,
         label: &str,
     ) -> bool {
-        if forbidden != actual {
-            true
-        } else {
+        if forbidden == actual {
             self.record_failure(format!(
                 "{label}: expected value != {forbidden:?}, but got equal"
             ));
             false
+        } else {
+            true
         }
     }
 
@@ -140,11 +171,11 @@ impl TestContext {
 
     /// Assert `condition` is false.
     pub fn assert_false(&mut self, condition: bool, label: &str) -> bool {
-        if !condition {
-            true
-        } else {
+        if condition {
             self.record_failure(format!("{label}: expected false, got true"));
             false
+        } else {
+            true
         }
     }
 
@@ -163,12 +194,11 @@ impl TestContext {
 
     /// Assert a `Result` is `Err`. Records a failure if `Ok`.
     pub fn assert_err<T, E>(&mut self, result: Result<T, E>, label: &str) -> bool {
-        match result {
-            Err(_) => true,
-            Ok(_) => {
-                self.record_failure(format!("{label}: expected Err, got Ok"));
-                false
-            }
+        if result.is_err() {
+            true
+        } else {
+            self.record_failure(format!("{label}: expected Err, got Ok"));
+            false
         }
     }
 
@@ -199,11 +229,13 @@ impl TestContext {
     }
 
     /// Returns `true` if any assertion has failed.
+    #[must_use]
     pub fn has_failures(&self) -> bool {
         !self.failures.is_empty()
     }
 
     /// All failure reasons accumulated so far.
+    #[must_use]
     pub fn failures(&self) -> &[String] {
         &self.failures
     }
@@ -211,6 +243,7 @@ impl TestContext {
     /// Consume the context and return the aggregate `TestResult`.
     ///
     /// Call this as the last line of `ConformanceTest::run_sync`.
+    #[must_use]
     pub fn result(&self) -> TestResult {
         if self.failures.is_empty() {
             TestResult::Pass

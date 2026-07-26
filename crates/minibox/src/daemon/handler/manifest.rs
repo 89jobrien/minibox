@@ -16,17 +16,16 @@ pub async fn handle_get_manifest(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    let record = match state.get_container(&id).await {
-        Some(r) => r,
-        None => {
-            send_error(
-                &tx,
-                "handle_get_manifest",
-                format!("container not found: {id}"),
-            )
-            .await;
-            return;
-        }
+    let record = if let Some(r) = state.get_container(&id).await {
+        r
+    } else {
+        send_error(
+            &tx,
+            "handle_get_manifest",
+            format!("container not found: {id}"),
+        )
+        .await;
+        return;
     };
 
     let manifest_path = match record.manifest_path {
@@ -103,17 +102,16 @@ pub async fn handle_verify_manifest(
 ) {
     use minibox_core::domain::{ExecutionManifest, ExecutionPolicy, PolicyDecision};
 
-    let record = match state.get_container(&id).await {
-        Some(r) => r,
-        None => {
-            send_error(
-                &tx,
-                "handle_verify_manifest",
-                format!("container not found: {id}"),
-            )
-            .await;
-            return;
-        }
+    let record = if let Some(r) = state.get_container(&id).await {
+        r
+    } else {
+        send_error(
+            &tx,
+            "handle_verify_manifest",
+            format!("container not found: {id}"),
+        )
+        .await;
+        return;
     };
 
     let manifest_path = match record.manifest_path {

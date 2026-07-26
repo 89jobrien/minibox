@@ -18,6 +18,7 @@ pub mod adapters;
 pub mod container;
 pub mod container_state;
 pub mod daemon;
+pub mod fs_util;
 pub mod nesting;
 
 // The `as_any!` and `adapt!` macros from minibox-macros expand to
@@ -35,4 +36,5 @@ pub use minibox_core::protocol;
 pub use minibox_core::image::reference::{ImageRef, ImageRefError};
 pub use minibox_core::require_capability;
 
+#[cfg(feature = "test-utils")]
 pub mod testing;

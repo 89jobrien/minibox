@@ -98,12 +98,11 @@ pub fn ci_watch(sh: &Shell, branch: Option<&str>) -> Result<()> {
     let repo = &repo.name_with_owner;
 
     let current_branch;
-    let br = match branch {
-        Some(b) => b,
-        None => {
-            current_branch = cmd!(sh, "git branch --show-current").read()?;
-            current_branch.trim()
-        }
+    let br = if let Some(b) = branch {
+        b
+    } else {
+        current_branch = cmd!(sh, "git branch --show-current").read()?;
+        current_branch.trim()
     };
 
     // Fetch enough runs to capture all workflows triggered by the latest push.

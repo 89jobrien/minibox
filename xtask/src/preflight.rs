@@ -9,7 +9,7 @@ pub trait ToolProbe {
 }
 
 /// Domain: result of a preflight check for a single tool.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ProbeResult {
     Ok,
     Missing(String),

@@ -1,4 +1,5 @@
 //! Mock [`MetricsRecorder`] for conformance testing.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use minibox_core::domain::MetricsRecorder;
 use std::sync::Mutex;
@@ -25,7 +26,7 @@ pub struct MockMetricsRecorder {
 
 impl MockMetricsRecorder {
     /// Create a fresh mock with no recorded events.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             events: Mutex::new(Vec::new()),
         }

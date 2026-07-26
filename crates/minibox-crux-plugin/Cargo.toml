@@ -5,6 +5,10 @@ edition.workspace = true
 license.workspace = true
 description = "Crux plugin binary exposing minibox container operations via JSON-RPC stdio"
 
+[lib]
+name = "minibox_crux_plugin"
+path = "src/lib.rs"
+
 [[bin]]
 name = "minibox-crux-plugin"
 path = "src/main.rs"
@@ -22,3 +26,6 @@ crux-plugin = { git = "https://github.com/89jobrien/crux", rev = "6cfb95eb5614d4
 tokio = { workspace = true }
 tempfile = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

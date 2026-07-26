@@ -61,27 +61,33 @@ mod tests {
     use super::*;
     use minibox_core::protocol::DaemonResponse;
 
+    /// Build the DaemonRequest::ContainerLogs that `execute` would send.
+    fn build_logs_request(container_id: &str, follow: bool) -> DaemonRequest {
+        DaemonRequest::ContainerLogs {
+            container_id: container_id.to_string(),
+            follow,
+        }
+    }
+
     /// Verify the `ContainerLogs` request serialises with the correct type tag.
+    /// Constructs the same request that `execute` sends to exercise the SUT path.
     #[test]
-    fn logs_request_has_type_tag() {
-        let req = DaemonRequest::ContainerLogs {
-            container_id: "ctr1".to_string(),
-            follow: false,
-        };
+    fn daemon_request_logs_has_type_tag() {
+        let container_id = "ctr1";
+        let req = build_logs_request(container_id, false);
         let json = serde_json::to_string(&req).unwrap();
         assert!(
             json.contains("\"type\":\"ContainerLogs\""),
             "serialised ContainerLogs request missing type tag: {json}"
         );
+        assert!(json.contains(&format!("\"container_id\":\"{container_id}\"")));
     }
 
     /// Verify `follow: true` serialises correctly.
+    /// Constructs the same request that `execute` sends with follow=true.
     #[test]
-    fn logs_request_follow_field() {
-        let req = DaemonRequest::ContainerLogs {
-            container_id: "ctr2".to_string(),
-            follow: true,
-        };
+    fn daemon_request_logs_follow_field() {
+        let req = build_logs_request("ctr2", true);
         let json = serde_json::to_string(&req).unwrap();
         assert!(
             json.contains("\"follow\":true"),
@@ -91,7 +97,7 @@ mod tests {
 
     /// Verify that a `LogLine` response deserialises correctly.
     #[test]
-    fn log_line_response_deserialises() {
+    fn daemon_response_log_line_deserialises() {
         let json = r#"{"type":"LogLine","stream":"stdout","line":"hello world"}"#;
         let resp: DaemonResponse = serde_json::from_str(json).unwrap();
         match resp {

@@ -1,6 +1,6 @@
 //! `mbx pipeline` — run, list, and show pipeline executions.
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, bail};
 use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::path::Path;
@@ -51,8 +51,7 @@ pub async fn execute_run(
                 exit_code,
             } => {
                 if exit_code != 0 {
-                    eprintln!("pipeline failed (container {container_id}, exit code {exit_code})");
-                    std::process::exit(exit_code);
+                    bail!("pipeline failed (container {container_id}, exit code {exit_code})");
                 }
                 println!(
                     "{}",
@@ -61,15 +60,13 @@ pub async fn execute_run(
                 return Ok(());
             }
             DaemonResponse::Error { message } => {
-                eprintln!("error: {message}");
-                std::process::exit(1);
+                bail!("daemon error: {message}");
             }
             _ => {}
         }
     }
 
-    eprintln!("no response from daemon");
-    std::process::exit(1);
+    bail!("no response from daemon");
 }
 
 /// Execute `mbx pipeline list`.
@@ -111,17 +108,14 @@ pub async fn execute_list(
                 Ok(())
             }
             DaemonResponse::Error { message } => {
-                eprintln!("error: {message}");
-                std::process::exit(1);
+                bail!("daemon error: {message}");
             }
             other => {
-                eprintln!("unexpected response: {other:?}");
-                std::process::exit(1);
+                bail!("unexpected response: {other:?}");
             }
         }
     } else {
-        eprintln!("no response from daemon");
-        std::process::exit(1);
+        bail!("no response from daemon");
     }
 }
 
@@ -145,17 +139,14 @@ pub async fn execute_show(id: String, socket_path: &Path) -> Result<()> {
                 Ok(())
             }
             DaemonResponse::Error { message } => {
-                eprintln!("error: {message}");
-                std::process::exit(1);
+                bail!("daemon error: {message}");
             }
             other => {
-                eprintln!("unexpected response: {other:?}");
-                std::process::exit(1);
+                bail!("unexpected response: {other:?}");
             }
         }
     } else {
-        eprintln!("no response from daemon");
-        std::process::exit(1);
+        bail!("no response from daemon");
     }
 }
 
@@ -180,7 +171,7 @@ mod tests {
         let (_tmp, socket_path) = setup(DaemonResponse::PipelineList {
             pipelines: vec![TraceSummary {
                 id: "trace-1".to_string(),
-                pipeline: "test.cruxx".to_string(),
+                pipeline: "test.crux".to_string(),
                 timestamp: "1700000000".to_string(),
                 exit_code: 0,
                 step_count: 3,
@@ -218,7 +209,7 @@ mod tests {
             },
         ])
         .await;
-        let result = execute_run("/tmp/test.cruxx".to_string(), None, None, &socket_path).await;
+        let result = execute_run("/tmp/test.crux".to_string(), None, None, &socket_path).await;
         assert!(result.is_ok(), "execute_run should succeed: {result:?}");
     }
 

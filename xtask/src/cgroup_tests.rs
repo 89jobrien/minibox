@@ -21,6 +21,7 @@ use std::{
 ///   5. Build the `cgroup_tests` test binary
 ///   6. Exec the binary as the sole process in `runner-leaf`
 #[cfg(target_os = "linux")]
+// qual:allow(iosp) reason: "cgroup test runner: system inspection + fs mutations + process exec"
 pub fn run_cgroup_tests(root: &Path) -> Result<()> {
     let cgroup_root = Path::new("/sys/fs/cgroup");
     let slice = cgroup_root.join("minibox-test-slice");
@@ -120,6 +121,7 @@ fn append_to_file(path: &Path, content: &str) -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
+// qual:allow(iosp) reason: "best-effort cgroup/fs cleanup traversal"
 fn cleanup_cgroup(dir: &Path) {
     if !dir.exists() {
         return;

@@ -23,6 +23,7 @@ impl SmolvmProcess {
     }
 
     /// Spawn using an explicit binary path (useful for testing missing-binary path).
+    #[allow(clippy::unused_async)]
     pub async fn spawn_with_bin(
         bin: &Path,
         image: &str,
@@ -64,13 +65,12 @@ impl SmolvmProcess {
             .await
             .context("smolvm process wait failed")?;
         use std::os::unix::process::ExitStatusExt;
-        match status.code() {
-            Some(code) => Ok(code),
-            None => {
-                let sig = status.signal().unwrap_or(0);
-                tracing::debug!(signal = sig, "smolvm: process killed by signal");
-                Ok(-sig)
-            }
+        if let Some(code) = status.code() {
+            Ok(code)
+        } else {
+            let sig = status.signal().unwrap_or(0);
+            tracing::debug!(signal = sig, "smolvm: process killed by signal");
+            Ok(-sig)
         }
     }
 
@@ -89,7 +89,7 @@ impl SmolvmProcess {
     /// Take the piped stdout from the child process, returning the raw fd.
     ///
     /// Converts the async `ChildStdout` back to its underlying `OwnedFd` so
-    /// the caller can pass it through the `SpawnResult` output_reader channel.
+    /// the caller can pass it through the `SpawnResult` `output_reader` channel.
     /// Returns `None` if stdout was not piped or was already taken.
     #[cfg(unix)]
     pub fn take_stdout_fd(&mut self) -> Option<std::os::fd::OwnedFd> {

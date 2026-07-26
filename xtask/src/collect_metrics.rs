@@ -35,8 +35,7 @@ fn now_utc() -> String {
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string())
+        .map_or_else(|| "unknown".to_string(), |s| s.trim().to_string())
 }
 
 /// Parse workspace member count from `cargo metadata`.
@@ -52,13 +51,13 @@ fn count_crates(root: &Path) -> Result<usize> {
     let meta: serde_json::Value = serde_json::from_str(&raw).context("parse cargo metadata")?;
     let count = meta["workspace_members"]
         .as_array()
-        .map(|a| a.len())
-        .unwrap_or(0);
+        .map_or(0, std::vec::Vec::len);
     Ok(count)
 }
 
 /// Walk all `.rs` files under `dir`, accumulating total non-empty source lines
 /// and lines that contain a test annotation.
+// qual:allow(iosp) reason: "recursive fs scan and aggregation"
 fn scan_rs_files(dir: &Path, lines: &mut usize, tests: &mut usize) -> Result<()> {
     if !dir.is_dir() {
         return Ok(());
@@ -112,6 +111,7 @@ fn feature_matrix_date(root: &Path) -> String {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
+// qual:allow(iosp) reason: "xtask entrypoint: shells out + reads filesystem + aggregates"
 pub fn collect_metrics(root: &Path, save: bool) -> Result<()> {
     let collected_at = now_utc();
     let crate_count = count_crates(root).context("count workspace crates")?;

@@ -14,7 +14,7 @@ enum Expectation {
 }
 
 impl Expectation {
-    fn label(self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Pass => "must-pass",
             Self::Fail => "must-fail",

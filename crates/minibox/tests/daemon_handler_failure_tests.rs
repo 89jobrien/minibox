@@ -45,6 +45,8 @@ async fn test_policy_denies_bind_mount_by_default() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -87,7 +89,7 @@ async fn test_policy_denies_privileged_by_default() {
         vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, priority: None, policy_override: None,
         },
         state,
         deps,
@@ -139,6 +141,7 @@ async fn test_policy_can_be_configured_to_allow_mounts() {
     let policy = ContainerPolicy {
         allow_bind_mounts: true,
         allow_privileged: false,
+        ..Default::default()
     };
     let deps = make_deps_with_policy(&temp_dir, policy);
     let state = create_test_state_with_dir(&temp_dir);
@@ -165,6 +168,8 @@ async fn test_policy_can_be_configured_to_allow_mounts() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -186,6 +191,7 @@ async fn test_policy_can_be_configured_to_allow_privileged() {
     let policy = ContainerPolicy {
         allow_bind_mounts: false,
         allow_privileged: true,
+        ..Default::default()
     };
     let deps = make_deps_with_policy(&temp_dir, policy);
     let state = create_test_state_with_dir(&temp_dir);
@@ -206,7 +212,7 @@ async fn test_policy_can_be_configured_to_allow_privileged() {
         vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, priority: None, policy_override: None,
         },
         state,
         deps,
@@ -232,7 +238,7 @@ fn test_validate_policy_plain_container_always_allowed() {
 
     let policy = ContainerPolicy::default(); // deny-all defaults
     assert!(
-        validate_policy(&[], false, &policy).is_ok(),
+        validate_policy(&[], false, None, &policy).is_ok(),
         "plain container must always pass policy"
     );
 }
@@ -246,13 +252,14 @@ fn test_validate_policy_denies_bind_mount() {
     let policy = ContainerPolicy {
         allow_bind_mounts: false,
         allow_privileged: false,
+        ..Default::default()
     };
     let mounts = vec![BindMount {
         host_path: std::path::PathBuf::from("/tmp/data"),
         container_path: std::path::PathBuf::from("/data"),
         read_only: false,
     }];
-    let err = validate_policy(&mounts, false, &policy).unwrap_err();
+    let err = validate_policy(&mounts, false, None, &policy).unwrap_err();
     assert!(
         err.contains("bind mount") || err.contains("policy"),
         "expected bind-mount policy error, got: {err}"
@@ -267,8 +274,9 @@ fn test_validate_policy_denies_privileged() {
     let policy = ContainerPolicy {
         allow_bind_mounts: false,
         allow_privileged: false,
+        ..Default::default()
     };
-    let err = validate_policy(&[], true, &policy).unwrap_err();
+    let err = validate_policy(&[], true, None, &policy).unwrap_err();
     assert!(
         err.contains("privileged") || err.contains("policy"),
         "expected privileged policy error, got: {err}"
@@ -299,6 +307,8 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
             name: Some("mybox".to_string()),
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         Arc::clone(&state),
         Arc::clone(&deps),
@@ -328,6 +338,8 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
             name: Some("mybox".to_string()),
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         Arc::clone(&state),
         Arc::clone(&deps),
@@ -384,6 +396,7 @@ async fn test_handle_run_filesystem_setup_failure_v2() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -453,6 +466,7 @@ async fn test_handle_run_limiter_create_failure() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -521,6 +535,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -547,6 +562,8 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -605,6 +622,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -627,6 +645,8 @@ async fn test_handle_run_privileged_denied_by_policy() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -665,6 +685,8 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state.clone(),
         deps.clone(),
@@ -741,6 +763,7 @@ async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
         policy: minibox::daemon::handler::ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: true,
+            ..Default::default()
         },
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -765,7 +788,7 @@ async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None,
+            cgroup_parent: None, priority: None, policy_override: None,
         },
         state,
         deps,
@@ -929,6 +952,8 @@ async fn handle_run_with_policy(
             name: None,
             platform: None,
             cgroup_parent: None,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -965,6 +990,7 @@ async fn test_policy_allows_bind_mount_when_permitted() {
     let policy = ContainerPolicy {
         allow_bind_mounts: true,
         allow_privileged: false,
+        ..Default::default()
     };
     let response = handle_run_with_policy(vec![sample_bind_mount()], false, policy).await;
     // Should NOT be a policy error (may be ContainerCreated or other non-policy error).
@@ -981,6 +1007,7 @@ async fn test_policy_allows_privileged_when_permitted() {
     let policy = ContainerPolicy {
         allow_bind_mounts: false,
         allow_privileged: true,
+        ..Default::default()
     };
     let response = handle_run_with_policy(vec![], true, policy).await;
     if let DaemonResponse::Error { message } = &response {

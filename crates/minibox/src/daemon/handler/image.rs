@@ -1,4 +1,6 @@
 //! Image handlers: pull, load, push, commit, build, prune, remove, list.
+// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
+#![allow(clippy::too_many_arguments)]
 
 use anyhow::Result;
 use minibox_core::events::EventSink;
@@ -12,6 +14,21 @@ use crate::daemon::state::DaemonState;
 
 use super::{HandlerDependencies, send_error};
 
+// ─── Metrics helpers ─────────────────────────────────────────────────────────
+
+/// Record operation counter + duration histogram for a timed image operation.
+fn record_timed_op(deps: &HandlerDependencies, op: &str, status: &str, elapsed_secs: f64) {
+    deps.events.metrics.increment_counter(
+        "minibox_container_ops_total",
+        &[("op", op), ("adapter", "daemon"), ("status", status)],
+    );
+    deps.events.metrics.record_histogram(
+        "minibox_container_op_duration_seconds",
+        elapsed_secs,
+        &[("op", op), ("adapter", "daemon")],
+    );
+}
+
 // ─── Platform registry resolution ────────────────────────────────────────────
 
 /// Apply a per-request platform override to whichever registry the router selected.
@@ -24,6 +41,7 @@ use super::{HandlerDependencies, send_error};
 ///
 /// Returns an error if `platform` cannot be parsed, or if the adapter cannot
 /// be reconstructed (e.g. TLS init failure).
+// qual:allow(iosp) reason: "handler orchestration — routing + adapter construction"
 pub(super) fn resolve_platform_registry(
     platform: &Option<String>,
     image_ref: &minibox_core::image::reference::ImageRef,
@@ -55,6 +73,7 @@ pub(super) fn resolve_platform_registry(
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
+// qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
@@ -117,16 +136,7 @@ pub async fn handle_pull(
         }
     };
 
-    deps.events.metrics.increment_counter(
-        "minibox_container_ops_total",
-        &[("op", "pull"), ("adapter", "daemon"), ("status", status)],
-    );
-    deps.events.metrics.record_histogram(
-        "minibox_container_op_duration_seconds",
-        start.elapsed().as_secs_f64(),
-        &[("op", "pull"), ("adapter", "daemon")],
-    );
-
+    record_timed_op(&deps, "pull", status, start.elapsed().as_secs_f64());
     response
 }
 
@@ -172,19 +182,7 @@ pub async fn handle_load_image(
             )
         }
     };
-    deps.events.metrics.increment_counter(
-        "minibox_container_ops_total",
-        &[
-            ("op", "load_image"),
-            ("adapter", "daemon"),
-            ("status", status),
-        ],
-    );
-    deps.events.metrics.record_histogram(
-        "minibox_container_op_duration_seconds",
-        start.elapsed().as_secs_f64(),
-        &[("op", "load_image"), ("adapter", "daemon")],
-    );
+    record_timed_op(&deps, "load_image", status, start.elapsed().as_secs_f64());
     response
 }
 
@@ -193,6 +191,7 @@ pub async fn handle_load_image(
 /// Push a locally-stored image to a remote OCI registry.
 ///
 /// Sends zero or more `PushProgress` messages followed by `Success` or `Error`.
+// qual:allow(iosp) reason: "handler orchestration — validate, push, stream progress"
 pub async fn handle_push(
     image_ref_str: String,
     credentials: minibox_core::protocol::PushCredentials,
@@ -252,7 +251,7 @@ pub async fn handle_push(
     });
 
     match pusher
-        .push_image(&image_ref, &creds, Some(progress_tx))
+        .push_image(&image_ref, &creds, Some(Arc::new(progress_tx)))
         .await
     {
         Ok(result) => {
@@ -294,7 +293,6 @@ pub async fn handle_push(
 
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
 pub async fn handle_commit(
     container_id: String,
     target_image: String,
@@ -358,10 +356,7 @@ pub async fn handle_commit(
                     message: format!(
                         "committed {} digest:{}",
                         target_image,
-                        meta.layers
-                            .first()
-                            .map(|l| l.digest.as_str())
-                            .unwrap_or("unknown")
+                        meta.layers.first().map_or("unknown", |l| l.digest.as_str())
                     ),
                 })
                 .await;
@@ -388,7 +383,7 @@ pub async fn handle_commit(
 /// Streams [`DaemonResponse::BuildOutput`] for each Dockerfile step, then
 /// sends exactly one terminal response: [`DaemonResponse::BuildComplete`] on
 /// success or [`DaemonResponse::Error`] on failure.
-#[allow(clippy::too_many_arguments)]
+// qual:allow(iosp) reason: "handler orchestration — parse, build steps, stream output"
 pub async fn handle_build(
     dockerfile: String,
     context_path: String,
@@ -473,7 +468,10 @@ pub async fn handle_build(
         }
     });
 
-    match builder.build_image(&context, &config, progress_tx).await {
+    match builder
+        .build_image(&context, &config, Arc::new(progress_tx))
+        .await
+    {
         Ok(meta) => {
             info!(
                 tag = %tag,
@@ -492,8 +490,7 @@ pub async fn handle_build(
             let image_id = meta
                 .layers
                 .first()
-                .map(|l| l.digest.clone())
-                .unwrap_or_else(|| format!("built:{tag}"));
+                .map_or_else(|| format!("built:{tag}"), |l| l.digest.clone());
             let _ = tx
                 .send(DaemonResponse::BuildComplete { image_id, tag })
                 .await;
@@ -516,7 +513,7 @@ pub async fn handle_build(
 // ─── Prune ──────────────────────────────────────────────────────────────────
 
 /// Remove unused images from the image store.
-pub(crate) async fn handle_prune(
+pub async fn handle_prune(
     dry_run: bool,
     state: Arc<DaemonState>,
     image_gc: Arc<dyn minibox_core::image::gc::ImageGarbageCollector>,
@@ -529,7 +526,7 @@ pub(crate) async fn handle_prune(
         .into_iter()
         .filter_map(|c| {
             if c.state == "running" || c.state == "paused" {
-                Some(c.image.clone())
+                Some(c.image)
             } else {
                 None
             }
@@ -562,7 +559,7 @@ pub(crate) async fn handle_prune(
 // ─── RemoveImage ─────────────────────────────────────────────────────────────
 
 /// Remove a specific image by reference.
-pub(crate) async fn handle_remove_image(
+pub async fn handle_remove_image(
     image_ref: String,
     state: Arc<DaemonState>,
     image_store: Arc<minibox_core::image::ImageStore>,
@@ -585,17 +582,16 @@ pub(crate) async fn handle_remove_image(
         return;
     }
 
-    let (name, tag) = match image_ref.rsplit_once(':') {
-        Some(pair) => pair,
-        None => {
-            send_error(
-                &tx,
-                "handle_remove_image",
-                format!("invalid image ref: {image_ref}"),
-            )
-            .await;
-            return;
-        }
+    let (name, tag) = if let Some(pair) = image_ref.rsplit_once(':') {
+        pair
+    } else {
+        send_error(
+            &tx,
+            "handle_remove_image",
+            format!("invalid image ref: {image_ref}"),
+        )
+        .await;
+        return;
     };
 
     match image_store.delete_image(name, tag).await {
@@ -617,7 +613,7 @@ pub(crate) async fn handle_remove_image(
 }
 
 /// List all cached images stored in the image store.
-pub(crate) async fn handle_list_images(
+pub async fn handle_list_images(
     image_store: Arc<minibox_core::image::ImageStore>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {

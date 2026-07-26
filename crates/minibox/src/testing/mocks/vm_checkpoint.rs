@@ -1,4 +1,5 @@
 //! Mock [`VmCheckpoint`] for conformance testing.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use anyhow::Result;
 use minibox_core::domain::{SnapshotInfo, VmCheckpoint};
@@ -16,7 +17,7 @@ pub struct MockVmCheckpoint {
 
 impl MockVmCheckpoint {
     /// Create a fresh mock with no snapshots.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             snapshots: Mutex::new(Vec::new()),
         }
@@ -38,10 +39,10 @@ impl VmCheckpoint for MockVmCheckpoint {
     fn save_snapshot(&self, container_id: &str, path: &Path) -> Result<SnapshotInfo> {
         let info = SnapshotInfo {
             container_id: container_id.to_string(),
-            name: path
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| "snapshot".to_string()),
+            name: path.file_name().map_or_else(
+                || "snapshot".to_string(),
+                |n| n.to_string_lossy().to_string(),
+            ),
             created_at: "2026-01-01T00:00:00Z".to_string(),
             adapter: "mock".to_string(),
             image: "alpine:3.18".to_string(),

@@ -50,8 +50,7 @@ impl RegistryRouter for HostnameRegistryRouter {
         let hostname = image_ref.registry.to_lowercase();
         self.overrides
             .get(&hostname)
-            .map(Arc::as_ref)
-            .unwrap_or_else(|| self.default.as_ref())
+            .map_or_else(|| self.default.as_ref(), Arc::as_ref)
     }
 }
 

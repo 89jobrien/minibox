@@ -18,7 +18,7 @@ def main [
     let args = [meta-agent $task_text]
     let args = if $no_synthesis { $args | append "--no-synthesis" } else { $args }
 
-    let openai_model = if $prod { "gpt-5.4-mini" } else { "gpt-4.1-mini" }
+    let openai_model = if $prod { "gpt-5.5" } else { "gpt-4.1-mini" }
     let dotenv_key = (^op read --account my.1password.com "op://byxmw65w7idxsk3i6qbohfiuty/nihl7o2bojy53zy4aqtr7txyqi/password")
 
     with-env {
