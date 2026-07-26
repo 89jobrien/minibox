@@ -88,6 +88,9 @@
 - 16 cgroup integration tests (Linux+root)
 - ~17 sandbox tests, 30 CLI subprocess tests
 - Conformance suite generates Markdown/JSON reports
+- e2e showcase suite (`crates/minibox-testsuite/src/showcase/`) — narrated demo
+  scenarios (e.g. lifecycle: run/stop/rm), backs a CLI demo mode; xtask CLI schema
+  at `xtask/schema/cli.schema.json` (02194fd9, 3b9b85bd)
 
 ### CI pipeline
 
@@ -104,11 +107,31 @@
 ### Developer tooling
 
 - `mbx doctor` — preflight diagnostics (compiled adapters, capabilities)
+- `mcp` / `minibox-mcp` — MCP stdio server exposing agent-safe daemon tools
+  for doctor, ps, images, logs, manifest, pull, run, stop, and rm
 - `cargo xtask ci-watch` — watch GHA run status with job-level detail
 - `nu scripts/promote.nu` — branch cascade (develop->next->staging->main)
 
 ## Recently completed
+- **MCP control surface first slice** — new `crates/mcp` workspace package
+  `minibox-mcp`, with Rust library and binary names set to `mcp`. Exposes
+  typed stdio MCP tools backed by `minibox-core::client::DaemonClient`,
+  policy-gated mutating/high-risk options, miette diagnostics, and unit +
+  stdio integration tests.
 
+- **smolvm async/sync boundary fix** — `SmolVmRegistry`/`SmolVmRuntime::vm_exec` and the
+  spawn_process command path ran `std::process::Command::output()` inline in async fns with
+  no `spawn_blocking`, starving the tokio worker on long-running VM ops (boot+pull+workload
+  can exceed a minute). Fixed and confirmed via live repro: `mbx ps` stays responsive during
+  a backgrounded long-running container (94f227b9).
+- **mbx pause/resume + ps polling fixes** — corrected terminal response handling for
+  pause/resume and the ps polling parser (e5c40152).
+- **e2e showcase suite** — narrated demo scenarios in
+  `crates/minibox-testsuite/src/showcase/`, xtask CLI schema
+  (`xtask/schema/cli.schema.json`); lifecycle scenario fixed to expect `rm` after `stop`
+  on an ephemeral run (02194fd9, 3b9b85bd).
+- **Docs audit fixes** — crate count, doc links, stale version refs, domain.rs
+  attribution, path prefixes, test file counts corrected (10a03d62, d9121ac3).
 - **minibox-bench crate** — dedicated Criterion benchmark crate with 8 hot-path
   targets (layer_extract, image_pull, linux_rootfs, cgroup, spawn), Justfile,
   `cargo xtask bench --check` regression gate, nightly CI job with self-hosted
@@ -123,6 +146,10 @@
   docs/plans/2026-07-07-structured-errors-miette.md (cf37b05a).
 - **PR-based auto-promote CI** — cascade develop->next->staging->main via PR
   workflow (c1a16d8e).
+- **Open PR merge pass + final verification** — #462, #460, #459, #464, and
+  #324 merged; open PR list empty. `cargo xtask verify` passed for task `t12`
+  on 2026-07-26, but the verify checkpoint was not recorded because the
+  checkout remains dirty with pre-existing work.
 - **Workspace-wide clippy sweep** — 64 Linux-only warnings resolved (826a54ed).
 - **Rustqual SRP sweep** — workspace-wide SRP_PARAMS/FRAGMENT/BOILERPLATE/TQ
   elimination (8212a9a4).
@@ -191,9 +218,6 @@
     - no slirp4netns
     - no fuse-overlayfs
     - no unprivileged cgroup delegation
-- **MCP control surface**:
-    - zero code
-    - no agent-facing JSON-RPC/gRPC server
 - **CRI compliance**:
     - zero protobuf/gRPC
     - no RuntimeService/ImageService
