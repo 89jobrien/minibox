@@ -1,7 +1,7 @@
-# Handoff — minibox (2026-07-25)
+# Handoff — minibox (2026-07-26)
 
-**Branch:** develop | **Build:** unknown | **Tests:** unknown
-EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
+**Branch:** develop | **Last commit:** d8f1e52 — feat(mcp): add stdio control surface (2026-07-26 02:27:10 -0400) | **Build:** unknown | **Tests:** unknown
+Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
 f9229da perf(xtask): skip cargo compilation in pre-commit when no Rust files staged
