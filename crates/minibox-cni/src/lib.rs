@@ -13,3 +13,8 @@ pub mod error;
 pub mod exec;
 pub mod provider;
 pub mod result;
+
+pub use config::{NetworkConfigList, PluginConfig};
+pub use error::CniError;
+pub use provider::CniNetworkProvider;
+pub use result::{CniDns, CniErrorPayload, CniInterface, CniIpConfig, CniResult};
