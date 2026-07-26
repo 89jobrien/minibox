@@ -11,12 +11,12 @@
 //!   - macOS: `brew install smolvm`
 //!   - Linux: see smolmachines docs
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, ResourceConfig,
-    ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry,
+    ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,6 +24,29 @@ use std::sync::Arc;
 
 /// Default smolvm image used for container operations.
 const DEFAULT_IMAGE: &str = "ubuntu:24.04";
+/// Host tarball directory mount point used while importing local images.
+const LOAD_MOUNT: &str = "/mnt/minibox-load";
+/// Timeout for local image imports into the VM.
+const LOAD_TIMEOUT_SECS: u32 = 600;
+/// POSIX shell script that imports a tarball and retags whatever docker loaded.
+const DOCKER_LOAD_AND_TAG_SCRIPT: &str = r#"set -eu
+tarball="$1"
+target="$2"
+out="$(docker load -i "$tarball")"
+printf '%s\n' "$out"
+loaded="$(printf '%s\n' "$out" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+if [ -n "$loaded" ]; then
+    docker tag "$loaded" "$target"
+    exit 0
+fi
+loaded_id="$(printf '%s\n' "$out" | sed -n 's/^Loaded image ID: //p' | tail -n 1)"
+if [ -n "$loaded_id" ]; then
+    docker tag "$loaded_id" "$target"
+    exit 0
+fi
+printf '%s\n' "docker load did not report a loaded image or image ID" >&2
+exit 1
+"#;
 
 /// Callable that runs a command inside the smolvm VM and returns its stdout.
 ///
@@ -166,6 +189,31 @@ impl SmolVmRegistry {
         .await
         .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
     }
+
+    /// Build the image reference used for VM-local docker operations.
+    fn target_ref(name: &str, tag: &str) -> String {
+        format!("{name}:{tag}")
+    }
+
+    /// Return the canonical host tarball path, parent directory, and VM guest path.
+    fn load_paths(path: &Path) -> Result<(PathBuf, PathBuf, String)> {
+        if !path.exists() {
+            bail!("image tarball not found: {}", path.display());
+        }
+        let tarball = path
+            .canonicalize()
+            .with_context(|| format!("canonicalize image tarball {}", path.display()))?;
+        let parent = tarball
+            .parent()
+            .context("image tarball has no parent directory")?
+            .to_path_buf();
+        let file_name = tarball
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("image tarball filename is not valid UTF-8")?;
+        let guest_path = format!("{LOAD_MOUNT}/{file_name}");
+        Ok((tarball, parent, guest_path))
+    }
 }
 
 #[async_trait]
@@ -206,10 +254,74 @@ impl ImageRegistry for SmolVmRegistry {
         })
     }
 
-    /// Layer paths live inside the VM's filesystem. Returning an empty vec
-    /// signals to the caller that it should pull first.
-    fn get_image_layers(&self, _name: &str, _tag: &str) -> Result<Vec<PathBuf>> {
-        Ok(vec![])
+    /// Layer paths live inside the VM's image cache. Return a stable VM-local
+    /// marker so the shared run pipeline can proceed; `SmolVmFilesystem`
+    /// treats this as metadata and does not perform host overlay setup.
+    fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
+        Ok(vec![PathBuf::from(format!("smolvm-image/{name}:{tag}"))])
+    }
+}
+
+#[async_trait]
+impl ImageLoader for SmolVmRegistry {
+    /// Load a local image tarball into the smolvm VM-local Docker image cache.
+    ///
+    /// The tarball directory is mounted into the VM, `docker load` imports the
+    /// image, and the loaded image/image-id is tagged as `name:tag` so the same
+    /// smolvm registry cache that `mbx run` checks can find it later.
+    async fn load_image(&self, path: &Path, name: &str, tag: &str) -> Result<()> {
+        let target = Self::target_ref(name, tag);
+        let (tarball, parent, guest_path) = Self::load_paths(path)?;
+
+        if self.executor.is_some() {
+            self.vm_exec(&[
+                "sh",
+                "-c",
+                DOCKER_LOAD_AND_TAG_SCRIPT,
+                "smolvm-load",
+                tarball
+                    .to_str()
+                    .context("image tarball path is not valid UTF-8")?,
+                &target,
+            ])
+            .await?;
+            return Ok(());
+        }
+
+        let parent_str = parent
+            .to_str()
+            .context("image tarball parent path is not valid UTF-8")?;
+        let image = self.image.clone();
+        let parent = parent_str.to_owned();
+        let target_for_exec = target.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            smolvm_exec_full(
+                &image,
+                &[
+                    "sh",
+                    "-c",
+                    DOCKER_LOAD_AND_TAG_SCRIPT,
+                    "smolvm-load",
+                    &guest_path,
+                    &target_for_exec,
+                ],
+                &[(parent.as_str(), LOAD_MOUNT)],
+                &[],
+                LOAD_TIMEOUT_SECS,
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm docker load: join error: {e}"))??;
+
+        if output.exit_code != 0 {
+            bail!(
+                "smolvm docker load failed for {} as {target}: {}",
+                path.display(),
+                output.stdout
+            );
+        }
+
+        Ok(())
     }
 }
 

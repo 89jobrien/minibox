@@ -49,7 +49,7 @@
 //! instance.
 
 use minibox::adapters::SmolVmRegistry;
-use minibox::domain::{ContainerRuntime, ImageRegistry};
+use minibox::domain::{ContainerRuntime, ImageLoader, ImageRegistry};
 use minibox_core::adapters::conformance::BackendDescriptor;
 use minibox_core::domain::BackendCapability;
 use std::sync::Arc;
@@ -129,6 +129,75 @@ async fn smolvm_registry_pull_failure_propagates() {
     assert!(
         err_msg.contains("connection"),
         "error message should indicate the underlying cause, got: {err_msg}"
+    );
+}
+
+/// SmolVmRegistry.load_image imports the host tarball into the VM-local Docker
+/// image cache and tags it with the requested `name:tag`.
+#[tokio::test]
+async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
+    let tmp = tempfile::TempDir::new().expect("create temp dir");
+    let tarball = tmp.path().join("image.tar");
+    std::fs::write(&tarball, b"fake tarball bytes").expect("write tarball");
+
+    let calls = Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
+    let captured = Arc::clone(&calls);
+    let registry = SmolVmRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+        captured
+            .lock()
+            .expect("calls lock")
+            .push(args.iter().map(|arg| (*arg).to_string()).collect());
+        Ok("Loaded image: source/name:oldtag\n".to_string())
+    }));
+
+    registry
+        .load_image(&tarball, "library/foo", "latest")
+        .await
+        .expect("load image into smolvm");
+
+    let calls = calls.lock().expect("calls lock");
+    let flattened = calls
+        .iter()
+        .flatten()
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        flattened.contains("docker load"),
+        "smolvm load must run docker load inside the VM, got: {flattened}"
+    );
+    assert!(
+        flattened.contains("docker tag"),
+        "smolvm load must tag the loaded image for mbx run, got: {flattened}"
+    );
+    assert!(
+        flattened.contains("library/foo:latest"),
+        "smolvm load must use the requested target image ref, got: {flattened}"
+    );
+}
+
+/// Missing local tarballs must fail before invoking smolvm.
+#[tokio::test]
+async fn smolvm_registry_load_image_rejects_missing_tarball() {
+    let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let called_by_exec = Arc::clone(&called);
+    let registry = SmolVmRegistry::new().with_executor(Arc::new(move |_args: &[&str]| {
+        called_by_exec.store(true, std::sync::atomic::Ordering::Relaxed);
+        Ok(String::new())
+    }));
+
+    let result = registry
+        .load_image(
+            std::path::Path::new("/definitely/missing/minibox-image.tar"),
+            "library/foo",
+            "latest",
+        )
+        .await;
+
+    assert!(result.is_err(), "missing tarball must return an error");
+    assert!(
+        !called.load(std::sync::atomic::Ordering::Relaxed),
+        "missing tarball must not invoke smolvm"
     );
 }
 

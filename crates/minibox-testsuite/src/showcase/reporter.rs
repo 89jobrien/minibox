@@ -177,7 +177,7 @@ impl Reporter for SilentAssertReporter {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .join("\n");
-        // `panic!`/`.unwrap()`/`.expect()` are denied by workspace lints;
+        // Panic-style helpers and direct unwrap/expect calls are denied by workspace lints;
         // `assert!` is this codebase's established test-harness idiom for
         // an unconditional failure (see `context::fail`).
         assert!(false, "{msg}\n--- captured output ---\n{ctx}");

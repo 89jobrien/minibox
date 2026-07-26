@@ -186,7 +186,7 @@ use anyhow::{Context, Result};
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
 use minibox::adapters::{
-    DockerHubRegistry, GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRuntime,
+    GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime,
 };
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
@@ -226,7 +226,7 @@ use tracing::{info, warn};
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
-    CgroupV2Limiter, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
 use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
@@ -942,15 +942,12 @@ fn build_smolvm_handler_dependencies(
     event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    let ghcr = Arc::new(
-        GhcrRegistry::new(Arc::clone(&state.image_store))
-            .context("creating GHCR registry adapter for smolvm")?,
-    ) as minibox_core::domain::DynImageRegistry;
+    let smolvm_registry = Arc::new(SmolVmRegistry::new());
+    let default_registry = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
+    let ghcr = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
+    let image_loader = smolvm_registry as minibox_core::domain::DynImageLoader;
     let registry_router = Arc::new(HostnameRegistryRouter::new(
-        Arc::new(
-            DockerHubRegistry::new(Arc::clone(&state.image_store))
-                .context("creating Docker Hub registry adapter for smolvm")?,
-        ) as minibox_core::domain::DynImageRegistry,
+        default_registry,
         [("ghcr.io", ghcr)],
     ));
     let filesystem = Arc::new(SmolVmFilesystem::new());
@@ -965,7 +962,7 @@ fn build_smolvm_handler_dependencies(
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router,
-            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_loader,
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
@@ -1406,6 +1403,13 @@ mod tests {
         .expect("build smolvm handler dependencies");
 
         assert!(deps.build.image_pusher.is_none());
+        let image_ref = minibox_core::image::reference::ImageRef::parse("library/foo:latest")
+            .expect("parse image ref");
+        let routed = deps.image.registry_router.route(&image_ref);
+        assert!(
+            routed.as_any().is::<minibox::adapters::SmolVmRegistry>(),
+            "smolvm suite must route run cache checks and pulls through SmolVmRegistry"
+        );
     }
 
     #[tokio::test]
