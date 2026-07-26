@@ -16,7 +16,7 @@ use minibox_core::protocol::{ContainerInfo, DaemonResponse};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::daemon::state::{ContainerRecord, ContainerState, DaemonState, RunCreationParams};
@@ -126,6 +126,7 @@ pub fn generate_container_id() -> String {
 /// Ephemeral runs (Linux-only) send zero or more `ContainerOutput` messages
 /// followed by one terminal `ContainerStopped` message.
 // qual:allow(iosp) reason: "handler orchestration — validate, create, start, stream"
+#[instrument(skip(params, state, deps, tx), fields(image = %params.image, ephemeral = params.ephemeral))]
 pub async fn handle_run(
     params: RunParams,
     state: Arc<DaemonState>,
