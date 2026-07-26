@@ -710,6 +710,19 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
     info!(network_mode = %mode, "network provider selected");
     match mode.as_str() {
+        #[cfg(feature = "cni")]
+        "bridge" => {
+            let cni_path =
+                std::env::var("MINIBOX_CNI_PATH").unwrap_or_else(|_| "/opt/cni/bin".to_string());
+            let cni_path: Vec<std::path::PathBuf> = std::env::split_paths(&cni_path).collect();
+            let config_dir = std::env::var("MINIBOX_CNI_CONFIG_DIR")
+                .unwrap_or_else(|_| "/etc/cni/net.d".to_string());
+            Ok(Arc::new(minibox_cni::CniNetworkProvider::new(
+                cni_path,
+                std::path::PathBuf::from(config_dir),
+            )))
+        }
+        #[cfg(not(feature = "cni"))]
         "bridge" => Ok(Arc::new(
             BridgeNetwork::new().context("BridgeNetwork init failed")?,
         )),
