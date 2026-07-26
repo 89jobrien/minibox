@@ -10,10 +10,6 @@ use tokio::process::Command;
 use tracing::{Span, instrument};
 
 /// Locate a plugin binary by name on the given `CNI_PATH` directories.
-// TODO: remove this allow once Task 8 wires exec_plugin into
-// NetworkConfigList::add/del — currently only reachable from this module's
-// own tests.
-#[allow(dead_code)]
 fn find_plugin_binary(cni_path: &[PathBuf], plugin_type: &str) -> Result<PathBuf, CniError> {
     for dir in cni_path {
         let candidate = dir.join(plugin_type);
@@ -53,10 +49,6 @@ fn find_plugin_binary(cni_path: &[PathBuf], plugin_type: &str) -> Result<PathBuf
     ),
     err
 )]
-// TODO: remove this allow once Task 8 wires exec_plugin into
-// NetworkConfigList::add/del — currently only reachable from this module's
-// own tests.
-#[allow(dead_code)]
 pub(crate) async fn exec_plugin(
     cni_path: &[PathBuf],
     plugin: &PluginConfig,
