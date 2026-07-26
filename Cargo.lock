@@ -1784,6 +1784,7 @@ dependencies = [
  "libc",
  "macbox",
  "miette",
+ "minibox-cni",
  "minibox-core",
  "minibox-macros",
  "nix 0.29.0",

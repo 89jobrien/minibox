@@ -9,6 +9,7 @@ publish = false
 workspace = true
 [dependencies]
 minibox-core = { workspace = true, features = ["test-utils"] }
+minibox-cni = { workspace = true, optional = true }
 minibox-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -60,6 +61,12 @@ otel = [
     "dep:opentelemetry-otlp",
     "dep:tracing-opentelemetry",
 ]
+## CNI (Container Network Interface) plugin-based bridge networking for the
+## native Linux adapter. Requires CNI plugin binaries (bridge, host-local,
+## portmap, dnsname) installed and MINIBOX_CNI_PATH set — see
+## docs/PLATFORM_SUPPORT.md. Off by default: with it disabled, the native
+## suite keeps constructing the existing bespoke BridgeNetwork.
+cni = ["dep:minibox-cni"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }
