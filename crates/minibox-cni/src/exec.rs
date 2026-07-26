@@ -245,4 +245,44 @@ mod tests {
             other => panic!("expected PluginError, got {other:?}"),
         }
     }
+
+    #[tokio::test]
+    async fn exec_plugin_crash_without_structured_error_returns_process_failed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("fake-crash");
+        let script = "#!/bin/sh\necho 'not json, just a crash log line' >&2\nexit 2\n";
+        std::fs::write(&path, script).expect("write fixture plugin");
+        let mut perms = std::fs::metadata(&path).expect("stat").permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&path, perms).expect("chmod");
+
+        let plugin = PluginConfig {
+            plugin_type: "fake-crash".to_string(),
+            raw: json!({"type": "fake-crash"}),
+        };
+
+        let result = exec_plugin(
+            &[dir.path().to_path_buf()],
+            &plugin,
+            "ADD",
+            "/fake/netns",
+            "container-1",
+            "eth0",
+            None,
+        )
+        .await;
+
+        match result {
+            Err(CniError::ProcessFailed {
+                plugin,
+                exit_code,
+                stderr,
+            }) => {
+                assert_eq!(plugin, "fake-crash");
+                assert_eq!(exit_code, Some(2));
+                assert!(stderr.contains("crash log line"));
+            }
+            other => panic!("expected ProcessFailed, got {other:?}"),
+        }
+    }
 }
