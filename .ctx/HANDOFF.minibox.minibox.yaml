@@ -1,99 +1,73 @@
 project: minibox
 id: minibox
-updated: 2026-07-26
+updated: 2026-07-27
 items:
-- id: chain-e-4
-  doob_uuid: null
-  name: chain-e--136---clarify-stability-checklist-md--mandatory-gates-vs-advisory-items
-  priority: P2
-  status: blocked
-  title: 'Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items'
-  description: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
-  files: []
-  completed: null
-  extra:
-  - date: 2026-07-22
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
-- id: smolvm-docker-465
-  doob_uuid: null
-  name: smolvm-pull-fails-guest-vm-lacks-docker
-  priority: P1
-  status: open
-  title: 'smolvm pull fails: guest VM lacks docker (GH #465)'
-  description: |-
-    `cargo xtask demo --filter lifecycle` panics during the pull step.
-    SmolVmRegistry (crates/minibox/src/adapters/smolvm.rs) shells out to
-    `docker pull`/`docker load`/`docker tag` inside the smolvm guest VM, but
-    the guest defaults to a plain, unprovisioned ubuntu:24.04 image with no
-    docker installed, and nothing in this repo provisions it.
-    SmolVmRegistry::new() has no `.with_image()` override wired in production
-    (crates/miniboxd/src/main.rs:945). docs/PLATFORM_SUPPORT.md's smolvm
-    prerequisites don't mention the guest-side docker dependency.
-    Root cause + fix options: minibox issue #465 (89jobrien/minibox)
-  files:
-  - crates/minibox/src/adapters/smolvm.rs
-  - crates/miniboxd/src/main.rs
-  - docs/PLATFORM_SUPPORT.md
-  completed: null
-  extra: []
-- id: uncommitted-work-2
-  doob_uuid: null
-  name: uncommitted-work-2
-  priority: P2
-  status: open
-  title: Uncommitted changes (17 files, mostly docs)
-  description: |-
-    Working tree has uncommitted changes:
-    .gitignore
-    CLAUDE.md
-    DEVELOPMENT.md
-    README.md
-    docs/core/ABOUT.mbx.md
-    docs/core/ARCHITECTURE.mbx.md
-    docs/core/CODE_STYLE.mbx.md
-    docs/core/CRATE_INVENTORY.mbx.md
-    docs/core/CRATE_TIERS.mbx.md
-    docs/core/DEVELOPMENT.mbx.md
-    docs/core/FEATURE_MATRIX.mbx.md
-    docs/core/PRERELEASE_CHANGELOG.mbx.md
-    docs/core/STABILITY_CHECKLIST.mbx.md
-    docs/core/STATE_MODEL.mbx.md
-    docs/core/SUPPORT_TIERS.mbx.md
-    docs/core/TESTING.mbx.md
-    docs/core/USAGE.mbx.md
-    Supersedes the previous uncommitted-work item — that file set (mostly
-    STABILITY_CHECKLIST/GOTCHAS/ROADMAP docs plus crates/mcp) has since been
-    committed (d8f1e52e feat(mcp): add stdio control surface); this is a
-    fresh, different set of doc-linter-driven changes.
-  files:
-  - .gitignore
-  - CLAUDE.md
-  - DEVELOPMENT.md
-  - README.md
-  - docs/core/ABOUT.mbx.md
-  - docs/core/ARCHITECTURE.mbx.md
-  - docs/core/CODE_STYLE.mbx.md
-  - docs/core/CRATE_INVENTORY.mbx.md
-  - docs/core/CRATE_TIERS.mbx.md
-  - docs/core/DEVELOPMENT.mbx.md
-  - docs/core/FEATURE_MATRIX.mbx.md
-  - docs/core/PRERELEASE_CHANGELOG.mbx.md
-  - docs/core/STABILITY_CHECKLIST.mbx.md
-  - docs/core/STATE_MODEL.mbx.md
-  - docs/core/SUPPORT_TIERS.mbx.md
-  - docs/core/TESTING.mbx.md
-  - docs/core/USAGE.mbx.md
-  completed: null
-  extra: []
+  - id: chain-e-4
+    doob_uuid: null
+    name: chain-e--136---clarify-stability-checklist-md--mandatory-gates-vs-advisory-items
+    priority: P2
+    status: blocked
+    title: "Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items"
+    description: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
+    files: []
+    completed: null
+    extra:
+      - date: 2026-07-27
+        type: blocker
+        field: null
+        value: null
+        reviewed: null
+        note: obfsck pre-commit hook flagged GitHub URL in STABILITY_CHECKLIST.mbx.md; needs allowlist entry before commit
+  - id: uncommitted-work
+    doob_uuid: null
+    name: uncommitted-work
+    priority: P1
+    status: open
+    title: Uncommitted changes (19 files)
+    description: |-
+      Working tree has uncommitted changes:
+      .ctx/HANDOFF.md
+      .ctx/HANDOFF.minibox.minibox.yaml
+      Justfile
+      crates/minibox-core/src/adapters/mocks.rs
+      crates/minibox/src/adapters/mocks.rs
+      docs/PLATFORM_SUPPORT.md
+      docs/core/CRATE_TIERS.mbx.md
+      docs/core/FEATURE_MATRIX.mbx.md
+      docs/core/GOTCHAS.mbx.md
+      docs/core/ROADMAP.mbx.md
+      docs/core/SECURITY_INVARIANTS.mbx.md
+      docs/core/STABILITY_CHECKLIST.mbx.md
+      docs/core/STATE_MODEL.mbx.md
+      docs/core/SUPPORT_TIERS.mbx.md
+      docs/core/XTASK_CLI.mbx.md
+      docs/notes/minibox-in-minibox.local.md
+      dupehound-card.png
+      dupehound-card.svg
+      output.png
+    files:
+      - .ctx/HANDOFF.md
+      - .ctx/HANDOFF.minibox.minibox.yaml
+      - Justfile
+      - crates/minibox-core/src/adapters/mocks.rs
+      - crates/minibox/src/adapters/mocks.rs
+      - docs/PLATFORM_SUPPORT.md
+      - docs/core/CRATE_TIERS.mbx.md
+      - docs/core/FEATURE_MATRIX.mbx.md
+      - docs/core/GOTCHAS.mbx.md
+      - docs/core/ROADMAP.mbx.md
+      - docs/core/SECURITY_INVARIANTS.mbx.md
+      - docs/core/STABILITY_CHECKLIST.mbx.md
+      - docs/core/STATE_MODEL.mbx.md
+      - docs/core/SUPPORT_TIERS.mbx.md
+      - docs/core/XTASK_CLI.mbx.md
+      - docs/notes/minibox-in-minibox.local.md
+      - dupehound-card.png
+      - dupehound-card.svg
+      - output.png
+    completed: null
+    extra: []
 log:
-- date: '20260726.044634'
-  summary: 'Reviewed the new minibox-mcp stdio MCP crate (4-agent parallel PR review: code, silent-failures, type-design, test-coverage), annotated confirmed findings as TODO(review) comments in source, then live-verified the built mcp binary over raw JSON-RPC/stdio (tool list, policy-denied paths, doctor/ps against a real miniboxd). Verification also drove `cargo xtask demo`, which surfaced a real bug — smolvm pull panics because the guest VM has no docker installed — filed as GH #465.'
-  commits: []
-  session: 1
-- date: '20260722.063956'
-  summary: done=136 running=0 pending=26 blocked=1
-  commits: []
+  - date: "20260727.054804"
+    summary: done=137 running=0 pending=26 blocked=1
+    commits: []

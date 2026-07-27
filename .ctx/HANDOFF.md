@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-07-26)
+# Handoff — minibox (2026-07-27)
 
 **Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
@@ -31,11 +31,9 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| smolvm-docker-465 | P1 | open | smolvm pull fails: guest VM lacks docker (GH #465) |
-| uncommitted-work-2 | P2 | open | Uncommitted changes (17 files, mostly docs) |
+| uncommitted-work | P1 | open | Uncommitted changes (19 files) |
 | chain-e-4 | P2 | blocked | Chain E #136 — Clarify STABILITY_CHECKLIST.md: mandatory gates vs advisory items |
 
 ## Log
 
-- 20260726.044634: Reviewed the new minibox-mcp stdio MCP crate (4-agent parallel PR review: code, silent-failures, type-design, test-coverage), annotated confirmed findings as TODO(review) comments in source, then live-verified the built mcp binary over raw JSON-RPC/stdio (tool list, policy-denied paths, doctor/ps against a real miniboxd). Verification also drove `cargo xtask demo`, which surfaced a real bug — smolvm pull panics because the guest VM has no docker installed — filed as GH #465.
-- 20260722.063956: done=136 running=0 pending=26 blocked=1
+- 20260727.054804: done=137 running=0 pending=26 blocked=1

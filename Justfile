@@ -46,6 +46,13 @@ build-linux:
 
 # ── Gates ───────────────────────────────────────────────────────────────────
 
+# Install repo git hooks from .githooks/ — run once after cloning, and again
+# whenever .githooks/* changes upstream (git does not auto-sync .git/hooks/).
+install-hooks:
+    cp .githooks/pre-commit .git/hooks/pre-commit
+    chmod +x .git/hooks/pre-commit
+    @echo "installed .git/hooks/pre-commit from .githooks/pre-commit"
+
 # fmt-check + lint + build-release
 pre-commit:
     cargo xtask pre-commit

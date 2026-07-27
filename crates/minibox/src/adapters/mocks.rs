@@ -52,6 +52,20 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+/// Locks `$self.state`, increments `$count`, and bails with `$msg` if `$flag`
+/// is false. Expands to the locked `state` guard so callers can keep using it
+/// for the rest of the method body.
+macro_rules! fake {
+    ($self:expr, $count:ident, $flag:ident, $msg:literal) => {{
+        let mut state = $self.state.lock().expect("mock: poisoned lock");
+        state.$count += 1;
+        if !state.$flag {
+            anyhow::bail!($msg);
+        }
+        state
+    }};
+}
+
 // ---------------------------------------------------------------------------
 // MockRegistry
 // ---------------------------------------------------------------------------
@@ -174,12 +188,7 @@ impl ImageRegistry for MockRegistry {
     ) -> Result<ImageMetadata> {
         let name = image_ref.cache_name();
         let tag = image_ref.tag.clone();
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.pull_count += 1;
-
-        if !state.pull_should_succeed {
-            anyhow::bail!("mock pull failure");
-        }
+        let mut state = fake!(self, pull_count, pull_should_succeed, "mock pull failure");
 
         // Simulate a successful pull by adding the image to the local cache.
         state.cached_images.push((name.clone(), tag.clone()));
@@ -303,12 +312,12 @@ impl minibox_core::domain::RootfsSetup for MockFilesystem {
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
     fn setup_rootfs(&self, _layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.setup_count += 1;
-
-        if !state.setup_should_succeed {
-            anyhow::bail!("mock filesystem setup failure");
-        }
+        let _state = fake!(
+            self,
+            setup_count,
+            setup_should_succeed,
+            "mock filesystem setup failure"
+        );
 
         Ok(RootfsLayout {
             merged_dir: container_dir.join("merged").into(),
@@ -322,12 +331,12 @@ impl minibox_core::domain::RootfsSetup for MockFilesystem {
     /// Increments the cleanup counter. Returns an error if the mock is
     /// configured to fail cleanup.
     fn cleanup(&self, _container_dir: &Path) -> Result<()> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.cleanup_count += 1;
-
-        if !state.cleanup_should_succeed {
-            anyhow::bail!("mock cleanup failure");
-        }
+        let _state = fake!(
+            self,
+            cleanup_count,
+            cleanup_should_succeed,
+            "mock cleanup failure"
+        );
         Ok(())
     }
 }
@@ -432,12 +441,12 @@ impl ResourceLimiter for MockLimiter {
     /// Increments the create counter and records the container ID. Returns
     /// `/mock/cgroup/<container_id>` on success.
     fn create(&self, container_id: &str, _config: &ResourceConfig) -> Result<String> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.create_count += 1;
-
-        if !state.create_should_succeed {
-            anyhow::bail!("mock resource limiter create failure");
-        }
+        let mut state = fake!(
+            self,
+            create_count,
+            create_should_succeed,
+            "mock resource limiter create failure"
+        );
 
         state.created_cgroups.push(container_id.to_string());
         Ok(format!("/mock/cgroup/{container_id}"))
@@ -457,12 +466,12 @@ impl ResourceLimiter for MockLimiter {
     /// Increments the cleanup counter. Returns an error if the mock is
     /// configured to fail cleanup.
     fn cleanup(&self, _container_id: &str) -> Result<()> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.cleanup_count += 1;
-
-        if !state.cleanup_should_succeed {
-            anyhow::bail!("mock cleanup failure");
-        }
+        let _state = fake!(
+            self,
+            cleanup_count,
+            cleanup_should_succeed,
+            "mock cleanup failure"
+        );
         Ok(())
     }
 }
@@ -548,11 +557,12 @@ impl MockRuntime {
     /// Useful in benchmarks and synchronous test helpers where an async
     /// executor is not available. Shares state with the async variant.
     pub fn spawn_process_sync(&self, _cfg: &ContainerSpawnConfig) -> Result<SpawnResult> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.spawn_count += 1;
-        if !state.spawn_should_succeed {
-            anyhow::bail!("mock spawn failure");
-        }
+        let mut state = fake!(
+            self,
+            spawn_count,
+            spawn_should_succeed,
+            "mock spawn failure"
+        );
         let pid = state.next_pid;
         state.next_pid += 1;
         Ok(SpawnResult {
@@ -584,12 +594,12 @@ impl ContainerRuntime for MockRuntime {
     /// (the write end is closed immediately, so the reader sees EOF at once).
     /// Otherwise `output_reader` is `None`.
     async fn spawn_process(&self, _config: &ContainerSpawnConfig) -> Result<SpawnResult> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.spawn_count += 1;
-
-        if !state.spawn_should_succeed {
-            anyhow::bail!("mock spawn failure");
-        }
+        let mut state = fake!(
+            self,
+            spawn_count,
+            spawn_should_succeed,
+            "mock spawn failure"
+        );
 
         let pid = state.next_pid;
         state.next_pid += 1;
@@ -713,12 +723,12 @@ impl NetworkProvider for MockNetwork {
     /// Increments the setup counter. Returns an error if configured via
     /// [`with_setup_failure`].
     async fn setup(&self, _container_id: &str, _config: &NetworkConfig) -> Result<String> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.setup_count += 1;
-
-        if !state.setup_should_succeed {
-            anyhow::bail!("mock network setup failure");
-        }
+        let _state = fake!(
+            self,
+            setup_count,
+            setup_should_succeed,
+            "mock network setup failure"
+        );
 
         Ok("/mock/netns".to_string())
     }
@@ -733,11 +743,12 @@ impl NetworkProvider for MockNetwork {
     /// Increments the cleanup counter. Returns an error if configured via
     /// [`with_cleanup_failure`].
     async fn cleanup(&self, _container_id: &str) -> Result<()> {
-        let mut state = self.state.lock().expect("mock: poisoned lock");
-        state.cleanup_count += 1;
-        if !state.cleanup_should_succeed {
-            anyhow::bail!("mock network cleanup failure");
-        }
+        let _state = fake!(
+            self,
+            cleanup_count,
+            cleanup_should_succeed,
+            "mock network cleanup failure"
+        );
         Ok(())
     }
 
