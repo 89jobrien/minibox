@@ -99,7 +99,7 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
-            .with_context(|| format!("creating merged dir {merged:?}"))?;
+            .with_context(|| format!("creating merged dir {}", merged.display()))?;
 
         debug!(
             "copy filesystem: merging {} layers into {:?}",
@@ -111,7 +111,7 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
         for layer in image_layers {
             if layer.is_dir() {
                 copy_dir_into(layer, &merged)
-                    .with_context(|| format!("copying layer {layer:?}"))?;
+                    .with_context(|| format!("copying layer {}", layer.display()))?;
             } else {
                 warn!("skipping non-directory layer: {:?}", layer);
             }
@@ -137,11 +137,14 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
                 path = %container_dir.display(),
                 "copy filesystem: refusing to remove suspicious path"
             );
-            anyhow::bail!("container_dir contains path traversal or is root: {container_dir:?}");
+            anyhow::bail!(
+                "container_dir contains path traversal or is root: {}",
+                container_dir.display()
+            );
         }
         if container_dir.exists() {
             std::fs::remove_dir_all(container_dir)
-                .with_context(|| format!("removing container dir {container_dir:?}"))?;
+                .with_context(|| format!("removing container dir {}", container_dir.display()))?;
         }
         Ok(())
     }
@@ -162,7 +165,7 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
     use walkdir::WalkDir;
 
     for entry in WalkDir::new(src).min_depth(1) {
-        let entry = entry.with_context(|| format!("walking {src:?}"))?;
+        let entry = entry.with_context(|| format!("walking {}", src.display()))?;
         let relative = entry.path().strip_prefix(src).context("stripping prefix")?;
         let target = dst.join(relative);
 

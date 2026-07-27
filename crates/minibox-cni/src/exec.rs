@@ -84,7 +84,15 @@ pub(crate) async fn exec_plugin(
         .stdin
         .take()
         .ok_or_else(|| CniError::Io(std::io::Error::other("child stdin was not piped")))?;
-    stdin.write_all(&config_bytes).await?;
+    // A plugin may exit (and close its stdin) before consuming the config we
+    // write, e.g. when it fails fast with a structured error. That produces
+    // BrokenPipe here, which is not a real failure — the plugin's actual
+    // exit status and output are read below and take precedence.
+    if let Err(err) = stdin.write_all(&config_bytes).await
+        && err.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        return Err(CniError::Io(err));
+    }
     drop(stdin);
 
     let output = child.wait_with_output().await?;
