@@ -146,6 +146,24 @@ pub enum RegistryError {
         source: tokio::task::JoinError,
     },
 
+    #[error("manifest too large: {size} bytes (max {max} bytes)")]
+    #[diagnostic(
+        code(minibox::registry::manifest_too_large),
+        help(
+            "the registry returned a manifest that exceeds the safety limit; this may indicate a malformed or adversarial response"
+        )
+    )]
+    ManifestTooLarge { size: u64, max: u64 },
+
+    #[error("layer too large: {size} bytes (max {max} bytes)")]
+    #[diagnostic(
+        code(minibox::registry::layer_too_large),
+        help(
+            "the layer blob exceeds the maximum allowed size; use a smaller base image or increase MAX_LAYER_SIZE if intentional"
+        )
+    )]
+    LayerTooLarge { size: u64, max: u64 },
+
     #[error("registry error: {0}")]
     #[diagnostic(code(minibox::registry::other))]
     Other(String),

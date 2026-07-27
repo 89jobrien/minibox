@@ -571,9 +571,10 @@ impl RegistryClient {
             && let Ok(size) = size_str.parse::<u64>()
             && size > MAX_MANIFEST_SIZE
         {
-            return Err(RegistryError::Other(format!(
-                "manifest too large: {size} bytes (max {MAX_MANIFEST_SIZE})"
-            ))
+            return Err(RegistryError::ManifestTooLarge {
+                size,
+                max: MAX_MANIFEST_SIZE,
+            }
             .into());
         }
 
@@ -586,9 +587,10 @@ impl RegistryClient {
             body.extend_from_slice(&chunk);
 
             if body.len() as u64 > MAX_MANIFEST_SIZE {
-                return Err(RegistryError::Other(format!(
-                    "manifest exceeded size limit: {MAX_MANIFEST_SIZE} bytes"
-                ))
+                return Err(RegistryError::ManifestTooLarge {
+                    size: body.len() as u64,
+                    max: MAX_MANIFEST_SIZE,
+                }
                 .into());
             }
         }
@@ -655,9 +657,10 @@ impl RegistryClient {
             && let Ok(size) = size_str.parse::<u64>()
             && size > MAX_LAYER_SIZE
         {
-            return Err(RegistryError::Other(format!(
-                "layer too large: {size} bytes (max {MAX_LAYER_SIZE})"
-            ))
+            return Err(RegistryError::LayerTooLarge {
+                size,
+                max: MAX_LAYER_SIZE,
+            }
             .into());
         }
 
@@ -680,9 +683,10 @@ impl RegistryClient {
             let chunk = chunk_result.map_err(RegistryError::Network)?;
             data.extend_from_slice(&chunk);
             if data.len() as u64 > MAX_LAYER_SIZE {
-                return Err(RegistryError::Other(format!(
-                    "layer exceeded size limit during download: {MAX_LAYER_SIZE} bytes"
-                ))
+                return Err(RegistryError::LayerTooLarge {
+                    size: data.len() as u64,
+                    max: MAX_LAYER_SIZE,
+                }
                 .into());
             }
         }

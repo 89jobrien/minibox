@@ -141,9 +141,16 @@ impl XtaskProbe for ProcessXtaskProbe {
 
 /// Run the full doctor suite and print results.
 ///
-/// Checks tools from `preflight.nu`, `CARGO_TARGET_DIR` env var, and on Linux,
-/// cgroups v2 + overlay filesystem availability. Returns `Ok(())` if all
-/// checks pass (warns are non-fatal), or an error listing failures.
+/// Checks all tools from `scripts/preflight.nu`, `CARGO_TARGET_DIR` env var,
+/// 1Password auth status, smolvm availability, git working-tree state, and on
+/// Linux, cgroups v2 + overlay filesystem availability. Returns `Ok(())` if all
+/// required checks pass (advisory warns are non-fatal), or an error listing
+/// failures.
+///
+/// This is the canonical single-source-of-truth for environment validation.
+/// `scripts/preflight.nu` remains a lightweight `SessionStart` hook that runs at
+/// shell startup; running `cargo xtask` at startup would add build latency, so
+/// the script stays independent and simply references this command in its banner.
 pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
     let mut failures: Vec<String> = Vec::new();
 
@@ -170,6 +177,62 @@ pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
         println!("[ok]   CARGO_TARGET_DIR set");
     } else {
         println!("[warn] CARGO_TARGET_DIR not set (optional but recommended)");
+    }
+
+    // --- 1Password auth (advisory) ---
+    // Mirrors `check "1Password authed" (op account list)` from preflight.nu.
+    // Non-fatal: missing op auth blocks secret resolution but not building/testing.
+    {
+        let authed = std::process::Command::new("op")
+            .arg("account")
+            .arg("list")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        if authed {
+            println!("[ok]   1Password authed");
+        } else {
+            println!(
+                "[warn] 1Password not authed — `op account list` failed (secret resolution may fail)"
+            );
+        }
+    }
+
+    // --- smolvm on PATH (info, mirrors preflight.nu) ---
+    // smolvm is the default macOS adapter; absence triggers fallback to krun/native.
+    {
+        let found = std::process::Command::new("which")
+            .arg("smolvm")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if found {
+            println!("[info] smolvm on PATH — default adapter available");
+        } else {
+            println!(
+                "[info] smolvm not on PATH — will fall back to native (Linux) or krun (macOS)"
+            );
+        }
+    }
+
+    // --- git working-tree state (info, mirrors preflight.nu) ---
+    // Dirty tree is expected during development; surfaced as info, not a failure.
+    {
+        let output = std::process::Command::new("git")
+            .args(["status", "--porcelain"])
+            .output();
+        match output {
+            Ok(out) if out.stdout.is_empty() => println!("[info] git repo clean"),
+            Ok(_) => {
+                println!(
+                    "[info] git repo has local changes (startup doctor ignores working tree dirtiness)"
+                );
+            }
+            Err(e) => println!("[warn] could not run `git status`: {e}"),
+        }
     }
 
     // --- Linux-only system checks ---
