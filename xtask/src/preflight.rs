@@ -207,8 +207,7 @@ pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+            .is_ok_and(|s| s.success());
         if found {
             println!("[info] smolvm on PATH — default adapter available");
         } else {
