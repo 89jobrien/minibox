@@ -55,8 +55,8 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: staged fmt/clippy plus config/docs checks.
 - `cargo xtask prepush` — broader gate: release build, release nextest, and conformance (use `cargo xtask coverage` separately for coverage reports).
-- `cargo xtask test-unit` — cross-platform unit and conformance subset.
-- `cargo xtask test-property` — property tests.
+- `cargo xtask test unit` — cross-platform unit and conformance subset.
+- `cargo xtask test property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
 - `just test-e2e` — Linux+root daemon/CLI tests.
 - `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.

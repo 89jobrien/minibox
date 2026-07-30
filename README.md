@@ -48,6 +48,9 @@ structured tracing, property testing.
 
 Requires Linux, root, kernel 5.0+, cgroups v2, overlay FS.
 
+First-time contributors: run `just install-hooks` and `cargo xtask doctor` to verify your
+toolchain and environment before building — see [`DEVELOPMENT.md`](DEVELOPMENT.md).
+
 ```bash
 # Build
 cargo build --release
@@ -89,7 +92,7 @@ breakdown.
 
 ## Architecture
 
-13 crates plus `xtask` (14 workspace members), Rust 2024 edition:
+14 crates plus `xtask` (15 workspace members), Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
@@ -107,6 +110,7 @@ minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
 minibox-mcp             MCP stdio server for agent-controlled minibox tools
 minibox-testsuite       conformance test harness for adapter trait contracts
 minibox-bench           benchmark crate
+minibox-cni             CNI plugin exec protocol and chain orchestration
 ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
@@ -206,8 +210,8 @@ report that the repository password is correct. A newly initialized repository r
 ## Testing
 
 ```bash
-cargo xtask test-unit        # unit + conformance + property tests (any platform)
-cargo xtask test-conformance # OCI adapter conformance matrix
+cargo xtask test unit        # unit + conformance + property tests (any platform)
+cargo xtask test conformance # OCI adapter conformance matrix
 just test-integration        # cgroup tests (Linux + root)
 just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```

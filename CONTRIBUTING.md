@@ -53,7 +53,7 @@ reference, and CI gate descriptions.
 
 ```bash
 cargo xtask pre-commit     # fmt + clippy + release build (macOS-safe)
-cargo xtask test-unit      # cross-platform unit and conformance subset
+cargo xtask test unit      # cross-platform unit and conformance subset
 cargo deny check           # license + advisory audit
 ```
 
@@ -86,7 +86,7 @@ non-negotiable Rust patterns enforced in this repository. Key rules:
 Before opening a PR, confirm:
 
 - [ ] `cargo xtask pre-commit` passes locally
-- [ ] `cargo xtask test-unit` passes locally
+- [ ] `cargo xtask test unit` passes locally
 - [ ] No new `.unwrap()` in production paths
 - [ ] No new public API surface (during freeze)
 - [ ] PR description references the issue being addressed

@@ -58,7 +58,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 - `adapters/`: native (overlay, cgroup, namespace, bridge network), gke
   (copy FS, proot, noop limiter), colima (lima/nerdctl), smolvm, stubs
   (vf, hcs, wsl2, docker_desktop), mocks
-- `daemon/`: handler.rs (HandlerDependencies, request routing), server.rs
+- `daemon/`: handler/ (HandlerDependencies, request routing), server.rs
   (Unix socket listener, SO_PEERCRED auth), state.rs (DaemonState),
   telemetry.rs, network_lifecycle.rs
 - `image/` (re-exported from minibox-core)
