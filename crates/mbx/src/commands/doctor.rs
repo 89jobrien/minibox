@@ -28,13 +28,18 @@ fn adapter_entries() -> Vec<AdapterEntry> {
             available: cfg!(target_os = "linux"),
         },
         AdapterEntry {
+            name: "colima",
+            description: "Colima/Lima VM via limactl + nerdctl",
+            available: cfg!(unix),
+        },
+        AdapterEntry {
             name: "smolvm",
-            description: "SmolVM lightweight Linux VMs with subsecond boot",
+            description: "SmolVM lightweight Linux VMs (recommended default, cross-platform)",
             available: cfg!(unix),
         },
         AdapterEntry {
             name: "krun",
-            description: "libkrun micro-VM (KVM on Linux, HVF on macOS)",
+            description: "libkrun micro-VM via KVM/HVF (recommended fallback, cross-platform)",
             available: true,
         },
     ]
@@ -182,6 +187,20 @@ mod tests {
             compiled_adapters().contains(&"krun"),
             "krun must always be in compiled_adapters"
         );
+    }
+
+    #[test]
+    fn compiled_adapters_includes_colima_on_unix() {
+        // Regression: adapter_entries() previously omitted "colima" entirely,
+        // even though it's a valid, always-compiled adapter per
+        // miniboxd::adapter_registry::all_adapters() / VALID_ADAPTERS. This
+        // silently hid a working `MINIBOX_ADAPTER=colima` option from `mbx doctor`.
+        if cfg!(unix) {
+            assert!(
+                compiled_adapters().contains(&"colima"),
+                "colima must be listed in compiled_adapters() on unix"
+            );
+        }
     }
 
     #[test]

@@ -144,6 +144,7 @@ pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 // Cross-platform exports (always available)
 pub use colima::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
+    privileged_command,
 };
 pub use colima_push::{ColimaImagePusher, colima_image_pusher};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};

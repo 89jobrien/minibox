@@ -37,11 +37,60 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
+/// Resolve a username to its home directory via the system user database.
+/// Split out from `colima_home()` so it can be unit tested without requiring
+/// the calling process to actually be root.
+fn home_dir_for_user(username: &str) -> Option<PathBuf> {
+    nix::unistd::User::from_name(username)
+        .ok()
+        .flatten()
+        .map(|u| u.dir)
+}
+
+/// If running as root via `sudo`, chown `path` to `$SUDO_USER`. No-op
+/// otherwise (including if `SUDO_USER` can't be resolved to a real user).
+///
+/// The generic container-directory creation in `daemon::handler::run` makes
+/// `container_dir` `0700`, owned by whichever user the daemon process runs
+/// as. That's correct for the native Linux adapter (daemon and workload run
+/// as the same root). For Colima, the actual filesystem work happens as
+/// `SUDO_USER` inside the VM via privilege-dropped `limactl`/`colima`
+/// invocations — without this chown, `container_dir` stays root-owned and
+/// every subsequent `mkdir`/`docker` call as `SUDO_USER` gets "Permission
+/// denied" on it, even though the directory was just created successfully by
+/// the (root) daemon a moment earlier.
+fn chown_to_sudo_user_if_root(path: &Path) -> Result<()> {
+    if !nix::unistd::geteuid().is_root() {
+        return Ok(());
+    }
+    let Ok(sudo_user) = std::env::var("SUDO_USER") else {
+        return Ok(());
+    };
+    let Ok(Some(user)) = nix::unistd::User::from_name(&sudo_user) else {
+        return Ok(());
+    };
+    nix::unistd::chown(path, Some(user.uid), Some(user.gid))
+        .map_err(|e| anyhow!("Failed to chown {} to {sudo_user}: {e}", path.display()))
+}
+
 fn colima_home() -> PathBuf {
     if let Ok(path) = std::env::var("COLIMA_HOME")
         && !path.is_empty()
     {
         return PathBuf::from(path);
+    }
+
+    // When running as root via sudo, sudoers' default env_reset resets $HOME
+    // to root's own home (e.g. /var/root on macOS), not the invoking user's.
+    // Resolve the original user's home via SUDO_USER so this matches the
+    // SUDO_USER handling `limactl_command()` already does below — otherwise
+    // LIMA_HOME points at a directory that was never colima's, and every
+    // limactl call reports the instance as not running.
+    if nix::unistd::geteuid().is_root()
+        && let Ok(sudo_user) = std::env::var("SUDO_USER")
+        && let Some(home) = home_dir_for_user(&sudo_user)
+    {
+        return home.join(".colima");
     }
 
     std::env::var("HOME")
@@ -59,21 +108,51 @@ fn lima_home() -> String {
     colima_home().join("_lima").to_string_lossy().to_string()
 }
 
-fn limactl_command(path: &str) -> Command {
-    // limactl refuses to run as root. When miniboxd is started via sudo,
-    // SUDO_USER is set to the original user. Drop back to that user so
-    // limactl can reach the Lima socket in their home directory.
+/// Build the `sudo -u <user> ... -- <path>` argument list used to drop back
+/// from root to the invoking user. Split out from `limactl_command()` so the
+/// exact flags — especially `--preserve-env=LIMA_HOME` — are unit testable
+/// without the test process itself needing to be root.
+fn sudo_drop_privileges_args<'a>(sudo_user: &'a str, path: &'a str) -> Vec<&'a str> {
+    // `sudo -u <user>` applies its own env_reset when dropping back from root
+    // to the target user, which would otherwise strip the LIMA_HOME set via
+    // `.env()` in limactl_command() below (that only sets it for the outer
+    // `sudo` invocation, not the process sudo execs after dropping
+    // privileges). --preserve-env is required so LIMA_HOME actually reaches
+    // limactl — without it, limactl silently falls back to the default
+    // ~/.lima and reports the colima instance as "not running" even though
+    // it is.
+    vec!["-u", sudo_user, "--preserve-env=LIMA_HOME", "--", path]
+}
+
+/// Build a `Command` for `path` (`limactl`, or the `colima` CLI itself).
+///
+/// Sets `LIMA_HOME` correctly and, if the calling process is root (as when
+/// miniboxd is started via `sudo`), drops privileges back to `SUDO_USER` —
+/// both `limactl` and `colima` refuse to run as root and look for VM state
+/// under the invoking user's home directory, not root's.
+///
+/// This is the single place that logic lives; every caller that shells out to
+/// either binary (including miniboxd's own LimaExecutor/LimaSpawner closures
+/// in `main.rs`) must go through this rather than re-deriving the sudo-wrap
+/// independently — a previous duplicate implementation of just the `colima
+/// ssh` case omitted the privilege drop entirely and always reported
+/// `colima not running`, even with a running instance, because it ran as root.
+pub fn privileged_command(path: &str) -> Command {
     if nix::unistd::geteuid().is_root()
         && let Ok(sudo_user) = std::env::var("SUDO_USER")
     {
         let mut cmd = Command::new("sudo");
-        cmd.args(["-u", &sudo_user, "--", path]);
+        cmd.args(sudo_drop_privileges_args(&sudo_user, path));
         cmd.env("LIMA_HOME", lima_home());
         return cmd;
     }
     let mut cmd = Command::new(path);
     cmd.env("LIMA_HOME", lima_home());
     cmd
+}
+
+fn limactl_command(path: &str) -> Command {
+    privileged_command(path)
 }
 
 fn shell_single_quote(value: &str) -> String {
@@ -226,16 +305,23 @@ impl ImageRegistry for ColimaRegistry {
             .is_ok_and(|out| !out.trim().is_empty())
     }
 
-    /// Pull the image via `nerdctl` inside the VM and return its metadata.
+    /// Pull the image via `docker` inside the VM and return its metadata.
+    ///
+    /// Colima instances may be configured with either a `docker` or
+    /// `containerd` (nerdctl) runtime — `docker` is used here because it's
+    /// present in both configurations (nerdctl's docker-compat mode produces
+    /// the same inspect JSON shape this parses), whereas `nerdctl` itself is
+    /// only present on containerd-runtime instances and errors with "command
+    /// not found" on the more common `docker`-runtime default.
     ///
     /// Layer sizes in the returned [`ImageMetadata`] are approximate: the total
-    /// image size reported by `nerdctl image inspect` is divided equally among
+    /// image size reported by `docker image inspect` is divided equally among
     /// the layers because the per-layer compressed size is not surfaced by the
     /// inspect output.
     ///
     /// # Errors
     ///
-    /// Returns an error if `nerdctl pull` or `nerdctl image inspect` fail inside
+    /// Returns an error if `docker pull` or `docker image inspect` fail inside
     /// the VM, or if the inspect JSON cannot be parsed.
     async fn pull_image(
         &self,
@@ -245,13 +331,13 @@ impl ImageRegistry for ColimaRegistry {
         let tag = image_ref.tag.clone();
         let full_name = format!("{cache_name}:{tag}");
 
-        // Pull image using nerdctl inside the Colima VM.
-        self.ctx.lima_exec(&["nerdctl", "pull", &full_name])?;
+        // Pull image using docker inside the Colima VM.
+        self.ctx.lima_exec(&["docker", "pull", &full_name])?;
 
-        // Retrieve layer information from the containerd image store.
+        // Retrieve layer information from the image store.
         let inspect_output = self
             .ctx
-            .lima_exec(&["nerdctl", "image", "inspect", &full_name])?;
+            .lima_exec(&["docker", "image", "inspect", &full_name])?;
         let inspect_data: Vec<NerdctlImageInspect> = serde_json::from_str(&inspect_output)
             .map_err(|e| anyhow!("Failed to parse image metadata: {e}"))?;
 
@@ -282,17 +368,19 @@ impl ImageRegistry for ColimaRegistry {
         })
     }
 
-    /// Export the image from containerd and return host-accessible layer paths.
+    /// Export the image and return host-accessible layer paths.
     ///
-    /// Uses `nerdctl save` to export the image as a Docker-format tar, then
-    /// extracts each layer into `/tmp/minibox-layers/<name>/<tag>/<short-digest>/rootfs/`.
-    /// The `/tmp` prefix is chosen because Lima mounts it into the VM, making
-    /// the paths accessible from the macOS host.
+    /// Uses `docker save` (present on both `docker`- and `containerd`-runtime
+    /// Colima instances, unlike `nerdctl` — see `pull_image`'s doc comment) to
+    /// export the image as a Docker-format tar, then extracts each layer into
+    /// `/tmp/minibox-layers/<name>/<tag>/<short-digest>/rootfs/`. The `/tmp`
+    /// prefix is chosen because Lima mounts it into the VM, making the paths
+    /// accessible from the macOS host.
     ///
     /// # Errors
     ///
-    /// Returns an error if the image is not present in the containerd store or
-    /// if the extraction commands fail inside the VM.
+    /// Returns an error if the image is not present in the image store or if
+    /// the extraction commands fail inside the VM.
     fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
         let full_name = format!("{name}:{tag}");
         // Use /tmp — Lima mounts /tmp into the VM, so these paths are
@@ -301,15 +389,15 @@ impl ImageRegistry for ColimaRegistry {
         let export_base = format!("/tmp/minibox-layers/{safe_name}/{tag}");
 
         // Export the image to the shared /tmp location and unpack the outer tar.
-        // `nerdctl save` produces a Docker-format tar where each layer is a
-        // directory containing `layer.tar`. We parse `manifest.json` to locate
-        // those layer tarballs rather than guessing directory names.
+        // `docker save` produces a tar where each layer is a directory
+        // containing `layer.tar`. We parse `manifest.json` to locate those
+        // layer tarballs rather than guessing directory names.
         let tar_path = format!("{export_base}.tar");
         self.ctx.lima_exec(&[
             "sh",
             "-c",
             &format!(
-                "mkdir -p {export_base} && nerdctl save {full_name} -o {tar_path} && tar xf {tar_path} -C {export_base}"
+                "mkdir -p {export_base} && docker save {full_name} -o {tar_path} && tar xf {tar_path} -C {export_base}"
             ),
         ])?;
 
@@ -343,19 +431,20 @@ impl ImageRegistry for ColimaRegistry {
 
 #[async_trait]
 impl ImageLoader for ColimaRegistry {
-    /// Load a local OCI tarball into the Colima VM's containerd image store.
+    /// Load a local OCI tarball into the Colima VM's image store.
     ///
     /// The tarball path must be reachable from inside the Lima VM.
     /// Lima automatically shares `/tmp` and `$HOME`, so paths under those
-    /// directories work without extra configuration.
+    /// directories work without extra configuration. Uses `docker` rather
+    /// than `nerdctl` — see `pull_image`'s doc comment.
     async fn load_image(&self, path: &std::path::Path, _name: &str, _tag: &str) -> Result<()> {
         let path_str = path
             .to_str()
             .ok_or_else(|| anyhow!("non-UTF-8 path: {}", path.display()))?;
         self.ctx
-            .lima_exec(&["nerdctl", "load", "-i", path_str])
+            .lima_exec(&["docker", "load", "-i", path_str])
             .map(|_| ())
-            .map_err(|e| anyhow!("nerdctl load failed: {e}"))
+            .map_err(|e| anyhow!("docker load failed: {e}"))
     }
 }
 
@@ -404,6 +493,11 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
     /// Returns an error if any `mkdir -p` or `mount -t overlay` command fails
     /// inside the VM (e.g. insufficient privileges or kernel module not loaded).
     fn setup_rootfs(&self, layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
+        // container_dir was just created 0700 by the (root) daemon process;
+        // hand ownership to SUDO_USER so the mkdir/mount calls below, which
+        // run as SUDO_USER inside the VM, can actually write into it.
+        chown_to_sudo_user_if_root(container_dir)?;
+
         // Concatenate all layer paths as colon-separated lowerdir value.
         let lower_dirs = layers
             .iter()
@@ -1057,7 +1151,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn colima_load_image_calls_nerdctl_load() {
+    async fn colima_load_image_calls_docker_load() {
         let called_args: Arc<std::sync::Mutex<Vec<String>>> =
             Arc::new(std::sync::Mutex::new(vec![]));
         let called_clone = Arc::clone(&called_args);
@@ -1081,8 +1175,8 @@ mod tests {
 
         let args = called_args.lock().unwrap();
         assert!(
-            args.iter().any(|a| a == "nerdctl"),
-            "expected nerdctl call, got: {args:?}"
+            args.iter().any(|a| a == "docker"),
+            "expected docker call, got: {args:?}"
         );
         assert!(
             args.iter().any(|a| a == "load"),
@@ -1154,6 +1248,78 @@ mod tests {
         minibox_macros::unsafe_restore_var!("HOME", prev_home);
 
         assert_eq!(result, PathBuf::from("/tmp/test-home").join(".colima"));
+    }
+
+    #[test]
+    fn chown_to_sudo_user_if_root_is_noop_when_not_root() {
+        // Regression: container_dir is created 0700 by the (root) daemon,
+        // then colima's setup_rootfs writes into it as SUDO_USER via
+        // privilege-dropped limactl/colima calls -- without chowning it
+        // first, every one of those calls failed with "Permission denied"
+        // even on a freshly-created, otherwise-correct directory. This test
+        // only covers the non-root branch (can't become root in a unit
+        // test); the chown itself is exercised manually against a live
+        // daemon, same limitation as home_dir_for_user's root-only branch.
+        if nix::unistd::geteuid().is_root() {
+            return; // test process is root (e.g. CI running as root) -- skip
+        }
+        let dir = tempfile::tempdir().expect("tempdir");
+        let result = chown_to_sudo_user_if_root(dir.path());
+        assert!(
+            result.is_ok(),
+            "must no-op successfully when not root: {result:?}"
+        );
+    }
+
+    #[test]
+    fn home_dir_for_user_resolves_real_user() {
+        // Regression: colima_home() previously used the *process's* $HOME
+        // unconditionally, which is wrong under `sudo` (env_reset resets
+        // HOME to root's, e.g. /var/root on macOS) — every limactl call
+        // then got the wrong LIMA_HOME and reported the instance as not
+        // running even though colima was up. home_dir_for_user() is the
+        // fix's lookup path; verify it resolves the current user correctly
+        // rather than mocking geteuid()==root, which isn't testable here.
+        //
+        // Takes ENV_MUTEX like the other tests in this file that touch
+        // $HOME/$COLIMA_HOME/$LIMA_HOME — without it, this test's read of
+        // $HOME races with those tests' temporary mutations and flakes under
+        // parallel test execution.
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let username = std::env::var("USER").or_else(|_| std::env::var("LOGNAME"));
+        let Ok(username) = username else {
+            return; // no USER/LOGNAME in this environment — nothing to assert
+        };
+        let expected_home = std::env::var("HOME").ok().map(PathBuf::from);
+
+        let resolved = home_dir_for_user(&username);
+
+        assert!(
+            resolved.is_some(),
+            "expected to resolve a home dir for user {username:?}"
+        );
+        if let Some(expected) = expected_home {
+            assert_eq!(resolved, Some(expected));
+        }
+    }
+
+    #[test]
+    fn home_dir_for_user_returns_none_for_bogus_user() {
+        assert_eq!(home_dir_for_user("definitely-not-a-real-user-xyz123"), None);
+    }
+
+    #[test]
+    fn sudo_drop_privileges_args_preserves_lima_home() {
+        // Regression: without --preserve-env=LIMA_HOME, `sudo -u <user>`
+        // applies its own env_reset when dropping from root back to the
+        // target user, silently discarding the LIMA_HOME set on the outer
+        // Command. limactl then falls back to the default ~/.lima and
+        // reports colima's actual running instance as "not running".
+        let args = sudo_drop_privileges_args("joe", "limactl");
+        assert_eq!(
+            args,
+            vec!["-u", "joe", "--preserve-env=LIMA_HOME", "--", "limactl"]
+        );
     }
 
     #[test]

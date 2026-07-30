@@ -902,10 +902,15 @@ fn build_colima_handler_dependencies(
     run_containers_dir: PathBuf,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    use minibox::adapters::{LimaExecutor, LimaSpawner};
+    use minibox::adapters::{LimaExecutor, LimaSpawner, privileged_command};
 
+    // privileged_command drops back to $SUDO_USER when miniboxd runs as root
+    // (via sudo) — both `colima` and `limactl` refuse to run as root and look
+    // for VM state under the invoking user's home, not root's. A previous
+    // version of this closure called `colima ssh` directly as root, which
+    // always failed with "colima not running" regardless of actual VM state.
     let executor: LimaExecutor = Arc::new(move |args: &[&str]| {
-        let output = std::process::Command::new("colima")
+        let output = privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
@@ -921,7 +926,7 @@ fn build_colima_handler_dependencies(
     });
 
     let spawner: LimaSpawner = Arc::new(move |args: &[&str]| {
-        std::process::Command::new("colima")
+        privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
