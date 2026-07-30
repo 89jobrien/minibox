@@ -1,6 +1,6 @@
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-07-27
+Last updated: 2026-07-30
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -52,7 +52,7 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
   `crates/minibox-core/src/protocol.rs`. `minibox` re-exports it. Wire format snapshot tests
   pin serialization; add a snapshot test when adding a field.
 - **`HandlerDependencies` construction sites** — Adding fields requires updating all five
-  adapter suites in `miniboxd/src/main.rs` (native, gke, colima, smolvm, krun). These are
+  adapter suites in `crates/miniboxd/src/main.rs` (native, gke, colima, smolvm, krun). These are
   `#[cfg(target_os = "linux")]` and won't fail on macOS `cargo check`.
 - **`handle_run` param chain** — Adding a parameter requires updating in order:
   `daemon/server.rs` dispatch → `handle_run` → `handle_run_streaming` → `run_inner_capture` →

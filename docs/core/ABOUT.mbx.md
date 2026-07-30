@@ -104,14 +104,14 @@ xtask                   CI gates, test runners, bench, VM image build
 ```
 
 **Hexagonal ports.** Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`,
-`ContainerRuntime`, `NetworkProvider`, …) live under `minibox-core/src/domain/`. Adapters implement them.
+`ContainerRuntime`, `NetworkProvider`, …) live under `crates/minibox-core/src/domain/`. Adapters implement them.
 Tests use mock adapters — no real HTTP or filesystem required.
 
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
 **Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
-Canonical source: `minibox-core/src/protocol.rs`.
+Canonical source: `crates/minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`ARCHITECTURE`](ARCHITECTURE.mbx.md).
 
@@ -198,8 +198,8 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 Issues and PRs are welcome. A few things to know before contributing:
 
 - Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
-- New adapters implement the domain traits under `minibox-core/src/domain/`.
-- Protocol changes start in `minibox-core/src/protocol.rs`; update handlers, CLI paths, and
+- New adapters implement the domain traits under `crates/minibox-core/src/domain/`.
+- Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`
   still passes.

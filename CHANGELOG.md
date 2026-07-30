@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+No unreleased changes yet.
+
+---
+
+## [v0.31.0] - 2026-05-26
+
 ### Added
 
 **MCP control surface:**

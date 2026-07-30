@@ -73,14 +73,14 @@ sudo ./target/release/mbx rm <id>
 
 ## Platform Support
 
-| Platform              | Status         | Adapter         | Notes                                      |
-| --------------------- | -------------- | --------------- | ------------------------------------------ |
-| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay           |
-| Linux aarch64         | **Production** | `native`        | Same as x86_64                             |
-| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS      |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed      |
-| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                          |
-| Windows               | Planned        | `winbox` stub   | Returns error unconditionally              |
+| Platform              | Status         | Adapter         | Notes                                 |
+| --------------------- | -------------- | --------------- | ------------------------------------- |
+| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay      |
+| Linux aarch64         | **Production** | `native`        | Same as x86_64                        |
+| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed |
+| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                     |
+| Windows               | Planned        | `winbox` stub   | Returns error unconditionally         |
 
 See [`docs/core/FEATURE_MATRIX.mbx.md`](docs/core/FEATURE_MATRIX.mbx.md) for the full per-adapter capability
 breakdown.
@@ -119,7 +119,7 @@ Tests use mock adapters — no real HTTP or filesystem required.
 in `spawn_blocking` to avoid blocking the runtime.
 
 **Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
-Canonical source: `minibox-core/src/protocol.rs`.
+Canonical source: `crates/minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITECTURE.mbx.md).
 
@@ -235,8 +235,8 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 Issues and PRs are welcome. A few things to know before contributing:
 
 - Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
-- New adapters implement the domain traits under `minibox-core/src/domain/`.
-- Protocol changes start in `minibox-core/src/protocol.rs`; update handlers, CLI paths, and
+- New adapters implement the domain traits under `crates/minibox-core/src/domain/`.
+- Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`
   still passes.
@@ -246,16 +246,16 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature                | Status                                |
-| ---------------------- | ------------------------------------- |
-| Bridge networking      | Experimental                          |
-| OCI push/commit/build  | Experimental                          |
-| macOS VZ.framework     | Removed after Apple ARM64 bug         |
-| Seccomp / capabilities | Planned                               |
-| Rootless support       | Planned                               |
-| Port forwarding / DNS  | Planned                               |
-| Windows (WSL2)         | Planned                               |
-| MCP control surface    | Initial MCP stdio server implemented  |
+| Feature                | Status                               |
+| ---------------------- | ------------------------------------ |
+| Bridge networking      | Experimental                         |
+| OCI push/commit/build  | Experimental                         |
+| macOS VZ.framework     | Removed after Apple ARM64 bug        |
+| Seccomp / capabilities | Planned                              |
+| Rootless support       | Planned                              |
+| Port forwarding / DNS  | Planned                              |
+| Windows (WSL2)         | Planned                              |
+| MCP control surface    | Initial MCP stdio server implemented |
 
 Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 

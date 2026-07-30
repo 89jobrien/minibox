@@ -1477,6 +1477,116 @@ mod tests {
     }
 }
 
+// ── Policy resolution tests ───────────────────────────────────────────────
+
+#[cfg(all(unix, test))]
+mod policy_tests {
+    use super::*;
+    use miniboxd::config::{DaemonConfig, PolicyConfig};
+
+    static POLICY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// When config explicitly sets both policy fields, those values are used
+    /// and the env-var defaults are ignored.
+    #[test]
+    fn config_policy_overrides_env_defaults() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        // Ensure env vars do not interfere.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: Some(true),
+                allow_privileged: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+        assert!(
+            policy.allow_bind_mounts,
+            "config allow_bind_mounts=true must propagate to resolved policy"
+        );
+        assert!(
+            policy.allow_privileged,
+            "config allow_privileged=true must propagate to resolved policy"
+        );
+    }
+
+    /// When config fields are None, the policy falls through to the env-var
+    /// (or deny-all) defaults, not to `true`.
+    #[test]
+    fn absent_config_policy_falls_back_to_env_defaults() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        // Guarantee deny-all env state.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: None,
+                allow_privileged: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+        // ContainerPolicy::default() is deny-all; from_env with no env vars
+        // set also returns deny-all, so both must be false.
+        assert!(
+            !policy.allow_bind_mounts,
+            "absent config bind_mounts + no env var must default to false (deny)"
+        );
+        assert!(
+            !policy.allow_privileged,
+            "absent config privileged + no env var must default to false (deny)"
+        );
+    }
+
+    /// Config deny (false) must override env-var allow, since config is
+    /// higher priority than env vars per the config layer spec.
+    #[test]
+    fn config_deny_overrides_env_allow() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        unsafe {
+            std::env::set_var("MINIBOX_ALLOW_BIND_MOUNTS", "true");
+            std::env::set_var("MINIBOX_ALLOW_PRIVILEGED", "true");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: Some(false),
+                allow_privileged: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        assert!(
+            !policy.allow_bind_mounts,
+            "config deny must win over env-var allow for bind_mounts"
+        );
+        assert!(
+            !policy.allow_privileged,
+            "config deny must win over env-var allow for privileged"
+        );
+    }
+}
+
 // ── CLI argument parser tests ─────────────────────────────────────────────
 
 #[cfg(all(unix, test))]

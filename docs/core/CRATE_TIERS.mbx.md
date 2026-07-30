@@ -4,7 +4,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-07-27
+Last updated: 2026-07-30
 
 ---
 
@@ -36,7 +36,7 @@ that breaks callers outside the workspace is a semver-major event.
 **Stability expectations for Core crates:**
 
 - `cargo xtask pre-commit` must pass before merging any PR that touches these crates.
-- Handler coverage in `minibox/src/daemon/` must stay at or above the current baseline;
+- Handler coverage in `crates/minibox/src/daemon/` must stay at or above the current baseline;
   the target is >= 80% function coverage.
 - Protocol wire format is pinned by snapshot tests in `minibox-core`. Do not remove or
   rename existing variants without a deprecation period.
@@ -133,7 +133,7 @@ hardened increases maintenance surface without shipping value.
 following gates in `docs/core/STABILITY_CHECKLIST.mbx.md` are green:**
 
 1. Protocol types have a single source of truth (currently met — minibox-core #122/#128).
-2. Handler coverage >= 80% function coverage in `minibox/src/daemon/handler.rs`.
+2. Handler coverage >= 80% function coverage in `crates/minibox/src/daemon/handler/`.
 3. All wired adapters have at least one integration test.
 4. `cargo xtask pre-commit` passes on macOS (staged fmt/clippy plus config/docs checks).
 5. `cargo xtask test-unit` passes (~506+ tests on macOS cross-platform subset).

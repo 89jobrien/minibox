@@ -4,7 +4,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-07-27
+Last updated: 2026-07-30
 
 ---
 
@@ -37,8 +37,8 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 
 | #   | Item                                                       | Tag        | Status  | Evidence                                   |
 | --- | ---------------------------------------------------------- | ---------- | ------- | ------------------------------------------ |
-| 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
-| 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`handler.rs`)              |
+| 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `crates/minibox-core/src/protocol.rs` (#122/#128) |
+| 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`crates/minibox/src/daemon/handler/`) |
 | 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm, krun all tested |
 | 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | staged fmt/clippy + config/docs checks     |
 | 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~506 tests (macOS cross-platform subset)   |

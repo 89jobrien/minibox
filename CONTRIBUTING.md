@@ -9,7 +9,7 @@ gates pass on CI. This freeze is formal and operational — not advisory.
 
 ### What "passing" means
 
-All 7 mandatory [GATE] items in [`docs/STABILITY_CHECKLIST.mbx.md`](docs/STABILITY_CHECKLIST.mbx.md)
+All 7 mandatory [GATE] items in [`docs/core/STABILITY_CHECKLIST.mbx.md`](docs/core/STABILITY_CHECKLIST.mbx.md)
 must be green on the `develop` branch in CI simultaneously. The current blocking gate is:
 
 - Gate 2: Handler coverage >= 80% (currently ~67.5%)

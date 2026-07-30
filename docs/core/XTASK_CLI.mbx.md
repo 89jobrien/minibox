@@ -1,6 +1,6 @@
 # xtask CLI Reference
 
-Last updated: 2026-07-27
+Last updated: 2026-07-30
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the

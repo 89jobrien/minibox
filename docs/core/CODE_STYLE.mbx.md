@@ -123,8 +123,8 @@ Rules:
 - Use named fields (`{ path: String }`) not tuple variants for anything beyond a bare wrapper.
 - Always include `#[source]` on the field that is a wrapped lower-level error.
 - Include `Other(String)` as a catch-all last variant for un-enumerated cases.
-- Cross-platform error types live in `minibox-core/src/error.rs`. Linux-specific errors
-  (anything depending on `nix`) live in `minibox/src/error.rs`.
+- Cross-platform error types live in `crates/minibox-core/src/error.rs`. Linux-specific errors
+  (anything depending on `nix`) live in `crates/minibox/src/error.rs`.
 
 ### `anyhow` for propagation
 
@@ -240,12 +240,12 @@ Composition Root (miniboxd/src/main.rs)
 
 Rules:
 
-- Domain traits live under `minibox-core/src/domain/`. Never add a trait there that
+- Domain traits live under `crates/minibox-core/src/domain/`. Never add a trait there that
   imports from `nix`, `libc`, or any platform crate.
-- New adapter suites are added to `minibox/src/adapters/` (Linux/cross-platform) or `smolbox/`
+- New adapter suites are added to `crates/minibox/src/adapters/` (Linux/cross-platform) or `smolbox/`
   (smolvm/krun macOS VM adapters) and exported from the module root.
 - `HandlerDependencies` is the single struct injected into all request handlers. Adding a field
-  requires updating all adapter suite construction sites in `miniboxd/src/main.rs`.
+  requires updating all adapter suite construction sites in `crates/miniboxd/src/main.rs`.
 - `Dyn` type aliases (`DynImageRegistry`, etc.) are defined alongside each trait and used in
   `HandlerDependencies` to avoid naming concrete types in handler code.
 
@@ -266,7 +266,7 @@ pub struct HandlerDependencies {
 
 When adding a new handler, declare it to accept the narrowest sub-struct it needs — not the full
 `HandlerDependencies`. When adding a field to `HandlerDependencies` or a sub-struct, update all
-adapter suite construction sites in `miniboxd/src/main.rs`.
+adapter suite construction sites in `crates/miniboxd/src/main.rs`.
 
 ### Channel-send failures
 
@@ -293,8 +293,8 @@ Test doubles live in two locations:
 
 | Location                             | Scope              | Contents                                                       |
 | ------------------------------------ | ------------------ | -------------------------------------------------------------- |
-| `minibox-core/src/adapters/mocks.rs` | cross-platform     | `MockRegistry`, `MockRuntime`, `MockFilesystem`, `MockLimiter` |
-| `minibox/src/testing/`               | minibox crate only | `mocks/`, `fixtures/`, `helpers/`, `backend/`, `capability.rs` |
+| `crates/minibox-core/src/adapters/mocks.rs` | cross-platform     | `MockRegistry`, `MockRuntime`, `MockFilesystem`, `MockLimiter` |
+| `crates/minibox/src/testing/`               | minibox crate only | `mocks/`, `fixtures/`, `helpers/`, `backend/`, `capability.rs` |
 
 Use `minibox::testing::mocks::*` for handler-level tests that need the full adapter suite.
 Use `minibox_core`'s mocks when writing conformance tests for domain traits directly.
@@ -691,8 +691,8 @@ protocol types:
 
 1. **Add/modify the type** in `protocol.rs`.
 2. **Add `#[serde(default)]`** on any new optional field for wire compatibility.
-3. **Update handlers** in `minibox/src/daemon/handler.rs` that pattern-match on the changed variant.
-4. **Update CLI** `mbx/src/commands/` for the corresponding subcommand.
+3. **Update handlers** in `crates/minibox/src/daemon/handler/` that pattern-match on the changed variant.
+4. **Update CLI** `crates/mbx/src/commands/` for the corresponding subcommand.
 5. **Update snapshot tests** — protocol evolution tests live in
    `crates/minibox-core/tests/protocol_evolution.rs`.
 6. **Run `cargo xtask verify`** to confirm fmt, clippy, and borrow fixtures pass.
