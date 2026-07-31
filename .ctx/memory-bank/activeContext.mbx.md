@@ -1,34 +1,39 @@
 # Active context
 
-**Current focus (2026-07-25):**
+**Current focus (2026-07-31):**
 
-`develop` branch. Recent work spans:
+`develop` branch. Most recent work (newest first, per `git log --oneline`):
 
-1. **smolvm async/sync boundary fix** (94f227b9) — `SmolVmRegistry`/`SmolVmRuntime::vm_exec`
-   and the spawn_process command path called `std::process::Command::output()` inline inside
-   async fns with no `spawn_blocking`, violating the repo's async/sync boundary rule and
-   starving the tokio worker for the container's request handling during long-running VM
-   invocations (boot + pull + workload can exceed a minute). Fixed + live-repro confirmed
-   (`mbx ps` now stays responsive during a backgrounded long-running container).
+1. **Docs fix pass** (9e6321ef) — README architecture diagram undercounted crates (13 -> 14,
+   omitted `minibox-cni`); README/DEVELOPMENT/CLAUDE/CONTRIBUTING taught deprecated
+   `cargo xtask test-unit`-style aliases instead of the canonical `cargo xtask test <suite>`
+   form; `CRATE_INVENTORY.mbx.md` still referenced `handler.rs` as a single file after it
+   was split into `crates/minibox/src/daemon/handler/`. Also fixed a broader batch of stale
+   doc references this session: `assets/index.html` demo command used flags that don't
+   parse (`--memory 64m --cpu 50` -> `--memory 67108864 --cpu-weight 50`), `CHANGELOG.md`'s
+   `[Unreleased]` was 7 minor versions stale and got promoted to `[v0.31.0] - 2026-05-26`,
+   `docs/core/PRERELEASE_CHANGELOG.mbx.md` had a mislabeled version header, and a batch of
+   docs across `docs/core/` were missing the `crates/` prefix on source paths.
 
-2. **mbx pause/resume + ps polling fixes** (e5c40152) — terminal response handling for
-   pause/resume, ps polling parser corrected.
+2. **minibox-cni crate landing** (a333e28b, 7b4ee0a5, 1b577da1) — new `minibox-cni` workspace
+   member (CNI plugin exec protocol + chain orchestration), wired into the nextest recipe,
+   BrokenPipe tolerance fix on plugin stdin writes, CNI networking OTEL design plan added.
 
-3. **e2e showcase suite** (02194fd9, 3b9b85bd) — new end-to-end showcase suite
-   (`crates/minibox-testsuite/src/showcase/`), narrated demo, xtask CLI schema
-   (`xtask/schema/cli.schema.json`). Lifecycle scenario fix: expected `rm` after `stop`
-   on an ephemeral run.
+3. **Colima/GKE adapter fixes** (d6659f56, bcd773e7) — Colima adapter privilege-drop bug,
+   docker/nerdctl mismatch, container dir ownership; GKE proot adapter error messages now use
+   `Display` instead of `Debug` formatting for paths (tracing convention compliance).
 
-4. **Docs audit fixes** (10a03d62, d9121ac3) — crate count, doc links, stale version refs,
-   domain.rs attribution, path prefixes, test file counts corrected across docs/core/.
-5. **MCP control surface first slice** — new `minibox-mcp` package at `crates/mcp`,
-   publishing the `mcp` library and binary names. Stdio MCP server wraps existing
-   daemon protocol operations for doctor, ps, images, logs, manifest, pull, run,
-   stop, and rm with agent-specific policy gates and miette diagnostics.
+4. **`cargo xtask doctor` consolidation** (c7032c07) — folded `scripts/preflight.nu` checks
+   (tool/secret-manager auth/smolvm checks) into `cargo xtask doctor` as the single canonical
+   environment-validation path; `scripts/preflight.nu` is now a lightweight SessionStart hook
+   only.
 
-6. **Prior session (2026-07-07 and earlier)**: benchmark crate (`crates/minibox-bench`,
-   8 Criterion targets), MoA review HIGH fixes (v0.31.0, 13 workspace crates), miette
-   diagnostics for CLI errors, `conformance_test!` macro in minibox-testsuite.
+5. **Mock/test infra** (677d3723, 787c5aad, b7e2653b) — `fake!` macro extracted for mock state
+   locking, `install-hooks` just recipe added, protocol workflow-step terminal classification
+   fix, new unit tests for `resolve_container_policy`/`AdapterSuite`/`AdapterSelectionError`.
+
+6. **Registry error typing** (d3d1a83e) — `ManifestTooLarge`/`LayerTooLarge` `RegistryError`
+   variants for clearer pull-size-limit diagnostics.
 
 **In progress:**
 
@@ -36,24 +41,22 @@
       overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction
 - [ ] macOS exec/logs via VM adapters — run+stdout streaming works,
       exec-into-running unsupported
+- [ ] minibox-cni wiring into miniboxd adapter suites (crate exists, CNI protocol landed,
+      OTEL design plan drafted — not yet consuming from the daemon)
 - [ ] Merge develop -> next (pending CI green on develop)
 
 **Recently completed:**
 
+- [x] Docs fix pass: crate count, deprecated xtask aliases, stale paths, CHANGELOG versioning — 9e6321ef and same-session predecessors
+- [x] minibox-cni crate: exec protocol, chain orchestration, nextest wiring, BrokenPipe fix — a333e28b, 7b4ee0a5, 1b577da1
+- [x] Colima adapter privilege-drop/docker-nerdctl/ownership fixes — d6659f56
+- [x] cargo xtask doctor absorbs scripts/preflight.nu checks — c7032c07
 - [x] smolvm spawn_blocking fix for vm_exec/spawn_process — 94f227b9
 - [x] MCP control surface first slice — `crates/mcp` / package `minibox-mcp`
-- [x] mbx pause/resume + ps polling fixes — e5c40152
 - [x] e2e showcase suite, narrated demo, xtask CLI schema — 02194fd9, 3b9b85bd
-- [x] docs audit (crate count, links, version refs, attribution) — 10a03d62, d9121ac3
 - [x] MoA review HIGH fixes (waves 1+2) — 54510f59, 8b842b53
 - [x] minibox-bench crate (waves A-C) — b9df139f, 2dd9d4ca, 1eee8706
-- [x] conformance_test! macro — 4ce6ce9f
-- [x] miette diagnostics for CLI — cf37b05a
 - [x] Mistakes ledger — `.ctx/memory-bank/mistakes.md` (30 patterns)
-- [x] crux pipeline integration — a2f04782..a913d4ea
-- [x] PR-based auto-promote cascade CI — c1a16d8e
-- [x] Open PR merge pass — #462, #460, #459, #464, and #324 merged; open PR list empty on 2026-07-26
-- [x] Final verification task `t12` — `cargo xtask verify` passed; verify checkpoint not recorded because checkout remains dirty with pre-existing work
 
 **Decisions (recent):**
 
@@ -62,6 +65,8 @@
 - smolvm is default macOS adapter, krun is fallback
 - Stabilization freeze active
 - smolbox crate houses smolvm + krun adapter implementations
+- `cargo xtask doctor` is now the single canonical preflight command (absorbed
+  `scripts/preflight.nu`'s checks); the script is a lightweight SessionStart hook only
 - Blocking subprocess calls in async fns must always route through
   `tokio::task::spawn_blocking`, even for adapter/VM exec paths that "look" fast —
   smolvm CLI can block over a minute (94f227b9 root cause)
@@ -71,5 +76,7 @@
 - fixture-consolidation (#355) blocked — duplicate test_fixtures.rs
 - CI coverage gaps for property tests, borrow fixtures, sandbox tests
 - `ACTIONS_RUNNER_READ_TOKEN` secret not yet set in GHA — bench runner preference inert
+- minibox-cni: crate exists and is tested but not yet wired into miniboxd's adapter suites —
+  scope of that wiring work not yet defined
 
 _Update when the task or branch focus changes._
