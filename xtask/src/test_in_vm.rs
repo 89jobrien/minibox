@@ -198,7 +198,18 @@ fn run_ephemeral(
     }
 
     // 3. Build the test runner script
-    let script = build_test_script(&deps_dir, &opts.test_args, backend.is_privileged(), target)?;
+    // Cached deps image (Phase C, #446): when a pre-baked image with test
+    // deps (coreutils, util-linux) is available, skip the `apk add` at boot
+    // and use it directly instead of bare `alpine`.
+    let use_cached_deps_image =
+        matches!(backend, VmBackend::Minibox(bin) if cached_deps_image_available(bin));
+    let script = build_test_script(
+        &deps_dir,
+        &opts.test_args,
+        backend.is_privileged(),
+        target,
+        use_cached_deps_image,
+    )?;
     let script_path = target_dir.join("test-in-vm-runner.sh");
     std::fs::write(&script_path, &script).context("writing test runner script")?;
 
@@ -207,10 +218,16 @@ fn run_ephemeral(
     let mut cmd = match backend {
         VmBackend::Minibox(bin) => {
             println!("[2/3] booting minibox VM (privileged) ...");
+            let image = if use_cached_deps_image {
+                println!("  using cached test-deps image '{CACHED_DEPS_IMAGE}'");
+                CACHED_DEPS_IMAGE
+            } else {
+                "alpine"
+            };
             let mut c = Command::new(bin);
             // TODO(#441): network bridge required for apk add; switch to --network none
             //       once we pre-bake test deps into a cached image (Phase C).
-            c.args(["run", "--privileged", "--network", "bridge", "alpine"]);
+            c.args(["run", "--privileged", "--network", "bridge", image]);
             c.args(["-v", &mount_spec]);
             c.args(["--", "/bin/sh", "-c"]);
             c.arg(&script);
@@ -266,6 +283,31 @@ fn run_ephemeral(
 
     println!("test-in-vm: all tests passed");
     Ok(())
+}
+
+/// Name of a pre-baked Alpine image with test deps (coreutils, util-linux)
+/// already installed. Avoids `apk add` (and the network access it requires)
+/// at VM boot. Build this image ahead of time and load it into minibox's
+/// image store (`minibox load` / `minibox pull`) under this tag; when absent
+/// we fall back to plain `alpine` + `apk add` at boot (see `build_test_script`).
+const CACHED_DEPS_IMAGE: &str = "minibox-test-deps:latest";
+
+/// Whether `CACHED_DEPS_IMAGE` is present in the minibox image store.
+fn cached_deps_image_available(bin: &Path) -> bool {
+    let repo = CACHED_DEPS_IMAGE
+        .split(':')
+        .next()
+        .unwrap_or(CACHED_DEPS_IMAGE);
+    Command::new(bin)
+        .arg("images")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|line| line.contains(repo))
+        })
 }
 
 fn which_bin(name: &str) -> Option<PathBuf> {
@@ -387,6 +429,7 @@ fn build_test_script(
     extra_args: &[String],
     privileged: bool,
     target: &str,
+    skip_dep_install: bool,
 ) -> Result<String> {
     // TODO(#444): add sandbox_tests, system_tests, cli_e2e_tests once minibox
     //       backend is validated end-to-end with privileged mode.
@@ -444,10 +487,14 @@ fn build_test_script(
     let ignored_suites = ["integration_tests"];
 
     let mut script = String::from("#!/bin/sh\n\n");
-    // TODO(#446): pre-bake test deps into a cached image (Phase C) to avoid
-    //       network access at boot and speed up repeated runs.
-    script.push_str("# Install test dependencies (best-effort, no set -e yet)\n");
-    script.push_str("apk add --no-cache coreutils util-linux 2>/dev/null || true\n\n");
+    if skip_dep_install {
+        // Phase C (#446): deps are already baked into the cached image —
+        // skip the network round-trip entirely.
+        script.push_str("# Test dependencies pre-baked into cached image; skipping apk add\n\n");
+    } else {
+        script.push_str("# Install test dependencies (best-effort, no set -e yet)\n");
+        script.push_str("apk add --no-cache coreutils util-linux 2>/dev/null || true\n\n");
+    }
 
     // Make cgroup writable for cgroup tests (best-effort — may fail in
     // unprivileged VMs where /sys/fs/cgroup is read-only).
@@ -524,6 +571,7 @@ mod tests {
             &[],
             true,
             "aarch64-unknown-linux-musl",
+            false,
         );
         assert!(result.is_err());
     }
@@ -531,9 +579,45 @@ mod tests {
     #[test]
     fn build_test_script_fails_on_empty_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl");
+        let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
+    }
+
+    #[test]
+    fn build_test_script_skips_apk_add_when_deps_cached() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_path = tmp.path().join("integration_tests-abc123");
+        std::fs::write(&bin_path, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let script = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", true)
+            .expect("build_test_script");
+        assert!(
+            !script.contains("apk add --no-cache"),
+            "script should skip installing deps when pre-baked:\n{script}"
+        );
+        assert!(script.contains("pre-baked"));
+    }
+
+    #[test]
+    fn build_test_script_installs_deps_when_not_cached() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_path = tmp.path().join("integration_tests-abc123");
+        std::fs::write(&bin_path, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let script = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false)
+            .expect("build_test_script");
+        assert!(script.contains("apk add --no-cache coreutils util-linux"));
     }
 
     #[test]
