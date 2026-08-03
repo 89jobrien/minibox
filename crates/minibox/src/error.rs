@@ -321,4 +321,8 @@ pub enum ProcessError {
     #[error("process error: {0}")]
     #[diagnostic(code(minibox::process::other))]
     Other(String),
+
+    #[error("failed to install mount immutability seccomp filter: {0}")]
+    #[diagnostic(code(minibox::process::seccomp_install))]
+    SeccompInstallFailed(String),
 }
