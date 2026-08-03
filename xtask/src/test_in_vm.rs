@@ -452,6 +452,17 @@ fn cross_compile_with_cross(cross_bin: &Path, workspace_root: &Path, target: &st
         bail!("cross-compile (cross-rs) failed for miniboxd binary");
     }
 
+    // cli_e2e_tests spawns the `mbx` CLI binary against a real daemon.
+    println!("  compiling mbx binary (cross) ...");
+    let status = Command::new(cross_bin)
+        .args(["build", "-p", "mbx", "--target", target])
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cross build mbx")?;
+    if !status.success() {
+        bail!("cross-compile (cross-rs) failed for mbx binary");
+    }
+
     println!("  compiling miniboxd tests (cross) ...");
     let status = Command::new(cross_bin)
         .args(["test", "--no-run", "-p", "miniboxd", "--target", target])
@@ -486,6 +497,19 @@ fn cross_compile_with_musl_gcc(workspace_root: &Path, target: &str, cc: &str) ->
         bail!("cross-compile failed for miniboxd binary");
     }
 
+    // cli_e2e_tests spawns the `mbx` CLI binary against a real daemon.
+    println!("  compiling mbx binary ...");
+    let status = Command::new("cargo")
+        .args(["build", "-p", "mbx", "--target", target])
+        .env(&cc_env, cc)
+        .env(&linker_env, cc)
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cargo build mbx")?;
+    if !status.success() {
+        bail!("cross-compile failed for mbx binary");
+    }
+
     // Cross-compile miniboxd test binaries — these are the Linux-only
     // suites (cgroup, integration, sandbox, system, e2e).
     println!("  compiling miniboxd tests ...");
@@ -510,13 +534,21 @@ fn build_test_script(
     target: &str,
     skip_dep_install: bool,
 ) -> Result<String> {
-    // TODO(#444): add sandbox_tests, system_tests, cli_e2e_tests once minibox
-    //       backend is validated end-to-end with privileged mode.
-    let mut suites = vec!["integration_tests"];
+    // sandbox_tests/system_tests/cgroup_tests need privileged mode
+    // (cgroups v2 + overlayfs); cli_e2e_tests is cross-platform and
+    // unprivileged (no root, no cgroups — see
+    // crates/miniboxd/tests/cli_e2e_tests.rs doc comment), so it always
+    // runs. This mirrors `cargo xtask build-test-image`'s entrypoint script
+    // (xtask/src/test_image.rs), which already validates cgroup_tests,
+    // integration_tests, system_tests, and sandbox_tests end-to-end under
+    // privileged mode via the native adapter.
+    let mut suites = vec!["integration_tests", "cli_e2e_tests"];
     if privileged {
         suites.push("cgroup_tests");
+        suites.push("system_tests");
+        suites.push("sandbox_tests");
     } else {
-        println!("  (skipping cgroup_tests — unprivileged backend)");
+        println!("  (skipping cgroup_tests/system_tests/sandbox_tests — unprivileged backend)");
     }
 
     let mut found = Vec::new();
@@ -563,7 +595,7 @@ fn build_test_script(
     };
 
     // Suites that require --ignored (tests gated behind #[ignore] for root/Linux)
-    let ignored_suites = ["integration_tests"];
+    let ignored_suites = ["integration_tests", "sandbox_tests"];
 
     let mut script = String::from("#!/bin/sh\n\n");
     if skip_dep_install {
@@ -687,6 +719,80 @@ mod tests {
     #[test]
     fn network_mode_is_bridge_when_deps_not_cached() {
         assert_eq!(minibox_network_mode(false), "bridge");
+    }
+
+    /// Create a fake executable test binary named `<suite>-<hash>` in `dir`.
+    fn write_fake_test_binary(dir: &Path, suite: &str) {
+        let bin_path = dir.join(format!("{suite}-abc123"));
+        std::fs::write(&bin_path, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    #[test]
+    fn build_test_script_wires_in_privileged_suites() {
+        let tmp = tempfile::tempdir().unwrap();
+        for suite in [
+            "integration_tests",
+            "cli_e2e_tests",
+            "cgroup_tests",
+            "system_tests",
+            "sandbox_tests",
+        ] {
+            write_fake_test_binary(tmp.path(), suite);
+        }
+
+        let script = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false)
+            .expect("build_test_script");
+        for suite in [
+            "integration_tests",
+            "cli_e2e_tests",
+            "cgroup_tests",
+            "system_tests",
+            "sandbox_tests",
+        ] {
+            assert!(
+                script.contains(&format!("=== {suite} ===")),
+                "script should run {suite}:\n{script}"
+            );
+        }
+        // sandbox_tests and integration_tests are gated behind #[ignore]
+        assert!(script.contains(&format!(
+            "{suite}-abc123 --test-threads=1 --ignored",
+            suite = "sandbox_tests"
+        )));
+        assert!(script.contains(&format!(
+            "{suite}-abc123 --test-threads=1 --ignored",
+            suite = "integration_tests"
+        )));
+        // system_tests and cli_e2e_tests are not ignore-gated
+        assert!(!script.contains("system_tests-abc123 --test-threads=1 --ignored"));
+        assert!(!script.contains("cli_e2e_tests-abc123 --test-threads=1 --ignored"));
+    }
+
+    #[test]
+    fn build_test_script_unprivileged_skips_privileged_suites() {
+        let tmp = tempfile::tempdir().unwrap();
+        for suite in [
+            "integration_tests",
+            "cli_e2e_tests",
+            "cgroup_tests",
+            "system_tests",
+            "sandbox_tests",
+        ] {
+            write_fake_test_binary(tmp.path(), suite);
+        }
+
+        let script = build_test_script(tmp.path(), &[], false, "aarch64-unknown-linux-musl", false)
+            .expect("build_test_script");
+        assert!(script.contains("=== integration_tests ==="));
+        assert!(script.contains("=== cli_e2e_tests ==="));
+        assert!(!script.contains("=== cgroup_tests ==="));
+        assert!(!script.contains("=== system_tests ==="));
+        assert!(!script.contains("=== sandbox_tests ==="));
     }
 
     #[test]
