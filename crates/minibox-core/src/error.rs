@@ -101,6 +101,7 @@ pub enum ImageError {
 /// Errors from the OCI registry client.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RegistryError {
+    #[cfg(feature = "registry")]
     #[error("network error: {0}")]
     #[diagnostic(
         code(minibox::registry::network),
@@ -321,6 +322,7 @@ pub enum PushError {
     #[diagnostic(code(minibox::push::manifest))]
     ManifestPushFailed { reason: String },
 
+    #[cfg(feature = "registry")]
     #[error("network error: {0}")]
     #[diagnostic(code(minibox::push::network))]
     Network(#[from] reqwest::Error),

@@ -185,6 +185,7 @@ pub enum ImageError {
 /// Errors from the OCI registry client.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RegistryError {
+    #[cfg(feature = "registry")]
     #[error("network error: {0}")]
     #[diagnostic(
         code(minibox::registry::network),
