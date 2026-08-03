@@ -67,6 +67,7 @@ pub use error::MiniboxError;
 pub use error::{ImageError, RegistryError};
 pub use image::ImageStore;
 pub use image::reference::{ImageRef, ImageRefError};
+#[cfg(feature = "registry")]
 pub use image::registry::RegistryClient;
 pub use minibox_macros::{adapt, as_any, default_new, require_capability};
 
