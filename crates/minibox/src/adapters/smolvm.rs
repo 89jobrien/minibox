@@ -28,10 +28,26 @@ const DEFAULT_IMAGE: &str = "ubuntu:24.04";
 const LOAD_MOUNT: &str = "/mnt/minibox-load";
 /// Timeout for local image imports into the VM.
 const LOAD_TIMEOUT_SECS: u32 = 600;
+/// POSIX shell snippet that installs `docker` inside the guest if it is not already
+/// present. The stock `ubuntu:24.04` guest image ships no container runtime, so every
+/// docker invocation inside the VM is prefixed with this self-healing check. Installation
+/// only runs once per VM instance (subsequent `smolvm machine run` calls that reuse the
+/// same cached VM see `docker` already on PATH and skip straight past it), but the very
+/// first pull/load/run after a fresh VM boot pays the `apt-get install` latency cost.
+const ENSURE_DOCKER_SCRIPT: &str = r"if ! command -v docker >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y -qq docker.io >/dev/null
+fi
+";
+
 /// POSIX shell script that imports a tarball and retags whatever docker loaded.
 const DOCKER_LOAD_AND_TAG_SCRIPT: &str = r#"set -eu
 tarball="$1"
 target="$2"
+if ! command -v docker >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y -qq docker.io >/dev/null
+fi
 out="$(docker load -i "$tarball")"
 printf '%s\n' "$out"
 loaded="$(printf '%s\n' "$out" | sed -n 's/^Loaded image: //p' | tail -n 1)"
@@ -191,8 +207,35 @@ impl SmolVmRegistry {
     }
 
     /// Build the image reference used for VM-local docker operations.
+    ///
+    /// Strips the `library/` namespace prefix so tags written by [`ImageLoader::load_image`]
+    /// line up with the names [`ImageRegistry::has_image`]/[`ImageRegistry::pull_image`] look
+    /// for. Docker itself normalizes pulled official images this way (`docker pull
+    /// library/alpine` is locally tagged `alpine:latest`, not `library/alpine:latest`); `docker
+    /// tag` does not apply the same normalization, so `load_image` must strip the prefix
+    /// itself to stay consistent — otherwise a locally loaded image is tagged
+    /// `library/foo:latest` while `has_image`/`pull_image` look for `foo:latest`, and `mbx run`
+    /// reports the image missing and attempts a real network pull.
     fn target_ref(name: &str, tag: &str) -> String {
-        format!("{name}:{tag}")
+        let short_name = name.strip_prefix("library/").unwrap_or(name);
+        format!("{short_name}:{tag}")
+    }
+
+    /// Quote a single argument for safe interpolation into a POSIX shell command line.
+    fn shell_quote(arg: &str) -> String {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+
+    /// Run a `docker` subcommand inside the VM, self-healing by installing `docker` first
+    /// if the guest image (a stock `ubuntu:24.04` cloud image) doesn't already have it.
+    async fn docker_exec(&self, args: &[&str]) -> Result<String> {
+        let joined = args
+            .iter()
+            .map(|arg| Self::shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let script = format!("{ENSURE_DOCKER_SCRIPT}exec docker {joined}\n");
+        self.vm_exec(&["sh", "-c", &script]).await
     }
 
     /// Return the canonical host tarball path, parent directory, and VM guest path.
@@ -223,10 +266,8 @@ impl ImageRegistry for SmolVmRegistry {
     /// Runs `docker images --filter reference=<name>:<tag> --quiet` inside
     /// the VM. Returns `true` if the output is non-empty.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        let short_name = name.strip_prefix("library/").unwrap_or(name);
-        let full_name = format!("{short_name}:{tag}");
-        self.vm_exec(&[
-            "docker",
+        let full_name = Self::target_ref(name, tag);
+        self.docker_exec(&[
             "images",
             "--filter",
             &format!("reference={full_name}"),
@@ -245,7 +286,7 @@ impl ImageRegistry for SmolVmRegistry {
         let tag = image_ref.tag.clone();
         let full_name = format!("{cache_name}:{tag}");
 
-        self.vm_exec(&["docker", "pull", &full_name]).await?;
+        self.docker_exec(&["pull", &full_name]).await?;
 
         Ok(ImageMetadata {
             name: cache_name,
@@ -667,7 +708,7 @@ mod tests {
     #[tokio::test]
     async fn registry_pull_failure_propagates() {
         let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-            if args.contains(&"pull") {
+            if args.iter().any(|a| a.contains("pull")) {
                 Err(anyhow!("network timeout"))
             } else {
                 Ok(String::new())
@@ -680,6 +721,45 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("network"));
+    }
+
+    /// `docker_exec` wraps the requested subcommand in the ensure-docker self-heal
+    /// snippet and invokes it via `sh -c`, so the docker verb still shows up in the
+    /// interpolated script even though it's no longer a standalone arg.
+    #[tokio::test]
+    async fn docker_exec_wraps_command_with_ensure_docker_snippet() {
+        let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
+            assert_eq!(args.first().copied(), Some("sh"));
+            assert_eq!(args.get(1).copied(), Some("-c"));
+            let script = args.get(2).copied().unwrap_or_default();
+            assert!(script.contains("command -v docker"));
+            assert!(script.contains("apt-get install"));
+            assert!(script.contains("exec docker 'pull' 'alpine:latest'"));
+            Ok("ok".to_string())
+        }));
+
+        let out = registry
+            .docker_exec(&["pull", "alpine:latest"])
+            .await
+            .expect("docker_exec");
+        assert_eq!(out, "ok");
+    }
+
+    /// `target_ref` strips the `library/` namespace prefix so a locally loaded image's
+    /// docker tag matches what `has_image`/`pull_image` look for (issue #457 regression:
+    /// without this, `mbx load --name library/foo` tagged `library/foo:latest` but `mbx
+    /// run foo` checked for `foo:latest` and never found it).
+    #[test]
+    fn target_ref_strips_library_prefix() {
+        assert_eq!(
+            SmolVmRegistry::target_ref("library/foo", "latest"),
+            "foo:latest"
+        );
+        assert_eq!(SmolVmRegistry::target_ref("foo", "latest"), "foo:latest");
+        assert_eq!(
+            SmolVmRegistry::target_ref("ghcr.io/org/image", "v1"),
+            "ghcr.io/org/image:v1"
+        );
     }
 
     /// Filesystem setup_rootfs returns the container_dir as merged_dir.
