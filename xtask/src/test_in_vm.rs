@@ -219,15 +219,18 @@ fn run_ephemeral(
         VmBackend::Minibox(bin) => {
             println!("[2/3] booting minibox VM (privileged) ...");
             let image = if use_cached_deps_image {
-                println!("  using cached test-deps image '{CACHED_DEPS_IMAGE}'");
                 CACHED_DEPS_IMAGE
             } else {
                 "alpine"
             };
+            let network = minibox_network_mode(use_cached_deps_image);
+            if use_cached_deps_image {
+                println!(
+                    "  using cached test-deps image '{CACHED_DEPS_IMAGE}' (--network {network})"
+                );
+            }
             let mut c = Command::new(bin);
-            // TODO(#441): network bridge required for apk add; switch to --network none
-            //       once we pre-bake test deps into a cached image (Phase C).
-            c.args(["run", "--privileged", "--network", "bridge", image]);
+            c.args(["run", "--privileged", "--network", network, image]);
             c.args(["-v", &mount_spec]);
             c.args(["--", "/bin/sh", "-c"]);
             c.arg(&script);
@@ -308,6 +311,19 @@ fn cached_deps_image_available(bin: &Path) -> bool {
                 .lines()
                 .any(|line| line.contains(repo))
         })
+}
+
+/// Network mode for the minibox backend's VM boot (#441).
+///
+/// The cached deps image needs no `apk add` at boot, so it can run fully
+/// isolated (`none`). The bare `alpine` fallback still installs deps over
+/// the network at boot, so it still requires bridge networking.
+const fn minibox_network_mode(use_cached_deps_image: bool) -> &'static str {
+    if use_cached_deps_image {
+        "none"
+    } else {
+        "bridge"
+    }
 }
 
 fn which_bin(name: &str) -> Option<PathBuf> {
@@ -582,6 +598,16 @@ mod tests {
         let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
+    }
+
+    #[test]
+    fn network_mode_is_none_when_deps_cached() {
+        assert_eq!(minibox_network_mode(true), "none");
+    }
+
+    #[test]
+    fn network_mode_is_bridge_when_deps_not_cached() {
+        assert_eq!(minibox_network_mode(false), "bridge");
     }
 
     #[test]
