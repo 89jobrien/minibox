@@ -64,6 +64,8 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
   to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
 - `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
+- `cargo xtask doctor` — canonical preflight: tool/env checks, secret-manager auth, Linux system
+  caps. Absorbed `scripts/preflight.nu`'s checks; that script is now just the fast SessionStart hook.
 
 No Python scripts are expected in the project; use Rust scripts or Nushell helpers for agent tooling.
 
@@ -236,9 +238,8 @@ items are `done`.
 
 ## Context Graph
 
-- Wiki root: `Read(.kgx/wiki/index.md)`
+- Wiki root: `Read(.kgx/wiki/index.md)` — run `kgx wiki write`/populate the wiki first if this doesn't exist yet
 - Query the graph: !`kgx query <entity>`
--
 
 ## Agent-specific guidance
 

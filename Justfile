@@ -128,6 +128,18 @@ test-linux:
 test-e2e-vps:
     ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'
 
+# Clone an arbitrary branch fresh into a scratch dir on jobrien-vm (does not touch ~/minibox)
+verify-vps branch:
+    ssh -t jobrien-vm 'rm -rf ~/verify-{{branch}} && git clone --branch {{branch}} --single-branch git@github.com:89jobrien/minibox.git ~/verify-{{branch}}'
+
+# Run the mount-immutability seccomp kernel-enforcement test on jobrien-vm (Linux-only, does not compile on macOS)
+test-seccomp-vps branch="develop": (verify-vps branch)
+    ssh -t jobrien-vm 'cd ~/verify-{{branch}} && ~/.cargo/bin/cargo test -p minibox --lib mount_seccomp -- --test-threads=1'
+
+# Build release binaries on jobrien-vm for live smolvm pull/run verification (needs a real network path smolvm's guest can reach)
+build-smolvm-vps branch="develop": (verify-vps branch)
+    ssh -t jobrien-vm 'cd ~/verify-{{branch}} && ~/.cargo/bin/cargo build --release -p mbx -p miniboxd'
+
 # Full pipeline: clean state -> doctor -> all tests -> clean state
 test-all: nuke-test-state doctor test-unit test-integration test-system nuke-test-state
 

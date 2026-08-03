@@ -16,15 +16,15 @@
    docs across `docs/core/` were missing the `crates/` prefix on source paths.
 
 2. **minibox-cni crate landing** (a333e28b, 7b4ee0a5, 1b577da1) — new `minibox-cni` workspace
-   member (CNI plugin exec protocol + chain orchestration), wired into the nextest recipe,
+   member for CNI plugin exec protocol and chain orchestration, wired into the nextest recipe,
    BrokenPipe tolerance fix on plugin stdin writes, CNI networking OTEL design plan added.
 
 3. **Colima/GKE adapter fixes** (d6659f56, bcd773e7) — Colima adapter privilege-drop bug,
    docker/nerdctl mismatch, container dir ownership; GKE proot adapter error messages now use
-   `Display` instead of `Debug` formatting for paths (tracing convention compliance).
+   `Display` instead of `Debug` formatting for paths, matching the tracing convention.
 
-4. **`cargo xtask doctor` consolidation** (c7032c07) — folded `scripts/preflight.nu` checks
-   (tool/secret-manager auth/smolvm checks) into `cargo xtask doctor` as the single canonical
+4. **`cargo xtask doctor` consolidation** (c7032c07) — folded `scripts/preflight.nu`'s tool,
+   secret-manager auth, and smolvm checks into `cargo xtask doctor` as the single canonical
    environment-validation path; `scripts/preflight.nu` is now a lightweight SessionStart hook
    only.
 
@@ -41,8 +41,8 @@
       overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction
 - [ ] macOS exec/logs via VM adapters — run+stdout streaming works,
       exec-into-running unsupported
-- [ ] minibox-cni wiring into miniboxd adapter suites (crate exists, CNI protocol landed,
-      OTEL design plan drafted — not yet consuming from the daemon)
+- [ ] minibox-cni wiring into miniboxd adapter suites — crate exists, CNI protocol landed,
+      OTEL design plan drafted, but the daemon doesn't consume it yet
 - [ ] Merge develop -> next (pending CI green on develop)
 
 **Recently completed:**

@@ -13,6 +13,12 @@ These override general Rust conventions:
 5. **Tracing structured fields** — Use `key = value` syntax in `tracing::info!/warn!/error!/debug!` macros. Never embed structured values in the message string.
 6. **`unsafe` blocks require documented invariants** — Every `unsafe {}` must have a comment explaining what invariant the caller upholds and why it cannot be expressed in the type system.
 
+## Mutex Guard Binding
+
+`let _ = mutex.lock()` drops the guard immediately (no critical section held) —
+workspace clippy denies this. Bind to a named variable instead:
+`let _state = mutex.lock()...` (or an explicit `.expect(...)` if fallible).
+
 ## Error Handling
 
 ### Always context, always miette
@@ -318,7 +324,7 @@ fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output 
 ```
 
 Only reach for `qual:allow` once extraction genuinely doesn't apply — e.g. the function's whole
-job *is* orchestration (bootstrap, setup/teardown sequences) and splitting it would scatter
+job _is_ orchestration (bootstrap, setup/teardown sequences) and splitting it would scatter
 sequencing logic across files without reducing complexity.
 
 ## Clippy Allows in Test Modules
@@ -346,17 +352,17 @@ Do this per-module as tests are added — don't pre-emptively blanket-allow at t
 
 ## Anti-Patterns (Minibox-Specific)
 
-| Pattern                                       | Problem                             | Fix                                           |
-| --------------------------------------------- | ----------------------------------- | --------------------------------------------- |
-| `.unwrap()` in production                     | Daemon panic orphans all containers | `.into_diagnostic().wrap_err()?`              |
-| `Path::join(user_input)` without validation   | Zip Slip / path traversal           | `validate_layer_path()` first                 |
-| `fork()`/`clone()` in async fn                | Blocks tokio runtime, possible UB   | `tokio::task::spawn_blocking`                 |
-| `println!` in daemon code                     | Contaminates container stdio        | `tracing::info!/warn!`                        |
-| Embedded values in tracing message            | Not queryable in log aggregators    | `key = value` structured fields               |
-| `unsafe` without SAFETY comment               | Reviewer can't verify correctness   | Document invariant                            |
-| Absolute symlink written without rewrite      | Host path leak after pivot_root     | `relative_path()` rewrite                     |
-| Missing cleanup on error path                 | Orphaned cgroups, stuck overlays    | Explicit cleanup with warn on secondary error |
-| `set_var`/`remove_var` in tests without mutex | Parallel test races                 | `static Mutex<()>` guard                      |
-| `OwnedFd` alive across `clone()`              | Double-close in parent and child    | `std::mem::forget` before clone               |
-| `.ok()` swallowing a fallible call            | Silent failure, e.g. network never attached | Propagate with `.wrap_err(...)?`      |
-| `format!("{val:?}")` on an enum for display   | Breaks if variant names/Debug repr change | Add/use `as_str()` or `Display`         |
+| Pattern                                       | Problem                                     | Fix                                           |
+| --------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
+| `.unwrap()` in production                     | Daemon panic orphans all containers         | `.into_diagnostic().wrap_err()?`              |
+| `Path::join(user_input)` without validation   | Zip Slip / path traversal                   | `validate_layer_path()` first                 |
+| `fork()`/`clone()` in async fn                | Blocks tokio runtime, possible UB           | `tokio::task::spawn_blocking`                 |
+| `println!` in daemon code                     | Contaminates container stdio                | `tracing::info!/warn!`                        |
+| Embedded values in tracing message            | Not queryable in log aggregators            | `key = value` structured fields               |
+| `unsafe` without SAFETY comment               | Reviewer can't verify correctness           | Document invariant                            |
+| Absolute symlink written without rewrite      | Host path leak after pivot_root             | `relative_path()` rewrite                     |
+| Missing cleanup on error path                 | Orphaned cgroups, stuck overlays            | Explicit cleanup with warn on secondary error |
+| `set_var`/`remove_var` in tests without mutex | Parallel test races                         | `static Mutex<()>` guard                      |
+| `OwnedFd` alive across `clone()`              | Double-close in parent and child            | `std::mem::forget` before clone               |
+| `.ok()` swallowing a fallible call            | Silent failure, e.g. network never attached | Propagate with `.wrap_err(...)?`              |
+| `format!("{val:?}")` on an enum for display   | Breaks if variant names/Debug repr change   | Add/use `as_str()` or `Display`               |

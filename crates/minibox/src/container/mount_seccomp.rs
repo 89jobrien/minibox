@@ -45,7 +45,7 @@
 //! variant and documents the gap explicitly.
 
 use crate::error::ProcessError;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// `MS_REMOUNT` from `<sys/mount.h>` (also `nix::mount::MsFlags::MS_REMOUNT`).
 const MS_REMOUNT: u32 = 32;
@@ -214,27 +214,6 @@ pub fn install_mount_immutability_filter() -> anyhow::Result<()> {
 
     debug!("container: mount immutability seccomp filter installed");
     Ok(())
-}
-
-/// Best-effort variant for call sites that must not fail container startup if the kernel lacks
-/// seccomp support (e.g. some minimal container test kernels).
-///
-/// Logs a warning instead of propagating the error.
-///
-/// Prefer [`install_mount_immutability_filter`] in the real container init
-/// path; this exists only for defense-in-depth callers that would rather
-/// degrade than fail closed. Currently unused in production — kept for
-/// callers added later that need this tradeoff — but the default init path
-/// fails closed via [`install_mount_immutability_filter`].
-#[allow(dead_code)]
-pub fn install_mount_immutability_filter_best_effort() {
-    if let Err(e) = install_mount_immutability_filter() {
-        warn!(
-            error = %e,
-            "container: mount immutability seccomp filter could not be installed; \
-             continuing without it (best-effort)"
-        );
-    }
 }
 
 #[cfg(test)]

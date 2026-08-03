@@ -237,8 +237,11 @@
 - Colima path validation bypass via `..` (P1)
 - Bind-mount teardown absent on container cleanup (P2)
 - `xtask` binary not currently available (preflight reports fail)
-- Mock system duplication — two locations (`adapters/mocks.rs` + `testing/mocks/`)
-  with overlapping but slightly different APIs
+- Mock system duplication — `crates/minibox/src/adapters/mocks.rs` is a ~1000-line
+  near-total reimplementation of `crates/minibox-core/src/adapters/mocks.rs` for the
+  same 5 mock types (~62 duplicate occurrences via `dupehound scan`). Fix candidate:
+  replace with `pub use minibox_core::adapters::mocks::{...}` re-export, consistent
+  with `minibox`'s existing re-export-of-`minibox-core` convention. Filed as task t23.
 - CI coverage gaps — property tests, borrow fixtures, sandbox tests, CLI
   subprocess tests, krun conformance not in any CI workflow
 - macOS VZ.framework — blocked by Apple bug on ARM64; adapter removed 2026-05-08
