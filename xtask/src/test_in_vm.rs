@@ -400,10 +400,73 @@ fn persistent_machine_exists(smolvm: &Path, vm_name: &str) -> Result<bool> {
     Ok(stdout.lines().any(|line| line.starts_with(vm_name)))
 }
 
+/// Cross-compilation strategy: `cross` (zero-setup, containerized, like
+/// youki uses) when available on PATH, otherwise raw `musl-gcc` requiring
+/// manual toolchain setup.
+enum CrossStrategy {
+    /// `cross build`/`cross test` — no local musl-gcc/linker setup required.
+    CrossRs(PathBuf),
+    /// Raw `cargo build`/`cargo test` with `CC_*`/`CARGO_TARGET_*_LINKER` env
+    /// vars pointing at a locally installed musl-gcc.
+    MuslGcc { cc: &'static str },
+}
+
+/// Detect the best available cross-compilation strategy (#443).
+///
+/// Prefers `cross` (cross-rs) when it's on PATH — it runs the build inside a
+/// pre-built Docker/Podman container with the target toolchain baked in, so
+/// no local `aarch64-linux-musl-gcc` install is required. Falls back to raw
+/// musl-gcc, which is what this xtask used exclusively before.
+fn detect_cross_strategy() -> CrossStrategy {
+    if let Some(path) = which_bin("cross") {
+        return CrossStrategy::CrossRs(path);
+    }
+    CrossStrategy::MuslGcc {
+        cc: "aarch64-linux-musl-gcc",
+    }
+}
+
 fn cross_compile(workspace_root: &Path, target: &str) -> Result<()> {
-    // TODO(#443): support cross-rs as an alternative to raw musl-gcc (like youki does)
-    //       for zero-setup cross-compilation.
-    let cc = "aarch64-linux-musl-gcc";
+    match detect_cross_strategy() {
+        CrossStrategy::CrossRs(cross_bin) => {
+            println!(
+                "  using cross-rs ({}) — no local musl-gcc setup required",
+                cross_bin.display()
+            );
+            cross_compile_with_cross(&cross_bin, workspace_root, target)
+        }
+        CrossStrategy::MuslGcc { cc } => cross_compile_with_musl_gcc(workspace_root, target, cc),
+    }
+}
+
+/// Cross-compile via `cross` (cross-rs): containerized builds, no local
+/// linker/CC setup needed.
+fn cross_compile_with_cross(cross_bin: &Path, workspace_root: &Path, target: &str) -> Result<()> {
+    println!("  compiling miniboxd binary (cross) ...");
+    let status = Command::new(cross_bin)
+        .args(["build", "-p", "miniboxd", "--target", target])
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cross build miniboxd")?;
+    if !status.success() {
+        bail!("cross-compile (cross-rs) failed for miniboxd binary");
+    }
+
+    println!("  compiling miniboxd tests (cross) ...");
+    let status = Command::new(cross_bin)
+        .args(["test", "--no-run", "-p", "miniboxd", "--target", target])
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cross test --no-run")?;
+    if !status.success() {
+        bail!("cross-compile (cross-rs) failed for miniboxd tests");
+    }
+    Ok(())
+}
+
+/// Cross-compile via raw `musl-gcc`: requires a locally installed
+/// `aarch64-linux-musl-gcc` toolchain.
+fn cross_compile_with_musl_gcc(workspace_root: &Path, target: &str, cc: &str) -> Result<()> {
     let cc_env = format!("CC_{}", target.replace('-', "_"));
     let linker_env = format!(
         "CARGO_TARGET_{}_LINKER",
@@ -598,6 +661,22 @@ mod tests {
         let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
+    }
+
+    #[test]
+    fn detect_cross_strategy_falls_back_to_musl_gcc_when_cross_absent() {
+        // `cross` is not expected to be installed in CI/dev environments for
+        // this workspace; verify the fallback path is selected and carries
+        // the expected CC value.
+        if which_bin("cross").is_some() {
+            // Environment has cross-rs installed; skip rather than assert a
+            // false negative.
+            return;
+        }
+        match detect_cross_strategy() {
+            CrossStrategy::MuslGcc { cc } => assert_eq!(cc, "aarch64-linux-musl-gcc"),
+            CrossStrategy::CrossRs(_) => panic!("expected MuslGcc fallback when cross is absent"),
+        }
     }
 
     #[test]
