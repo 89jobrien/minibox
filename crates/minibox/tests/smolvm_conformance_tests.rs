@@ -110,7 +110,7 @@ async fn smolvm_registry_has_image_delegates_to_docker() {
 #[tokio::test]
 async fn smolvm_registry_pull_failure_propagates() {
     let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-        if args.contains(&"pull") {
+        if args.iter().any(|a| a.contains("pull")) {
             Err(anyhow::anyhow!("connection refused"))
         } else {
             Ok(String::new())
@@ -170,9 +170,11 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
         flattened.contains("docker tag"),
         "smolvm load must tag the loaded image for mbx run, got: {flattened}"
     );
+    // The `library/` namespace prefix is stripped so the tag matches what
+    // `has_image`/`pull_image` look for later (issue #457 regression coverage).
     assert!(
-        flattened.contains("library/foo:latest"),
-        "smolvm load must use the requested target image ref, got: {flattened}"
+        flattened.contains("foo:latest") && !flattened.contains("library/foo:latest"),
+        "smolvm load must tag with the library/ prefix stripped, got: {flattened}"
     );
 }
 

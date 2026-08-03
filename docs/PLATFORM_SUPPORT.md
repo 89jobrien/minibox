@@ -3,7 +3,7 @@
 This document summarizes which minibox adapters work on which platforms and what
 capabilities each adapter provides. It is written for end users of minibox.
 
-Last updated: 2026-07-30
+Last updated: 2026-08-03
 
 ---
 
@@ -49,6 +49,12 @@ MINIBOX_ADAPTER=colima miniboxd
   - `smolvm` binary on PATH (subsecond-boot lightweight VM manager)
   - No root required on macOS
   - On Linux, root or appropriate capabilities may be required depending on host setup
+  - **Guest-side `docker`:** image pull/load/inspect operations run `docker` _inside_ the
+    guest VM (a stock `ubuntu:24.04` cloud image, which does not ship a container runtime).
+    `SmolVmRegistry` self-heals by installing `docker.io` via `apt-get` on first use inside
+    a given VM instance; this adds `apt-get update && apt-get install` latency to the first
+    pull/load/run after a fresh VM boot. No user action is required, but expect a slower
+    first request per VM lifetime.
 - **Isolation:** provided by the smolvm VM, not Linux namespaces
 
 ### `krun` (macOS fallback)
