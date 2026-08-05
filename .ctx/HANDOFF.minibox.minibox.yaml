@@ -1,53 +1,25 @@
 project: minibox
 id: minibox
-updated: 2026-08-03
+updated: 2026-08-05
 items:
   - id: uncommitted-work
     doob_uuid: null
     name: uncommitted-work
     priority: P1
     status: open
-    title: Uncommitted changes (17 files)
+    title: Uncommitted changes (3 files)
     description: |-
       Working tree has uncommitted changes:
-      .claude/rules/rust-patterns.md
       .ctx/HANDOFF.md
       .ctx/HANDOFF.minibox.minibox.yaml
-      .ctx/memory-bank/activeContext.mbx.md
-      .ctx/memory-bank/progress.mbx.md
-      AGENTS.md
-      CLAUDE.md
-      Justfile
-      docs/core/CRATE_TIERS.mbx.md
-      docs/core/FEATURE_MATRIX.mbx.md
-      docs/core/GOTCHAS.mbx.md
-      docs/core/ROADMAP.mbx.md
-      docs/core/STABILITY_CHECKLIST.mbx.md
-      docs/core/STATE_MODEL.mbx.md
-      docs/core/SUPPORT_TIERS.mbx.md
-      docs/core/XTASK_CLI.mbx.md
-      docs/notes/minibox-in-minibox.local.md
+      .minibox/checkpoints/prepush.json
     files:
-      - .claude/rules/rust-patterns.md
       - .ctx/HANDOFF.md
       - .ctx/HANDOFF.minibox.minibox.yaml
-      - .ctx/memory-bank/activeContext.mbx.md
-      - .ctx/memory-bank/progress.mbx.md
-      - AGENTS.md
-      - CLAUDE.md
-      - Justfile
-      - docs/core/CRATE_TIERS.mbx.md
-      - docs/core/FEATURE_MATRIX.mbx.md
-      - docs/core/GOTCHAS.mbx.md
-      - docs/core/ROADMAP.mbx.md
-      - docs/core/STABILITY_CHECKLIST.mbx.md
-      - docs/core/STATE_MODEL.mbx.md
-      - docs/core/SUPPORT_TIERS.mbx.md
-      - docs/core/XTASK_CLI.mbx.md
-      - docs/notes/minibox-in-minibox.local.md
+      - .minibox/checkpoints/prepush.json
     completed: null
     extra: []
 log:
-  - date: "20260803.122313"
+  - date: "20260804.214942"
     summary: done=141 running=0 pending=23 blocked=0
     commits: []

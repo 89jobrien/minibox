@@ -15,6 +15,7 @@ members = [
     "crates/minibox-bench",
     "crates/mcp",
     "crates/minibox-cni",
+    "crates/minibox-tui",
     "xtask",
 ]
 
@@ -74,6 +75,10 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 pin-project-lite = "0.2"
 ipnet = "2"
 
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
 # Benchmarking
 criterion = { version = "0.7", features = ["async_tokio"] }
 
@@ -86,6 +91,7 @@ minibox-cni = { path = "crates/minibox-cni" }
 macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
+minibox-tui = { path = "crates/minibox-tui" }
 slashcrux = "0.1"
 dirs = "6"
 secrecy = "0.10"

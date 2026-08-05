@@ -368,6 +368,9 @@ enum Commands {
     /// be selected given the current environment, and basic platform info.
     Doctor,
 
+    /// Open a read-only terminal dashboard: live container table + event log.
+    Tui,
+
     /// Show the execution manifest for a container.
     Manifest {
         /// Container ID or name.
@@ -617,6 +620,8 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
         },
 
         Commands::Doctor => into_cli(commands::doctor::execute()),
+
+        Commands::Tui => into_cli(commands::tui::execute().await),
 
         Commands::Manifest { id } => into_cli(commands::manifest::execute(id, socket_path).await),
 

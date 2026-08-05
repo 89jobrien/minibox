@@ -98,6 +98,7 @@ pub mod run;
 pub mod sandbox;
 pub mod snapshot;
 pub mod stop;
+pub mod tui;
 pub mod update;
 pub mod upgrade;
 
