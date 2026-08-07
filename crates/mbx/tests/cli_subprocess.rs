@@ -8,6 +8,7 @@
 //! unit tests — this is the primary motivation for this test suite.
 
 #![cfg(all(unix, feature = "subprocess-tests"))]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use assert_cmd::Command;
 use minibox_core::protocol::{ContainerInfo, DaemonResponse};
