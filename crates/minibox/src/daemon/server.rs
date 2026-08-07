@@ -1418,6 +1418,55 @@ mod tests {
         }
     }
 
+    /// Boundary case for MAX_REQUEST_SIZE: a request line at (but not over)
+    /// the 1 MB limit must be accepted rather than rejected as too large.
+    /// Complements `test_handle_connection_oversized_request`, which only
+    /// exercises the over-limit path.
+    #[tokio::test]
+    async fn test_handle_connection_request_at_size_limit_is_accepted() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (client, server) = tokio::io::duplex(2 * 1024 * 1024 + 64);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state, deps).await;
+        });
+
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+
+        // Build a request line whose total byte length (including the
+        // trailing newline) is exactly MAX_REQUEST_SIZE. bounded_read_line's
+        // limit is inclusive of the terminator, so this must NOT be rejected.
+        let overhead = "{\"__pad\":\"\"}\n".len();
+        let pad_len = MAX_REQUEST_SIZE - overhead;
+        let padded = format!("{{\"__pad\":\"{}\"}}\n", "z".repeat(pad_len));
+        assert_eq!(
+            padded.len(),
+            MAX_REQUEST_SIZE,
+            "test line must equal the limit exactly"
+        );
+
+        write_half
+            .write_all(padded.as_bytes())
+            .await
+            .expect("write at-limit payload");
+
+        let resp = read_response(&mut reader).await;
+        // The padded object doesn't deserialize into a DaemonRequest, so we
+        // expect a parse-related Error — but it must NOT be the size-limit
+        // rejection, proving the boundary itself was accepted for reading.
+        match resp {
+            DaemonResponse::Error { message } => {
+                assert!(
+                    !message.contains("request too large"),
+                    "at-limit request should not be rejected as too large, got: {message}"
+                );
+            }
+            other => panic!("expected Error (parse failure) for at-limit request, got {other:?}"),
+        }
+    }
+
     // ─── run_server ──────────────────────────────────────────────────────────
 
     struct MockListener {

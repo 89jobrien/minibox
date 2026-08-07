@@ -511,11 +511,11 @@ fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord 
             .source_image_ref
             .clone()
             .or_else(|| Some(image_label.to_string())),
-        // TODO(rootfs-metadata-persist): populate from rootfs_layout during
-        // create/run (see backlog item "Persist rootfs metadata into
-        // ContainerRecord during create/run").
-        upper_dir: None,
-        merged_dir: None,
+        upper_dir: rootfs_layout
+            .rootfs_metadata
+            .as_ref()
+            .map(|m| m.overlay_upper_dir().clone().into_inner()),
+        merged_dir: Some(merged_dir.clone().into_inner()),
         step_state: None,
         priority: None,
         urgency: None,

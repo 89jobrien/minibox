@@ -1544,6 +1544,45 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn get_manifest_streaming_loop_rejects_oversized_body_without_content_length() {
+            // Regression test for the streaming byte-counter check in
+            // `get_manifest_inner` (distinct from the Content-Length header
+            // pre-check, already covered by
+            // `get_manifest_errors_when_content_length_exceeds_limit`).
+            //
+            // We manually set "transfer-encoding: chunked" on the mock response.
+            // wiremock/hyper normally auto-computes and sends a real
+            // Content-Length header for a fully-buffered body (and the reqwest
+            // client rejects any header we try to lie about — hyper validates
+            // it), so this is the only way to produce a response with *no*
+            // Content-Length header at all, forcing the client through the
+            // streaming-loop branch instead of the header pre-check. Verified
+            // via a raw `reqwest` probe that the resulting response indeed
+            // carries no "content-length" header.
+            let server = MockServer::start().await;
+            let oversized_body = vec![0u8; (MAX_MANIFEST_SIZE + 1) as usize];
+            Mock::given(method("GET"))
+                .and(path("/v2/library/alpine/manifests/latest"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/vnd.oci.image.manifest.v1+json")
+                        .insert_header("transfer-encoding", "chunked")
+                        .set_body_bytes(oversized_body),
+                )
+                .mount(&server)
+                .await;
+
+            let err = test_client(&server)
+                .get_manifest("library/alpine", "latest", "tok")
+                .await
+                .unwrap_err();
+            assert!(
+                err.to_string().contains("manifest too large"),
+                "unexpected error: {err}"
+            );
+        }
+
+        #[tokio::test]
         async fn get_manifest_errors_when_no_amd64_in_list() {
             let server = MockServer::start().await;
             Mock::given(method("GET"))
@@ -1619,10 +1658,33 @@ mod tests {
             assert!(msg.contains("HTTP 404"), "unexpected error: {msg}");
         }
 
-        // NOTE: pull_layer's Content-Length size check (MAX_LAYER_SIZE = 10 GiB) cannot
-        // be exercised via wiremock — hyper requires Content-Length to match the actual
-        // body size, making it infeasible to serve a 10 GiB body in a unit test.
-        // The identical code pattern IS covered by get_manifest_errors_when_content_length_exceeds_limit.
+        // NOTE: pull_layer's / pull_layer_response's Content-Length size check
+        // (MAX_LAYER_SIZE = 10 GiB) cannot be exercised via wiremock. Two approaches
+        // were tried and both fail:
+        //   1. Serving a real MAX_LAYER_SIZE+1 body (as the manifest test does) is
+        //      infeasible — that's 10 GiB of data per test run.
+        //   2. Lying about Content-Length (declaring a value > MAX_LAYER_SIZE while
+        //      the actual body is small) does not reach our check at all: hyper's
+        //      *server* side (used internally by wiremock) panics/aborts the
+        //      connection as soon as the declared Content-Length doesn't match the
+        //      real body length ("payload claims content-length of N, custom
+        //      content-length header claims M"), and the client sees a generic
+        //      "connection closed before message completed" network error instead
+        //      of ever parsing our (correct) declared header value.
+        // Making this testable would require adding a test-only injectable
+        // max-layer-size knob (mirroring `with_max_total_image_size`), which is a
+        // production-code change out of scope here. The identical
+        // header-parsing/comparison code pattern IS covered by
+        // `get_manifest_errors_when_content_length_exceeds_limit`.
+        //
+        // Similarly, the parallel per-layer pull path in `pull_image` (which wraps
+        // each layer in `LimitedStream::new(..., MAX_LAYER_SIZE)`) has no wiremock
+        // integration test showing a real cutoff mid-stream through the full
+        // `pull_image` orchestration — only the standalone `LimitedStream` unit
+        // tests below exercise the type in isolation. Testing the wiring would
+        // require the same kind of injectable per-layer-size-limit knob, which
+        // doesn't currently exist; adding one is a production-code change out of
+        // scope for this test-only task.
 
         // ------------------------------------------------------------------
         // pull_image — aggregate size limit

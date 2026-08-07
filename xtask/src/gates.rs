@@ -184,9 +184,7 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     let sh = sh.clone();
     gated(GateId::Prepush, &root, move || {
-        // TODO: add `cargo check --target x86_64-unknown-linux-musl` here to catch
-        // cfg(target_os = "linux") compile failures before pushing. Would have prevented
-        // the 2026-05-22 cluster of 5 iterative CI-fix-push cycles. See mistakes.md.
+        musl_check(&sh)?;
         cmd!(
             sh,
             "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
@@ -203,6 +201,42 @@ pub fn prepush(sh: &Shell) -> Result<()> {
         test_conformance(&sh)?;
         Ok(())
     })
+}
+
+/// Musl cross-check gate: `cargo check --target x86_64-unknown-linux-musl` for the
+/// two crates the release workflow actually cross-compiles (`miniboxd`, `mbx`; see
+/// `.github/workflows/release.yml`'s `build` job, which uses `cross build --release
+/// --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
+///
+/// Catches `#[cfg(target_os = "linux")]` compile failures locally, before push —
+/// macOS `cargo check` alone doesn't validate Linux-gated code paths (see
+/// `docs/core/GOTCHAS.mbx.md`). Would have prevented the 2026-05-22 cluster of 5
+/// iterative CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
+///
+/// Requires the `x86_64-unknown-linux-musl` rustup target. If it isn't installed,
+/// this gate is skipped with a warning rather than failing the whole prepush gate —
+/// installing a cross target is a one-time local setup step, not something this
+/// gate should force on every invocation.
+pub fn musl_check(sh: &Shell) -> Result<()> {
+    const TARGET: &str = "x86_64-unknown-linux-musl";
+
+    let installed = cmd!(sh, "rustup target list --installed")
+        .read()
+        .unwrap_or_default();
+    if !installed.lines().any(|l| l == TARGET) {
+        eprintln!(
+            "musl-check: skipping — target {TARGET} not installed \
+             (run `rustup target add {TARGET}` to enable this gate)"
+        );
+        return Ok(());
+    }
+
+    eprintln!("--- musl-check: cargo check --target {TARGET} -p miniboxd -p mbx ---");
+    cmd!(sh, "cargo check --target {TARGET} -p miniboxd -p mbx")
+        .run()
+        .context("musl cross-check failed (cargo check --target x86_64-unknown-linux-musl)")?;
+    eprintln!("musl-check passed");
+    Ok(())
 }
 
 /// Unit tests (any platform, matches CI).

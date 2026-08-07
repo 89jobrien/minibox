@@ -106,6 +106,7 @@ mod gke;
 
 // Cross-platform adapters
 mod colima;
+mod colima_commit;
 mod colima_push;
 mod docker_desktop;
 mod hcs;
@@ -151,6 +152,7 @@ pub use colima::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
     privileged_command,
 };
+pub use colima_commit::{ColimaContainerCommitter, colima_container_committer};
 pub use colima_push::{ColimaImagePusher, colima_image_pusher};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
 #[cfg(feature = "registry")]

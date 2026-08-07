@@ -84,6 +84,7 @@ fn main() -> Result<()> {
         Some("fix") => gates::fix(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
+        Some("musl-check") => gates::musl_check(&sh),
         Some("agentlint") => {
             let all = env::args().any(|a| a == "--all");
             if all {
