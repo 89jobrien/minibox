@@ -93,7 +93,7 @@ Deprecated aliases: `collect-metrics`, `context`, `detect-changes`.
 | `lint` | No | fmt --check + clippy `-D warnings` + `cargo check --workspace` across the full adapter matrix. Checkpointed. |
 | `fix` | **Yes** | `cargo fmt --all`, re-stage, version bump, `clippy --fix --allow-dirty --allow-staged`, re-stage again. Only runs the mutating steps if Rust files are currently staged. |
 | `pre-commit` | Validation-only | The git pre-commit hook's gate: fmt+clippy on staged Rust files, agentlint on staged agent-config files, actionlint on staged workflow files, docs-lint, FEATURE_MATRIX date stamp refresh, repo-cleanliness warning. Never runs a release build or the conformance suite. |
-| `prepush` | No | Release build (`miniboxd`, `minibox-core`, `mbx`, `minibox`, `minibox-macros`) + nextest (release profile) + conformance suite. Skipped entirely if no Rust files are in the push range. Checkpointed. |
+| `prepush` | No | Release build (`miniboxd`, `minibox-core`, `mbx`, `minibox`, `minibox-macros`) + nextest (release profile) + conformance suite. Skipped entirely if no Rust files are in the push range. Checkpointed. Set `SKIP_PHASE_2=1` (or `true`) to skip the conformance suite step locally — this is a local-dev convenience only; CI never sets it and always runs the full sequence. |
 | `agentlint [--all]` | No | Lint agent config files (`.claude/`, `.codex/`, `.agents/`, `.cursor/`). Without `--all`, only staged files are linted. |
 | `coverage [--open] [--lcov-only] [--html-only]` | No | Generate a coverage report; `--open` opens the HTML report afterward. |
 | `coverage-check` | No | Handler module function coverage gate. |
