@@ -68,6 +68,25 @@ jobs:
       - name: cargo xtask test-unit
         run: cargo xtask test-unit
 
+  docs:
+    name: cargo doc
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: |
+      needs.detect-changes.outputs.core == 'true' ||
+      needs.detect-changes.outputs.daemon == 'true' ||
+      needs.detect-changes.outputs.cli == 'true' ||
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.xtask == 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc (build check)
+        env:
+          RUSTDOCFLAGS: -D rustdoc::invalid_rust_codeblocks
+        run: cargo doc --workspace --no-deps --all-features
+
   actionlint:
     name: actionlint
     runs-on: ubuntu-latest
