@@ -1,10 +1,36 @@
 # Active context
 
-**Current focus (2026-07-31):**
+**Current focus (2026-08-08):**
 
 `develop` branch. Most recent work (newest first, per `git log --oneline`):
 
-1. **Docs fix pass** (9e6321ef) — README architecture diagram undercounted crates (13 -> 14,
+1. **Protocol drift expectation fix** (fe9bae3e) — `xtask::protocol_drift`'s expected surface
+   list still had the pre-split single `domain-ports` entry after a prior session split it into
+   finer-grained `domain-*` entries; test now tracks the split surfaces. Also file-level allow
+   for unwrap/expect/panic in `crates/mbx/tests/cli_subprocess.rs` (integration test target,
+   clippy production-code lints don't apply).
+
+2. **Colima commit adapter + image lease conformance** (1ae7528e) — new
+   `ColimaContainerCommitter` (nerdctl commit/save -> docker-archive import) in
+   `crates/minibox/src/adapters/colima_commit.rs`; `ImageLeaseService` port conformance suite
+   plus `InMemoryLeaseService` test double added to `crates/minibox-core/src/image/lease.rs`;
+   `ContainerRecord` now populates `upper_dir`/`merged_dir` from rootfs metadata; new
+   `xtask musl-check` gate wired into `prepush` to catch `cfg(target_os = "linux")` failures
+   before CI.
+
+3. **minibox-tui crate** (adf70510) — new read-only TUI dashboard crate (ratatui + crossterm):
+   live container table (polls `DaemonRequest::List` every 1s) and live-tailing lifecycle event
+   log (`DaemonRequest::SubscribeEvents`), split-pane layout. Deliberately read-only for v1 — no
+   run/stop/exec — to avoid duplicating `mbx`'s policy-gated mutation paths in a second UI
+   surface. Wired in as `mbx tui`, same crate-split precedent as `mcp`. 6 unit tests + live
+   smoke-test against `miniboxd`.
+
+4. **Nushell completion generation** (b9a84847) — `clap_complete` + `clap_complete_nushell`;
+   intercepts a hidden `completions` invocation before clap parsing to generate a Nushell
+   completion script (sourced via `nu_libs.nu`) without leaking the interception mechanism into
+   `--help` or generated completions.
+
+5. **Docs fix pass** (9e6321ef) — README architecture diagram undercounted crates (13 -> 14,
    omitted `minibox-cni`); README/DEVELOPMENT/CLAUDE/CONTRIBUTING taught deprecated
    `cargo xtask test-unit`-style aliases instead of the canonical `cargo xtask test <suite>`
    form; `CRATE_INVENTORY.mbx.md` still referenced `handler.rs` as a single file after it
@@ -47,6 +73,10 @@
 
 **Recently completed:**
 
+- [x] Protocol drift expectations track split domain-* surfaces — fe9bae3e
+- [x] Colima commit adapter, image lease conformance suite, musl prepush gate — 1ae7528e
+- [x] minibox-tui crate (read-only dashboard), `mbx tui` subcommand — adf70510
+- [x] Nushell completion generation (`mbx completions`) — b9a84847
 - [x] Docs fix pass: crate count, deprecated xtask aliases, stale paths, CHANGELOG versioning — 9e6321ef and same-session predecessors
 - [x] minibox-cni crate: exec protocol, chain orchestration, nextest wiring, BrokenPipe fix — a333e28b, 7b4ee0a5, 1b577da1
 - [x] Colima adapter privilege-drop/docker-nerdctl/ownership fixes — d6659f56

@@ -73,7 +73,8 @@
 
 - **smolvm** (default): run/stop/ps via lightweight Linux VM
 - **krun**: run/stop/ps via libkrun VM (fallback when smolvm absent)
-- **colima**: run/stop/ps via Lima VM (Intel Macs)
+- **colima**: run/stop/ps via Lima VM (Intel Macs); `ColimaContainerCommitter` added for
+  commit/save (nerdctl commit/save -> docker-archive import) (1ae7528e)
 - Limitations: exec/logs not supported on any macOS adapter
 
 ### Testing infrastructure
@@ -109,10 +110,28 @@
 - `mbx doctor` — preflight diagnostics (compiled adapters, capabilities)
 - `mcp` / `minibox-mcp` — MCP stdio server exposing agent-safe daemon tools
   for doctor, ps, images, logs, manifest, pull, run, stop, and rm
+- `mbx tui` — new read-only `minibox-tui` crate (ratatui + crossterm): live container table
+  (polls `DaemonRequest::List` every 1s) and live-tailing lifecycle event log
+  (`DaemonRequest::SubscribeEvents`); no run/stop/exec by design (adf70510)
+- `mbx completions` — hidden subcommand generating a Nushell completion script via
+  `clap_complete`/`clap_complete_nushell`, sourced through `nu_libs.nu` (b9a84847)
+- `cargo xtask musl-check` — new prepush gate catching `cfg(target_os = "linux")` build
+  failures against the musl target before CI (1ae7528e)
 - `cargo xtask ci-watch` — watch GHA run status with job-level detail
 - `nu scripts/promote.nu` — branch cascade (develop->next->staging->main)
 
 ## Recently completed
+- **Protocol drift expectation fix** — xtask's expected surface registry updated to track the
+  already-split `domain-*` entries instead of the stale single `domain-ports` entry; file-level
+  clippy allow for unwrap/expect/panic in `cli_subprocess.rs` (fe9bae3e).
+- **Colima commit adapter + image lease conformance** — `ColimaContainerCommitter`
+  (nerdctl commit/save -> docker-archive import), `ImageLeaseService` port conformance suite +
+  `InMemoryLeaseService` test double, `ContainerRecord.upper_dir`/`merged_dir` populated from
+  rootfs metadata, `xtask musl-check` prepush gate (1ae7528e).
+- **minibox-tui crate** — new read-only TUI dashboard crate, `mbx tui` subcommand, 6 unit tests
+  covering App state transitions, live-smoke-tested against `miniboxd` (adf70510).
+- **Nushell completion generation** — `clap_complete_nushell`-backed hidden `completions`
+  invocation intercepted before clap parsing (b9a84847).
 - **MCP control surface first slice** — new `crates/mcp` workspace package
   `minibox-mcp`, with Rust library and binary names set to `mcp`. Exposes
   typed stdio MCP tools backed by `minibox-core::client::DaemonClient`,

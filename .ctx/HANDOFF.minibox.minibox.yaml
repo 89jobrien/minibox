@@ -1,25 +1,29 @@
 project: minibox
 id: minibox
-updated: 2026-08-07
+updated: 2026-08-08
 items:
   - id: uncommitted-work
     doob_uuid: null
     name: uncommitted-work
     priority: P1
     status: open
-    title: Uncommitted changes (3 files)
+    title: Uncommitted changes (5 files)
     description: |-
       Working tree has uncommitted changes:
       .ctx/HANDOFF.md
       .ctx/HANDOFF.minibox.minibox.yaml
+      .ctx/memory-bank/activeContext.mbx.md
+      .ctx/memory-bank/progress.mbx.md
       .minibox/checkpoints/prepush.json
     files:
       - .ctx/HANDOFF.md
       - .ctx/HANDOFF.minibox.minibox.yaml
+      - .ctx/memory-bank/activeContext.mbx.md
+      - .ctx/memory-bank/progress.mbx.md
       - .minibox/checkpoints/prepush.json
     completed: null
     extra: []
 log:
-  - date: "20260804.214942"
+  - date: "20260808.155757"
     summary: done=141 running=0 pending=23 blocked=0
     commits: []
