@@ -357,6 +357,79 @@ async fn test_handle_run_registry_pull_failure_returns_error_response() {
     }
 }
 
+/// When MockRuntime is configured to fail `spawn_process`, `handle_run` returns
+/// an Error response and marks the container `Failed` rather than removing it.
+///
+/// This also documents a real gap (not fixed here, out of scope for this test-only
+/// issue): overlay (`MockFilesystem::cleanup`) teardown is NOT invoked on the
+/// spawn-failure path in `run_inner` (`crates/minibox/src/daemon/handler/run.rs`).
+/// The container record stays in state with its rootfs/cgroup resources still
+/// considered allocated until an explicit `rm` is issued. See the
+/// `MockFilesystem::cleanup_count()` assertion below, which currently asserts 0
+/// (the actual, non-idealized behavior).
+#[tokio::test]
+async fn test_handle_run_spawn_failure_returns_error_and_skips_cleanup() {
+    let temp_dir = TempDir::new().expect("unwrap in test");
+    let state = make_state(&temp_dir);
+
+    // Filesystem and limiter succeed (so overlay/cgroup setup completes before
+    // the spawn failure), only the runtime's spawn_process is configured to fail.
+    let runtime = Arc::new(MockRuntime::new().with_spawn_failure());
+    let filesystem = Arc::new(MockFilesystem::new());
+    let registry = Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
+
+    let deps = make_deps(&temp_dir, runtime, filesystem.clone(), registry);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        Arc::clone(&state),
+        deps,
+    )
+    .await;
+
+    // Spawn failure must surface as an Error response.
+    let error_message = match response {
+        DaemonResponse::Error { message } => {
+            assert!(!message.is_empty(), "error message should not be empty");
+            message
+        }
+        other => panic!("expected Error response for spawn failure, got {other:?}"),
+    };
+    assert!(
+        error_message.to_lowercase().contains("spawn")
+            || error_message.to_lowercase().contains("mock"),
+        "error message should indicate spawn failure, got: {error_message}"
+    );
+
+    // The container was registered before spawn was attempted (overlay + cgroup
+    // setup preceded the spawn call), and is left in the `Failed` state rather
+    // than being removed — no automatic rollback of the container record.
+    let containers = state.list_containers().await;
+    assert_eq!(
+        containers.len(),
+        1,
+        "expected the container record to remain in state after spawn failure"
+    );
+    assert_eq!(
+        containers[0].state, "Failed",
+        "container should be marked Failed after spawn failure"
+    );
+
+    // GAP: overlay/cgroup cleanup is not invoked on this failure path today.
+    // This assertion pins the current (non-idealized) behavior; if a future
+    // change adds cleanup here, update this test to assert cleanup_count() > 0.
+    assert_eq!(
+        filesystem.cleanup_count(),
+        0,
+        "filesystem cleanup is not currently invoked on spawn failure (known gap)"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // handle_stop / handle_remove Failure Tests
 // ---------------------------------------------------------------------------
