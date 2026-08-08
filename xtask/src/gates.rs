@@ -198,9 +198,27 @@ pub fn prepush(sh: &Shell) -> Result<()> {
         )
         .run()
         .context("nextest failed")?;
-        test_conformance(&sh)?;
+        if phase_2_skipped() {
+            eprintln!(
+                "pre-push: SKIP_PHASE_2 set — skipping conformance suite (Phase 2) locally. \
+                 CI always runs the full sequence regardless of this env var."
+            );
+        } else {
+            test_conformance(&sh)?;
+        }
         Ok(())
     })
+}
+
+/// Returns true if `SKIP_PHASE_2` is set to a truthy value (`1` or `true`).
+///
+/// Local-dev convenience only, mirroring `fail_fast_flag()`'s env-var-gated
+/// escape-hatch pattern. Skips the conformance suite step of `prepush`
+/// (Phase 2 of the pre-push gate). This var must never be set from CI —
+/// CI always runs the full sequence regardless of this check; nothing in
+/// `.github/workflows/*.yml` sets or forwards it.
+fn phase_2_skipped() -> bool {
+    matches!(std::env::var("SKIP_PHASE_2").as_deref(), Ok("1" | "true"))
 }
 
 /// Musl cross-check gate: `cargo check --target x86_64-unknown-linux-musl` for the
@@ -844,7 +862,43 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
 mod tests {
     use super::{
         GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, parse_handler_fn_coverage,
+        phase_2_skipped,
     };
+
+    /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn phase_2_skipped_true_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["1", "true"] {
+            // SAFETY: serialized via ENV_LOCK; no other thread reads this var.
+            unsafe { std::env::set_var("SKIP_PHASE_2", val) };
+            assert!(phase_2_skipped(), "expected true for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("SKIP_PHASE_2") };
+    }
+
+    #[test]
+    fn phase_2_skipped_false_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["0", "false", "yes", ""] {
+            // SAFETY: serialized via ENV_LOCK
+            unsafe { std::env::set_var("SKIP_PHASE_2", val) };
+            assert!(!phase_2_skipped(), "expected false for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("SKIP_PHASE_2") };
+    }
+
+    #[test]
+    fn phase_2_skipped_unset_is_false() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe { std::env::remove_var("SKIP_PHASE_2") };
+        assert!(!phase_2_skipped());
+    }
 
     #[test]
     fn cfg_predicate_has_test_matches_plain_cfg_test() {
