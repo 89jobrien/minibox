@@ -358,17 +358,13 @@ async fn test_handle_run_registry_pull_failure_returns_error_response() {
 }
 
 /// When MockRuntime is configured to fail `spawn_process`, `handle_run` returns
-/// an Error response and marks the container `Failed` rather than removing it.
-///
-/// This also documents a real gap (not fixed here, out of scope for this test-only
-/// issue): overlay (`MockFilesystem::cleanup`) teardown is NOT invoked on the
-/// spawn-failure path in `run_inner` (`crates/minibox/src/daemon/handler/run.rs`).
-/// The container record stays in state with its rootfs/cgroup resources still
-/// considered allocated until an explicit `rm` is issued. See the
-/// `MockFilesystem::cleanup_count()` assertion below, which currently asserts 0
-/// (the actual, non-idealized behavior).
+/// an Error response, marks the container `Failed` rather than removing it, and
+/// tears down the overlay/cgroup resources that were already allocated before
+/// the spawn attempt (`run_inner` in `crates/minibox/src/daemon/handler/run.rs`
+/// cleans up on the spawn-failure branch — see `filesystem.cleanup()` and
+/// `resource_limiter.cleanup()` calls there).
 #[tokio::test]
-async fn test_handle_run_spawn_failure_returns_error_and_skips_cleanup() {
+async fn test_handle_run_spawn_failure_returns_error_and_cleans_up() {
     let temp_dir = TempDir::new().expect("unwrap in test");
     let state = make_state(&temp_dir);
 
@@ -420,13 +416,12 @@ async fn test_handle_run_spawn_failure_returns_error_and_skips_cleanup() {
         "container should be marked Failed after spawn failure"
     );
 
-    // GAP: overlay/cgroup cleanup is not invoked on this failure path today.
-    // This assertion pins the current (non-idealized) behavior; if a future
-    // change adds cleanup here, update this test to assert cleanup_count() > 0.
+    // Overlay cleanup must be invoked on the spawn-failure path so a failed
+    // container doesn't orphan its already-allocated rootfs.
     assert_eq!(
         filesystem.cleanup_count(),
-        0,
-        "filesystem cleanup is not currently invoked on spawn failure (known gap)"
+        1,
+        "filesystem cleanup should be invoked once on spawn failure"
     );
 }
 

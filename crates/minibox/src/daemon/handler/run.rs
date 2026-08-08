@@ -878,11 +878,47 @@ async fn run_inner_capture(
         .await
         .expect("semaphore closed");
 
-    let spawn_result = deps
+    let spawn_result = match deps
         .lifecycle
         .runtime
         .spawn_process(&prepared.spawn_config)
-        .await?;
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            error!("failed to spawn container {}: {e:#}", prepared.id);
+            deps.events.metrics.increment_counter(
+                "minibox_container_ops_total",
+                &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
+            );
+            // Overlay and cgroup were already set up in prepare_run before the
+            // spawn attempt — tear them down so a spawn failure doesn't orphan
+            // them. Mirrors the cleanup sequence in handler/lifecycle.rs's
+            // handle_remove.
+            let container_dir = deps.lifecycle.containers_base.join(&prepared.id);
+            if container_dir.exists() {
+                if !container_dir.starts_with(&deps.lifecycle.containers_base) {
+                    warn!(
+                        path = %container_dir.display(),
+                        base = %deps.lifecycle.containers_base.display(),
+                        "run: container_dir escapes base directory, skipping cleanup"
+                    );
+                } else if let Err(ce) = deps.lifecycle.filesystem.cleanup(&container_dir) {
+                    warn!(container_id = %prepared.id, error = %ce, "run: overlay cleanup failed after spawn error");
+                }
+            }
+            if let Err(ce) = deps.lifecycle.resource_limiter.cleanup(&prepared.id) {
+                warn!(container_id = %prepared.id, error = %ce, "run: cgroup cleanup failed after spawn error");
+            }
+            if let Err(ue) = state
+                .update_container_state(&prepared.id, ContainerState::Failed)
+                .await
+            {
+                warn!(container_id = %prepared.id, error = %ue, "state: failed to mark container Failed");
+            }
+            return Err(e);
+        }
+    };
 
     let pid = spawn_result.pid;
     let runtime_id = spawn_result.runtime_id;
@@ -969,6 +1005,25 @@ async fn run_inner(
                 "minibox_container_ops_total",
                 &[("op", "run"), ("adapter", "daemon"), ("status", "error")],
             );
+            // Overlay and cgroup were already set up in prepare_run before the
+            // spawn attempt — tear them down so a spawn failure doesn't orphan
+            // them. Mirrors the cleanup sequence in handler/lifecycle.rs's
+            // handle_remove.
+            let container_dir = deps.lifecycle.containers_base.join(&id);
+            if container_dir.exists() {
+                if !container_dir.starts_with(&deps.lifecycle.containers_base) {
+                    warn!(
+                        path = %container_dir.display(),
+                        base = %deps.lifecycle.containers_base.display(),
+                        "run: container_dir escapes base directory, skipping cleanup"
+                    );
+                } else if let Err(ce) = deps.lifecycle.filesystem.cleanup(&container_dir) {
+                    warn!(container_id = %id, error = %ce, "run: overlay cleanup failed after spawn error");
+                }
+            }
+            if let Err(ce) = deps.lifecycle.resource_limiter.cleanup(&id) {
+                warn!(container_id = %id, error = %ce, "run: cgroup cleanup failed after spawn error");
+            }
             if let Err(ue) = state
                 .update_container_state(&id, ContainerState::Failed)
                 .await

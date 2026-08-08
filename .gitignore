@@ -174,3 +174,4 @@ docs/archive/
 bench/results/
 .taskit-state.json
 .taskit-cache/
+.taskit/
