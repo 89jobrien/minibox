@@ -12,12 +12,14 @@
 > Updated 2026-07-25: crate count corrected to 13 crates, plus xtask as the
 > workspace dev-tool member (added ail and minibox-bench).
 > Updated 2026-07-26: added `minibox-mcp` MCP stdio control surface.
+> Updated 2026-08-08: crate count corrected to 15 crates, plus xtask (added
+> `minibox-cni` and `minibox-tui`).
 
 ## Workspace Overview
 
-14 workspace members (13 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
+16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
 
-<!-- fact:crate_count=13 -->
+<!-- fact:crate_count=15 -->
 <!-- fact:workspace_version=0.31.0 -->
 
 ```text
@@ -36,6 +38,8 @@ minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSO
 minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
 minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
 minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
+minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
+minibox-tui             (bin) — read-only TUI dashboard (ratatui + crossterm), `mbx tui`
 ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 ```
@@ -56,6 +60,8 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | minibox-mcp         | minibox-core                                                  |
 | minibox-testsuite   | minibox, minibox-core                                         |
 | minibox-bench       | minibox, minibox-core, minibox-macros                         |
+| minibox-cni         | minibox-core                                                  |
+| minibox-tui         | minibox-core                                                  |
 | ail                 | --                                                             |
 | xtask               | (standalone)                                                  |
 

@@ -842,7 +842,29 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
-    use super::{GATES_SOURCE, extract_test_unit_body, parse_handler_fn_coverage};
+    use super::{
+        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, parse_handler_fn_coverage,
+    };
+
+    #[test]
+    fn cfg_predicate_has_test_matches_plain_cfg_test() {
+        assert!(cfg_predicate_has_test("#[cfg(test)]"));
+    }
+
+    #[test]
+    fn cfg_predicate_has_test_matches_compound_predicate() {
+        assert!(cfg_predicate_has_test(
+            r#"#[cfg(all(test, feature = "registry"))]"#
+        ));
+        assert!(cfg_predicate_has_test("#[cfg(any(test, doctest))]"));
+    }
+
+    #[test]
+    fn cfg_predicate_has_test_ignores_test_like_feature_names() {
+        assert!(!cfg_predicate_has_test(r#"#[cfg(feature = "test_thing")]"#));
+        assert!(!cfg_predicate_has_test(r#"#[cfg(feature = "testing")]"#));
+        assert!(!cfg_predicate_has_test(r#"#[cfg(target_os = "linux")]"#));
+    }
 
     /// Tripwire: `test_unit` (the implementation of `cargo xtask test unit`,
     /// the canonical "unit + conformance + property tests, any platform"
@@ -1371,6 +1393,39 @@ pub fn test_gke_adapter(sh: &Shell) -> Result<()> {
     }
 }
 
+/// Returns true if a `#[cfg(...)]` attribute line's predicate contains a bare
+/// `test` token — e.g. `#[cfg(test)]` or `#[cfg(all(test, feature = "x"))]` —
+/// but not `#[cfg(feature = "test_thing")]` (a string literal, not the `test`
+/// predicate) or `#[cfg(feature = "testing")]` (a different identifier).
+/// String-literal contents are stripped before tokenizing so quoted feature
+/// names never match.
+fn cfg_predicate_has_test(line: &str) -> bool {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut token = String::new();
+    let mut in_string = false;
+    for c in line.chars() {
+        if c == '"' {
+            in_string = !in_string;
+            if !token.is_empty() {
+                tokens.push(std::mem::take(&mut token));
+            }
+            continue;
+        }
+        if in_string {
+            continue;
+        }
+        if c.is_alphanumeric() || c == '_' {
+            token.push(c);
+        } else if !token.is_empty() {
+            tokens.push(std::mem::take(&mut token));
+        }
+    }
+    if !token.is_empty() {
+        tokens.push(token);
+    }
+    tokens.iter().any(|t| t == "test")
+}
+
 /// Scan production Rust source for `.unwrap()` calls outside test infrastructure.
 ///
 /// Mirrors the `no-unwrap-in-prod` job in `stability-gates.yml`. Advisory by default —
@@ -1434,7 +1489,10 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
             for (i, line) in content.lines().enumerate() {
                 let trimmed = line.trim();
 
-                if !in_test_module && trimmed.contains("#[cfg(test)]") {
+                if !in_test_module
+                    && trimmed.starts_with("#[cfg(")
+                    && cfg_predicate_has_test(trimmed)
+                {
                     saw_cfg_test = true;
                     continue;
                 }

@@ -1,7 +1,7 @@
 {
   "gate": "prepush",
-  "tree_hash": "6294c59199d2e17e2fd9c12ade7fd9f4fd0ac0ae",
+  "tree_hash": "cd33070e8af2c85735b74a5ae54abee8e29e22c0",
   "platform": "macos-aarch64",
   "rustc_version": "rustc 1.96.0 (ac68faa20 2026-05-25)",
-  "timestamp": "2026-08-08T16:51:25.697376Z"
+  "timestamp": "2026-08-08T17:05:41.632436Z"
 }
