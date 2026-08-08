@@ -820,10 +820,102 @@ fn parse_handler_fn_coverage(output: &str) -> Option<HandlerCoverage> {
     })
 }
 
+/// Source text of this file, embedded at compile time so the `test_unit` drift
+/// guard below can inspect the live implementation rather than a stale copy.
+#[cfg(test)]
+const GATES_SOURCE: &str = include_str!("gates.rs");
+
+/// Extracts the body of `pub fn test_unit` from `gates.rs` source text.
+///
+/// Returns the substring from the `pub fn test_unit(` signature up to (but not
+/// including) the next top-level `pub fn` declaration. Used only by the
+/// `test_unit_invokes_expected_crate_set` tripwire test below.
+#[cfg(test)]
+fn extract_test_unit_body(source: &str) -> Option<&str> {
+    let start = source.find("pub fn test_unit(")?;
+    let after_start = &source[start..];
+    // Find the next `pub fn` after the opening one, marking the end of this fn.
+    let next_fn_offset = after_start[1..].find("\npub fn ")? + 1;
+    Some(&after_start[..next_fn_offset])
+}
+
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
-    use super::parse_handler_fn_coverage;
+    use super::{GATES_SOURCE, extract_test_unit_body, parse_handler_fn_coverage};
+
+    /// Tripwire: `test_unit` (the implementation of `cargo xtask test unit`,
+    /// the canonical "unit + conformance + property tests, any platform"
+    /// command per README.md/CLAUDE.md) must keep invoking `cargo nextest run
+    /// --workspace --lib`, and the only crate ever excluded from that run must
+    /// be the explicit, expected set below.
+    ///
+    /// `test_unit` deliberately does *not* enumerate crates with `-p` flags —
+    /// it runs `--workspace` so newly added workspace members are picked up
+    /// automatically. That means the only way a crate's tests can silently
+    /// stop running is via a `--exclude` flag (or a switch away from
+    /// `--workspace` entirely). This test parses the live `test_unit` source
+    /// and asserts:
+    ///   1. every macOS/non-macOS branch still runs `cargo nextest run
+    ///      --workspace --lib`
+    ///   2. the set of `--exclude <crate>` flags used exactly matches
+    ///      `EXPECTED_EXCLUDED_CRATES`
+    ///
+    /// If this test fails: either `test_unit`'s invoked set changed
+    /// intentionally (update `EXPECTED_EXCLUDED_CRATES` to match, with a
+    /// comment explaining why) or a crate/binary was accidentally dropped
+    /// from the unit test run (fix `test_unit` instead of the expected list).
+    #[test]
+    fn test_unit_invokes_expected_crate_set() {
+        // macbox is macOS-only (VM adapter crate); it is excluded from the
+        // non-macOS nextest invocation because it does not compile there.
+        const EXPECTED_EXCLUDED_CRATES: &[&str] = &["macbox"];
+
+        let body = extract_test_unit_body(GATES_SOURCE)
+            .expect("could not locate `pub fn test_unit` in gates.rs source");
+
+        // Both branches (macOS and non-macOS) must run the full workspace's
+        // lib tests — this is what makes `--workspace` (not an explicit `-p`
+        // list) the crate-drift-resistant invocation shape.
+        let workspace_lib_invocations = body.matches("--workspace").count();
+        assert!(
+            workspace_lib_invocations >= 2,
+            "test_unit must invoke `cargo nextest run --workspace --lib` on both \
+             the macOS and non-macOS branches; found {workspace_lib_invocations} \
+             `--workspace` occurrence(s) in:\n{body}"
+        );
+        assert!(
+            body.contains("--lib"),
+            "test_unit must run `--lib` tests; not found in:\n{body}"
+        );
+
+        // Collect every `--exclude <name>` token that appears in the body.
+        let mut excluded: Vec<&str> = Vec::new();
+        let mut rest = body;
+        while let Some(idx) = rest.find("--exclude ") {
+            let after = &rest[idx + "--exclude ".len()..];
+            let name = after
+                .split(|c: char| c.is_whitespace() || c == '"')
+                .find(|s| !s.is_empty())
+                .unwrap_or("");
+            if !name.is_empty() {
+                excluded.push(name);
+            }
+            rest = &after[name.len()..];
+        }
+        excluded.sort_unstable();
+        excluded.dedup();
+
+        let mut expected: Vec<&str> = EXPECTED_EXCLUDED_CRATES.to_vec();
+        expected.sort_unstable();
+
+        assert_eq!(
+            excluded, expected,
+            "test_unit's --exclude set drifted from the expected tripwire list — \
+             a crate was silently added to or removed from the unit test run. \
+             found excludes: {excluded:?}, expected: {expected:?}"
+        );
+    }
 
     /// Multi-file handler module: aggregates counts across submodules.
     #[test]
