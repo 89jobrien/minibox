@@ -350,6 +350,34 @@ mod tests {
 
 Do this per-module as tests are added — don't pre-emptively blanket-allow at the crate level.
 
+## Preferred Idioms — Lint Policy (Issue #228)
+
+The workspace `[workspace.lints.clippy]` table in the root `Cargo.toml` denies a small set of
+named lints on top of the `all`/`pedantic`/`nursery` groups, to make specific idiom regressions
+fail the build immediately rather than relying on the broader group staying enabled:
+
+| Idiom                      | Anti-pattern                              | Clippy lint (denied)     |
+| -------------------------- | ----------------------------------------- | ------------------------ |
+| `std::io::Error::other(e)` | `io::Error::new(io::ErrorKind::Other, e)` | `clippy::io_other_error` |
+| `slice.first()`            | `slice.get(0)`                            | `clippy::get_first`      |
+| `collection.is_empty()`    | `collection.len() == 0`                   | `clippy::len_zero`       |
+
+These three are already covered transitively by `all = { level = "warn" }` (they live in
+clippy's `style` group), but are re-stated at `deny` explicitly so a future edit to the group
+levels above can't silently drop them, and so the intent is documented in one place.
+
+Two more idioms named in issue #228 are enforced by convention only — clippy has no lint that
+maps to them as of clippy 0.1.96 (verified: `clippy::from_ref` is not a real lint name and errors
+with `unknown_lints` if used; let-chains have no clippy lint pushing adoption of the syntax):
+
+- **`From::from_ref` / `AsRef`-based conversions** — prefer implementing `From<&T> for U` (or
+  using an existing `from_ref` associated fn where the standard library provides one, e.g.
+  `Arc::from_ref`-style patterns) over a hand-rolled `fn from_my_type(t: &T) -> U` that clones
+  fields one at a time. No clippy lint enforces this; catch it in code review.
+- **let-chains** (`if let X = a && let Y = b { ... }`, stable since edition 2024) — prefer a
+  single let-chain over nested `if let` blocks when both conditions must hold before entering the
+  branch. No clippy lint enforces this today; catch it in code review.
+
 ## Anti-Patterns (Minibox-Specific)
 
 | Pattern                                       | Problem                                     | Fix                                           |
