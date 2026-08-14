@@ -5,6 +5,14 @@ use std::path::PathBuf;
 /// Errors from CNI plugin execution.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum CniError {
+    /// A plugin type was not a single filename component.
+    #[error("CNI plugin type '{plugin}' must be a single normal path component")]
+    #[diagnostic(code(minibox::cni::invalid_plugin_type))]
+    InvalidPluginType {
+        /// The invalid plugin type supplied by the CNI configuration.
+        plugin: String,
+    },
+
     /// A required plugin binary was not found on the configured `CNI_PATH`.
     #[error("CNI plugin '{plugin}' not found on CNI_PATH")]
     #[diagnostic(code(minibox::cni::plugin_not_found))]

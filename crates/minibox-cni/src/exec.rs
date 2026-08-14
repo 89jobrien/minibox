@@ -4,15 +4,25 @@
 use crate::config::PluginConfig;
 use crate::error::CniError;
 use crate::result::CniErrorPayload;
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 use tracing::{Span, instrument};
 
 /// Locate a plugin binary by name on the given `CNI_PATH` directories.
 fn find_plugin_binary(cni_path: &[PathBuf], plugin_type: &str) -> Result<PathBuf, CniError> {
+    let plugin_path = Path::new(plugin_type);
+    if !matches!(
+        plugin_path.components().collect::<Vec<_>>().as_slice(),
+        [Component::Normal(_)]
+    ) {
+        return Err(CniError::InvalidPluginType {
+            plugin: plugin_type.to_string(),
+        });
+    }
+
     for dir in cni_path {
-        let candidate = dir.join(plugin_type);
+        let candidate = dir.join(plugin_path);
         if candidate.is_file() {
             return Ok(candidate);
         }
@@ -202,6 +212,15 @@ mod tests {
         .await;
 
         assert!(matches!(result, Err(CniError::PluginNotFound { .. })));
+    }
+
+    #[test]
+    fn find_plugin_binary_rejects_traversal() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        let result = find_plugin_binary(&[dir.path().to_path_buf()], "../malicious-plugin");
+
+        assert!(matches!(result, Err(CniError::InvalidPluginType { .. })));
     }
 
     #[tokio::test]

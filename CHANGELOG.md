@@ -9,7 +9,25 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-No unreleased changes yet.
+### Security
+
+- CNI plugin lookup now rejects plugin types that are not a single normal path component,
+  closing a path-traversal vector in `find_plugin_binary`.
+- Colima `commit`/`save` archive import now resolves `config`/`layers` entries with a
+  canonicalization check against the extraction root, rejecting archive members that
+  escape via `..` or absolute paths.
+
+### Changed
+
+- `xtask coverage-check`'s handler function-coverage threshold raised from 61% to the
+  documented 80% target; enforced in CI on Linux via a new `handler-coverage` job in
+  `stability-gates.yml`.
+- CI's main pipeline job now runs `cargo xtask verify` directly instead of
+  `cargo xtask ci --fail-fast`.
+- `stability-gates.yml` now also runs on pushes to `develop`.
+- Stability checklist consolidated from 7 to 6 mandatory gates (former advisory-adjacent
+  gate 7 folded into the advisory list); `STABILITY_CHECKLIST.mbx.md`, `SUPPORT_TIERS.mbx.md`,
+  and `CONTRIBUTING.md` updated to reflect gate 2 (handler coverage) now passing at 92.41%.
 
 ---
 

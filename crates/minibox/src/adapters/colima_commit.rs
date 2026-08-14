@@ -17,7 +17,7 @@ use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::{Descriptor, OciManifest};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -161,7 +161,7 @@ fn import_docker_archive(
         .first()
         .ok_or_else(|| anyhow!("commit archive manifest.json has no entries"))?;
 
-    let config_path = tmp.path().join(&entry.config);
+    let config_path = resolve_archive_member(tmp.path(), &entry.config)?;
     let config_bytes = std::fs::read(&config_path)
         .with_context(|| format!("read config {}", config_path.display()))?;
     let config_digest = format!("sha256:{:x}", Sha256::digest(&config_bytes));
@@ -169,7 +169,7 @@ fn import_docker_archive(
     let mut layer_descriptors = Vec::with_capacity(entry.layers.len());
     let mut layer_infos = Vec::with_capacity(entry.layers.len());
     for layer_rel_path in &entry.layers {
-        let layer_path = tmp.path().join(layer_rel_path);
+        let layer_path = resolve_archive_member(tmp.path(), layer_rel_path)?;
         let layer_bytes = std::fs::read(&layer_path)
             .with_context(|| format!("read layer {}", layer_path.display()))?;
 
@@ -219,6 +219,31 @@ fn import_docker_archive(
         tag: tag.to_string(),
         layers: layer_infos,
     })
+}
+
+/// Resolve an archive member only when it remains inside the unpacked archive.
+fn resolve_archive_member(extraction_root: &Path, member: &str) -> Result<PathBuf> {
+    let member_path = Path::new(member);
+    if !member_path
+        .components()
+        .all(|component| matches!(component, Component::Normal(_)))
+        || member_path.as_os_str().is_empty()
+    {
+        return Err(anyhow!("archive member has a non-normal path: {member}"));
+    }
+
+    let canonical_root = extraction_root
+        .canonicalize()
+        .with_context(|| format!("canonicalize extraction root {}", extraction_root.display()))?;
+    let canonical_member = extraction_root
+        .join(member_path)
+        .canonicalize()
+        .with_context(|| format!("canonicalize archive member {member}"))?;
+    if !canonical_member.starts_with(&canonical_root) {
+        return Err(anyhow!("archive member escapes extraction root: {member}"));
+    }
+
+    Ok(canonical_member)
 }
 
 fn gzip_compress(bytes: &[u8]) -> Result<Vec<u8>> {
@@ -331,6 +356,30 @@ mod tests {
         let (name, tag) = parse_image_ref("myapp");
         assert_eq!(name, "myapp");
         assert_eq!(tag, "latest");
+    }
+
+    #[test]
+    fn resolve_archive_member_rejects_traversal() {
+        let root = tempfile::TempDir::new().unwrap();
+
+        let err = resolve_archive_member(root.path(), "../outside.json")
+            .expect_err("traversal path must be rejected");
+
+        assert!(err.to_string().contains("non-normal path"));
+    }
+
+    #[test]
+    fn resolve_archive_member_accepts_internal_member() {
+        let root = tempfile::TempDir::new().unwrap();
+        let members = root.path().join("layers");
+        std::fs::create_dir(&members).unwrap();
+        let member = members.join("layer.tar");
+        std::fs::write(&member, b"layer").unwrap();
+
+        assert_eq!(
+            resolve_archive_member(root.path(), "layers/layer.tar").unwrap(),
+            member.canonicalize().unwrap()
+        );
     }
 
     #[test]

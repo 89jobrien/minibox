@@ -639,17 +639,15 @@ pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Res
 ///
 /// # Threshold rationale
 ///
-/// LLVM's function-coverage counter treats every await-point state-machine
-/// closure in an `async fn` as a separate function symbol. A typical
-/// `async fn` with N `.await` points generates N+1 coverage symbols even
-/// though they map to a single logical function. For the handler module,
-/// which is almost entirely `async fn`, this inflates the denominator.
-/// The practical ceiling is ~65%.
+/// The report aggregates all functions in `daemon/handler/`, including
+/// compiler-generated async state-machine closures. The threshold therefore
+/// protects the handler module's observable behavior rather than serving as a
+/// line-coverage target.
 ///
-/// Threshold is set at 61% — just below the measured baseline — to catch
-/// regressions while remaining achievable on macOS CI.
+/// The published 80% function-coverage threshold is intentionally enforced in
+/// CI on Linux, where `cargo llvm-cov` and the complete test selection run.
 pub fn coverage_check(sh: &Shell) -> Result<()> {
-    const THRESHOLD: f64 = 61.0;
+    const THRESHOLD: f64 = 80.0;
 
     let output = cmd!(
         sh,
@@ -1029,7 +1027,7 @@ mod tests {
         );
     }
 
-    /// Exactly 61% should satisfy the threshold.
+    /// The parser preserves an exact 61% value below the enforcement threshold.
     #[test]
     fn recognises_61_percent() {
         let sample = r#"{"data":[{"files":[
@@ -1059,17 +1057,17 @@ mod tests {
         assert!(parse_handler_fn_coverage("not json").is_none());
     }
 
-    /// The 61% threshold contract from the doc comment.
+    /// The published handler-coverage threshold remains enforceable.
     #[test]
-    fn coverage_threshold_is_61_percent() {
-        const THRESHOLD: f64 = 61.0;
+    fn coverage_threshold_is_80_percent() {
+        const THRESHOLD: f64 = 80.0;
         let sample = r#"{"data":[{"files":[
-            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"functions":{"count":100,"covered":61,"percent":61.0}}}
+            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"functions":{"count":100,"covered":80,"percent":80.0}}}
         ]}]}"#;
-        let result = parse_handler_fn_coverage(sample).expect("should parse 61.0%");
+        let result = parse_handler_fn_coverage(sample).expect("should parse 80.0%");
         assert!(
             result.percent >= THRESHOLD,
-            "61.0% must satisfy the {THRESHOLD}% threshold; got {:.2}%",
+            "80.0% must satisfy the {THRESHOLD}% threshold; got {:.2}%",
             result.percent
         );
     }

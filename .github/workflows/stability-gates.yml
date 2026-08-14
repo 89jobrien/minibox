@@ -3,7 +3,17 @@ name: Stability Gates
 on:
   merge_group:
   push:
-    branches: [main, next, staging, "feature/*", "hotfix/*", "chore/*", "feat/*"]
+    branches:
+      [
+        develop,
+        main,
+        next,
+        staging,
+        "feature/*",
+        "hotfix/*",
+        "chore/*",
+        "feat/*",
+      ]
   pull_request:
     branches: [main, next]
 
@@ -89,6 +99,22 @@ jobs:
       - name: cargo xtask check-protocol-sites
         run: cargo xtask check-protocol-sites crates/miniboxd/src/main.rs --expected 4
 
+  handler-coverage:
+    name: handler function coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: cargo xtask coverage-check
+        run: cargo xtask coverage-check
+
   cancel-on-failure:
     name: cancel on failure
     runs-on: ubuntu-latest
@@ -99,6 +125,7 @@ jobs:
       - stability-compile
       - check-stale-names
       - check-protocol-sites
+      - handler-coverage
     if: failure()
     steps:
       - name: cancel workflow run

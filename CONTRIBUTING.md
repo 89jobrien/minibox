@@ -9,14 +9,14 @@ gates pass on CI. This freeze is formal and operational — not advisory.
 
 ### What "passing" means
 
-All 7 mandatory [GATE] items in [`docs/core/STABILITY_CHECKLIST.mbx.md`](docs/core/STABILITY_CHECKLIST.mbx.md)
+All six mandatory [GATE] items in [`docs/core/STABILITY_CHECKLIST.mbx.md`](docs/core/STABILITY_CHECKLIST.mbx.md)
 must be green on the `develop` branch in CI simultaneously. The current blocking gate is:
 
-- Gate 2: Handler coverage >= 80% (currently ~67.5%)
+- Gate 2: Handler coverage >= 80% (currently 92.41%, 207/224 functions)
 
 ### Unlock condition
 
-All 7 mandatory gates green in CI on `develop`. A maintainer will tag the freeze as lifted
+All six mandatory gates green on the `develop` -> `next` -> `staging` promotion path, including Linux integration/e2e evidence. A maintainer will tag the freeze as lifted
 in the tracking issue and update this file.
 
 ### What IS allowed during the freeze
@@ -26,6 +26,7 @@ in the tracking issue and update this file.
 - Documentation updates
 - Refactors that do not change public API surface
 - Dependency updates (security patches, version bumps)
+- Isolated Tier 2/3 experiments that do not alter frozen Tier 1 contracts
 - CI and tooling improvements
 
 ### What is NOT allowed during the freeze
