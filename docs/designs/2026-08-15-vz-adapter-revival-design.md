@@ -22,14 +22,29 @@ the existing `~/.minibox/vm/boot/` files (~4 months old) and a freshly downloade
 official Alpine v3.22 aarch64 `netboot` kernel+initramfs — **identical failure both
 times**. This rules out "stale kernel file" as the cause.
 
+A follow-up adversarial review (via `/doublecheck`) surfaced a real alternative
+explanation that hadn't been tested: neither minibox's `VzVm::prepare_on_main_queue` nor
+the minimal repro ever set a `VZPlatformConfiguration` (e.g.
+`VZGenericPlatformConfiguration`) on `VZVirtualMachineConfiguration`. If that object is
+implicitly required by this macOS/SDK version, its absence could plausibly produce
+exactly this generic "Internal Virtualization error" with nothing to do with an Apple
+regression. Tested directly: added an explicit `VZGenericPlatformConfiguration::new()` +
+`setPlatform:` to the minimal repro (API confirmed present in the vendored
+`objc2-virtualization 0.3.2`) — **identical `VZErrorDomain code=1` failure**. This
+hypothesis is ruled out too.
+
 **Conclusion**: `VZLinuxBootLoader` itself is still broken on macOS 26.4, independent of
-minibox's code and independent of which kernel is used. The adapter code restored by
-this plan is real, compiles clean, and is architecturally sound (see the rest of this
-doc and `docs/plans/2026-08-15-vz-adapter-revival.md`'s 8 completed tasks) — but it
-cannot actually boot a VM on this machine's OS build today. `vz` should be treated as
-**not functional**, not merely "unvalidated," until Apple fixes `VZLinuxBootLoader`
-specifically, or minibox switches to `VZEFIBootLoader` (a materially different,
-disk-image-based boot mechanism — out of scope for this design).
+minibox's code, independent of which kernel is used, and independent of platform
+configuration. Two plausible alternative explanations (stale kernel image, missing
+platform config) have been directly tested and ruled out — this strengthens but does not
+constitute absolute proof of an Apple-side regression specifically (a config gap neither
+of these two tests happened to probe remains logically possible, however unlikely). The
+adapter code restored by this plan is real, compiles clean, and is architecturally sound
+(see the rest of this doc and `docs/plans/2026-08-15-vz-adapter-revival.md`'s 8 completed
+tasks) — but it cannot actually boot a VM on this machine's OS build today. `vz` should
+be treated as **not functional**, not merely "unvalidated," until Apple fixes
+`VZLinuxBootLoader` specifically, or minibox switches to `VZEFIBootLoader` (a materially
+different, disk-image-based boot mechanism — out of scope for this design).
 
 ## Goal (original, superseded by the status update above)
 
