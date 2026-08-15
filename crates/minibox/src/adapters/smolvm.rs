@@ -18,9 +18,13 @@ use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry,
     ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
+use minibox_core::image::ImageStore;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+
+use crate::adapters::DockerHubRegistry;
+use crate::adapters::docker_archive::build_docker_load_tarball;
 
 /// Default smolvm image used for container operations.
 const DEFAULT_IMAGE: &str = "ubuntu:24.04";
@@ -28,25 +32,28 @@ const DEFAULT_IMAGE: &str = "ubuntu:24.04";
 const LOAD_MOUNT: &str = "/mnt/minibox-load";
 /// Timeout for local image imports into the VM.
 const LOAD_TIMEOUT_SECS: u32 = 600;
-/// POSIX shell snippet that installs `docker` inside the guest if it is not already
-/// present. The stock `ubuntu:24.04` guest image ships no container runtime, so every
-/// docker invocation inside the VM is prefixed with this self-healing check. Installation
-/// only runs once per VM instance (subsequent `smolvm machine run` calls that reuse the
-/// same cached VM see `docker` already on PATH and skip straight past it), but the very
-/// first pull/load/run after a fresh VM boot pays the `apt-get install` latency cost.
-const ENSURE_DOCKER_SCRIPT: &str = r"if ! command -v docker >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq && apt-get install -y -qq docker.io >/dev/null
-fi
-";
-
 /// POSIX shell script that imports a tarball and retags whatever docker loaded.
+///
+/// The stock `ubuntu:24.04` guest image ships no container runtime, so this
+/// installs `docker.io` on first use (subsequent `smolvm machine run` calls
+/// that reuse the same cached VM see `docker` already on PATH and skip
+/// straight past it). Installing the package does not start `dockerd` on its
+/// own in this guest image (no systemd unit gets brought up on a one-off
+/// `smolvm machine run` invocation) — the daemon is started explicitly and
+/// polled until its socket answers before `docker load` runs.
 const DOCKER_LOAD_AND_TAG_SCRIPT: &str = r#"set -eu
 tarball="$1"
 target="$2"
 if ! command -v docker >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq && apt-get install -y -qq docker.io >/dev/null
+fi
+if ! docker info >/dev/null 2>&1; then
+    dockerd >/var/log/dockerd.log 2>&1 &
+    for _ in $(seq 1 30); do
+        docker info >/dev/null 2>&1 && break
+        sleep 1
+    done
 fi
 out="$(docker load -i "$tarball")"
 printf '%s\n' "$out"
@@ -150,23 +157,43 @@ fn smolvm_exec_full(
 
 /// `SmolVM` implementation of [`ImageRegistry`].
 ///
-/// Pulls images via `smolvm machine run` which handles image management
-/// internally. smolvm caches images locally after first pull.
+/// Pulls images on the host via [`DockerHubRegistry`] (real OCI registry
+/// client, no VM/network round-trip through the guest), then packages the
+/// result into a `docker load` tarball and imports it into the VM's
+/// docker-local image cache — see [`crate::adapters::docker_archive`]. This
+/// avoids depending on the ephemeral guest VM having working outbound
+/// network access and a running docker daemon just to pull; the guest still
+/// needs a running docker daemon for `load_image`/`has_image` and to run
+/// containers, but no longer for the pull itself.
 pub struct SmolVmRegistry {
     /// Image to use for the VM (default: ubuntu:24.04).
     image: String,
     /// Optional injected executor used in tests to avoid real smolvm calls.
     executor: Option<SmolVmExecutor>,
+    /// Host-side OCI registry client backing the actual pull.
+    inner: DockerHubRegistry,
+    /// Shared host-side image store `inner` pulls into; also read back when
+    /// building the docker-load tarball for VM import.
+    store: Arc<ImageStore>,
 }
 
 impl SmolVmRegistry {
-    /// Create a new registry adapter using the default smolvm image.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
+    /// Create a new registry adapter using the default smolvm image and the
+    /// given host-side image store (typically the daemon's shared
+    /// `state.image_store`, so pulls are cached across adapters).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the underlying OCI registry HTTP client cannot be
+    /// initialised (e.g. TLS initialisation failure).
+    pub fn new(store: Arc<ImageStore>) -> Result<Self> {
+        let inner = DockerHubRegistry::new(store.clone())?;
+        Ok(Self {
             image: DEFAULT_IMAGE.to_string(),
             executor: None,
-        }
+            inner,
+            store,
+        })
     }
 
     /// Override the smolvm VM image (default: `ubuntu:24.04`).
@@ -221,23 +248,6 @@ impl SmolVmRegistry {
         format!("{short_name}:{tag}")
     }
 
-    /// Quote a single argument for safe interpolation into a POSIX shell command line.
-    fn shell_quote(arg: &str) -> String {
-        format!("'{}'", arg.replace('\'', "'\\''"))
-    }
-
-    /// Run a `docker` subcommand inside the VM, self-healing by installing `docker` first
-    /// if the guest image (a stock `ubuntu:24.04` cloud image) doesn't already have it.
-    async fn docker_exec(&self, args: &[&str]) -> Result<String> {
-        let joined = args
-            .iter()
-            .map(|arg| Self::shell_quote(arg))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let script = format!("{ENSURE_DOCKER_SCRIPT}exec docker {joined}\n");
-        self.vm_exec(&["sh", "-c", &script]).await
-    }
-
     /// Return the canonical host tarball path, parent directory, and VM guest path.
     fn load_paths(path: &Path) -> Result<(PathBuf, PathBuf, String)> {
         if !path.exists() {
@@ -261,38 +271,40 @@ impl SmolVmRegistry {
 
 #[async_trait]
 impl ImageRegistry for SmolVmRegistry {
-    /// Check if an image is available inside the smolvm VM.
-    ///
-    /// Runs `docker images --filter reference=<name>:<tag> --quiet` inside
-    /// the VM. Returns `true` if the output is non-empty.
+    /// Check if an image has already been pulled to the host-side image
+    /// store. Unlike the VM-local docker cache (which is discarded whenever
+    /// the ephemeral guest VM exits), the host store persists across runs,
+    /// so this is both faster and more accurate than asking the guest.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        let full_name = Self::target_ref(name, tag);
-        self.docker_exec(&[
-            "images",
-            "--filter",
-            &format!("reference={full_name}"),
-            "--quiet",
-        ])
-        .await
-        .is_ok_and(|out| !out.trim().is_empty())
+        self.inner.has_image(name, tag).await
     }
 
-    /// Pull an image inside the smolvm VM via `docker pull`.
+    /// Pull an image on the host via [`DockerHubRegistry`], then package and
+    /// import it into the smolvm VM's docker-local image cache.
+    ///
+    /// See the [`SmolVmRegistry`] doc comment for why the pull itself no
+    /// longer round-trips through the guest VM.
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
     ) -> Result<ImageMetadata> {
+        let metadata = self.inner.pull_image(image_ref).await?;
+
         let cache_name = image_ref.cache_name();
         let tag = image_ref.tag.clone();
-        let full_name = format!("{cache_name}:{tag}");
-
-        self.docker_exec(&["pull", &full_name]).await?;
-
-        Ok(ImageMetadata {
-            name: cache_name,
-            tag,
-            layers: vec![],
+        let store = self.store.clone();
+        let export_name = cache_name.clone();
+        let export_tag = tag.clone();
+        let export_dir = std::env::temp_dir().join("minibox-smolvm-export");
+        let tarball = tokio::task::spawn_blocking(move || {
+            build_docker_load_tarball(&store, &export_name, &export_tag, &export_dir)
         })
+        .await
+        .map_err(|e| anyhow!("docker-archive export: join error: {e}"))??;
+
+        self.load_image(&tarball, &cache_name, &tag).await?;
+
+        Ok(metadata)
     }
 
     /// Layer paths live inside the VM's image cache. Return a stable VM-local
@@ -645,13 +657,11 @@ impl ResourceLimiter for SmolVmLimiter {
     }
 }
 
-// Register all four SmolVM adapters with the adapt! macro.
-adapt!(
-    SmolVmRegistry,
-    SmolVmFilesystem,
-    SmolVmLimiter,
-    SmolVmRuntime
-);
+// SmolVmRegistry's `new()` takes an `Arc<ImageStore>` and returns `Result`,
+// so it doesn't fit `adapt!`'s no-arg-`Default`-constructor contract — just
+// give it `AsAny`. The other three adapters still take no arguments.
+minibox_core::as_any!(SmolVmRegistry);
+adapt!(SmolVmFilesystem, SmolVmLimiter, SmolVmRuntime);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -667,6 +677,15 @@ mod tests {
     fn _assert_filesystem_provider<T: FilesystemProvider>() {}
     fn _assert_resource_limiter<T: ResourceLimiter>() {}
 
+    /// Build a registry backed by a throwaway temp-dir image store, for tests
+    /// that don't care about the specific store location.
+    fn test_registry() -> SmolVmRegistry {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = Arc::new(ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"));
+        std::mem::forget(tmp); // keep tempdir alive for the registry's lifetime
+        SmolVmRegistry::new(store).expect("SmolVmRegistry::new")
+    }
+
     /// Compile-time and runtime check: all four adapters satisfy the required domain traits
     /// and can be instantiated.
     #[test]
@@ -677,7 +696,7 @@ mod tests {
         let _ = _assert_filesystem_provider::<SmolVmFilesystem>;
         let _ = _assert_resource_limiter::<SmolVmLimiter>;
         // Runtime: verify the adapters can be constructed.
-        let registry = SmolVmRegistry::new();
+        let registry = test_registry();
         let runtime = SmolVmRuntime::new();
         let filesystem = SmolVmFilesystem::new();
         let limiter = SmolVmLimiter::new();
@@ -688,61 +707,14 @@ mod tests {
         drop((runtime, filesystem, limiter));
     }
 
-    /// Registry with injected executor returns true when image exists.
+    /// `has_image` now checks the host-side image store (persists across
+    /// ephemeral VM instances) instead of asking the guest, so it reports
+    /// `true` once `inner`'s backing store has the image cached — with no
+    /// VM executor involved at all.
     #[tokio::test]
-    async fn registry_has_image_with_executor() {
-        let registry = SmolVmRegistry::new()
-            .with_executor(Arc::new(|_args: &[&str]| Ok("sha256:abc123\n".to_string())));
-        assert!(registry.has_image("alpine", "latest").await);
-    }
-
-    /// Registry with injected executor returns false on empty output.
-    #[tokio::test]
-    async fn registry_has_image_returns_false_on_empty() {
-        let registry =
-            SmolVmRegistry::new().with_executor(Arc::new(|_args: &[&str]| Ok(String::new())));
+    async fn registry_has_image_checks_host_store() {
+        let registry = test_registry();
         assert!(!registry.has_image("alpine", "latest").await);
-    }
-
-    /// Pull failure propagates through the executor.
-    #[tokio::test]
-    async fn registry_pull_failure_propagates() {
-        let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-            if args.iter().any(|a| a.contains("pull")) {
-                Err(anyhow!("network timeout"))
-            } else {
-                Ok(String::new())
-            }
-        }));
-
-        let result = registry
-            .pull_image(&crate::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
-            .await;
-
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("network"));
-    }
-
-    /// `docker_exec` wraps the requested subcommand in the ensure-docker self-heal
-    /// snippet and invokes it via `sh -c`, so the docker verb still shows up in the
-    /// interpolated script even though it's no longer a standalone arg.
-    #[tokio::test]
-    async fn docker_exec_wraps_command_with_ensure_docker_snippet() {
-        let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-            assert_eq!(args.first().copied(), Some("sh"));
-            assert_eq!(args.get(1).copied(), Some("-c"));
-            let script = args.get(2).copied().unwrap_or_default();
-            assert!(script.contains("command -v docker"));
-            assert!(script.contains("apt-get install"));
-            assert!(script.contains("exec docker 'pull' 'alpine:latest'"));
-            Ok("ok".to_string())
-        }));
-
-        let out = registry
-            .docker_exec(&["pull", "alpine:latest"])
-            .await
-            .expect("docker_exec");
-        assert_eq!(out, "ok");
     }
 
     /// `target_ref` strips the `library/` namespace prefix so a locally loaded image's

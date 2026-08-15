@@ -960,7 +960,7 @@ fn build_smolvm_handler_dependencies(
     event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    let smolvm_registry = Arc::new(SmolVmRegistry::new());
+    let smolvm_registry = Arc::new(SmolVmRegistry::new(Arc::clone(&state.image_store))?);
     let default_registry = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
     let ghcr = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
     let image_loader = smolvm_registry as minibox_core::domain::DynImageLoader;
