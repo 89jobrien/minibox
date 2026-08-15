@@ -22,7 +22,7 @@
 use mcp::types::{PsOutput, RunContainerOutput};
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind};
 use rmcp::ServiceExt;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use rmcp::transport::{ConfigureCommandExt, TokioChildProcess};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -123,10 +123,10 @@ async fn minibox_ps_maps_to_list_request() {
 
     let service = spawn_client(&socket_path).await;
     let result = service
-        .call_tool(CallToolRequestParam {
-            name: "minibox_ps".into(),
-            arguments: Some(json!({}).as_object().cloned().unwrap()),
-        })
+        .call_tool(
+            CallToolRequestParams::new("minibox_ps")
+                .with_arguments(json!({}).as_object().cloned().unwrap()),
+        )
         .await
         .expect("call minibox_ps");
     let output = result.into_typed::<PsOutput>().expect("typed ps output");
@@ -161,18 +161,14 @@ async fn minibox_run_collects_streaming_output() {
 
     let service = spawn_client(&socket_path).await;
     let result = service
-        .call_tool(CallToolRequestParam {
-            name: "minibox_run".into(),
-            arguments: Some(
-                json!({
-                    "image": "alpine",
-                    "command": ["/bin/echo", "hello"]
-                })
-                .as_object()
-                .cloned()
-                .unwrap(),
+        .call_tool(
+            CallToolRequestParams::new("minibox_run").with_arguments(
+                json!({"image": "alpine", "command": ["/bin/echo", "hello"]})
+                    .as_object()
+                    .cloned()
+                    .unwrap(),
             ),
-        })
+        )
         .await
         .expect("call minibox_run");
     let output = result
