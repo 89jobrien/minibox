@@ -1,0 +1,18 @@
+{
+  "documents": [
+    {
+      "id": "doc1",
+      "title": "Test",
+      "source": "test.txt",
+      "raw_content": "example content",
+      "chunks": [
+        {
+          "id": "47149dae-e1b7-459a-96c9-9028e42421a0",
+          "doc_id": "doc1",
+          "text": "example content",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

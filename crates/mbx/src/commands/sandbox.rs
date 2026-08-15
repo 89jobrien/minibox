@@ -3,6 +3,16 @@
 //! Detects the language from the file extension, bind-mounts the script into
 //! the container at `/workspace/script`, and streams output back. Enforces
 //! safety defaults: 512 MB memory, 60 s timeout, no network, no privileged.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::{Context as _, Result, bail};
 use base64::Engine;

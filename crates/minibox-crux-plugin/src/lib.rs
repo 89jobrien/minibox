@@ -2,6 +2,16 @@
 //!
 //! Exposes the minibox container API as crux handlers under the
 //! `minibox::container::*` and `minibox::image::*` namespaces.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::{Context, Result};
 use crux_plugin::protocol::{HandlerDecl, Request, Response};

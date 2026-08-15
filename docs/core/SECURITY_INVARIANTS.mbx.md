@@ -6,7 +6,7 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
-Last updated: 2026-07-13
+Last updated: 2026-08-15
 
 ---
 
@@ -268,6 +268,64 @@ the same file.)_
 
 ---
 
+## 13. Mount Immutability Ratchet (Seccomp)
+
+**Invariant:** Once the container's init-time mounts are in place (overlay, bind mounts,
+`pivot_root`'s `proc`/`sysfs`/`dev`), no process in the container — including the exec'd
+workload and anything it spawns — may widen a mount back to read-write via
+`mount(2, MS_REMOUNT)`. Remounting to read-only is always allowed (tightening is safe). Fresh,
+non-remount mounts created after init remain unrestricted. This mirrors the sysbox mount
+interception model described in `docs/ideas/sysbox-security.md`.
+
+**Code path:**
+
+- `crates/minibox/src/container/mount_seccomp.rs` — `build_mount_immutability_program()`
+  constructs a classic (non-eBPF) seccomp BPF program; `install_mount_immutability_filter()`
+  sets `PR_SET_NO_NEW_PRIVS` then installs it via `prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)`.
+- `crates/minibox/src/container/process.rs` — `child_init()` calls
+  `install_mount_immutability_filter()` immediately after `pivot_root_to()` (step 4b), before
+  capability/exec setup, so the filter is in place before any workload code runs and is
+  inherited across `fork`/`clone`/`execve` for the lifetime of the container process tree.
+
+**Enforcement model (scope, read before modifying):**
+
+The filter inspects only the raw `mount(2)` argument bits — the syscall number, target
+architecture, and the low 32 bits of the `mountflags` argument (`args[3]` in
+`struct seccomp_data`). It denies (`EPERM`) any call with `MS_REMOUNT` set and `MS_RDONLY`
+unset, and allows everything else. This is a deliberately coarse approximation of sysbox's
+per-mount policy: it cannot distinguish "this mount was originally read-only" from "this mount
+was originally read-write" (classic BPF has no access to kernel mount-table state), so it
+denies `remount,rw` universally rather than only for mounts that started read-only. The
+practical effect matches the acceptance criteria (ro mounts can't become rw; rw mounts can be
+tightened to ro; fresh mounts are unrestricted), at the cost of also denying a redundant
+`remount,rw` re-assertion on an already-read-write mount.
+
+**Deferred (not implemented):** A precise per-mount policy that also allows `remount,rw` on
+mounts that started read-write would require `SECCOMP_RET_USER_NOTIF` plus a supervisor
+process resolving the target from `/proc/[pid]/mountinfo` against a per-container mount
+policy, or a BPF LSM hook on `security_sb_mount`. Both are substantially larger changes
+(new supervisor process/IPC, or a BPF LSM program) and were out of scope for this change.
+
+**Regression tests:**
+
+| Test name | File |
+|-----------|------|
+| `program_has_expected_instruction_count` | `crates/minibox/src/container/mount_seccomp.rs` (unit) |
+| `program_ends_with_allow` | `crates/minibox/src/container/mount_seccomp.rs` (unit) |
+| `program_denies_remount_without_rdonly` | `crates/minibox/src/container/mount_seccomp.rs` (unit) |
+| `remount_rdonly_check_masks_match_kernel_flags` | `crates/minibox/src/container/mount_seccomp.rs` (unit) |
+| `interpreter_matches_documented_policy` | `crates/minibox/src/container/mount_seccomp.rs` (unit, BPF-program interpreter covering all acceptance-criteria cases) |
+| `kernel_enforces_remount_rw_denial_after_filter_install` | `crates/minibox/src/container/mount_seccomp.rs` (Linux + root integration test: real `fork()`, real `mount(2)`, asserts `remount,rw` fails EPERM, `remount,ro` succeeds, and a fresh mount succeeds) |
+
+**Verification status:** Type-checked and clippy-clean cross-compiled to
+`aarch64-unknown-linux-gnu` from macOS (no cross-linker available in the dev sandbox, so the
+test binary could not be linked/executed there). The `#[cfg(target_os = "linux")]`-gated
+kernel integration test has not yet been run on real Linux + root — run
+`cargo nextest run -p minibox mount_seccomp` on the VPS or self-hosted CI runner before
+relying on this invariant in production.
+
+---
+
 ## Mutation Audit Coverage Checklist
 
 Every invariant below has at least one test that passes **only** because the
@@ -287,8 +345,9 @@ guard is present. Removing or weakening the guard causes the test to fail.
 | 10  | Request size limit           | `minibox/.../server.rs` `MAX_REQUEST_SIZE` + `bounded_read_line`                                                     | `mutation_audit_request_size_limit_exists`, `test_handle_connection_oversized_request`                                                                                 | minibox               |
 | 11  | Image pull limits            | `minibox-core/.../registry.rs` `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, `MAX_TOTAL_IMAGE_SIZE`, `LimitedStream`        | `mutation_audit_image_pull_size_limits_exist`, `test_constants_*`, `get_manifest_errors_when_content_length_exceeds_limit`                                             | minibox, minibox-core |
 | 12  | Execution manifest integrity | `minibox-core/.../execution_manifest.rs` `seal()`, SHA-256 env hashing; `minibox/.../handler/run.rs` `prepare_run()` | `mutation_audit_execution_manifest_env_hashing`, `env_var_value_is_never_plaintext`, `seal_sets_workload_digest`                                                       | minibox, minibox-core |
+| 13  | Mount immutability ratchet (seccomp) | `minibox/.../container/mount_seccomp.rs` `build_mount_immutability_program`, `install_mount_immutability_filter`; called from `minibox/.../container/process.rs` `child_init` | `program_denies_remount_without_rdonly`, `interpreter_matches_documented_policy`, `kernel_enforces_remount_rw_denial_after_filter_install` | minibox |
 
-Last audited: 2026-05-21 (issue #368)
+Last audited: 2026-08-03 (issue #449)
 
 ---
 

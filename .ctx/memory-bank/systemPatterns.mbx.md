@@ -2,7 +2,7 @@
 
 ## High-level layout
 
-11-crate Rust 2024 workspace (v0.30.0):
+14-crate Rust 2024 workspace + `xtask` (v0.31.0):
 
 ```
 minibox-macros       proc-macro (~300 LOC)
@@ -10,11 +10,15 @@ minibox-core         cross-platform types, domain traits, protocol (~12.6k LOC)
 minibox              Linux adapters, daemon handler/server/state (~21.5k LOC)
 macbox               macOS backend wiring (delegates to smolbox)
 smolbox              smolvm + krun adapter implementations
-winbox               Windows stub (WSL2, ~40% scaffolded)
+winbox               Windows stub (WSL2, ~40% scaffolded, not wired into miniboxd)
 miniboxd             daemon entry point, adapter DI composition root (~1.6k LOC)
 mbx                  CLI client (~3.2k LOC)
 minibox-crux-plugin  crux plugin host (JSON-RPC stdio)
 minibox-testsuite    conformance test harness
+minibox-bench        criterion benchmark crate
+minibox-cni          CNI plugin exec protocol + chain orchestration (not yet wired into miniboxd)
+mcp (minibox-mcp)    MCP stdio server for agent-controlled minibox tools
+ail                  placeholder crate
 xtask                CI gates, test runners, bench (~5k LOC)
 ```
 
@@ -28,17 +32,17 @@ xtask                CI gates, test runners, bench (~5k LOC)
 
 ## Patterns to follow
 
-- **Hexagonal architecture**: domain traits in `minibox-core/src/domain.rs`,
-  adapters in `minibox/src/adapters/`
+- **Hexagonal architecture**: domain traits in `crates/minibox/src/domain.rs`,
+  adapters in `crates/minibox/src/adapters/`
 - **Error handling**: `anyhow::Context` everywhere, no `.unwrap()` in production
 - **Tracing**: structured `key = value` fields, never embedded in message string
 - **Path validation**: all external paths through `validate_layer_path()` before
   filesystem ops
 - **Async/sync boundary**: `spawn_blocking` for fork/clone/exec, never inline
-- **Protocol changes**: start in `minibox-core/src/protocol.rs`, update handlers
+- **Protocol changes**: start in `crates/minibox-core/src/protocol.rs`, update handlers
   + CLI + snapshots together. New fields get `#[serde(default)]`.
 - **`HandlerDependencies` changes**: update ALL adapter suite construction sites
-  in `miniboxd/src/main.rs`
+  in `crates/miniboxd/src/main.rs`
 - **Testing**: `expect("reason")` in tests, never bare `.unwrap()`
 - **Unsafe**: every `unsafe {}` block requires a `// SAFETY:` comment
 

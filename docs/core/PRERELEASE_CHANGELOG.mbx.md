@@ -1,10 +1,14 @@
-# Changelog
+# Changelog (pre-release era)
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+This file covers the pre-1.0 iteration numbering (`v0.0.1` through `v0.21.0`) used before
+the project adopted its current versioning. For `v0.24.0` and later, see `CHANGELOG.md`
+at the repository root.
+
+## [v0.21.0] - 2026-04-26
 
 ### Added
 
@@ -72,7 +76,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Plugin extraction: dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench moved to
   `minibox-plugins` workspace
-- `cargo xtask pre-commit` — fmt-check + clippy + release build (macOS-safe)
+- `cargo xtask pre-commit` — staged fmt/clippy plus config/docs checks (macOS-safe)
 - CI `all-features` job, coverage-check gate (handler 80% threshold)
 - Stability checklist enforcement gates, protocol-drift detection workflow
 - `init_tracing()` with `MINIBOX_TRACE_LEVEL` env var

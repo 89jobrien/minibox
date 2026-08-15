@@ -16,6 +16,8 @@ name = "generate-report"
 path = "src/bin/generate_report.rs"
 
 [dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 minibox = { workspace = true, features = ["test-utils"] }
 minibox-core = { workspace = true }
 serde = { workspace = true }
@@ -26,6 +28,11 @@ chrono = { workspace = true }
 tempfile = { workspace = true }
 inventory = { workspace = true }
 paste = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
 
 [lints]
 workspace = true

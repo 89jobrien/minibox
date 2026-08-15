@@ -4,6 +4,16 @@
 //! Releases API, compares the latest tag against the running binary version,
 //! downloads and extracts the tarball for the current platform, and atomically
 //! replaces the current executable.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::{Context as _, Result, bail};
 use std::env;
@@ -277,6 +287,17 @@ pub async fn execute(dry_run: bool, version: Option<String>) -> Result<()> {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::redundant_closure_for_method_calls,
+    clippy::redundant_clone,
+    clippy::single_char_pattern,
+    clippy::uninlined_format_args,
+    clippy::semicolon_if_nothing_returned,
+    clippy::doc_markdown
+)]
 #[cfg(test)]
 mod tests {
     use super::*;

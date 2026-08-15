@@ -8,19 +8,20 @@ Guidance for Claude Code when working in this repository.
 
 Minibox is a Rust 2024 Docker-like container runtime with a daemon/CLI split, OCI image support, Linux namespace/cgroup isolation, overlay filesystems, and macOS adapter backends.
 
-Default adapter selection lives in `miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
+Default adapter selection lives in `crates/miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
 
 ## Read First
 
 - `README.md` — user-facing overview and quickstart.
 - `DEVELOPMENT.md` — canonical developer workflow and command selection.
-- `docs/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
-- `docs/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
-- `docs/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
-- `docs/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
-- `docs/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
-- `docs/STATE_MODEL.mbx.md` — daemon persistence model.
-- `docs/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
+- `docs/core/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
+- `docs/core/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
+- `docs/core/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
+- `docs/core/XTASK_CLI.mbx.md` — full `cargo xtask` command reference; see also `xtask/schema/cli.schema.json`.
+- `docs/core/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
+- `docs/core/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
+- `docs/core/STATE_MODEL.mbx.md` — daemon persistence model.
+- `docs/core/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
 
 If changing container code, protocol types, adapters, or tests, read the relevant reference above instead of relying on this compact file.
 
@@ -52,19 +53,21 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo check --workspace` — compile/check workspace.
 - `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
-- `cargo xtask pre-commit` — macOS-safe pre-commit gate: fmt, clippy fixes/checks with warnings denied, release build.
-- `cargo xtask prepush` — broader Linux-oriented gate: nextest (use `cargo xtask coverage` separately for coverage reports).
-- `cargo xtask test-unit` — cross-platform unit and conformance subset.
-- `cargo xtask test-property` — property tests.
+- `cargo xtask pre-commit` — macOS-safe pre-commit gate: staged fmt/clippy plus config/docs checks.
+- `cargo xtask prepush` — broader gate: release build, release nextest, and conformance (use `cargo xtask coverage` separately for coverage reports).
+- `cargo xtask test unit` — cross-platform unit and conformance subset.
+- `cargo xtask test property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
 - `just test-e2e` — Linux+root daemon/CLI tests.
 - `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.
-- `cargo xtask build-vm-image` — build cached Alpine kernel/agent image for macOS VM adapters.
+- `cargo xtask build-test-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
   to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
 - `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
+- `cargo xtask doctor` — canonical preflight: tool/env checks, secret-manager auth, Linux system
+  caps. Absorbed `scripts/preflight.nu`'s checks; that script is now just the fast SessionStart hook.
 
-`scripts/*.py` Claude Agent SDK scripts require an interactive foreground terminal and fail when run through background/non-interactive execution.
+No Python scripts are expected in the project; use Rust scripts or Nushell helpers for agent tooling.
 
 ## Rust and Test Conventions
 
@@ -78,11 +81,11 @@ Use `just` or `cargo xtask` for repeatable gates.
 
 ## Architecture Guardrails
 
-- Domain ports live in `minibox-core/src/domain.rs` and are implemented by adapters under `crates/minibox/src/adapters/`.
+- Domain ports live under `crates/minibox-core/src/domain/` and are re-exported by `crates/minibox/src/domain.rs` for adapter compatibility.
 - `minibox` re-exports `minibox-core`; do not remove re-exports needed by `as_any!`/`adapt!` macro expansion.
 - `DaemonRequest`/`DaemonResponse` are canonical in `crates/minibox-core/src/protocol.rs`.
 - `DaemonResponse::ContainerOutput` is non-terminal; most other response variants end request streaming. Update terminal-response logic when adding variants.
-- `HandlerDependencies` changes require updating all adapter suite construction sites in `miniboxd/src/main.rs`.
+- `HandlerDependencies` changes require updating all adapter suite construction sites in `crates/miniboxd/src/main.rs`.
 
 ## Security Invariants
 
@@ -132,7 +135,7 @@ No direct path from user input    → call validate_layer_path() first
 No env::set_var in parallel tests → use static Mutex<()> guard
 No new protocol field without     → #[serde(default)]
   backward compat
-New adapter? Update composition   → miniboxd/src/main.rs (all suites)
+New adapter? Update composition   → crates/miniboxd/src/main.rs (all suites)
 New HandlerDependencies field?    → update all construction sites
 ```
 
@@ -235,9 +238,8 @@ items are `done`.
 
 ## Context Graph
 
-- Wiki root: `Read(.kgx/wiki/index.md)`
+- Wiki root: `Read(.kgx/wiki/index.md)` — run `kgx wiki write`/populate the wiki first if this doesn't exist yet
 - Query the graph: !`kgx query <entity>`
--
 
 ## Agent-specific guidance
 

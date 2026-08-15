@@ -1,4 +1,44 @@
 //! # minibox
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result,
+        clippy::uninlined_format_args,
+        clippy::redundant_clone,
+        clippy::redundant_closure,
+        clippy::redundant_closure_for_method_calls,
+        clippy::single_char_pattern,
+        clippy::collapsible_if,
+        clippy::match_same_arms,
+        clippy::only_used_in_recursion,
+        clippy::used_underscore_binding,
+        clippy::map_unwrap_or,
+        clippy::manual_assert,
+        clippy::as_ptr_cast_mut,
+        clippy::ptr_as_ptr,
+        clippy::must_use_candidate,
+        clippy::used_underscore_items,
+        clippy::missing_const_for_fn,
+        clippy::manual_string_new,
+        clippy::semicolon_if_nothing_returned,
+        clippy::redundant_field_names,
+        clippy::unreadable_literal,
+        clippy::ref_as_ptr,
+        clippy::default_constructed_unit_structs,
+        clippy::allow_attributes_without_reason,
+        clippy::needless_raw_string_hashes,
+        clippy::manual_is_variant_and,
+        clippy::ignore_without_reason,
+        clippy::default_trait_access,
+        clippy::cast_lossless,
+        clippy::if_not_else,
+        clippy::print_literal,
+    )
+)]
 //!
 //! Linux-only container primitives for the Minibox container runtime.
 //!

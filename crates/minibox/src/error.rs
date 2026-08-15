@@ -185,6 +185,7 @@ pub enum ImageError {
 /// Errors from the OCI registry client.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RegistryError {
+    #[cfg(feature = "registry")]
     #[error("network error: {0}")]
     #[diagnostic(
         code(minibox::registry::network),
@@ -321,4 +322,8 @@ pub enum ProcessError {
     #[error("process error: {0}")]
     #[diagnostic(code(minibox::process::other))]
     Other(String),
+
+    #[error("failed to install mount immutability seccomp filter: {0}")]
+    #[diagnostic(code(minibox::process::seccomp_install))]
+    SeccompInstallFailed(String),
 }

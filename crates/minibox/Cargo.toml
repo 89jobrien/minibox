@@ -9,6 +9,7 @@ publish = false
 workspace = true
 [dependencies]
 minibox-core = { workspace = true, features = ["test-utils"] }
+minibox-cni = { workspace = true, optional = true }
 minibox-macros = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -23,7 +24,7 @@ chrono = { workspace = true }
 nix = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, optional = true }
 tempfile = { workspace = true }
 async-trait = { workspace = true }
 walkdir = { workspace = true }
@@ -47,8 +48,14 @@ opentelemetry-otlp   = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 
 [features]
-## Test infrastructure: mocks, fixtures, conformance helpers (never compile into production)
+## Test infrastructure: mocks, fixtures, conformance helpers.
+## Enabled by default (crate is not published; test utils needed for cargo nextest compile-tests).
+default = ["test-utils", "registry"]
 test-utils = ["minibox-core/test-utils"]
+## OCI registry client (reqwest-based image pull/push, GHCR). Disabling this
+## drops ~108 transitive dependencies for local-only container management
+## builds. See issue #447.
+registry = ["dep:reqwest", "minibox-core/registry"]
 ## Prometheus /metrics endpoint + prometheus-client recorder
 metrics = ["dep:prometheus-client", "dep:axum"]
 ## OTLP trace export via opentelemetry + tonic
@@ -58,9 +65,27 @@ otel = [
     "dep:opentelemetry-otlp",
     "dep:tracing-opentelemetry",
 ]
+## CNI (Container Network Interface) plugin-based bridge networking for the
+## native Linux adapter. Requires CNI plugin binaries (bridge, host-local,
+## portmap, dnsname) installed and MINIBOX_CNI_PATH set — see
+## docs/PLATFORM_SUPPORT.md. Off by default: with it disabled, the native
+## suite keeps constructing the existing bespoke BridgeNetwork.
+cni = ["dep:minibox-cni"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = { workspace = true }
+
+[package.metadata.cargo-machete]
+# minibox-cni: optional dep behind the "cni" feature. CNI protocol/chain
+# orchestration landed in the minibox-cni crate but isn't wired into this
+# crate's adapters yet (see .ctx/memory-bank/activeContext.mbx.md) — kept
+# as a declared dependency for the in-progress wiring work.
+ignored = ["minibox-cni"]
+
+[[test]]
+name = "conformance_push"
+path = "tests/conformance_push.rs"
+required-features = ["registry"]
 
 [dev-dependencies]
 proptest = "1"

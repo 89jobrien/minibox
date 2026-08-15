@@ -1,3 +1,4 @@
+import? 'sops.just'
 default:
     @just --list
 
@@ -45,6 +46,13 @@ build-linux:
 
 # ── Gates ───────────────────────────────────────────────────────────────────
 
+# Install repo git hooks from .githooks/ — run once after cloning, and again
+# whenever .githooks/* changes upstream (git does not auto-sync .git/hooks/).
+install-hooks:
+    cp .githooks/pre-commit .git/hooks/pre-commit
+    chmod +x .git/hooks/pre-commit
+    @echo "installed .git/hooks/pre-commit from .githooks/pre-commit"
+
 # fmt-check + lint + build-release
 pre-commit:
     cargo xtask pre-commit
@@ -80,7 +88,7 @@ test-adapters:
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd
+    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd -p minibox-cni
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
@@ -119,6 +127,18 @@ test-linux:
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
     ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'
+
+# Clone an arbitrary branch fresh into a scratch dir on jobrien-vm (does not touch ~/minibox)
+verify-vps branch:
+    ssh -t jobrien-vm 'rm -rf ~/verify-{{branch}} && git clone --branch {{branch}} --single-branch git@github.com:89jobrien/minibox.git ~/verify-{{branch}}'
+
+# Run the mount-immutability seccomp kernel-enforcement test on jobrien-vm (Linux-only, does not compile on macOS)
+test-seccomp-vps branch="develop": (verify-vps branch)
+    ssh -t jobrien-vm 'cd ~/verify-{{branch}} && ~/.cargo/bin/cargo test -p minibox --lib mount_seccomp -- --test-threads=1'
+
+# Build release binaries on jobrien-vm for live smolvm pull/run verification (needs a real network path smolvm's guest can reach)
+build-smolvm-vps branch="develop": (verify-vps branch)
+    ssh -t jobrien-vm 'cd ~/verify-{{branch}} && ~/.cargo/bin/cargo build --release -p mbx -p miniboxd'
 
 # Full pipeline: clean state -> doctor -> all tests -> clean state
 test-all: nuke-test-state doctor test-unit test-integration test-system nuke-test-state

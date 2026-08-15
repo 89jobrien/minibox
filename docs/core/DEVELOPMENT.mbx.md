@@ -1,7 +1,7 @@
 # Development Guide
 
 Canonical developer workflow for minibox. See `CLAUDE.md` for architecture
-details, `TESTING.md` for the full test strategy, and `docs/SUPPORT_TIERS.mbx.md` for crate and
+details, `docs/core/TESTING.mbx.md` for the full test strategy, and `docs/core/SUPPORT_TIERS.mbx.md` for crate and
 adapter support-tier definitions.
 
 ## Quick Start for New Contributors
@@ -9,9 +9,9 @@ adapter support-tier definitions.
 Three commands cover 95% of daily development:
 
 ```bash
-cargo xtask pre-commit   # before every commit: fmt-check + clippy + release build
+cargo xtask pre-commit   # before every commit: staged fmt/clippy + config/docs checks
 cargo xtask test-unit    # run all unit + conformance tests (any platform)
-cargo xtask prepush      # before every push: nextest suite + coverage
+cargo xtask prepush      # before every push: release build + release nextest + conformance
 ```
 
 Install git hooks once after cloning:
@@ -27,7 +27,6 @@ See the [Command Reference](#command-reference) table below for the full list.
 - Rust stable (edition 2024)
 - [cargo-nextest](https://nexte.st/) for test filtering
 - [just](https://github.com/casey/just) for convenience recipes
-- [uv](https://docs.astral.sh/uv/) for Python script dependencies
 - Linux + root for integration/e2e tests (unit tests run on macOS)
 
 ## Good to have
@@ -71,10 +70,9 @@ cargo xtask borrow-fixtures
 # Unit tests (any platform)
 cargo xtask test-unit
 
-# Pre-commit gate (format check + clippy + release build)
+# Pre-commit gate (staged fmt/clippy plus config/docs checks)
 cargo xtask pre-commit
-
-# Pre-push gate (nextest + llvm-cov coverage)
+# Pre-push gate (release build + release nextest + conformance)
 cargo xtask prepush
 ```
 
@@ -276,8 +274,8 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 | Task                                  | Command                            | When to use                              |
 | ------------------------------------- | ---------------------------------- | ---------------------------------------- |
-| Before every commit                   | `cargo xtask pre-commit`           | fmt-check + clippy + release build       |
-| Before every push                     | `cargo xtask prepush`              | nextest suite + coverage check           |
+| Before every commit                   | `cargo xtask pre-commit`           | staged fmt/clippy + config/docs checks   |
+| Before every push                     | `cargo xtask prepush`              | release build + release nextest + conformance |
 | Read-only local verification          | `cargo xtask verify`               | fmt + clippy + borrow fixtures + docs    |
 | Auto-fix formatting/clippy            | `cargo xtask fix`                  | mutates files; review diff after         |
 | Lint only (no build)                  | `cargo xtask lint`                 | fmt-check + clippy (CI lint gate)        |
@@ -311,7 +309,7 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 | Scan for `.unwrap()` in production    | `cargo xtask check-no-unwrap`              | Advisory; use `--strict` to fail     |
 | Verify adapter test coverage          | `cargo xtask check-adapter-coverage`       | After adding a new adapter           |
 | Check for tracked generated artifacts | `cargo xtask check-repo-clean`             | Before PRs                           |
-| Lint docs frontmatter                 | `cargo xtask lint-docs`                    | After editing docs/superpowers/      |
+| Lint docs frontmatter                 | `cargo xtask docs lint`                    | After editing docs/core/             |
 
 ### Build
 

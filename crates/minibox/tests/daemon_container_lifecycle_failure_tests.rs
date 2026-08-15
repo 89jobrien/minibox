@@ -1,3 +1,42 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::doc_markdown,
+    clippy::redundant_field_names,
+    clippy::uninlined_format_args,
+    clippy::redundant_clone,
+    clippy::redundant_closure,
+    clippy::single_char_pattern,
+    clippy::unwrap_in_result,
+    clippy::collapsible_if,
+    clippy::match_same_arms,
+    clippy::only_used_in_recursion,
+    clippy::used_underscore_binding,
+    clippy::map_unwrap_or,
+    clippy::manual_assert,
+    clippy::as_ptr_cast_mut,
+    clippy::ptr_as_ptr,
+    clippy::must_use_candidate,
+    clippy::used_underscore_items,
+    clippy::missing_const_for_fn,
+    clippy::manual_string_new,
+    clippy::semicolon_if_nothing_returned,
+    clippy::unreadable_literal,
+    clippy::default_constructed_unit_structs,
+    clippy::ref_as_ptr,
+    clippy::allow_attributes_without_reason,
+    clippy::redundant_closure_for_method_calls,
+    clippy::needless_raw_string_hashes,
+    clippy::manual_is_variant_and,
+    clippy::ignore_without_reason,
+    clippy::default_trait_access,
+    clippy::cast_lossless,
+    clippy::match_wild_err_arm,
+    clippy::format_push_string,
+    clippy::bool_assert_comparison,
+    clippy::struct_excessive_bools
+)]
 //! Tests for container lifecycle failure paths (GH #24, minibox-32).
 //!
 //! Verifies that handlers return appropriate error responses when underlying
@@ -117,6 +156,8 @@ fn make_record(id: &str) -> ContainerRecord {
         post_exit_hooks: vec![],
         rootfs_metadata: None,
         source_image_ref: None,
+        upper_dir: None,
+        merged_dir: None,
         step_state: None,
         priority: None,
         urgency: None,
@@ -314,6 +355,74 @@ async fn test_handle_run_registry_pull_failure_returns_error_response() {
         }
         other => panic!("expected Error response for registry pull failure, got {other:?}"),
     }
+}
+
+/// When MockRuntime is configured to fail `spawn_process`, `handle_run` returns
+/// an Error response, marks the container `Failed` rather than removing it, and
+/// tears down the overlay/cgroup resources that were already allocated before
+/// the spawn attempt (`run_inner` in `crates/minibox/src/daemon/handler/run.rs`
+/// cleans up on the spawn-failure branch — see `filesystem.cleanup()` and
+/// `resource_limiter.cleanup()` calls there).
+#[tokio::test]
+async fn test_handle_run_spawn_failure_returns_error_and_cleans_up() {
+    let temp_dir = TempDir::new().expect("unwrap in test");
+    let state = make_state(&temp_dir);
+
+    // Filesystem and limiter succeed (so overlay/cgroup setup completes before
+    // the spawn failure), only the runtime's spawn_process is configured to fail.
+    let runtime = Arc::new(MockRuntime::new().with_spawn_failure());
+    let filesystem = Arc::new(MockFilesystem::new());
+    let registry = Arc::new(MockRegistry::new().with_cached_image("alpine", "latest"));
+
+    let deps = make_deps(&temp_dir, runtime, filesystem.clone(), registry);
+
+    let response = handle_run_once(
+        "alpine".to_string(),
+        Some("latest".to_string()),
+        vec!["/bin/sh".to_string()],
+        None,
+        None,
+        false,
+        Arc::clone(&state),
+        deps,
+    )
+    .await;
+
+    // Spawn failure must surface as an Error response.
+    let error_message = match response {
+        DaemonResponse::Error { message } => {
+            assert!(!message.is_empty(), "error message should not be empty");
+            message
+        }
+        other => panic!("expected Error response for spawn failure, got {other:?}"),
+    };
+    assert!(
+        error_message.to_lowercase().contains("spawn")
+            || error_message.to_lowercase().contains("mock"),
+        "error message should indicate spawn failure, got: {error_message}"
+    );
+
+    // The container was registered before spawn was attempted (overlay + cgroup
+    // setup preceded the spawn call), and is left in the `Failed` state rather
+    // than being removed — no automatic rollback of the container record.
+    let containers = state.list_containers().await;
+    assert_eq!(
+        containers.len(),
+        1,
+        "expected the container record to remain in state after spawn failure"
+    );
+    assert_eq!(
+        containers[0].state, "Failed",
+        "container should be marked Failed after spawn failure"
+    );
+
+    // Overlay cleanup must be invoked on the spawn-failure path so a failed
+    // container doesn't orphan its already-allocated rootfs.
+    assert_eq!(
+        filesystem.cleanup_count(),
+        1,
+        "filesystem cleanup should be invoked once on spawn failure"
+    );
 }
 
 // ---------------------------------------------------------------------------

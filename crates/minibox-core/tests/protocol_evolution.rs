@@ -1,3 +1,46 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::doc_markdown,
+    clippy::redundant_field_names,
+    clippy::uninlined_format_args,
+    clippy::redundant_clone,
+    clippy::redundant_closure,
+    clippy::single_char_pattern,
+    clippy::unwrap_in_result,
+    clippy::collapsible_if,
+    clippy::match_same_arms,
+    clippy::only_used_in_recursion,
+    clippy::used_underscore_binding,
+    clippy::map_unwrap_or,
+    clippy::manual_assert,
+    clippy::as_ptr_cast_mut,
+    clippy::ptr_as_ptr,
+    clippy::must_use_candidate,
+    clippy::used_underscore_items,
+    clippy::missing_const_for_fn,
+    clippy::manual_string_new,
+    clippy::semicolon_if_nothing_returned,
+    clippy::unreadable_literal,
+    clippy::default_constructed_unit_structs,
+    clippy::ref_as_ptr,
+    clippy::allow_attributes_without_reason,
+    clippy::redundant_closure_for_method_calls,
+    clippy::needless_raw_string_hashes,
+    clippy::manual_is_variant_and,
+    clippy::ignore_without_reason,
+    clippy::default_trait_access,
+    clippy::cast_lossless,
+    clippy::match_wild_err_arm,
+    clippy::format_push_string,
+    clippy::bool_assert_comparison,
+    clippy::struct_excessive_bools,
+    clippy::type_complexity,
+    clippy::float_cmp,
+    clippy::diverging_sub_expression,
+    clippy::single_match_else
+)]
 //! Protocol evolution guard tests.
 //!
 //! These tests enforce invariants that are easy to violate when adding new
@@ -21,7 +64,7 @@
 //! When adding a new `DaemonRequest` variant with optional/defaulted fields:
 //! - Add a case to `test_request_serde_default_fields`.
 
-use minibox_core::domain::SnapshotInfo;
+use minibox_core::domain::{PhaseOutcome, SnapshotInfo, StepStatus};
 use minibox_core::events::ContainerEvent;
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::time::SystemTime;
@@ -146,6 +189,21 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         DaemonResponse::PipelineDetail {
             id: "trace-1".to_string(),
             trace: serde_json::json!({"steps": []}),
+        },
+        DaemonResponse::Manifest {
+            manifest: serde_json::json!({"container_id": "abc123"}),
+        },
+        DaemonResponse::VerifyResult {
+            allowed: true,
+            reason: None,
+        },
+        DaemonResponse::WorkflowStepComplete {
+            alias: "build".to_string(),
+            output: serde_json::json!({"ok": true}),
+            status: StepStatus::Succeeded,
+        },
+        DaemonResponse::WorkflowComplete {
+            final_phase: PhaseOutcome::Succeeded,
         },
     ]
 }
@@ -417,12 +475,26 @@ fn test_terminal_classification_is_exhaustive() {
             id: "trace-1".to_string(),
             trace: serde_json::json!({"steps": []}),
         },
+        DaemonResponse::Manifest {
+            manifest: serde_json::json!({"container_id": "abc123"}),
+        },
+        DaemonResponse::VerifyResult {
+            allowed: true,
+            reason: None,
+        },
+        DaemonResponse::WorkflowComplete {
+            final_phase: PhaseOutcome::Succeeded,
+        },
     ];
 
     for v in &terminal_variants {
         assert!(
             classify_terminal(v),
             "expected terminal, got non-terminal for: {v:?}"
+        );
+        assert!(
+            v.is_terminal(),
+            "production is_terminal() disagrees for terminal variant: {v:?}"
         );
     }
 
@@ -463,12 +535,21 @@ fn test_terminal_classification_is_exhaustive() {
             image: "alpine:latest".to_string(),
             status: "updated".to_string(),
         },
+        DaemonResponse::WorkflowStepComplete {
+            alias: "build".to_string(),
+            output: serde_json::json!({"ok": true}),
+            status: StepStatus::Succeeded,
+        },
     ];
 
     for v in &non_terminal_variants {
         assert!(
             !classify_terminal(v),
             "expected non-terminal, got terminal for: {v:?}"
+        );
+        assert!(
+            !v.is_terminal(),
+            "production is_terminal() disagrees for non-terminal variant: {v:?}"
         );
     }
 
