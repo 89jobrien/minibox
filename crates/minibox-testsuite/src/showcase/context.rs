@@ -81,6 +81,9 @@ pub fn find_binary(name: &str) -> Result<PathBuf> {
         if p.exists() {
             return Ok(p);
         }
+        return Err(anyhow!(
+            "MINIBOX_TEST_BIN_DIR is set to '{dir}' but '{name}' was not found there"
+        ));
     }
 
     if let Ok(target_dir) = std::env::var("CARGO_TARGET_DIR") {
