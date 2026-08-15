@@ -1,0 +1,133 @@
+[workspace]
+crates = [
+  { dir = "crates/minibox-core", pkg = "minibox-core" },
+  { dir = "crates/minibox-macros", pkg = "minibox-macros" },
+  { dir = "crates/minibox", pkg = "minibox", features = ["test-utils"] },
+  { dir = "crates/macbox", pkg = "macbox" },
+  { dir = "crates/miniboxd", pkg = "miniboxd" },
+  { dir = "crates/winbox", pkg = "winbox" },
+  { dir = "crates/smolbox", pkg = "smolbox" },
+  { dir = "crates/mbx", pkg = "mbx" },
+  { dir = "crates/minibox-crux-plugin", pkg = "minibox-crux-plugin" },
+  { dir = "crates/minibox-testsuite", pkg = "minibox-testsuite" },
+  { dir = "xtask" },
+]
+# offline_skip = "test(/.*network.*/)"
+
+
+[[workspace.propagation]]
+source = "macbox"
+dependents = ["minibox", "miniboxd", "smolbox"]
+
+[[workspace.propagation]]
+source = "minibox"
+dependents = ["macbox", "miniboxd", "winbox", "smolbox", "minibox-testsuite"]
+
+[[workspace.propagation]]
+source = "minibox-core"
+dependents = ["minibox", "macbox", "miniboxd", "winbox", "mbx", "minibox-crux-plugin", "minibox-testsuite"]
+
+[[workspace.propagation]]
+source = "minibox-macros"
+dependents = ["minibox-core", "minibox", "macbox", "miniboxd", "mbx"]
+
+[[workspace.propagation]]
+source = "smolbox"
+dependents = ["miniboxd"]
+
+[[workspace.propagation]]
+source = "winbox"
+dependents = ["miniboxd"]
+
+[protocol]
+# lockfile = "taskit-protocol.lock"
+
+[[protocol.surfaces]]
+name = "minibox-core-events"
+path = "crates/minibox-core/src/events.rs"
+
+[[protocol.surfaces]]
+name = "minibox-core-domain"
+path = "crates/minibox-core/src/domain/mod.rs"
+
+[[protocol.surfaces]]
+name = "minibox-core-trace"
+path = "crates/minibox-core/src/trace.rs"
+
+[[protocol.surfaces]]
+name = "minibox-core-typestate"
+path = "crates/minibox-core/src/typestate.rs"
+
+[[protocol.surfaces]]
+name = "minibox-container_state"
+path = "crates/minibox/src/container_state.rs"
+
+[[protocol.surfaces]]
+name = "minibox-domain"
+path = "crates/minibox/src/domain.rs"
+
+[[protocol.surfaces]]
+name = "xtask-test_linux"
+path = "xtask/src/test_linux.rs"
+
+[[protocol.surfaces]]
+name = "xtask-checkpoint"
+path = "xtask/src/checkpoint.rs"
+
+[[protocol.surfaces]]
+name = "xtask-docs_audit"
+path = "xtask/src/docs_audit.rs"
+
+[[protocol.surfaces]]
+name = "xtask-preflight"
+path = "xtask/src/preflight.rs"
+
+# Coverage enforcement: run `taskit coverage` to check.
+#
+# [coverage]
+# crate_name = "my-crate"
+# threshold = 80.0
+
+[ci]
+# cruxfile = "Cruxfile"
+
+[[ci.steps]]
+name = "self-check"
+cmd = "self-check"
+gate = true
+
+[[ci.steps]]
+name = "fmt --check"
+cmd = "fmt --check"
+gate = false
+
+[[ci.steps]]
+name = "lint"
+cmd = "lint"
+gate = false
+
+[[ci.steps]]
+name = "compile-tests"
+cmd = "compile-tests"
+gate = false
+
+[[ci.steps]]
+name = "test"
+cmd = "test"
+gate = false
+
+[[ci.steps]]
+name = "check-deps"
+cmd = "check-deps"
+gate = false
+
+[[ci.steps]]
+name = "check-protocol-drift"
+cmd = "check-protocol-drift"
+gate = false
+
+[flow]
+main = "main"
+develop = "develop"
+staging = "next"
+release = "staging"

@@ -1,12 +1,12 @@
 # Minibox Roadmap
 
-Last updated: 2026-07-07
+Last updated: 2026-08-15
 
 ## Engineering Priorities
 
 ### P0 -- Stability Gates
 
-- **Handler coverage >= 80%**: `minibox/src/daemon/handler.rs` was at 67.5%
+- **Handler coverage >= 80%**: `crates/minibox/src/daemon/handler/` was at 67.5%
   function / 55% line coverage. Recent work (exhaustive small-domain tests #342,
   barrier-based race tests #344, roundtrip property tests #345, stream/transport
   trait extraction #343, handler tests split by feature #320) has substantially
@@ -38,7 +38,7 @@ Last updated: 2026-07-07
 - **Stream/transport trait extraction**: `StreamReader`/`StreamWriter` traits
   extracted from handler for isolated unit testing (#343).
 - **Mutation audit checklist**: Security module mutation coverage documented
-  in `docs/SECURITY_INVARIANTS.md` (#341).
+  in `docs/core/SECURITY_INVARIANTS.mbx.md` (#341).
 - **StateRepository persistence**: `StateRepository` wired into `DaemonState`
   for durable container state across daemon restarts (#315).
 - **Handler tests split by feature**: `daemon_handler_tests` decomposed into

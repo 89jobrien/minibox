@@ -1,4 +1,11 @@
 //! xtask — workspace dev-tool binary.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_in_result,
+    clippy::needless_raw_string_hashes
+)]
 //!
 //! Commands are organized into subcommand groups:
 //!
@@ -77,6 +84,7 @@ fn main() -> Result<()> {
         Some("fix") => gates::fix(&sh),
         Some("pre-commit") => gates::pre_commit(&sh),
         Some("prepush") => gates::prepush(&sh),
+        Some("musl-check") => gates::musl_check(&sh),
         Some("agentlint") => {
             let all = env::args().any(|a| a == "--all");
             if all {
@@ -207,7 +215,12 @@ fn main() -> Result<()> {
                 .windows(2)
                 .find(|w| w[0] == "--adapter")
                 .map_or_else(|| "smolvm".to_string(), |w| w[1].clone());
-            demo::demo(&sh, root, &adapter)
+            let filter = args
+                .windows(2)
+                .find(|w| w[0] == "--filter")
+                .map(|w| w[1].clone());
+            let strict = args.iter().any(|a| a == "--strict");
+            demo::run_demo(&adapter, filter.as_deref(), strict)
         }
         Some("borrow-fixtures") => borrow_fixtures::run(root),
         Some("clippy-sarif") => {
@@ -639,7 +652,7 @@ fn print_help() -> Result<()> {
     eprintln!("Misc:");
     eprintln!("  bench              criterion benchmarks");
     eprintln!("  fuzz               libFuzzer protocol targets");
-    eprintln!("  demo [--adapter <name>]");
+    eprintln!("  demo [--adapter <name>] [--filter <name>] [--strict]");
     eprintln!("  borrow-fixtures    borrow-reasoning must-pass/must-fail fixtures");
     eprintln!("  clippy-sarif [<path>]");
     eprintln!("  run-cgroup-tests   cgroup v2 integration tests (Linux, root)");

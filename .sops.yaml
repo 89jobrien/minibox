@@ -1,0 +1,3 @@
+creation_rules:
+  - path_regex: secrets/.*\.sops\.ya?ml$
+    age: age1rek84cdzedc33erq5gq5uylw3g8ln5uvs5zx9jf4c8vm865rfgcqa052ur

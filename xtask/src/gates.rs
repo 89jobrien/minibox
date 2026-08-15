@@ -184,9 +184,7 @@ pub fn prepush(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     let sh = sh.clone();
     gated(GateId::Prepush, &root, move || {
-        // TODO: add `cargo check --target x86_64-unknown-linux-musl` here to catch
-        // cfg(target_os = "linux") compile failures before pushing. Would have prevented
-        // the 2026-05-22 cluster of 5 iterative CI-fix-push cycles. See mistakes.md.
+        musl_check(&sh)?;
         cmd!(
             sh,
             "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
@@ -200,9 +198,63 @@ pub fn prepush(sh: &Shell) -> Result<()> {
         )
         .run()
         .context("nextest failed")?;
-        test_conformance(&sh)?;
+        if phase_2_skipped() {
+            eprintln!(
+                "pre-push: SKIP_PHASE_2 set — skipping conformance suite (Phase 2) locally. \
+                 CI always runs the full sequence regardless of this env var."
+            );
+        } else {
+            test_conformance(&sh)?;
+        }
         Ok(())
     })
+}
+
+/// Returns true if `SKIP_PHASE_2` is set to a truthy value (`1` or `true`).
+///
+/// Local-dev convenience only, mirroring `fail_fast_flag()`'s env-var-gated
+/// escape-hatch pattern. Skips the conformance suite step of `prepush`
+/// (Phase 2 of the pre-push gate). This var must never be set from CI —
+/// CI always runs the full sequence regardless of this check; nothing in
+/// `.github/workflows/*.yml` sets or forwards it.
+fn phase_2_skipped() -> bool {
+    matches!(std::env::var("SKIP_PHASE_2").as_deref(), Ok("1" | "true"))
+}
+
+/// Musl cross-check gate: `cargo check --target x86_64-unknown-linux-musl` for the
+/// two crates the release workflow actually cross-compiles (`miniboxd`, `mbx`; see
+/// `.github/workflows/release.yml`'s `build` job, which uses `cross build --release
+/// --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
+///
+/// Catches `#[cfg(target_os = "linux")]` compile failures locally, before push —
+/// macOS `cargo check` alone doesn't validate Linux-gated code paths (see
+/// `docs/core/GOTCHAS.mbx.md`). Would have prevented the 2026-05-22 cluster of 5
+/// iterative CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
+///
+/// Requires the `x86_64-unknown-linux-musl` rustup target. If it isn't installed,
+/// this gate is skipped with a warning rather than failing the whole prepush gate —
+/// installing a cross target is a one-time local setup step, not something this
+/// gate should force on every invocation.
+pub fn musl_check(sh: &Shell) -> Result<()> {
+    const TARGET: &str = "x86_64-unknown-linux-musl";
+
+    let installed = cmd!(sh, "rustup target list --installed")
+        .read()
+        .unwrap_or_default();
+    if !installed.lines().any(|l| l == TARGET) {
+        eprintln!(
+            "musl-check: skipping — target {TARGET} not installed \
+             (run `rustup target add {TARGET}` to enable this gate)"
+        );
+        return Ok(());
+    }
+
+    eprintln!("--- musl-check: cargo check --target {TARGET} -p miniboxd -p mbx ---");
+    cmd!(sh, "cargo check --target {TARGET} -p miniboxd -p mbx")
+        .run()
+        .context("musl cross-check failed (cargo check --target x86_64-unknown-linux-musl)")?;
+    eprintln!("musl-check passed");
+    Ok(())
 }
 
 /// Unit tests (any platform, matches CI).
@@ -280,7 +332,7 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
         let code = report_output
             .status
             .code()
-            .map_or("signal".to_string(), |c| c.to_string());
+            .map_or_else(|| "signal".to_string(), |c| c.to_string());
         let stderr = String::from_utf8_lossy(&report_output.stderr);
         let stdout = String::from_utf8_lossy(&report_output.stdout);
         anyhow::bail!("generate-report exited with {code}\nstderr: {stderr}\nstdout: {stdout}");
@@ -587,17 +639,15 @@ pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Res
 ///
 /// # Threshold rationale
 ///
-/// LLVM's function-coverage counter treats every await-point state-machine
-/// closure in an `async fn` as a separate function symbol. A typical
-/// `async fn` with N `.await` points generates N+1 coverage symbols even
-/// though they map to a single logical function. For the handler module,
-/// which is almost entirely `async fn`, this inflates the denominator.
-/// The practical ceiling is ~65%.
+/// The report aggregates all functions in `daemon/handler/`, including
+/// compiler-generated async state-machine closures. The threshold therefore
+/// protects the handler module's observable behavior rather than serving as a
+/// line-coverage target.
 ///
-/// Threshold is set at 61% — just below the measured baseline — to catch
-/// regressions while remaining achievable on macOS CI.
+/// The published 80% function-coverage threshold is intentionally enforced in
+/// CI on Linux, where `cargo llvm-cov` and the complete test selection run.
 pub fn coverage_check(sh: &Shell) -> Result<()> {
-    const THRESHOLD: f64 = 61.0;
+    const THRESHOLD: f64 = 80.0;
 
     let output = cmd!(
         sh,
@@ -786,9 +836,160 @@ fn parse_handler_fn_coverage(output: &str) -> Option<HandlerCoverage> {
     })
 }
 
+/// Source text of this file, embedded at compile time so the `test_unit` drift
+/// guard below can inspect the live implementation rather than a stale copy.
 #[cfg(test)]
+const GATES_SOURCE: &str = include_str!("gates.rs");
+
+/// Extracts the body of `pub fn test_unit` from `gates.rs` source text.
+///
+/// Returns the substring from the `pub fn test_unit(` signature up to (but not
+/// including) the next top-level `pub fn` declaration. Used only by the
+/// `test_unit_invokes_expected_crate_set` tripwire test below.
+#[cfg(test)]
+fn extract_test_unit_body(source: &str) -> Option<&str> {
+    let start = source.find("pub fn test_unit(")?;
+    let after_start = &source[start..];
+    // Find the next `pub fn` after the opening one, marking the end of this fn.
+    let next_fn_offset = after_start[1..].find("\npub fn ")? + 1;
+    Some(&after_start[..next_fn_offset])
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
-    use super::parse_handler_fn_coverage;
+    use super::{
+        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, parse_handler_fn_coverage,
+        phase_2_skipped,
+    };
+
+    /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn phase_2_skipped_true_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["1", "true"] {
+            // SAFETY: serialized via ENV_LOCK; no other thread reads this var.
+            unsafe { std::env::set_var("SKIP_PHASE_2", val) };
+            assert!(phase_2_skipped(), "expected true for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("SKIP_PHASE_2") };
+    }
+
+    #[test]
+    fn phase_2_skipped_false_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["0", "false", "yes", ""] {
+            // SAFETY: serialized via ENV_LOCK
+            unsafe { std::env::set_var("SKIP_PHASE_2", val) };
+            assert!(!phase_2_skipped(), "expected false for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("SKIP_PHASE_2") };
+    }
+
+    #[test]
+    fn phase_2_skipped_unset_is_false() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe { std::env::remove_var("SKIP_PHASE_2") };
+        assert!(!phase_2_skipped());
+    }
+
+    #[test]
+    fn cfg_predicate_has_test_matches_plain_cfg_test() {
+        assert!(cfg_predicate_has_test("#[cfg(test)]"));
+    }
+
+    #[test]
+    fn cfg_predicate_has_test_matches_compound_predicate() {
+        assert!(cfg_predicate_has_test(
+            r#"#[cfg(all(test, feature = "registry"))]"#
+        ));
+        assert!(cfg_predicate_has_test("#[cfg(any(test, doctest))]"));
+    }
+
+    #[test]
+    fn cfg_predicate_has_test_ignores_test_like_feature_names() {
+        assert!(!cfg_predicate_has_test(r#"#[cfg(feature = "test_thing")]"#));
+        assert!(!cfg_predicate_has_test(r#"#[cfg(feature = "testing")]"#));
+        assert!(!cfg_predicate_has_test(r#"#[cfg(target_os = "linux")]"#));
+    }
+
+    /// Tripwire: `test_unit` (the implementation of `cargo xtask test unit`,
+    /// the canonical "unit + conformance + property tests, any platform"
+    /// command per README.md/CLAUDE.md) must keep invoking `cargo nextest run
+    /// --workspace --lib`, and the only crate ever excluded from that run must
+    /// be the explicit, expected set below.
+    ///
+    /// `test_unit` deliberately does *not* enumerate crates with `-p` flags —
+    /// it runs `--workspace` so newly added workspace members are picked up
+    /// automatically. That means the only way a crate's tests can silently
+    /// stop running is via a `--exclude` flag (or a switch away from
+    /// `--workspace` entirely). This test parses the live `test_unit` source
+    /// and asserts:
+    ///   1. every macOS/non-macOS branch still runs `cargo nextest run
+    ///      --workspace --lib`
+    ///   2. the set of `--exclude <crate>` flags used exactly matches
+    ///      `EXPECTED_EXCLUDED_CRATES`
+    ///
+    /// If this test fails: either `test_unit`'s invoked set changed
+    /// intentionally (update `EXPECTED_EXCLUDED_CRATES` to match, with a
+    /// comment explaining why) or a crate/binary was accidentally dropped
+    /// from the unit test run (fix `test_unit` instead of the expected list).
+    #[test]
+    fn test_unit_invokes_expected_crate_set() {
+        // macbox is macOS-only (VM adapter crate); it is excluded from the
+        // non-macOS nextest invocation because it does not compile there.
+        const EXPECTED_EXCLUDED_CRATES: &[&str] = &["macbox"];
+
+        let body = extract_test_unit_body(GATES_SOURCE)
+            .expect("could not locate `pub fn test_unit` in gates.rs source");
+
+        // Both branches (macOS and non-macOS) must run the full workspace's
+        // lib tests — this is what makes `--workspace` (not an explicit `-p`
+        // list) the crate-drift-resistant invocation shape.
+        let workspace_lib_invocations = body.matches("--workspace").count();
+        assert!(
+            workspace_lib_invocations >= 2,
+            "test_unit must invoke `cargo nextest run --workspace --lib` on both \
+             the macOS and non-macOS branches; found {workspace_lib_invocations} \
+             `--workspace` occurrence(s) in:\n{body}"
+        );
+        assert!(
+            body.contains("--lib"),
+            "test_unit must run `--lib` tests; not found in:\n{body}"
+        );
+
+        // Collect every `--exclude <name>` token that appears in the body.
+        let mut excluded: Vec<&str> = Vec::new();
+        let mut rest = body;
+        while let Some(idx) = rest.find("--exclude ") {
+            let after = &rest[idx + "--exclude ".len()..];
+            let name = after
+                .split(|c: char| c.is_whitespace() || c == '"')
+                .find(|s| !s.is_empty())
+                .unwrap_or("");
+            if !name.is_empty() {
+                excluded.push(name);
+            }
+            rest = &after[name.len()..];
+        }
+        excluded.sort_unstable();
+        excluded.dedup();
+
+        let mut expected: Vec<&str> = EXPECTED_EXCLUDED_CRATES.to_vec();
+        expected.sort_unstable();
+
+        assert_eq!(
+            excluded, expected,
+            "test_unit's --exclude set drifted from the expected tripwire list — \
+             a crate was silently added to or removed from the unit test run. \
+             found excludes: {excluded:?}, expected: {expected:?}"
+        );
+    }
 
     /// Multi-file handler module: aggregates counts across submodules.
     #[test]
@@ -826,7 +1027,7 @@ mod tests {
         );
     }
 
-    /// Exactly 61% should satisfy the threshold.
+    /// The parser preserves an exact 61% value below the enforcement threshold.
     #[test]
     fn recognises_61_percent() {
         let sample = r#"{"data":[{"files":[
@@ -856,17 +1057,17 @@ mod tests {
         assert!(parse_handler_fn_coverage("not json").is_none());
     }
 
-    /// The 61% threshold contract from the doc comment.
+    /// The published handler-coverage threshold remains enforceable.
     #[test]
-    fn coverage_threshold_is_61_percent() {
-        const THRESHOLD: f64 = 61.0;
+    fn coverage_threshold_is_80_percent() {
+        const THRESHOLD: f64 = 80.0;
         let sample = r#"{"data":[{"files":[
-            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"functions":{"count":100,"covered":61,"percent":61.0}}}
+            {"filename":"/path/to/daemon/handler/mod.rs","summary":{"functions":{"count":100,"covered":80,"percent":80.0}}}
         ]}]}"#;
-        let result = parse_handler_fn_coverage(sample).expect("should parse 61.0%");
+        let result = parse_handler_fn_coverage(sample).expect("should parse 80.0%");
         assert!(
             result.percent >= THRESHOLD,
-            "61.0% must satisfy the {THRESHOLD}% threshold; got {:.2}%",
+            "80.0% must satisfy the {THRESHOLD}% threshold; got {:.2}%",
             result.percent
         );
     }
@@ -1071,6 +1272,7 @@ fn fail_fast_flag() -> Vec<&'static str> {
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) differ between
 /// HEAD and the upstream tracking branch. Falls back to `true` when upstream is absent
 /// (new branch) so tests always run in that case.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn pushed_rust_files(sh: &Shell) -> Result<bool> {
     let range = "@{u}..HEAD";
     let out = cmd!(sh, "git diff --name-only {range}").output();
@@ -1097,6 +1299,7 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn staged_rust_files(sh: &Shell) -> Result<bool> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
@@ -1114,6 +1317,7 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
 ///
 /// After bumping, re-stages `Cargo.toml` so the version change is included
 /// in the commit.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn auto_bump(sh: &Shell) -> Result<()> {
     if workspace_version_already_staged(sh)? {
         eprintln!("[minibox] workspace version already staged — skipping auto bump");
@@ -1241,6 +1445,39 @@ pub fn test_gke_adapter(sh: &Shell) -> Result<()> {
     }
 }
 
+/// Returns true if a `#[cfg(...)]` attribute line's predicate contains a bare
+/// `test` token — e.g. `#[cfg(test)]` or `#[cfg(all(test, feature = "x"))]` —
+/// but not `#[cfg(feature = "test_thing")]` (a string literal, not the `test`
+/// predicate) or `#[cfg(feature = "testing")]` (a different identifier).
+/// String-literal contents are stripped before tokenizing so quoted feature
+/// names never match.
+fn cfg_predicate_has_test(line: &str) -> bool {
+    let mut tokens: Vec<String> = Vec::new();
+    let mut token = String::new();
+    let mut in_string = false;
+    for c in line.chars() {
+        if c == '"' {
+            in_string = !in_string;
+            if !token.is_empty() {
+                tokens.push(std::mem::take(&mut token));
+            }
+            continue;
+        }
+        if in_string {
+            continue;
+        }
+        if c.is_alphanumeric() || c == '_' {
+            token.push(c);
+        } else if !token.is_empty() {
+            tokens.push(std::mem::take(&mut token));
+        }
+    }
+    if !token.is_empty() {
+        tokens.push(token);
+    }
+    tokens.iter().any(|t| t == "test")
+}
+
 /// Scan production Rust source for `.unwrap()` calls outside test infrastructure.
 ///
 /// Mirrors the `no-unwrap-in-prod` job in `stability-gates.yml`. Advisory by default —
@@ -1291,24 +1528,55 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
             // .unwrap() inside ANY test module, not just the last one.
             // Nested #[cfg(test)] (e.g. proptest_tests inside tests) are
             // handled by only entering/exiting at the outermost level.
+            //
+            // Between `#[cfg(test)]` and `mod tests {` there may be other
+            // attributes (e.g. a multi-line `#[allow(...)]`) — track their
+            // `[`/`]` bracket depth so those lines don't cancel saw_cfg_test.
             let mut in_test_module = false;
             let mut test_brace_depth: i32 = 0;
             let mut saw_cfg_test = false;
+            let mut in_attr_block = false;
+            let mut attr_bracket_depth: i32 = 0;
 
             for (i, line) in content.lines().enumerate() {
                 let trimmed = line.trim();
 
-                if !in_test_module && trimmed.contains("#[cfg(test)]") {
+                if !in_test_module
+                    && trimmed.starts_with("#[cfg(")
+                    && cfg_predicate_has_test(trimmed)
+                {
                     saw_cfg_test = true;
                     continue;
                 }
 
-                if saw_cfg_test && !trimmed.is_empty() {
+                if saw_cfg_test {
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    if in_attr_block {
+                        attr_bracket_depth += trimmed.matches('[').count() as i32;
+                        attr_bracket_depth -= trimmed.matches(']').count() as i32;
+                        if attr_bracket_depth <= 0 {
+                            in_attr_block = false;
+                        }
+                        continue;
+                    }
                     if trimmed.starts_with("mod ") || trimmed.starts_with("pub mod ") {
                         in_test_module = true;
                         test_brace_depth = 0;
+                        saw_cfg_test = false;
+                    } else if trimmed.starts_with('#') {
+                        // Another attribute (possibly multi-line) before `mod`.
+                        attr_bracket_depth = trimmed.matches('[').count() as i32
+                            - trimmed.matches(']').count() as i32;
+                        if attr_bracket_depth > 0 {
+                            in_attr_block = true;
+                        }
+                        continue;
+                    } else {
+                        // Not `mod`, not an attribute — give up.
+                        saw_cfg_test = false;
                     }
-                    saw_cfg_test = false;
                 }
 
                 if in_test_module {

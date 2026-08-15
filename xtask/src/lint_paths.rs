@@ -64,7 +64,7 @@ pub fn run(root: &Path) -> Result<()> {
     let mut files_checked: usize = 0;
     let mut findings: Vec<Finding> = Vec::new();
 
-    let mut queue: Vec<PathBuf> = vec![crates_dir.clone()];
+    let mut queue: Vec<PathBuf> = vec![crates_dir];
 
     while let Some(dir) = queue.pop() {
         let entries = match std::fs::read_dir(&dir) {

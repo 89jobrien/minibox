@@ -227,6 +227,21 @@ pub struct ContainerRecord {
     /// Image reference used to create this container (e.g. `"alpine:latest"`).
     #[serde(default)]
     pub source_image_ref: Option<String>,
+    /// Host-visible writable-layer (overlay upper) directory for this
+    /// container's rootfs, when the backend exposes one. Mirrors
+    /// [`BackendRootfsMetadata::overlay_upper_dir`] but is kept as a
+    /// top-level field so callers don't need to match on `rootfs_metadata`
+    /// to locate the writable layer. `None` for adapters without an
+    /// overlay filesystem (GKE, VZ) or when not yet populated.
+    #[serde(default)]
+    pub upper_dir: Option<PathBuf>,
+    /// Path to the merged/mounted rootfs presented to the container.
+    /// Currently duplicates `rootfs_path` for backends that use an overlay
+    /// mount; kept as a distinct field so future backends can report a
+    /// merged view that differs from `rootfs_path`. `None` when not yet
+    /// populated.
+    #[serde(default)]
+    pub merged_dir: Option<PathBuf>,
     /// Slashcrux step state — mirrors container lifecycle for agentic pipelines.
     #[serde(default)]
     pub step_state: Option<slashcrux::StepState>,
@@ -538,13 +553,26 @@ impl DaemonState {
         map.values().any(|r| r.info.name.as_deref() == Some(name))
     }
 
-    /// Return `ContainerInfo` snapshots for every tracked container.
+    /// Return `ContainerInfo` snapshots for every tracked container, ordered
+    /// by creation time (oldest first, ties broken by `id`).
     ///
-    /// The returned vec is a point-in-time snapshot; order is unspecified
-    /// (`HashMap` iteration order).
+    /// The returned vec is a point-in-time snapshot. `containers` is a
+    /// `HashMap`, whose iteration order is unspecified and effectively
+    /// randomized per-process (`RandomState` hasher) — callers that infer
+    /// "the container that just appeared" from table position (e.g. `mbx
+    /// ps`'s last row, or test harnesses polling for a freshly-created
+    /// container) need a deterministic, creation-stable order rather than
+    /// raw map iteration. `created_at` is an ISO 8601 string, so a plain
+    /// lexicographic sort is also chronological.
     pub async fn list_containers(&self) -> Vec<ContainerInfo> {
         let map = self.containers.read().await;
-        map.values().map(|r| r.info.clone()).collect()
+        let mut containers: Vec<ContainerInfo> = map.values().map(|r| r.info.clone()).collect();
+        containers.sort_by(|a, b| {
+            a.created_at
+                .cmp(&b.created_at)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        containers
     }
 
     /// Change the `state` field of a container using the typed [`ContainerState`] enum.
@@ -808,6 +836,8 @@ mod tests {
             post_exit_hooks: vec![],
             rootfs_metadata: None,
             source_image_ref: None,
+            upper_dir: None,
+            merged_dir: None,
             step_state: None,
             priority: None,
             urgency: None,

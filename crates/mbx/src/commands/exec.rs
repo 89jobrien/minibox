@@ -13,6 +13,16 @@
 //! * [`DaemonResponse::ContainerStopped`] — exec process exited; CLI exits
 //!   with the carried exit code.
 //! * [`DaemonResponse::Error`] — fatal error; CLI exits with code 1.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::{Context as _, Result};
 use base64::Engine;
@@ -25,6 +35,107 @@ use std::io::Write;
 /// Connects to the daemon, sends a `DaemonRequest::Exec`, then streams
 /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped`.
 /// Exits with the container process exit code.
+fn spawn_stdin_relay_task(socket_path: std::path::PathBuf, exec_id: String) {
+    tokio::spawn(async move {
+        use tokio::io::AsyncReadExt as _;
+        let writer = DaemonWriter::with_socket(&socket_path);
+        let mut stdin = tokio::io::stdin();
+        let mut buf = [0u8; 256];
+        loop {
+            match stdin.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                    let req = DaemonRequest::SendInput {
+                        session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
+                        data,
+                    };
+                    if writer.send(req).await.is_err() {
+                        eprintln!("exec: stdin relay: daemon connection lost");
+                        break;
+                    }
+                }
+            }
+        }
+    });
+}
+
+#[cfg(unix)]
+async fn send_initial_pty_size(socket_path: &std::path::Path, exec_id: &str) {
+    let (cols, rows) = crate::terminal::terminal_size();
+    let _ = DaemonWriter::with_socket(socket_path)
+        .send(DaemonRequest::ResizePty {
+            session_id: minibox_core::domain::SessionId::from(exec_id.to_string()),
+            cols,
+            rows,
+        })
+        .await;
+}
+
+#[cfg(unix)]
+fn spawn_sigwinch_forwarder_task(socket_path: std::path::PathBuf, exec_id: String) {
+    use tokio::signal::unix::{SignalKind, signal};
+    match signal(SignalKind::window_change()) {
+        Ok(mut sigwinch) => {
+            tokio::spawn(async move {
+                let writer = DaemonWriter::with_socket(&socket_path);
+                while sigwinch.recv().await.is_some() {
+                    let (cols, rows) = crate::terminal::terminal_size();
+                    let _ = writer
+                        .send(DaemonRequest::ResizePty {
+                            session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
+                            cols,
+                            rows,
+                        })
+                        .await;
+                }
+            });
+        }
+        Err(e) => {
+            eprintln!(
+                "exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}"
+            );
+        }
+    }
+}
+
+async fn handle_exec_started(exec_id: String, tty: bool, socket_path: &std::path::Path) {
+    if tty {
+        // Stdin relay task — batches reads and sends one SendInput per
+        // read() call via DaemonWriter (fire-and-forget, no per-call
+        // response needed), avoiding the per-keypress connection cost.
+        spawn_stdin_relay_task(socket_path.to_path_buf(), exec_id.clone());
+
+        // Initial terminal size.
+        #[cfg(unix)]
+        send_initial_pty_size(socket_path, &exec_id).await;
+
+        // SIGWINCH forwarding — uses tokio's process-wide signal stream
+        // so the signal is reliably received regardless of which Tokio
+        // worker thread the OS delivers it to.  Per-thread sigprocmask
+        // is not portable under a multi-threaded runtime.
+        #[cfg(unix)]
+        spawn_sigwinch_forwarder_task(socket_path.to_path_buf(), exec_id.clone());
+    }
+}
+
+fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .context("failed to decode exec output chunk")?;
+    match stream {
+        OutputStreamKind::Stdout => {
+            std::io::stdout().write_all(&bytes)?;
+            std::io::stdout().flush()?;
+        }
+        OutputStreamKind::Stderr => {
+            std::io::stderr().write_all(&bytes)?;
+            std::io::stderr().flush()?;
+        }
+    }
+    Ok(())
+}
+
 pub async fn execute(
     container_id: String,
     cmd: Vec<String>,
@@ -62,101 +173,10 @@ pub async fn execute(
     while let Some(response) = stream.next().await.context("stream error")? {
         match response {
             DaemonResponse::ExecStarted { exec_id } => {
-                if tty {
-                    // Stdin relay task — batches reads and sends one SendInput per
-                    // read() call via DaemonWriter (fire-and-forget, no per-call
-                    // response needed), avoiding the per-keypress connection cost.
-                    let sp2 = sp.clone();
-                    let sid = exec_id.clone();
-                    tokio::spawn(async move {
-                        use tokio::io::AsyncReadExt as _;
-                        let writer = DaemonWriter::with_socket(&sp2);
-                        let mut stdin = tokio::io::stdin();
-                        let mut buf = [0u8; 256];
-                        loop {
-                            match stdin.read(&mut buf).await {
-                                Ok(0) | Err(_) => break,
-                                Ok(n) => {
-                                    let data =
-                                        base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
-                                    let req = DaemonRequest::SendInput {
-                                        session_id: minibox_core::domain::SessionId::from(
-                                            sid.clone(),
-                                        ),
-                                        data,
-                                    };
-                                    if writer.send(req).await.is_err() {
-                                        eprintln!("exec: stdin relay: daemon connection lost");
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    });
-
-                    // Initial terminal size.
-                    #[cfg(unix)]
-                    {
-                        let (cols, rows) = crate::terminal::terminal_size();
-                        let _ = DaemonWriter::with_socket(&sp)
-                            .send(DaemonRequest::ResizePty {
-                                session_id: minibox_core::domain::SessionId::from(exec_id.clone()),
-                                cols,
-                                rows,
-                            })
-                            .await;
-                    }
-
-                    // SIGWINCH forwarding — uses tokio's process-wide signal stream
-                    // so the signal is reliably received regardless of which Tokio
-                    // worker thread the OS delivers it to.  Per-thread sigprocmask
-                    // is not portable under a multi-threaded runtime.
-                    #[cfg(unix)]
-                    {
-                        use tokio::signal::unix::{SignalKind, signal};
-                        let sp3 = sp.clone();
-                        let sid2 = exec_id.clone();
-                        match signal(SignalKind::window_change()) {
-                            Ok(mut sigwinch) => {
-                                tokio::spawn(async move {
-                                    let writer = DaemonWriter::with_socket(&sp3);
-                                    while sigwinch.recv().await.is_some() {
-                                        let (cols, rows) = crate::terminal::terminal_size();
-                                        let _ = writer
-                                            .send(DaemonRequest::ResizePty {
-                                                session_id: minibox_core::domain::SessionId::from(
-                                                    sid2.clone(),
-                                                ),
-                                                cols,
-                                                rows,
-                                            })
-                                            .await;
-                                    }
-                                });
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "exec: SIGWINCH handler unavailable; terminal resize will not be forwarded: {e}"
-                                );
-                            }
-                        }
-                    }
-                }
+                handle_exec_started(exec_id, tty, &sp).await;
             }
             DaemonResponse::ContainerOutput { stream, data } => {
-                let bytes = base64::engine::general_purpose::STANDARD
-                    .decode(&data)
-                    .context("failed to decode exec output chunk")?;
-                match stream {
-                    OutputStreamKind::Stdout => {
-                        std::io::stdout().write_all(&bytes)?;
-                        std::io::stdout().flush()?;
-                    }
-                    OutputStreamKind::Stderr => {
-                        std::io::stderr().write_all(&bytes)?;
-                        std::io::stderr().flush()?;
-                    }
-                }
+                handle_container_output(stream, &data)?;
             }
             DaemonResponse::ContainerStopped { exit_code } => {
                 #[cfg(unix)]
@@ -181,6 +201,17 @@ pub async fn execute(
     Ok(())
 }
 
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::redundant_closure_for_method_calls,
+    clippy::redundant_clone,
+    clippy::single_char_pattern,
+    clippy::uninlined_format_args,
+    clippy::semicolon_if_nothing_returned,
+    clippy::doc_markdown
+)]
 #[cfg(test)]
 mod tests {
     use super::*;

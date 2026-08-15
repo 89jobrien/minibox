@@ -237,6 +237,27 @@ impl ExecutionManifestMount {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::redundant_clone,
+    clippy::ptr_as_ptr,
+    clippy::ref_as_ptr,
+    clippy::doc_markdown,
+    clippy::missing_const_for_fn,
+    clippy::uninlined_format_args,
+    clippy::unreadable_literal,
+    clippy::match_same_arms,
+    clippy::map_unwrap_or,
+    clippy::single_match_else,
+    clippy::single_char_pattern,
+    clippy::redundant_closure_for_method_calls,
+    clippy::type_complexity,
+    clippy::float_cmp,
+    clippy::cast_lossless,
+    clippy::diverging_sub_expression
+)]
 mod tests {
     use super::*;
     use proptest::option;

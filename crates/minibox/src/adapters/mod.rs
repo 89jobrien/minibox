@@ -96,6 +96,7 @@ pub use exec::NativeExecRuntime;
 mod filesystem;
 #[cfg(target_os = "linux")]
 mod limiter;
+#[cfg(feature = "registry")]
 mod registry;
 #[cfg(target_os = "linux")]
 mod runtime;
@@ -105,6 +106,7 @@ mod gke;
 
 // Cross-platform adapters
 mod colima;
+mod colima_commit;
 mod colima_push;
 mod docker_desktop;
 mod hcs;
@@ -116,6 +118,7 @@ mod wsl2;
 pub mod network;
 
 // GitHub Container Registry adapter (cross-platform)
+#[cfg(feature = "registry")]
 pub mod ghcr;
 
 // Native OCI tarball loader
@@ -123,7 +126,9 @@ pub mod image_loader;
 pub use image_loader::NativeImageLoader;
 
 // OCI push adapter
+#[cfg(feature = "registry")]
 pub mod push;
+#[cfg(feature = "registry")]
 pub use push::OciPushAdapter;
 
 // Test doubles (always available for testing)
@@ -134,6 +139,7 @@ pub mod mocks;
 pub use filesystem::OverlayFilesystem;
 #[cfg(target_os = "linux")]
 pub use limiter::CgroupV2Limiter;
+#[cfg(feature = "registry")]
 pub use registry::DockerHubRegistry;
 #[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
@@ -144,9 +150,12 @@ pub use gke::{CopyFilesystem, NoopLimiter, ProotRuntime};
 // Cross-platform exports (always available)
 pub use colima::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
+    privileged_command,
 };
+pub use colima_commit::{ColimaContainerCommitter, colima_container_committer};
 pub use colima_push::{ColimaImagePusher, colima_image_pusher};
 pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDesktopRuntime};
+#[cfg(feature = "registry")]
 pub use ghcr::GhcrRegistry;
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
 pub use network::{HostNetwork, NoopNetwork};

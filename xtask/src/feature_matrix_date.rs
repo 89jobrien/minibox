@@ -8,13 +8,13 @@
 //! Covered files (any `*.mbx.md` or `*.md` under `docs/` that contains a
 //! `Last updated:` line):
 //!
-//! - docs/FEATURE_MATRIX.mbx.md
-//! - docs/SECURITY_INVARIANTS.mbx.md
+//! - `docs/FEATURE_MATRIX.mbx.md`
+//! - `docs/SECURITY_INVARIANTS.mbx.md`
 //! - docs/ROADMAP.mbx.md
-//! - docs/STABILITY_CHECKLIST.mbx.md
-//! - docs/STATE_MODEL.mbx.md
-//! - docs/CRATE_TIERS.mbx.md
-//! - docs/SUPPORT_TIERS.mbx.md
+//! - `docs/STABILITY_CHECKLIST.mbx.md`
+//! - `docs/STATE_MODEL.mbx.md`
+//! - `docs/CRATE_TIERS.mbx.md`
+//! - `docs/SUPPORT_TIERS.mbx.md`
 //! - docs/GOTCHAS.mbx.md
 //! - … and any future docs that add a `Last updated:` stamp.
 
@@ -95,7 +95,7 @@ fn collect_recursive(dir: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         let path = entry.path();
         if path.is_dir() {
             collect_recursive(&path, out)?;
-        } else if path.extension().map_or(false, |e| e == "md") {
+        } else if path.extension().is_some_and(|e| e == "md") {
             out.push(path);
         }
     }

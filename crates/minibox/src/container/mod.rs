@@ -5,6 +5,7 @@
 
 pub mod cgroups;
 pub mod filesystem;
+pub mod mount_seccomp;
 pub mod namespace;
 pub mod process;
 

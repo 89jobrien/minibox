@@ -28,13 +28,18 @@ fn adapter_entries() -> Vec<AdapterEntry> {
             available: cfg!(target_os = "linux"),
         },
         AdapterEntry {
+            name: "colima",
+            description: "Colima/Lima VM via limactl + nerdctl",
+            available: cfg!(unix),
+        },
+        AdapterEntry {
             name: "smolvm",
-            description: "SmolVM lightweight Linux VMs with subsecond boot",
+            description: "SmolVM lightweight Linux VMs (recommended default, cross-platform)",
             available: cfg!(unix),
         },
         AdapterEntry {
             name: "krun",
-            description: "libkrun micro-VM (KVM on Linux, HVF on macOS)",
+            description: "libkrun micro-VM via KVM/HVF (recommended fallback, cross-platform)",
             available: true,
         },
     ]
@@ -64,6 +69,32 @@ pub fn selected_adapter() -> String {
             "smolvm (or krun if smolvm binary absent)".to_string()
         }
     }
+}
+
+/// Result of checking a single CNI plugin binary's presence.
+pub struct CniPluginStatus {
+    /// Plugin binary name (e.g. `"bridge"`).
+    pub plugin: &'static str,
+    /// Whether the binary was found on `MINIBOX_CNI_PATH`.
+    pub found: bool,
+}
+
+/// Check whether the standard CNI plugin binaries minibox's native adapter
+/// needs (when built with the `cni` feature) are present on
+/// `MINIBOX_CNI_PATH` (defaulting to `/opt/cni/bin`).
+///
+/// Advisory only — does not invoke the binaries, just checks presence,
+/// matching this module's existing checks' style.
+pub fn cni_plugin_status() -> Vec<CniPluginStatus> {
+    let cni_path = std::env::var("MINIBOX_CNI_PATH").unwrap_or_else(|_| "/opt/cni/bin".to_string());
+    let dirs: Vec<std::path::PathBuf> = std::env::split_paths(&cni_path).collect();
+    ["bridge", "host-local", "portmap", "dnsname"]
+        .into_iter()
+        .map(|plugin| CniPluginStatus {
+            plugin,
+            found: dirs.iter().any(|dir| dir.join(plugin).is_file()),
+        })
+        .collect()
 }
 
 /// Run `cargo xtask doctor` and stream its output to stdout.
@@ -126,6 +157,14 @@ pub fn execute() -> anyhow::Result<()> {
     println!("selected adapter:  {}", selected_adapter());
     println!("(override with:    MINIBOX_ADAPTER=<name> miniboxd)");
 
+    println!();
+    println!("CNI plugins (opt-in native bridge networking, cni feature):");
+    for status in cni_plugin_status() {
+        let marker = if status.found { "[x]" } else { "[ ]" };
+        println!("  {marker} {}", status.plugin);
+    }
+    println!("(configure with:   MINIBOX_CNI_PATH, defaults to /opt/cni/bin)");
+
     Ok(())
 }
 
@@ -151,6 +190,20 @@ mod tests {
     }
 
     #[test]
+    fn compiled_adapters_includes_colima_on_unix() {
+        // Regression: adapter_entries() previously omitted "colima" entirely,
+        // even though it's a valid, always-compiled adapter per
+        // miniboxd::adapter_registry::all_adapters() / VALID_ADAPTERS. This
+        // silently hid a working `MINIBOX_ADAPTER=colima` option from `mbx doctor`.
+        if cfg!(unix) {
+            assert!(
+                compiled_adapters().contains(&"colima"),
+                "colima must be listed in compiled_adapters() on unix"
+            );
+        }
+    }
+
+    #[test]
     fn execute_returns_ok() {
         let result = execute();
         assert!(result.is_ok(), "doctor execute should not fail: {result:?}");
@@ -168,5 +221,31 @@ mod tests {
             std::env::remove_var("MINIBOX_ADAPTER");
         }
         assert_eq!(adapter, "krun");
+    }
+
+    #[test]
+    fn cni_plugin_status_reports_missing_binaries_when_path_unset() {
+        // SAFETY: serialized by process-level isolation in unit tests;
+        // MINIBOX_CNI_PATH is unset in this test process by default.
+        let statuses = cni_plugin_status();
+        assert!(statuses.iter().any(|s| !s.found));
+    }
+
+    #[test]
+    fn cni_plugin_status_reports_found_when_binaries_present() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        for name in ["bridge", "host-local", "portmap", "dnsname"] {
+            std::fs::write(dir.path().join(name), "#!/bin/sh\n").expect("write fixture");
+        }
+        // SAFETY: serialized by process-level isolation in unit tests.
+        unsafe {
+            std::env::set_var("MINIBOX_CNI_PATH", dir.path());
+        }
+        let statuses = cni_plugin_status();
+        // SAFETY: same unique env var set above; remove_var restores the absent state.
+        unsafe {
+            std::env::remove_var("MINIBOX_CNI_PATH");
+        }
+        assert!(statuses.iter().all(|s| s.found));
     }
 }

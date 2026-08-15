@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    # TODO: add develop and next — current triggers miss all active dev branches
+    branches: [main, staging, release]
+  pull_request:
+    # TODO: add develop so PRs targeting the primary dev branch are covered
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  ci:
+    name: CI Pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: taiki-e/install-action@nextest
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run CI pipeline
+        run: cargo xtask verify

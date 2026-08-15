@@ -11,12 +11,12 @@
 //!   - macOS: `brew install smolvm`
 //!   - Linux: see smolmachines docs
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, ImageMetadata, ImageRegistry, ResourceConfig,
-    ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, ImageLoader, ImageMetadata, ImageRegistry,
+    ResourceConfig, ResourceLimiter, RootfsLayout, RuntimeCapabilities, SpawnResult,
 };
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -24,6 +24,45 @@ use std::sync::Arc;
 
 /// Default smolvm image used for container operations.
 const DEFAULT_IMAGE: &str = "ubuntu:24.04";
+/// Host tarball directory mount point used while importing local images.
+const LOAD_MOUNT: &str = "/mnt/minibox-load";
+/// Timeout for local image imports into the VM.
+const LOAD_TIMEOUT_SECS: u32 = 600;
+/// POSIX shell snippet that installs `docker` inside the guest if it is not already
+/// present. The stock `ubuntu:24.04` guest image ships no container runtime, so every
+/// docker invocation inside the VM is prefixed with this self-healing check. Installation
+/// only runs once per VM instance (subsequent `smolvm machine run` calls that reuse the
+/// same cached VM see `docker` already on PATH and skip straight past it), but the very
+/// first pull/load/run after a fresh VM boot pays the `apt-get install` latency cost.
+const ENSURE_DOCKER_SCRIPT: &str = r"if ! command -v docker >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y -qq docker.io >/dev/null
+fi
+";
+
+/// POSIX shell script that imports a tarball and retags whatever docker loaded.
+const DOCKER_LOAD_AND_TAG_SCRIPT: &str = r#"set -eu
+tarball="$1"
+target="$2"
+if ! command -v docker >/dev/null 2>&1; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq && apt-get install -y -qq docker.io >/dev/null
+fi
+out="$(docker load -i "$tarball")"
+printf '%s\n' "$out"
+loaded="$(printf '%s\n' "$out" | sed -n 's/^Loaded image: //p' | tail -n 1)"
+if [ -n "$loaded" ]; then
+    docker tag "$loaded" "$target"
+    exit 0
+fi
+loaded_id="$(printf '%s\n' "$out" | sed -n 's/^Loaded image ID: //p' | tail -n 1)"
+if [ -n "$loaded_id" ]; then
+    docker tag "$loaded_id" "$target"
+    exit 0
+fi
+printf '%s\n' "docker load did not report a loaded image or image ID" >&2
+exit 1
+"#;
 
 /// Callable that runs a command inside the smolvm VM and returns its stdout.
 ///
@@ -147,11 +186,76 @@ impl SmolVmRegistry {
     }
 
     /// Run a command inside the smolvm VM and return its stdout.
-    fn vm_exec(&self, args: &[&str]) -> Result<String> {
+    ///
+    /// The real `smolvm` invocation blocks on a synchronous `Command::output()`
+    /// call that can take well over a minute (VM boot + image pull), so it runs
+    /// on a blocking-pool thread via `spawn_blocking` rather than inline on the
+    /// async runtime — otherwise it starves whichever tokio worker picked up
+    /// this request's task.
+    async fn vm_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        smolvm_exec(&self.image, args)
+        let image = self.image.clone();
+        let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
+        tokio::task::spawn_blocking(move || {
+            let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
+            smolvm_exec(&image, &arg_refs)
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
+    }
+
+    /// Build the image reference used for VM-local docker operations.
+    ///
+    /// Strips the `library/` namespace prefix so tags written by [`ImageLoader::load_image`]
+    /// line up with the names [`ImageRegistry::has_image`]/[`ImageRegistry::pull_image`] look
+    /// for. Docker itself normalizes pulled official images this way (`docker pull
+    /// library/alpine` is locally tagged `alpine:latest`, not `library/alpine:latest`); `docker
+    /// tag` does not apply the same normalization, so `load_image` must strip the prefix
+    /// itself to stay consistent — otherwise a locally loaded image is tagged
+    /// `library/foo:latest` while `has_image`/`pull_image` look for `foo:latest`, and `mbx run`
+    /// reports the image missing and attempts a real network pull.
+    fn target_ref(name: &str, tag: &str) -> String {
+        let short_name = name.strip_prefix("library/").unwrap_or(name);
+        format!("{short_name}:{tag}")
+    }
+
+    /// Quote a single argument for safe interpolation into a POSIX shell command line.
+    fn shell_quote(arg: &str) -> String {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+
+    /// Run a `docker` subcommand inside the VM, self-healing by installing `docker` first
+    /// if the guest image (a stock `ubuntu:24.04` cloud image) doesn't already have it.
+    async fn docker_exec(&self, args: &[&str]) -> Result<String> {
+        let joined = args
+            .iter()
+            .map(|arg| Self::shell_quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let script = format!("{ENSURE_DOCKER_SCRIPT}exec docker {joined}\n");
+        self.vm_exec(&["sh", "-c", &script]).await
+    }
+
+    /// Return the canonical host tarball path, parent directory, and VM guest path.
+    fn load_paths(path: &Path) -> Result<(PathBuf, PathBuf, String)> {
+        if !path.exists() {
+            bail!("image tarball not found: {}", path.display());
+        }
+        let tarball = path
+            .canonicalize()
+            .with_context(|| format!("canonicalize image tarball {}", path.display()))?;
+        let parent = tarball
+            .parent()
+            .context("image tarball has no parent directory")?
+            .to_path_buf();
+        let file_name = tarball
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("image tarball filename is not valid UTF-8")?;
+        let guest_path = format!("{LOAD_MOUNT}/{file_name}");
+        Ok((tarball, parent, guest_path))
     }
 }
 
@@ -162,15 +266,14 @@ impl ImageRegistry for SmolVmRegistry {
     /// Runs `docker images --filter reference=<name>:<tag> --quiet` inside
     /// the VM. Returns `true` if the output is non-empty.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
-        let short_name = name.strip_prefix("library/").unwrap_or(name);
-        let full_name = format!("{short_name}:{tag}");
-        self.vm_exec(&[
-            "docker",
+        let full_name = Self::target_ref(name, tag);
+        self.docker_exec(&[
             "images",
             "--filter",
             &format!("reference={full_name}"),
             "--quiet",
         ])
+        .await
         .is_ok_and(|out| !out.trim().is_empty())
     }
 
@@ -183,7 +286,7 @@ impl ImageRegistry for SmolVmRegistry {
         let tag = image_ref.tag.clone();
         let full_name = format!("{cache_name}:{tag}");
 
-        self.vm_exec(&["docker", "pull", &full_name])?;
+        self.docker_exec(&["pull", &full_name]).await?;
 
         Ok(ImageMetadata {
             name: cache_name,
@@ -192,10 +295,74 @@ impl ImageRegistry for SmolVmRegistry {
         })
     }
 
-    /// Layer paths live inside the VM's filesystem. Returning an empty vec
-    /// signals to the caller that it should pull first.
-    fn get_image_layers(&self, _name: &str, _tag: &str) -> Result<Vec<PathBuf>> {
-        Ok(vec![])
+    /// Layer paths live inside the VM's image cache. Return a stable VM-local
+    /// marker so the shared run pipeline can proceed; `SmolVmFilesystem`
+    /// treats this as metadata and does not perform host overlay setup.
+    fn get_image_layers(&self, name: &str, tag: &str) -> Result<Vec<PathBuf>> {
+        Ok(vec![PathBuf::from(format!("smolvm-image/{name}:{tag}"))])
+    }
+}
+
+#[async_trait]
+impl ImageLoader for SmolVmRegistry {
+    /// Load a local image tarball into the smolvm VM-local Docker image cache.
+    ///
+    /// The tarball directory is mounted into the VM, `docker load` imports the
+    /// image, and the loaded image/image-id is tagged as `name:tag` so the same
+    /// smolvm registry cache that `mbx run` checks can find it later.
+    async fn load_image(&self, path: &Path, name: &str, tag: &str) -> Result<()> {
+        let target = Self::target_ref(name, tag);
+        let (tarball, parent, guest_path) = Self::load_paths(path)?;
+
+        if self.executor.is_some() {
+            self.vm_exec(&[
+                "sh",
+                "-c",
+                DOCKER_LOAD_AND_TAG_SCRIPT,
+                "smolvm-load",
+                tarball
+                    .to_str()
+                    .context("image tarball path is not valid UTF-8")?,
+                &target,
+            ])
+            .await?;
+            return Ok(());
+        }
+
+        let parent_str = parent
+            .to_str()
+            .context("image tarball parent path is not valid UTF-8")?;
+        let image = self.image.clone();
+        let parent = parent_str.to_owned();
+        let target_for_exec = target.clone();
+        let output = tokio::task::spawn_blocking(move || {
+            smolvm_exec_full(
+                &image,
+                &[
+                    "sh",
+                    "-c",
+                    DOCKER_LOAD_AND_TAG_SCRIPT,
+                    "smolvm-load",
+                    &guest_path,
+                    &target_for_exec,
+                ],
+                &[(parent.as_str(), LOAD_MOUNT)],
+                &[],
+                LOAD_TIMEOUT_SECS,
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm docker load: join error: {e}"))??;
+
+        if output.exit_code != 0 {
+            bail!(
+                "smolvm docker load failed for {} as {target}: {}",
+                path.display(),
+                output.stdout
+            );
+        }
+
+        Ok(())
     }
 }
 
@@ -236,11 +403,20 @@ impl SmolVmRuntime {
     }
 
     /// Run a command inside the smolvm VM and return its stdout.
-    fn vm_exec(&self, args: &[&str]) -> Result<String> {
+    ///
+    /// See [`SmolVmRegistry::vm_exec`] — same rationale for `spawn_blocking`.
+    async fn vm_exec(&self, args: &[&str]) -> Result<String> {
         if let Some(exec) = &self.executor {
             return exec(args);
         }
-        smolvm_exec(&self.image, args)
+        let image = self.image.clone();
+        let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
+        tokio::task::spawn_blocking(move || {
+            let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
+            smolvm_exec(&image, &arg_refs)
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
     }
 }
 
@@ -294,27 +470,35 @@ impl ContainerRuntime for SmolVmRuntime {
             })
             .collect();
 
-        let vol_refs: Vec<(&str, &str)> = volumes
-            .iter()
-            .map(|(h, g)| (h.as_str(), g.as_str()))
-            .collect();
-        let env_refs: Vec<(&str, &str)> = env_pairs
-            .iter()
-            .map(|(k, v)| (k.as_str(), v.as_str()))
-            .collect();
-
         let (stdout, exit_code) = if self.executor.is_some() {
             // Use the test executor — flatten command into a single arg list.
-            (self.vm_exec(&command)?, 0)
+            (self.vm_exec(&command).await?, 0)
         } else {
             const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
-            let result = smolvm_exec_full(
-                &self.image,
-                &command,
-                &vol_refs,
-                &env_refs,
-                DEFAULT_EXEC_TIMEOUT_SECS,
-            )?;
+            let image = self.image.clone();
+            let command_owned: Vec<String> = command.iter().map(|s| (*s).to_owned()).collect();
+            let volumes_owned = volumes.clone();
+            let env_pairs_owned = env_pairs.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let command_refs: Vec<&str> = command_owned.iter().map(String::as_str).collect();
+                let vol_refs: Vec<(&str, &str)> = volumes_owned
+                    .iter()
+                    .map(|(h, g)| (h.as_str(), g.as_str()))
+                    .collect();
+                let env_refs: Vec<(&str, &str)> = env_pairs_owned
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                smolvm_exec_full(
+                    &image,
+                    &command_refs,
+                    &vol_refs,
+                    &env_refs,
+                    DEFAULT_EXEC_TIMEOUT_SECS,
+                )
+            })
+            .await
+            .map_err(|e| anyhow!("smolvm_exec_full: join error: {e}"))??;
             (result.stdout, result.exit_code)
         };
 
@@ -524,7 +708,7 @@ mod tests {
     #[tokio::test]
     async fn registry_pull_failure_propagates() {
         let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-            if args.contains(&"pull") {
+            if args.iter().any(|a| a.contains("pull")) {
                 Err(anyhow!("network timeout"))
             } else {
                 Ok(String::new())
@@ -537,6 +721,45 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("network"));
+    }
+
+    /// `docker_exec` wraps the requested subcommand in the ensure-docker self-heal
+    /// snippet and invokes it via `sh -c`, so the docker verb still shows up in the
+    /// interpolated script even though it's no longer a standalone arg.
+    #[tokio::test]
+    async fn docker_exec_wraps_command_with_ensure_docker_snippet() {
+        let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
+            assert_eq!(args.first().copied(), Some("sh"));
+            assert_eq!(args.get(1).copied(), Some("-c"));
+            let script = args.get(2).copied().unwrap_or_default();
+            assert!(script.contains("command -v docker"));
+            assert!(script.contains("apt-get install"));
+            assert!(script.contains("exec docker 'pull' 'alpine:latest'"));
+            Ok("ok".to_string())
+        }));
+
+        let out = registry
+            .docker_exec(&["pull", "alpine:latest"])
+            .await
+            .expect("docker_exec");
+        assert_eq!(out, "ok");
+    }
+
+    /// `target_ref` strips the `library/` namespace prefix so a locally loaded image's
+    /// docker tag matches what `has_image`/`pull_image` look for (issue #457 regression:
+    /// without this, `mbx load --name library/foo` tagged `library/foo:latest` but `mbx
+    /// run foo` checked for `foo:latest` and never found it).
+    #[test]
+    fn target_ref_strips_library_prefix() {
+        assert_eq!(
+            SmolVmRegistry::target_ref("library/foo", "latest"),
+            "foo:latest"
+        );
+        assert_eq!(SmolVmRegistry::target_ref("foo", "latest"), "foo:latest");
+        assert_eq!(
+            SmolVmRegistry::target_ref("ghcr.io/org/image", "v1"),
+            "ghcr.io/org/image:v1"
+        );
     }
 
     /// Filesystem setup_rootfs returns the container_dir as merged_dir.

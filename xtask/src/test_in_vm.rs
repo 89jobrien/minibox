@@ -12,6 +12,7 @@
 //!   and `MINIBOX_ALLOW_PRIVILEGED=1`
 
 use anyhow::{Context, Result, bail};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -197,7 +198,18 @@ fn run_ephemeral(
     }
 
     // 3. Build the test runner script
-    let script = build_test_script(&deps_dir, &opts.test_args, backend.is_privileged(), target)?;
+    // Cached deps image (Phase C, #446): when a pre-baked image with test
+    // deps (coreutils, util-linux) is available, skip the `apk add` at boot
+    // and use it directly instead of bare `alpine`.
+    let use_cached_deps_image =
+        matches!(backend, VmBackend::Minibox(bin) if cached_deps_image_available(bin));
+    let script = build_test_script(
+        &deps_dir,
+        &opts.test_args,
+        backend.is_privileged(),
+        target,
+        use_cached_deps_image,
+    )?;
     let script_path = target_dir.join("test-in-vm-runner.sh");
     std::fs::write(&script_path, &script).context("writing test runner script")?;
 
@@ -206,10 +218,19 @@ fn run_ephemeral(
     let mut cmd = match backend {
         VmBackend::Minibox(bin) => {
             println!("[2/3] booting minibox VM (privileged) ...");
+            let image = if use_cached_deps_image {
+                CACHED_DEPS_IMAGE
+            } else {
+                "alpine"
+            };
+            let network = minibox_network_mode(use_cached_deps_image);
+            if use_cached_deps_image {
+                println!(
+                    "  using cached test-deps image '{CACHED_DEPS_IMAGE}' (--network {network})"
+                );
+            }
             let mut c = Command::new(bin);
-            // TODO(#441): network bridge required for apk add; switch to --network none
-            //       once we pre-bake test deps into a cached image (Phase C).
-            c.args(["run", "--privileged", "--network", "bridge", "alpine"]);
+            c.args(["run", "--privileged", "--network", network, image]);
             c.args(["-v", &mount_spec]);
             c.args(["--", "/bin/sh", "-c"]);
             c.arg(&script);
@@ -265,6 +286,44 @@ fn run_ephemeral(
 
     println!("test-in-vm: all tests passed");
     Ok(())
+}
+
+/// Name of a pre-baked Alpine image with test deps (coreutils, util-linux)
+/// already installed. Avoids `apk add` (and the network access it requires)
+/// at VM boot. Build this image ahead of time and load it into minibox's
+/// image store (`minibox load` / `minibox pull`) under this tag; when absent
+/// we fall back to plain `alpine` + `apk add` at boot (see `build_test_script`).
+const CACHED_DEPS_IMAGE: &str = "minibox-test-deps:latest";
+
+/// Whether `CACHED_DEPS_IMAGE` is present in the minibox image store.
+fn cached_deps_image_available(bin: &Path) -> bool {
+    let repo = CACHED_DEPS_IMAGE
+        .split(':')
+        .next()
+        .unwrap_or(CACHED_DEPS_IMAGE);
+    Command::new(bin)
+        .arg("images")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .any(|line| line.contains(repo))
+        })
+}
+
+/// Network mode for the minibox backend's VM boot (#441).
+///
+/// The cached deps image needs no `apk add` at boot, so it can run fully
+/// isolated (`none`). The bare `alpine` fallback still installs deps over
+/// the network at boot, so it still requires bridge networking.
+const fn minibox_network_mode(use_cached_deps_image: bool) -> &'static str {
+    if use_cached_deps_image {
+        "none"
+    } else {
+        "bridge"
+    }
 }
 
 fn which_bin(name: &str) -> Option<PathBuf> {
@@ -341,10 +400,84 @@ fn persistent_machine_exists(smolvm: &Path, vm_name: &str) -> Result<bool> {
     Ok(stdout.lines().any(|line| line.starts_with(vm_name)))
 }
 
+/// Cross-compilation strategy: `cross` (zero-setup, containerized, like
+/// youki uses) when available on PATH, otherwise raw `musl-gcc` requiring
+/// manual toolchain setup.
+enum CrossStrategy {
+    /// `cross build`/`cross test` — no local musl-gcc/linker setup required.
+    CrossRs(PathBuf),
+    /// Raw `cargo build`/`cargo test` with `CC_*`/`CARGO_TARGET_*_LINKER` env
+    /// vars pointing at a locally installed musl-gcc.
+    MuslGcc { cc: &'static str },
+}
+
+/// Detect the best available cross-compilation strategy (#443).
+///
+/// Prefers `cross` (cross-rs) when it's on PATH — it runs the build inside a
+/// pre-built Docker/Podman container with the target toolchain baked in, so
+/// no local `aarch64-linux-musl-gcc` install is required. Falls back to raw
+/// musl-gcc, which is what this xtask used exclusively before.
+fn detect_cross_strategy() -> CrossStrategy {
+    if let Some(path) = which_bin("cross") {
+        return CrossStrategy::CrossRs(path);
+    }
+    CrossStrategy::MuslGcc {
+        cc: "aarch64-linux-musl-gcc",
+    }
+}
+
 fn cross_compile(workspace_root: &Path, target: &str) -> Result<()> {
-    // TODO(#443): support cross-rs as an alternative to raw musl-gcc (like youki does)
-    //       for zero-setup cross-compilation.
-    let cc = "aarch64-linux-musl-gcc";
+    match detect_cross_strategy() {
+        CrossStrategy::CrossRs(cross_bin) => {
+            println!(
+                "  using cross-rs ({}) — no local musl-gcc setup required",
+                cross_bin.display()
+            );
+            cross_compile_with_cross(&cross_bin, workspace_root, target)
+        }
+        CrossStrategy::MuslGcc { cc } => cross_compile_with_musl_gcc(workspace_root, target, cc),
+    }
+}
+
+/// Cross-compile via `cross` (cross-rs): containerized builds, no local
+/// linker/CC setup needed.
+fn cross_compile_with_cross(cross_bin: &Path, workspace_root: &Path, target: &str) -> Result<()> {
+    println!("  compiling miniboxd binary (cross) ...");
+    let status = Command::new(cross_bin)
+        .args(["build", "-p", "miniboxd", "--target", target])
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cross build miniboxd")?;
+    if !status.success() {
+        bail!("cross-compile (cross-rs) failed for miniboxd binary");
+    }
+
+    // cli_e2e_tests spawns the `mbx` CLI binary against a real daemon.
+    println!("  compiling mbx binary (cross) ...");
+    let status = Command::new(cross_bin)
+        .args(["build", "-p", "mbx", "--target", target])
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cross build mbx")?;
+    if !status.success() {
+        bail!("cross-compile (cross-rs) failed for mbx binary");
+    }
+
+    println!("  compiling miniboxd tests (cross) ...");
+    let status = Command::new(cross_bin)
+        .args(["test", "--no-run", "-p", "miniboxd", "--target", target])
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cross test --no-run")?;
+    if !status.success() {
+        bail!("cross-compile (cross-rs) failed for miniboxd tests");
+    }
+    Ok(())
+}
+
+/// Cross-compile via raw `musl-gcc`: requires a locally installed
+/// `aarch64-linux-musl-gcc` toolchain.
+fn cross_compile_with_musl_gcc(workspace_root: &Path, target: &str, cc: &str) -> Result<()> {
     let cc_env = format!("CC_{}", target.replace('-', "_"));
     let linker_env = format!(
         "CARGO_TARGET_{}_LINKER",
@@ -362,6 +495,19 @@ fn cross_compile(workspace_root: &Path, target: &str) -> Result<()> {
         .context("spawning cargo build miniboxd")?;
     if !status.success() {
         bail!("cross-compile failed for miniboxd binary");
+    }
+
+    // cli_e2e_tests spawns the `mbx` CLI binary against a real daemon.
+    println!("  compiling mbx binary ...");
+    let status = Command::new("cargo")
+        .args(["build", "-p", "mbx", "--target", target])
+        .env(&cc_env, cc)
+        .env(&linker_env, cc)
+        .current_dir(workspace_root)
+        .status()
+        .context("spawning cargo build mbx")?;
+    if !status.success() {
+        bail!("cross-compile failed for mbx binary");
     }
 
     // Cross-compile miniboxd test binaries — these are the Linux-only
@@ -386,14 +532,23 @@ fn build_test_script(
     extra_args: &[String],
     privileged: bool,
     target: &str,
+    skip_dep_install: bool,
 ) -> Result<String> {
-    // TODO(#444): add sandbox_tests, system_tests, cli_e2e_tests once minibox
-    //       backend is validated end-to-end with privileged mode.
-    let mut suites = vec!["integration_tests"];
+    // sandbox_tests/system_tests/cgroup_tests need privileged mode
+    // (cgroups v2 + overlayfs); cli_e2e_tests is cross-platform and
+    // unprivileged (no root, no cgroups — see
+    // crates/miniboxd/tests/cli_e2e_tests.rs doc comment), so it always
+    // runs. This mirrors `cargo xtask build-test-image`'s entrypoint script
+    // (xtask/src/test_image.rs), which already validates cgroup_tests,
+    // integration_tests, system_tests, and sandbox_tests end-to-end under
+    // privileged mode via the native adapter.
+    let mut suites = vec!["integration_tests", "cli_e2e_tests"];
     if privileged {
         suites.push("cgroup_tests");
+        suites.push("system_tests");
+        suites.push("sandbox_tests");
     } else {
-        println!("  (skipping cgroup_tests — unprivileged backend)");
+        println!("  (skipping cgroup_tests/system_tests/sandbox_tests — unprivileged backend)");
     }
 
     let mut found = Vec::new();
@@ -440,13 +595,17 @@ fn build_test_script(
     };
 
     // Suites that require --ignored (tests gated behind #[ignore] for root/Linux)
-    let ignored_suites = ["integration_tests"];
+    let ignored_suites = ["integration_tests", "sandbox_tests"];
 
     let mut script = String::from("#!/bin/sh\n\n");
-    // TODO(#446): pre-bake test deps into a cached image (Phase C) to avoid
-    //       network access at boot and speed up repeated runs.
-    script.push_str("# Install test dependencies (best-effort, no set -e yet)\n");
-    script.push_str("apk add --no-cache coreutils util-linux 2>/dev/null || true\n\n");
+    if skip_dep_install {
+        // Phase C (#446): deps are already baked into the cached image —
+        // skip the network round-trip entirely.
+        script.push_str("# Test dependencies pre-baked into cached image; skipping apk add\n\n");
+    } else {
+        script.push_str("# Install test dependencies (best-effort, no set -e yet)\n");
+        script.push_str("apk add --no-cache coreutils util-linux 2>/dev/null || true\n\n");
+    }
 
     // Make cgroup writable for cgroup tests (best-effort — may fail in
     // unprivileged VMs where /sys/fs/cgroup is read-only).
@@ -458,7 +617,7 @@ fn build_test_script(
 
     // Set bin dir for e2e tests that need miniboxd/minibox binaries
     let bin_dir = format!("/mnt/tests/{target}/debug");
-    script.push_str(&format!("export MINIBOX_TEST_BIN_DIR={bin_dir}\n\n"));
+    let _ = write!(script, "export MINIBOX_TEST_BIN_DIR={bin_dir}\n\n");
 
     script.push_str("PASS=0\nFAIL=0\n\n");
 
@@ -469,10 +628,11 @@ fn build_test_script(
         } else {
             ""
         };
-        script.push_str(&format!("echo '=== {suite} ==='\n"));
-        script.push_str(&format!(
+        let _ = writeln!(script, "echo '=== {suite} ==='");
+        let _ = write!(
+            script,
             "if {bin_path} --test-threads=1{ignored_flag}{extra}; then\n  PASS=$((PASS + 1))\nelse\n  FAIL=$((FAIL + 1))\nfi\n\n"
-        ));
+        );
     }
 
     script.push_str("echo \"\"\n");
@@ -522,6 +682,7 @@ mod tests {
             &[],
             true,
             "aarch64-unknown-linux-musl",
+            false,
         );
         assert!(result.is_err());
     }
@@ -529,9 +690,145 @@ mod tests {
     #[test]
     fn build_test_script_fails_on_empty_dir() {
         let tmp = tempfile::tempdir().unwrap();
-        let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl");
+        let result = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("no test binaries"),);
+    }
+
+    #[test]
+    fn detect_cross_strategy_falls_back_to_musl_gcc_when_cross_absent() {
+        // `cross` is not expected to be installed in CI/dev environments for
+        // this workspace; verify the fallback path is selected and carries
+        // the expected CC value.
+        if which_bin("cross").is_some() {
+            // Environment has cross-rs installed; skip rather than assert a
+            // false negative.
+            return;
+        }
+        match detect_cross_strategy() {
+            CrossStrategy::MuslGcc { cc } => assert_eq!(cc, "aarch64-linux-musl-gcc"),
+            CrossStrategy::CrossRs(_) => panic!("expected MuslGcc fallback when cross is absent"),
+        }
+    }
+
+    #[test]
+    fn network_mode_is_none_when_deps_cached() {
+        assert_eq!(minibox_network_mode(true), "none");
+    }
+
+    #[test]
+    fn network_mode_is_bridge_when_deps_not_cached() {
+        assert_eq!(minibox_network_mode(false), "bridge");
+    }
+
+    /// Create a fake executable test binary named `<suite>-<hash>` in `dir`.
+    fn write_fake_test_binary(dir: &Path, suite: &str) {
+        let bin_path = dir.join(format!("{suite}-abc123"));
+        std::fs::write(&bin_path, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    #[test]
+    fn build_test_script_wires_in_privileged_suites() {
+        let tmp = tempfile::tempdir().unwrap();
+        for suite in [
+            "integration_tests",
+            "cli_e2e_tests",
+            "cgroup_tests",
+            "system_tests",
+            "sandbox_tests",
+        ] {
+            write_fake_test_binary(tmp.path(), suite);
+        }
+
+        let script = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false)
+            .expect("build_test_script");
+        for suite in [
+            "integration_tests",
+            "cli_e2e_tests",
+            "cgroup_tests",
+            "system_tests",
+            "sandbox_tests",
+        ] {
+            assert!(
+                script.contains(&format!("=== {suite} ===")),
+                "script should run {suite}:\n{script}"
+            );
+        }
+        // sandbox_tests and integration_tests are gated behind #[ignore]
+        assert!(script.contains(&format!(
+            "{suite}-abc123 --test-threads=1 --ignored",
+            suite = "sandbox_tests"
+        )));
+        assert!(script.contains(&format!(
+            "{suite}-abc123 --test-threads=1 --ignored",
+            suite = "integration_tests"
+        )));
+        // system_tests and cli_e2e_tests are not ignore-gated
+        assert!(!script.contains("system_tests-abc123 --test-threads=1 --ignored"));
+        assert!(!script.contains("cli_e2e_tests-abc123 --test-threads=1 --ignored"));
+    }
+
+    #[test]
+    fn build_test_script_unprivileged_skips_privileged_suites() {
+        let tmp = tempfile::tempdir().unwrap();
+        for suite in [
+            "integration_tests",
+            "cli_e2e_tests",
+            "cgroup_tests",
+            "system_tests",
+            "sandbox_tests",
+        ] {
+            write_fake_test_binary(tmp.path(), suite);
+        }
+
+        let script = build_test_script(tmp.path(), &[], false, "aarch64-unknown-linux-musl", false)
+            .expect("build_test_script");
+        assert!(script.contains("=== integration_tests ==="));
+        assert!(script.contains("=== cli_e2e_tests ==="));
+        assert!(!script.contains("=== cgroup_tests ==="));
+        assert!(!script.contains("=== system_tests ==="));
+        assert!(!script.contains("=== sandbox_tests ==="));
+    }
+
+    #[test]
+    fn build_test_script_skips_apk_add_when_deps_cached() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_path = tmp.path().join("integration_tests-abc123");
+        std::fs::write(&bin_path, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let script = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", true)
+            .expect("build_test_script");
+        assert!(
+            !script.contains("apk add --no-cache"),
+            "script should skip installing deps when pre-baked:\n{script}"
+        );
+        assert!(script.contains("pre-baked"));
+    }
+
+    #[test]
+    fn build_test_script_installs_deps_when_not_cached() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin_path = tmp.path().join("integration_tests-abc123");
+        std::fs::write(&bin_path, b"#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&bin_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let script = build_test_script(tmp.path(), &[], true, "aarch64-unknown-linux-musl", false)
+            .expect("build_test_script");
+        assert!(script.contains("apk add --no-cache coreutils util-linux"));
     }
 
     #[test]
@@ -586,7 +883,7 @@ mod tests {
         );
     }
 
-    /// Serialize env-mutating tests (Rust 2024: set_var/remove_var are unsafe).
+    /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]

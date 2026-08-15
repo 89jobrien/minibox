@@ -1,0 +1,17 @@
+{
+  "date": "2026-08-08",
+  "tests": {
+    "total": 2209,
+    "passed": 2207,
+    "failed": 2,
+    "skipped": 0
+  },
+  "clippy": {
+    "warnings": 0,
+    "errors": 0
+  },
+  "todo_fixme": 29,
+  "crates": 16,
+  "versions_consistent": false,
+  "version": "0.31.0"
+}

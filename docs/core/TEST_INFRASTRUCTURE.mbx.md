@@ -5,6 +5,10 @@
 > Updated 2026-06-14: macOS nextest count updated to 789 (789 passed, 1 skipped). minibox
 > integration test file count updated to 54. minibox-testsuite and smolbox crates added to
 > the crate table.
+> Updated 2026-07-25: integration test file counts corrected against current
+> crates/*/tests/ contents (minibox 54->56, minibox-core 7->10, miniboxd 6->13,
+> mbx 2->3, smolbox 0->2, winbox 0->1). Per-crate/category test-count estimates
+> not re-derived — file counts only.
 
 ## Test Counts
 
@@ -24,14 +28,14 @@ and root-required tests add more on top.
 
 | Crate              | Integration files | Integration tests | Inline tests |
 | ------------------ | ----------------- | ----------------- | ------------ |
-| minibox            | 54                | ~479              | ~255         |
-| minibox-core       | 7                 | ~126              | ~285         |
-| miniboxd           | 6                 | ~72               | ~24          |
-| mbx                | 2                 | ~32               | ~96          |
+| minibox            | 56                | ~479              | ~255         |
+| minibox-core       | 10                | ~126              | ~285         |
+| miniboxd           | 13                | ~72               | ~24          |
+| mbx                | 3                 | ~32               | ~96          |
 | macbox             | 3                 | ~30               | ~63          |
 | minibox-testsuite  | 0                 | 0                 | ~24          |
-| smolbox            | 0                 | 0                 | ~3           |
-| winbox             | 0                 | 0                 | ~5           |
+| smolbox            | 2                 | 0                 | ~3           |
+| winbox             | 1                 | 0                 | ~5           |
 | minibox-macros     | 0                 | 0                 | 0            |
 | xtask              | 0                 | 0                 | 0            |
 

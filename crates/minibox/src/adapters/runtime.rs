@@ -12,7 +12,7 @@ use minibox_core::adapt;
 use minibox_core::domain::{
     ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult,
 };
-use tracing::debug;
+use tracing::{debug, instrument};
 
 /// Linux namespaces implementation of the [`ContainerRuntime`] trait.
 ///
@@ -106,6 +106,11 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
         }
     }
 
+    #[instrument(
+        skip(self, config),
+        fields(command = %config.command, privileged = config.privileged),
+        err
+    )]
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
         debug!(
             "spawning container process: command={}, rootfs={:?}",

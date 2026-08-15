@@ -1,3 +1,19 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::doc_markdown,
+    clippy::unwrap_in_result,
+    clippy::redundant_clone,
+    clippy::redundant_closure,
+    clippy::single_char_pattern,
+    clippy::redundant_field_names,
+    clippy::uninlined_format_args,
+    clippy::manual_assert,
+    clippy::duration_suboptimal_units,
+    clippy::unnecessary_map_or,
+    clippy::unnecessary_literal_bound
+)]
 //! `TestRunner` — collects and executes `ConformanceTest` instances.
 //!
 //! Tests run sequentially (parallelism is intentionally omitted — the mock

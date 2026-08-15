@@ -41,6 +41,7 @@ fn record_timed_op(deps: &HandlerDependencies, op: &str, status: &str, elapsed_s
 ///
 /// Returns an error if `platform` cannot be parsed, or if the adapter cannot
 /// be reconstructed (e.g. TLS init failure).
+#[cfg(feature = "registry")]
 // qual:allow(iosp) reason: "handler orchestration — routing + adapter construction"
 pub(super) fn resolve_platform_registry(
     platform: &Option<String>,
@@ -69,6 +70,23 @@ pub(super) fn resolve_platform_registry(
     let registry =
         crate::adapters::DockerHubRegistry::with_platform(Arc::clone(&deps.image.image_store), tp)?;
     Ok(Some(Box::new(registry)))
+}
+
+/// Fallback when the `registry` feature is disabled: per-request platform
+/// overrides require reconstructing the concrete registry adapter, which is
+/// not compiled in without the feature.
+#[cfg(not(feature = "registry"))]
+pub(super) fn resolve_platform_registry(
+    platform: &Option<String>,
+    _image_ref: &minibox_core::image::reference::ImageRef,
+    _deps: &HandlerDependencies,
+) -> Result<Option<Box<dyn minibox_core::domain::ImageRegistry>>> {
+    if platform.is_some() {
+        anyhow::bail!(
+            "per-request platform override requires the `registry` feature to be enabled"
+        );
+    }
+    Ok(None)
 }
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
@@ -631,7 +649,7 @@ pub async fn handle_list_images(
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
+#[cfg(all(test, feature = "registry"))]
 mod registry_router_tests {
     use crate::adapters::{DockerHubRegistry, GhcrRegistry};
     use minibox_core::adapters::HostnameRegistryRouter;

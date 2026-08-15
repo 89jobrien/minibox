@@ -30,6 +30,17 @@ impl ServerListener for UnixServerListener {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::uninlined_format_args,
+    clippy::redundant_clone,
+    clippy::only_used_in_recursion,
+    clippy::collapsible_if,
+    clippy::used_underscore_items,
+    clippy::doc_markdown
+)]
 mod tests {
     use super::*;
     use std::os::unix::net::UnixStream as StdUnixStream;

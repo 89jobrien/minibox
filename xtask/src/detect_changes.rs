@@ -26,6 +26,7 @@ pub enum Area {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct ChangeSet {
     pub core: bool,
     pub daemon: bool,
@@ -65,6 +66,7 @@ impl ChangeSet {
 /// Map a changed file path (relative to workspace root) to a workspace area.
 ///
 /// Returns `None` for paths that don't match any tracked area (e.g. `fuzz/`).
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 pub fn classify_path(path: &str) -> Option<Area> {
     if path.starts_with("crates/minibox-core/") || path.starts_with("crates/minibox-macros/") {
         Some(Area::Core)

@@ -11,6 +11,7 @@
 !USAGE.md
 !docs/*.mbx.md
 !docs/specs/*.md
+!docs/FEATURE_MATRIX.md
 !docs/PLATFORM_SUPPORT.md
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
@@ -118,6 +119,7 @@ Thumbs.db
 # Local development
 .env
 .env.local
+/cache/
 *.log
 *.pid
 .env.nu
@@ -171,3 +173,6 @@ docs/archive/
 .claude/skills/whatidid/cache/
 .capsec-baseline.json
 bench/results/
+.taskit-state.json
+.taskit-cache/
+.taskit/

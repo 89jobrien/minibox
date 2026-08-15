@@ -156,7 +156,7 @@ pub fn extract_variants(src: &str, enum_name: &str) -> Vec<String> {
             {
                 // Variant names are PascalCase; skip keywords and noise.
                 let first = name.chars().next();
-                if first.map(|c| c.is_uppercase()).unwrap_or(false) {
+                if first.is_some_and(char::is_uppercase) {
                     variants.push(name.to_string());
                 }
             }
@@ -193,7 +193,7 @@ fn collect_rs_files_inner(dir: &Path, skip: &Path, out: &mut Vec<PathBuf>) -> Re
 
         if path.is_dir() {
             collect_rs_files_inner(&path, skip, out)?;
-        } else if path.extension().map(|e| e == "rs").unwrap_or(false) && path != skip {
+        } else if path.extension().is_some_and(|e| e == "rs") && path != skip {
             out.push(path);
         }
     }

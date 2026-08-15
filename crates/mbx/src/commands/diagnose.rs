@@ -5,6 +5,16 @@
 //! /proc/<pid>/status on Linux) and prints a structured text report.  LLM
 //! integration is intentionally absent; this command produces the raw data a
 //! human or downstream tool can feed to an AI.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::Context;
 use minibox_core::client::DaemonClient;

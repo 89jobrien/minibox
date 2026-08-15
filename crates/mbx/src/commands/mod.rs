@@ -3,6 +3,16 @@
 //! Each module implements a single subcommand using the [`minibox_core::client`] library
 //! to communicate with the daemon. The [`DaemonClient`] abstraction handles socket
 //! connection and protocol formatting.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::Context as _;
 use miette::Diagnostic;
@@ -50,6 +60,14 @@ pub async fn send_request(
                 println!("{message}");
                 Ok(())
             }
+            DaemonResponse::ContainerPaused { id } => {
+                println!("{id} paused");
+                Ok(())
+            }
+            DaemonResponse::ContainerResumed { id } => {
+                println!("{id} resumed");
+                Ok(())
+            }
             DaemonResponse::Error { message } => Err(RequestError::DaemonError { message }.into()),
             other => Err(RequestError::UnexpectedResponse {
                 response: format!("{other:?}"),
@@ -80,6 +98,7 @@ pub mod run;
 pub mod sandbox;
 pub mod snapshot;
 pub mod stop;
+pub mod tui;
 pub mod update;
 pub mod upgrade;
 

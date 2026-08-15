@@ -1,0 +1,40 @@
+[package]
+name = "minibox-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "MCP stdio server exposing minibox daemon operations"
+publish = true
+
+[lib]
+name = "mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mcp"
+path = "src/main.rs"
+
+[dependencies]
+minibox-core = { workspace = true }
+base64 = { workspace = true }
+miette = { workspace = true }
+# TODO(review): rmcp/schemars are pinned directly instead of via [workspace.dependencies]
+# like every other dep in this manifest; confirm cargo-deny is fine with it or move to
+# workspace deps for consistency.
+rmcp = { version = "1.8.0", features = ["server", "transport-io"] }
+schemars = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+rmcp = { version = "1.8.0", features = ["client", "transport-child-process"] }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
