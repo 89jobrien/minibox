@@ -12,6 +12,7 @@ pub mod layer;
 pub mod lease;
 pub mod manifest;
 pub mod reference;
+#[cfg(feature = "registry")]
 pub mod registry;
 
 use crate::error::ImageError;
@@ -522,6 +523,7 @@ fn validate_image_component(label: &str, value: &str) -> anyhow::Result<()> {
 /// Returns an error if the image reference is invalid, registry authentication
 /// fails, the manifest cannot be fetched, or any layer blob download or
 /// extraction fails.
+#[cfg(feature = "registry")]
 pub async fn pull(
     image_ref: &str,
     store_path: impl Into<std::path::PathBuf>,

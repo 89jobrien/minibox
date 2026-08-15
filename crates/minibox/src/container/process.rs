@@ -356,6 +356,17 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     // 4. Pivot root to the overlay merged directory.
     pivot_root_to(&config.rootfs).with_context(|| "child: pivot_root")?;
 
+    // 4b. Install the mount-immutability seccomp filter now that every
+    //     init-time mount (overlay, bind mounts, pivot_root's proc/sysfs/dev)
+    //     has been applied. From this point on, any `mount(2)` remount
+    //     attempt that drops MS_RDONLY (i.e. an attempted `remount,rw`) is
+    //     denied for the lifetime of this process tree; fresh (non-remount)
+    //     mounts created after this point remain unrestricted. See
+    //     crate::container::mount_seccomp for the enforcement model and its
+    //     documented scope.
+    crate::container::mount_seccomp::install_mount_immutability_filter()
+        .with_context(|| "child: install_mount_immutability_filter")?;
+
     // 5. Apply privileged capability whitelist if requested.
     #[cfg(target_os = "linux")]
     if config.privileged {

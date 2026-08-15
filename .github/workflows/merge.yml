@@ -28,11 +28,11 @@ jobs:
     name: detect changes
     runs-on: ubuntu-latest
     outputs:
-      core:      ${{ steps.dc.outputs.core }}
-      daemon:    ${{ steps.dc.outputs.daemon }}
-      cli:       ${{ steps.dc.outputs.cli }}
-      runtime:   ${{ steps.dc.outputs.runtime }}
-      xtask:     ${{ steps.dc.outputs.xtask }}
+      core: ${{ steps.dc.outputs.core }}
+      daemon: ${{ steps.dc.outputs.daemon }}
+      cli: ${{ steps.dc.outputs.cli }}
+      runtime: ${{ steps.dc.outputs.runtime }}
+      xtask: ${{ steps.dc.outputs.xtask }}
       workflows: ${{ steps.dc.outputs.workflows }}
     steps:
       - uses: actions/checkout@v5
@@ -193,6 +193,9 @@ jobs:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
     if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    concurrency:
+      group: minibox-selfhosted-e2e
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
       - name: pre-test runner cleanup
@@ -212,6 +215,9 @@ jobs:
     name: integration tests (Linux, root)
     runs-on: [self-hosted, minibox]
     if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    concurrency:
+      group: minibox-selfhosted-e2e
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
       - name: pre-test runner cleanup
@@ -231,6 +237,9 @@ jobs:
     name: protocol e2e (Linux)
     runs-on: [self-hosted, minibox]
     if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    concurrency:
+      group: minibox-selfhosted-e2e
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
       - name: pre-test runner cleanup

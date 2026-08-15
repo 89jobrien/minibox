@@ -71,8 +71,6 @@ feature-depth = 1
 ignore = [
     # paste is unmaintained (RUSTSEC-2024-0436); no safe upgrade — used by conformance_test! macro.
     { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; no maintained drop-in replacement available; tracked in issue backlog" },
-    # anyhow downcast_mut unsoundness (RUSTSEC-2026-0190); fix expected in next anyhow release.
-    { id = "RUSTSEC-2026-0190", reason = "anyhow Error::downcast_mut() unsoundness; we do not call downcast_mut(); fix expected upstream" },
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.

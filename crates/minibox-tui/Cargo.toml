@@ -1,0 +1,26 @@
+[package]
+name = "minibox-tui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Read-only terminal dashboard for the minibox daemon (container table + live event log)"
+publish = false
+
+[lib]
+name = "minibox_tui"
+path = "src/lib.rs"
+
+[dependencies]
+minibox-core = { workspace = true }
+ratatui = { workspace = true }
+crossterm = { workspace = true, features = ["event-stream"] }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+miette = { workspace = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

@@ -8,9 +8,64 @@
       "hash": "b06d2fbbc7ef0b4e438f9819c2efd55cebc2d796d3662cf29465f82ca0f8e45e"
     },
     {
-      "name": "domain-ports",
-      "path": "crates/minibox-core/src/domain.rs",
-      "hash": "8439863046f4b38c8a77d8b59a6b5a2405362a7f68432f764cdee0798c79ff24"
+      "name": "domain-capability",
+      "path": "crates/minibox-core/src/domain/capability.rs",
+      "hash": "fb23da727719e07ae5cbd8885462353d643dd98f4159c449a3b34052e04f665b"
+    },
+    {
+      "name": "domain-checkpoint",
+      "path": "crates/minibox-core/src/domain/checkpoint.rs",
+      "hash": "ffe017b2f73bcf476b48c276e7cfa580452059760603da41c15c790d532e3b08"
+    },
+    {
+      "name": "domain-error",
+      "path": "crates/minibox-core/src/domain/error.rs",
+      "hash": "ba7094ebe630987508b369d4c3be22a4e5d6a9e26a2ddc2438556eac20048c3a"
+    },
+    {
+      "name": "domain-exec",
+      "path": "crates/minibox-core/src/domain/exec.rs",
+      "hash": "a5f541466169a664899b949bfe87e36ee12b98d4f509d7a1f7968c6bca7a46f4"
+    },
+    {
+      "name": "domain-filesystem",
+      "path": "crates/minibox-core/src/domain/filesystem.rs",
+      "hash": "b00e2de2b43cc92f3002c53f3fb733bb9cac743537852217603b9de6d6503ca3"
+    },
+    {
+      "name": "domain-ids",
+      "path": "crates/minibox-core/src/domain/ids.rs",
+      "hash": "f639db882fd776f283234792bf802643bfb44617c943021d80be1296210c10d6"
+    },
+    {
+      "name": "domain-image",
+      "path": "crates/minibox-core/src/domain/image.rs",
+      "hash": "9817ae3f85e79b978d153f5cdeb4c51c8fc1569ca7d2ce4385fb9e22019fe28a"
+    },
+    {
+      "name": "domain-metrics",
+      "path": "crates/minibox-core/src/domain/metrics.rs",
+      "hash": "65a1d0cc117b5f5a4aeef013bffd74746aa62bdcd5553eb2101801a5b9ac6b10"
+    },
+    {
+      "name": "domain-pty",
+      "path": "crates/minibox-core/src/domain/pty.rs",
+      "hash": "60c65da013ebce36ac23ec1b1b60d3d8424749202878e6873738ba81ceb35cdf"
+    },
+    {
+      "name": "domain-runtime",
+      "path": "crates/minibox-core/src/domain/runtime.rs",
+      "hash": "0f3d2364821a939c160455121bb0f26cd311e54c6042257b9604fbe688670774"
+    },
+    {
+      "name": "domain-state",
+      "path": "crates/minibox-core/src/domain/state.rs",
+      "hash": "71e78b780ec27dcdb63c4c9149548e3bc473a19ba4715a14b2261dd3d5e01588"
+    },
+    {
+      "name": "domain-workflow",
+      "path": "crates/minibox-core/src/domain/workflow.rs",
+      "hash": "85498eba69f9cf868b3beb6798262db2976eba36cce15f1845d3d70ed96107a2"
     },
     {
       "name": "domain-networking",
@@ -30,7 +85,7 @@
     {
       "name": "execution-manifest",
       "path": "crates/minibox-core/src/domain/execution_manifest.rs",
-      "hash": "75d16466ae715816e28d9b98b83ebc2d60028096496fa01d7920009a1e478d98"
+      "hash": "a460482edbed0400335028c3b0f54d3cda53dbdd70e0776b9365983e90cf4ae1"
     },
     {
       "name": "execution-policy",

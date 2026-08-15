@@ -6,6 +6,7 @@
 //! - `test_fixtures`: Shared test setup helpers (behind `test-utils` feature)
 
 mod noop_exec;
+#[cfg(feature = "registry")]
 mod registry;
 mod registry_router;
 
@@ -33,4 +34,5 @@ pub mod test_fixtures;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod conformance;
 
+#[cfg(feature = "registry")]
 pub use registry::DockerHubRegistry;

@@ -1,12 +1,3 @@
----
-watches:
-    - crates/*/Cargo.toml
-    - crates/miniboxd/src/adapter_registry.rs
-    - crates/minibox-core/src/domain.rs
-    - crates/minibox-core/src/domain/*.rs
-    - crates/minibox-core/src/protocol.rs
----
-
 # Minibox Architecture Reference
 
 > Generated 2026-04-27 from automated codebase analysis.
@@ -18,13 +9,18 @@ watches:
 > via macbox::build_colima_handler_dependencies.
 > Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
 > removed.
+> Updated 2026-07-25: crate count corrected to 13 crates, plus xtask as the
+> workspace dev-tool member (added ail and minibox-bench).
+> Updated 2026-07-26: added `minibox-mcp` MCP stdio control surface.
+> Updated 2026-08-08: crate count corrected to 15 crates, plus xtask (added
+> `minibox-cni` and `minibox-tui`).
 
 ## Workspace Overview
 
-10 crates, Rust 2024 edition, workspace version 0.30.0.
+16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
 
-<!-- fact:crate_count=10 -->
-<!-- fact:workspace_version=0.30.0 -->
+<!-- fact:crate_count=15 -->
+<!-- fact:workspace_version=0.31.0 -->
 
 ```text
 minibox-macros          (proc-macro, ~300 LOC)
@@ -32,16 +28,19 @@ minibox-macros          (proc-macro, ~300 LOC)
 minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain traits, protocol, image ops
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
-    ^     ^
-macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm) | Windows stub
-    ^
-smolbox                 (macOS VM backend) — smolvm adapter; default macOS runtime
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  (platform libs) — Colima | smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
+minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
 minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
+minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
+minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
+minibox-tui             (bin) — read-only TUI dashboard (ratatui + crossterm), `mbx tui`
+ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 ```
 
@@ -53,20 +52,27 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | minibox-core        | minibox-macros                                                |
 | minibox             | minibox-core, minibox-macros                                  |
 | macbox              | minibox, minibox-core                                         |
+| smolbox             | minibox, minibox-core                                         |
 | winbox              | minibox, minibox-core                                         |
-| miniboxd            | minibox, minibox-core (unix), macbox (unix), winbox (windows) |
+| miniboxd            | minibox, minibox-core (unix), macbox/smolbox (unix), winbox (windows) |
 | mbx                 | minibox-core                                                  |
 | minibox-crux-plugin | minibox-core                                                  |
+| minibox-mcp         | minibox-core                                                  |
 | minibox-testsuite   | minibox, minibox-core                                         |
+| minibox-bench       | minibox, minibox-core, minibox-macros                         |
+| minibox-cni         | minibox-core                                                  |
+| minibox-tui         | minibox-core                                                  |
+| ail                 | --                                                             |
 | xtask               | (standalone)                                                  |
 
 ---
 
 ## Domain Traits (Hexagonal Ports)
 
-Most are defined in `crates/minibox-core/src/domain.rs`; `NetworkProvider` is in
-`crates/minibox-core/src/domain/networking.rs`. All are re-exported via
-`crates/minibox/src/domain.rs`.
+Most are defined under `crates/minibox-core/src/domain/`; `NetworkProvider` is in
+`crates/minibox-core/src/domain/networking.rs`. The `minibox` crate re-exports the
+core domain surface via `crates/minibox/src/domain.rs` for adapter and macro
+compatibility.
 
 ### Primary Ports (wired in HandlerDependencies)
 
@@ -178,7 +184,7 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-27 request variants, 28 response variants. Canonical source:
+29 request variants, 28 response variants. Canonical source:
 `crates/minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
@@ -186,17 +192,19 @@ HandlerDependencies
 Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
-RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest
+RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest,
+ListPipelines, ShowPipeline, RunWorkflow
 
 ### DaemonResponse Variants
 
 **Terminal** (end a request): ContainerCreated, Success, ContainerPaused,
 ContainerResumed, ContainerList, ImageLoaded, ImageList, Error,
-ContainerStopped, BuildComplete, Pruned, PipelineComplete, SnapshotSaved,
-SnapshotRestored, SnapshotList, Manifest, VerifyResult
+ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
+PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
+Manifest, VerifyResult, WorkflowComplete
 
 **Non-terminal** (streaming): ContainerOutput, ExecStarted, PushProgress,
-BuildOutput, Event, LogLine, UpdateProgress
+BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
 
 ---
 
@@ -291,7 +299,7 @@ container records to disk (atomic rename) on every add/remove.
 Records survive daemon restart; running processes do not reattach.
 State machine: Created -> Running -> Paused -> Stopped
 (+ Failed, Orphaned).
-See `docs/STATE_MODEL.mbx.md` for full detail.
+See `docs/core/STATE_MODEL.mbx.md` for full detail.
 
 ---
 

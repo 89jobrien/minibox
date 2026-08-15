@@ -1,4 +1,14 @@
 //! `minibox ps` — list all containers.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result
+    )
+)]
 
 use anyhow::Context;
 use minibox_core::client::DaemonClient;

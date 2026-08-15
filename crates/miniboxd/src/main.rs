@@ -21,6 +21,22 @@
 //! 2. `run_daemon(config)`: tracing → adapter selection → privilege check →
 //!    path resolution → directory creation → state load → dependency injection →
 //!    socket bind → signal handler → accept loop.
+#![cfg_attr(
+    test,
+    allow(
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::panic,
+        clippy::doc_markdown,
+        clippy::unwrap_in_result,
+        clippy::uninlined_format_args,
+        clippy::redundant_clone,
+        clippy::collapsible_if,
+        clippy::match_same_arms,
+        clippy::only_used_in_recursion,
+        clippy::used_underscore_binding,
+    )
+)]
 
 // ── Windows ───────────────────────────────────────────────────────────────
 #[cfg(target_os = "windows")]
@@ -170,7 +186,7 @@ use anyhow::{Context, Result};
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
 use minibox::adapters::{
-    DockerHubRegistry, GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRuntime,
+    GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime,
 };
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
@@ -210,7 +226,7 @@ use tracing::{info, warn};
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
-    CgroupV2Limiter, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
 use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
@@ -331,31 +347,17 @@ async fn load_state(paths: &DaemonPaths) -> Result<Arc<DaemonState>> {
 
 // ── Unified daemon entry point ────────────────────────────────────────────
 
-#[cfg(unix)]
-// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
-async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
-    // ── Tracing ──────────────────────────────────────────────────────────
-    #[cfg(feature = "otel")]
-    let _otel_guard = {
-        let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
-        minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
-    };
-    #[cfg(not(feature = "otel"))]
+#[cfg(feature = "otel")]
+fn init_daemon_tracing() -> minibox::daemon::telemetry::traces::OtelGuard {
+    let otlp_endpoint = std::env::var("MINIBOX_OTLP_ENDPOINT").ok();
+    minibox::daemon::telemetry::traces::init_tracing(otlp_endpoint.as_deref())
+}
+#[cfg(not(feature = "otel"))]
+fn init_daemon_tracing() {
     minibox_core::init_tracing();
+}
 
-    info!("miniboxd starting");
-
-    // ── Config ────────────────────────────────────────────────────────────
-    info!(
-        adapter = ?config.adapter,
-        log_level = ?config.log_level,
-        "config loaded"
-    );
-
-    // ── Adapter suite ────────────────────────────────────────────────────
-    // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
-    // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
-    // Config file adapter field is injected above when env is unset.
+fn select_and_validate_adapter_suite() -> Result<AdapterSuite> {
     let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
     let available = adapter_registry::available_adapter_names();
     info!(
@@ -364,81 +366,49 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         "adapter suite selected"
     );
 
-    // ── Native preflight warning ─────────────────────────────────────────
     #[cfg(target_os = "linux")]
     adapter_registry::warn_if_native_without_root();
 
-    // ── Privilege check (native only) ────────────────────────────────────
     #[cfg(target_os = "linux")]
     if suite == AdapterSuite::Native && !nix::unistd::getuid().is_root() {
         anyhow::bail!("miniboxd must run as root (native adapter suite)");
     }
 
-    // ── Cgroup self-migration (native only) ──────────────────────────────
     #[cfg(target_os = "linux")]
     if suite == AdapterSuite::Native {
         migrate_to_supervisor_cgroup();
     }
 
-    // ── Resolve paths (configurable via env vars) ───────────────────────
-    let paths = resolve_paths();
+    Ok(suite)
+}
 
-    // ── Startup diagnostics ──────────────────────────────────────────────
-    #[cfg(target_os = "linux")]
-    {
-        let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
-            .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
-        minibox::daemon::server::log_startup_info(
-            &paths.socket_path.display().to_string(),
-            &paths.data_dir.display().to_string(),
-            &cgroup_root,
-        );
-    }
-
-    // ── Directories ──────────────────────────────────────────────────────
+fn prepare_daemon_directories(paths: &DaemonPaths) -> Result<()> {
     const OWNER_RWX_PERMS: u32 = 0o700;
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        for dir in &[
-            paths.images_dir.as_path(),
-            paths.containers_dir.as_path(),
-            paths.run_dir.as_path(),
-            paths.run_containers_dir.as_path(),
-        ] {
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(OWNER_RWX_PERMS)
-                .create(dir)
-                .with_context(|| format!("creating directory {}", dir.display()))?;
-        }
+    use std::os::unix::fs::DirBuilderExt;
+    for dir in &[
+        paths.images_dir.as_path(),
+        paths.containers_dir.as_path(),
+        paths.run_dir.as_path(),
+        paths.run_containers_dir.as_path(),
+    ] {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(OWNER_RWX_PERMS)
+            .create(dir)
+            .with_context(|| format!("creating directory {}", dir.display()))?;
     }
+    Ok(())
+}
 
-    // ── Shared state ─────────────────────────────────────────────────────
-    let state = load_state(&paths).await?;
-    info!("state loaded from disk and reconciled");
-
-    // ── Image GC ─────────────────────────────────────────────────────────
-    let leases_path = paths.data_dir.join("leases.json");
-    let lease_service = Arc::new(
-        DiskLeaseService::new(leases_path)
-            .await
-            .context("creating lease service")?,
-    );
-    let image_gc: Arc<dyn ImageGarbageCollector> =
-        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
-
-    // ── Event broker ─────────────────────────────────────────────────────
-    let event_broker = Arc::new(BroadcastEventBroker::new());
-
-    // ── Metrics ──────────────────────────────────────────────────────────
-    #[cfg(feature = "metrics")]
-    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> = {
-        const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
-        let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
-            .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
-            .parse()
-            .context("parsing MINIBOX_METRICS_ADDR")?;
-        let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
+#[cfg(feature = "metrics")]
+async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
+    const DEFAULT_METRICS_ADDR: &str = "127.0.0.1:9090";
+    let metrics_addr: std::net::SocketAddr = std::env::var("MINIBOX_METRICS_ADDR")
+        .unwrap_or_else(|_| DEFAULT_METRICS_ADDR.to_string())
+        .parse()
+        .context("parsing MINIBOX_METRICS_ADDR")?;
+    let recorder = Arc::new(minibox::daemon::telemetry::PrometheusMetricsRecorder::new());
+    Ok(
         match minibox::daemon::telemetry::server::run_metrics_server(metrics_addr, recorder.clone())
             .await
         {
@@ -450,19 +420,20 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
                 tracing::warn!(addr = %metrics_addr, error = %e, "metrics server failed to bind; continuing without metrics");
                 Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new())
             }
-        }
-    };
-    #[cfg(not(feature = "metrics"))]
-    let metrics_recorder: Arc<dyn minibox_core::domain::MetricsRecorder> =
-        Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new());
+        },
+    )
+}
 
-    // ── Dependency Injection ─────────────────────────────────────────────
-    let require_root_auth = suite == AdapterSuite::Native;
+#[cfg(not(feature = "metrics"))]
+async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
+    Ok(Arc::new(
+        minibox::daemon::telemetry::NoOpMetricsRecorder::new(),
+    ))
+}
 
-    // Build container policy: config file values take precedence, then env
-    // vars, then deny-all defaults.
+fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> ContainerPolicy {
     let env_policy = ContainerPolicy::from_env();
-    let policy = ContainerPolicy {
+    ContainerPolicy {
         allow_bind_mounts: config
             .policy
             .allow_bind_mounts
@@ -472,28 +443,10 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
             .allow_privileged
             .unwrap_or(env_policy.allow_privileged),
         ..Default::default()
-    };
-    tracing::info!(
-        allow_bind_mounts = policy.allow_bind_mounts,
-        allow_privileged = policy.allow_privileged,
-        "container policy configured (config > env > default)"
-    );
+    }
+}
 
-    let deps = build_handler_deps(
-        suite,
-        Arc::clone(&state),
-        &paths,
-        metrics_recorder.clone(),
-        Arc::clone(&event_broker),
-        Arc::clone(&image_gc),
-        policy,
-    )
-    .await?;
-
-    info!("dependency injection configured");
-
-    // ── Socket ───────────────────────────────────────────────────────────
-    let sock_path = &paths.socket_path;
+fn bind_and_secure_socket(sock_path: &std::path::Path) -> Result<UnixListener> {
     if sock_path.exists() {
         warn!("removing stale socket at {}", sock_path.display());
         std::fs::remove_file(sock_path)
@@ -540,18 +493,115 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
         info!("socket permissions set to {mode:04o}");
     }
 
-    info!("listening on {}", sock_path.display());
+    Ok(raw_listener)
+}
 
-    // ── Signal handling ──────────────────────────────────────────────────
+fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output = ()>> {
     use tokio::signal::unix::{SignalKind, signal};
     let mut sigterm = signal(SignalKind::terminate()).context("SIGTERM handler")?;
     let mut sigint = signal(SignalKind::interrupt()).context("SIGINT handler")?;
-    let shutdown = async move {
+    Ok(async move {
         tokio::select! {
             _ = sigterm.recv() => { info!("received SIGTERM, shutting down"); }
             _ = sigint.recv()  => { info!("received SIGINT, shutting down");  }
         }
-    };
+    })
+}
+
+#[cfg(unix)]
+// qual:allow(iosp) reason: "daemon bootstrap: config/logging/adapter selection + side-effectful initialization"
+async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
+    // ── Tracing ──────────────────────────────────────────────────────────
+    #[cfg(feature = "otel")]
+    let _otel_guard = init_daemon_tracing();
+    #[cfg(not(feature = "otel"))]
+    init_daemon_tracing();
+
+    info!("miniboxd starting");
+
+    // ── Config ────────────────────────────────────────────────────────────
+    info!(
+        adapter = ?config.adapter,
+        log_level = ?config.log_level,
+        "config loaded"
+    );
+
+    // ── Adapter suite ────────────────────────────────────────────────────
+    // Single source of truth: crates/miniboxd/src/adapter_registry.rs.
+    // Reads MINIBOX_ADAPTER env var; auto-selects smolvm→krun when unset.
+    // Config file adapter field is injected above when env is unset.
+    let suite = select_and_validate_adapter_suite()?;
+
+    // ── Resolve paths (configurable via env vars) ───────────────────────
+    let paths = resolve_paths();
+
+    // ── Startup diagnostics ──────────────────────────────────────────────
+    #[cfg(target_os = "linux")]
+    {
+        let cgroup_root = std::env::var("MINIBOX_CGROUP_ROOT")
+            .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string());
+        minibox::daemon::server::log_startup_info(
+            &paths.socket_path.display().to_string(),
+            &paths.data_dir.display().to_string(),
+            &cgroup_root,
+        );
+    }
+
+    // ── Directories ──────────────────────────────────────────────────────
+    prepare_daemon_directories(&paths)?;
+
+    // ── Shared state ─────────────────────────────────────────────────────
+    let state = load_state(&paths).await?;
+    info!("state loaded from disk and reconciled");
+
+    // ── Image GC ─────────────────────────────────────────────────────────
+    let leases_path = paths.data_dir.join("leases.json");
+    let lease_service = Arc::new(
+        DiskLeaseService::new(leases_path)
+            .await
+            .context("creating lease service")?,
+    );
+    let image_gc: Arc<dyn ImageGarbageCollector> =
+        Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+
+    // ── Event broker ─────────────────────────────────────────────────────
+    let event_broker = Arc::new(BroadcastEventBroker::new());
+
+    // ── Metrics ──────────────────────────────────────────────────────────
+    let metrics_recorder = build_metrics_recorder().await?;
+
+    // ── Dependency Injection ─────────────────────────────────────────────
+    let require_root_auth = suite == AdapterSuite::Native;
+
+    // Build container policy: config file values take precedence, then env
+    // vars, then deny-all defaults.
+    let policy = resolve_container_policy(&config);
+    tracing::info!(
+        allow_bind_mounts = policy.allow_bind_mounts,
+        allow_privileged = policy.allow_privileged,
+        "container policy configured (config > env > default)"
+    );
+
+    let deps = build_handler_deps(
+        suite,
+        Arc::clone(&state),
+        &paths,
+        metrics_recorder.clone(),
+        Arc::clone(&event_broker),
+        Arc::clone(&image_gc),
+        policy,
+    )
+    .await?;
+
+    info!("dependency injection configured");
+
+    // ── Socket ───────────────────────────────────────────────────────────
+    let sock_path = &paths.socket_path;
+    let raw_listener = bind_and_secure_socket(sock_path)?;
+    info!("listening on {}", sock_path.display());
+
+    // ── Signal handling ──────────────────────────────────────────────────
+    let shutdown = install_shutdown_signal_handlers()?;
 
     let listener = UnixServerListener(raw_listener);
 
@@ -573,18 +623,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 }
 
 // ── Handler dependency builders (per adapter suite) ───────────────────────
-//
-// TODO: centralize adapter registration into a shared builder (#161)
-//
-// Each `build_*_handler_dependencies` function below constructs a
-// `HandlerDependencies` struct for one adapter suite.  A second copy of
-// `build_colima_handler_dependencies` lives in `crates/macbox/src/lib.rs`
-// for the legacy macOS-only daemon path.  To centralize:
-//   1. Move all `build_*_handler_dependencies` fns into a new crate or
-//      module (e.g. `minibox-adapters` or `miniboxd::adapter_builders`).
-//   2. Remove the duplicate in `macbox/src/lib.rs` and have it call the
-//      shared builder instead.
-//   3. Update `HandlerDependencies` construction sites in tests accordingly.
+// Issue #161: centralize adapter registration
 
 #[cfg(unix)]
 #[allow(clippy::unused_async)]
@@ -671,6 +710,19 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
     info!(network_mode = %mode, "network provider selected");
     match mode.as_str() {
+        #[cfg(feature = "cni")]
+        "bridge" => {
+            let cni_path =
+                std::env::var("MINIBOX_CNI_PATH").unwrap_or_else(|_| "/opt/cni/bin".to_string());
+            let cni_path: Vec<std::path::PathBuf> = std::env::split_paths(&cni_path).collect();
+            let config_dir = std::env::var("MINIBOX_CNI_CONFIG_DIR")
+                .unwrap_or_else(|_| "/etc/cni/net.d".to_string());
+            Ok(Arc::new(minibox_cni::CniNetworkProvider::new(
+                cni_path,
+                std::path::PathBuf::from(config_dir),
+            )))
+        }
+        #[cfg(not(feature = "cni"))]
         "bridge" => Ok(Arc::new(
             BridgeNetwork::new().context("BridgeNetwork init failed")?,
         )),
@@ -723,7 +775,7 @@ fn build_native_handler_dependencies(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
     );
-    let filesystem = Arc::new(OverlayFilesystem::new());
+    let filesystem = Arc::new(OverlayFilesystem::new_with_base(data_dir.join("images")));
     let runtime = Arc::new(LinuxNamespaceRuntime::new());
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
@@ -850,10 +902,15 @@ fn build_colima_handler_dependencies(
     run_containers_dir: PathBuf,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    use minibox::adapters::{LimaExecutor, LimaSpawner};
+    use minibox::adapters::{LimaExecutor, LimaSpawner, privileged_command};
 
+    // privileged_command drops back to $SUDO_USER when miniboxd runs as root
+    // (via sudo) — both `colima` and `limactl` refuse to run as root and look
+    // for VM state under the invoking user's home, not root's. A previous
+    // version of this closure called `colima ssh` directly as root, which
+    // always failed with "colima not running" regardless of actual VM state.
     let executor: LimaExecutor = Arc::new(move |args: &[&str]| {
-        let output = std::process::Command::new("colima")
+        let output = privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
@@ -869,7 +926,7 @@ fn build_colima_handler_dependencies(
     });
 
     let spawner: LimaSpawner = Arc::new(move |args: &[&str]| {
-        std::process::Command::new("colima")
+        privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
@@ -903,15 +960,12 @@ fn build_smolvm_handler_dependencies(
     event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    let ghcr = Arc::new(
-        GhcrRegistry::new(Arc::clone(&state.image_store))
-            .context("creating GHCR registry adapter for smolvm")?,
-    ) as minibox_core::domain::DynImageRegistry;
+    let smolvm_registry = Arc::new(SmolVmRegistry::new());
+    let default_registry = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
+    let ghcr = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
+    let image_loader = smolvm_registry as minibox_core::domain::DynImageLoader;
     let registry_router = Arc::new(HostnameRegistryRouter::new(
-        Arc::new(
-            DockerHubRegistry::new(Arc::clone(&state.image_store))
-                .context("creating Docker Hub registry adapter for smolvm")?,
-        ) as minibox_core::domain::DynImageRegistry,
+        default_registry,
         [("ghcr.io", ghcr)],
     ));
     let filesystem = Arc::new(SmolVmFilesystem::new());
@@ -926,7 +980,7 @@ fn build_smolvm_handler_dependencies(
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router,
-            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_loader,
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
@@ -1367,6 +1421,13 @@ mod tests {
         .expect("build smolvm handler dependencies");
 
         assert!(deps.build.image_pusher.is_none());
+        let image_ref = minibox_core::image::reference::ImageRef::parse("library/foo:latest")
+            .expect("parse image ref");
+        let routed = deps.image.registry_router.route(&image_ref);
+        assert!(
+            routed.as_any().is::<minibox::adapters::SmolVmRegistry>(),
+            "smolvm suite must route run cache checks and pulls through SmolVmRegistry"
+        );
     }
 
     #[tokio::test]
@@ -1413,6 +1474,116 @@ mod tests {
         assert!(deps.build.commit_adapter.is_none());
         // No image builder wired for GKE
         assert!(deps.build.image_builder.is_none());
+    }
+}
+
+// ── Policy resolution tests ───────────────────────────────────────────────
+
+#[cfg(all(unix, test))]
+mod policy_tests {
+    use super::*;
+    use miniboxd::config::{DaemonConfig, PolicyConfig};
+
+    static POLICY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// When config explicitly sets both policy fields, those values are used
+    /// and the env-var defaults are ignored.
+    #[test]
+    fn config_policy_overrides_env_defaults() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        // Ensure env vars do not interfere.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: Some(true),
+                allow_privileged: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+        assert!(
+            policy.allow_bind_mounts,
+            "config allow_bind_mounts=true must propagate to resolved policy"
+        );
+        assert!(
+            policy.allow_privileged,
+            "config allow_privileged=true must propagate to resolved policy"
+        );
+    }
+
+    /// When config fields are None, the policy falls through to the env-var
+    /// (or deny-all) defaults, not to `true`.
+    #[test]
+    fn absent_config_policy_falls_back_to_env_defaults() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        // Guarantee deny-all env state.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: None,
+                allow_privileged: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+        // ContainerPolicy::default() is deny-all; from_env with no env vars
+        // set also returns deny-all, so both must be false.
+        assert!(
+            !policy.allow_bind_mounts,
+            "absent config bind_mounts + no env var must default to false (deny)"
+        );
+        assert!(
+            !policy.allow_privileged,
+            "absent config privileged + no env var must default to false (deny)"
+        );
+    }
+
+    /// Config deny (false) must override env-var allow, since config is
+    /// higher priority than env vars per the config layer spec.
+    #[test]
+    fn config_deny_overrides_env_allow() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        unsafe {
+            std::env::set_var("MINIBOX_ALLOW_BIND_MOUNTS", "true");
+            std::env::set_var("MINIBOX_ALLOW_PRIVILEGED", "true");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: Some(false),
+                allow_privileged: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        assert!(
+            !policy.allow_bind_mounts,
+            "config deny must win over env-var allow for bind_mounts"
+        );
+        assert!(
+            !policy.allow_privileged,
+            "config deny must win over env-var allow for privileged"
+        );
     }
 }
 

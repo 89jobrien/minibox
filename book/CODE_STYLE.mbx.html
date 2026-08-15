@@ -1,0 +1,816 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Code Style - minibox</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Agentic container runtime.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-0392ca55.css">
+        <link rel="stylesheet" href="css/chrome-fc474251.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-d8edc199.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">minibox</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/89jobrien/minibox" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="code-style-and-conventions"><a class="header" href="#code-style-and-conventions">Code Style and Conventions</a></h1>
+<p>Minibox is a Rust 2024 container runtime. This document records the patterns observed throughout
+the codebase — follow them when adding or modifying code.</p>
+<hr>
+<h2 id="table-of-contents"><a class="header" href="#table-of-contents">Table of Contents</a></h2>
+<ol>
+<li><a href="#1-workspace-layout">Workspace Layout</a></li>
+<li><a href="#2-module-documentation">Module Documentation</a></li>
+<li><a href="#3-error-handling">Error Handling</a></li>
+<li><a href="#4-tracing">Tracing</a></li>
+<li><a href="#5-architecture">Architecture</a></li>
+<li><a href="#6-platform-gating">Platform Gating</a></li>
+<li><a href="#7-unsafe-code">Unsafe Code</a></li>
+<li><a href="#8-async--sync-boundary">Async / Sync Boundary</a></li>
+<li><a href="#9-security-invariants">Security Invariants</a></li>
+<li><a href="#10-naming-conventions">Naming Conventions</a></li>
+<li><a href="#11-imports-and-visibility">Imports and Visibility</a></li>
+<li><a href="#12-section-dividers">Section Dividers</a></li>
+<li><a href="#13-serialization">Serialization</a></li>
+<li><a href="#14-testing">Testing</a></li>
+<li><a href="#15-macros">Macros</a></li>
+<li><a href="#16-typestate-pattern">Typestate Pattern</a></li>
+<li><a href="#17-protocol-changes">Protocol Changes</a></li>
+</ol>
+<hr>
+<h2 id="1-workspace-layout"><a class="header" href="#1-workspace-layout">1. Workspace Layout</a></h2>
+<pre><code class="language-text">crates/
+  minibox-core/     # Cross-platform shared types, domain traits, protocol, image handling
+  minibox/          # Infrastructure adapters + container runtime (Linux-native + cross-platform)
+  miniboxd/         # Daemon binary: socket listener, handler dispatch, adapter wiring
+  mbx/              # CLI binary: command implementations, terminal handling
+  minibox-macros/   # macro_rules! boilerplate reduction (as_any!, adapt!, etc.)
+  minibox-testsuite/   # Conformance test harness and runner
+  macbox/           # macOS adapter: krun/smolvm backends
+  winbox/           # Windows adapter: HCS/WSL2 backends
+  minibox-crux-plugin/ # crux runtime plugin
+xtask/              # Cargo xtask: pre-commit, verify, prepush, cleanup gates
+</code></pre>
+<p>Key conventions:</p>
+<ul>
+<li><code>minibox-core</code> has <strong>zero infrastructure dependencies</strong> — only <code>std</code>, <code>serde</code>, <code>tokio</code>, <code>anyhow</code>, <code>thiserror</code>, and <code>tracing</code>. Never add OS-specific imports here.</li>
+<li><code>minibox</code> re-exports everything from <code>minibox-core</code> that adapters or macros need. Do not remove these re-exports; macro expansion depends on them.</li>
+<li>Platform-specific crates (<code>macbox</code>, <code>winbox</code>) implement domain traits from <code>minibox-core</code>.</li>
+</ul>
+<hr>
+<h2 id="2-module-documentation"><a class="header" href="#2-module-documentation">2. Module Documentation</a></h2>
+<p>Every module file begins with a <code>//!</code> inner doc comment. A complete module doc includes:</p>
+<ul>
+<li>One-sentence purpose statement.</li>
+<li>A <code># Architecture</code> or structural diagram for non-trivial modules.</li>
+<li>A <code># Traits (Ports)</code> or <code># Adapters</code> section listing public items.</li>
+<li>A code example (using <code>rust,ignore</code> when the example can’t compile standalone).</li>
+</ul>
+<p><strong>Example — well-formed module doc:</strong></p>
+<pre><code class="language-rust ignore">//! Container lifecycle event types and pub/sub ports.
+//!
+//! `EventSink` is the write port — handlers call `emit()`.
+//! `EventSource` is the read port — consumers (CLI, dashboards) subscribe.
+//! `BroadcastEventBroker` is the single adapter implementing both ports.</code></pre>
+<p><strong>Example — well-formed lib.rs with module table:</strong></p>
+<pre><code class="language-rust ignore">//! # minibox-core
+//!
+//! Cross-platform shared types, domain traits, protocol definitions, and
+//! image handling for the Minibox container runtime.
+//!
+//! ## Module overview
+//!
+//! | Module | Purpose |
+//! |--------|---------|
+//! | [`domain`] | Hexagonal-architecture ports: trait definitions. Zero infrastructure deps. |
+//! | [`protocol`] | Newline-delimited JSON types for the Unix socket protocol. |</code></pre>
+<p>Inline items (structs, functions, constants) use <code>///</code> doc comments. Required fields:</p>
+<ul>
+<li>Every <code>pub struct</code> field gets a <code>///</code> comment explaining its meaning, not just restating its type.</li>
+<li>Every <code>pub fn</code> on an <code>impl</code> block documents what it does, key preconditions, and on <code>Result</code>
+returns, what can fail.</li>
+</ul>
+<hr>
+<h2 id="3-error-handling"><a class="header" href="#3-error-handling">3. Error Handling</a></h2>
+<h3 id="fine-grained-typed-errors-with-thiserror"><a class="header" href="#fine-grained-typed-errors-with-thiserror">Fine-grained typed errors with <code>thiserror</code></a></h3>
+<p>Each subsystem defines its own <code>#[derive(Debug, Error)]</code> enum with named-field variants for all
+structured failure cases. Variants include enough context to diagnose the failure without a
+stack trace.</p>
+<pre><code class="language-rust ignore">// ✅ Correct
+#[derive(Debug, Error)]
+pub enum ImageError {
+    #[error("image {name}:{tag} not found in local store")]
+    NotFound { name: String, tag: String },
+
+    #[error("failed to write to image store at {path}: {source}")]
+    StoreWrite {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+}</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Use named fields (<code>{ path: String }</code>) not tuple variants for anything beyond a bare wrapper.</li>
+<li>Always include <code>#[source]</code> on the field that is a wrapped lower-level error.</li>
+<li>Include <code>Other(String)</code> as a catch-all last variant for un-enumerated cases.</li>
+<li>Cross-platform error types live in <code>minibox-core/src/error.rs</code>. Linux-specific errors
+(anything depending on <code>nix</code>) live in <code>minibox/src/error.rs</code>.</li>
+</ul>
+<h3 id="anyhow-for-propagation"><a class="header" href="#anyhow-for-propagation"><code>anyhow</code> for propagation</a></h3>
+<p>Production functions return <code>anyhow::Result&lt;T&gt;</code>. Always attach context to every <code>?</code>:</p>
+<pre><code class="language-rust ignore">// ✅ Correct — static context
+let content = fs::read_to_string(path).context("read image manifest")?;
+
+// ✅ Correct — dynamic context with path or ID
+let content = fs::read_to_string(path)
+    .with_context(|| format!("read manifest for {}", path.display()))?;
+
+// ❌ Wrong — no context
+let content = fs::read_to_string(path)?;
+
+// ❌ Wrong — .unwrap() in production code
+let content = fs::read_to_string(path).unwrap();</code></pre>
+<p>Use <code>anyhow::bail!</code> for early returns that don’t fit a typed error variant:</p>
+<pre><code class="language-rust ignore">if self.state != ContainerState::Running {
+    bail!("container {} is not running", self.id);
+}</code></pre>
+<h3 id="cleanup-on-failure"><a class="header" href="#cleanup-on-failure">Cleanup on failure</a></h3>
+<p>Resource-creating functions must clean up on error. Log secondary cleanup failures at <code>warn!</code>
+and do not propagate them — let the original error surface.</p>
+<pre><code class="language-rust ignore">let rootfs = create_overlay(&amp;config.layers, &amp;id).context("create_overlay")?;
+if let Err(e) = setup_cgroup(&amp;id, &amp;config.limits) {
+    if let Err(cleanup_err) = destroy_overlay(&amp;id) {
+        tracing::warn!(
+            container_id = %id,
+            error = %cleanup_err,
+            "container: overlay cleanup failed after cgroup error"
+        );
+    }
+    return Err(e).context("setup_cgroup");
+}</code></pre>
+<hr>
+<h2 id="4-tracing"><a class="header" href="#4-tracing">4. Tracing</a></h2>
+<p>All daemon and library code uses <code>tracing</code> macros. <strong>Never use <code>println!</code> or <code>eprintln!</code></strong> in
+daemon code — they contaminate container stdio.</p>
+<h3 id="structured-fields-are-mandatory"><a class="header" href="#structured-fields-are-mandatory">Structured fields are mandatory</a></h3>
+<p>Values go in <strong>key = value</strong> fields, not in the message string:</p>
+<pre><code class="language-rust ignore">// ✅ Correct
+tracing::info!(
+    container_id = %id,
+    pid = pid.as_raw(),
+    rootfs = %config.rootfs.display(),
+    "container: process started"
+);
+
+// ❌ Wrong — values embedded in message (not queryable)
+tracing::info!("Container {} started with PID {}", id, pid);</code></pre>
+<p>Use <code>%</code> for types that implement <code>Display</code>, <code>?</code> for <code>Debug</code>.</p>
+<h3 id="message-format"><a class="header" href="#message-format">Message format</a></h3>
+<p>Messages use lowercase <code>noun: verb</code> (or <code>subsystem: action</code>) format:</p>
+<ul>
+<li><code>"container: process started"</code></li>
+<li><code>"tar: rejected absolute symlink"</code></li>
+<li><code>"adapter: MINIBOX_ADAPTER=native requires root"</code></li>
+<li><code>"image: pulled {image}:{tag}"</code></li>
+</ul>
+<p>No sentence case. No trailing period.</p>
+<h3 id="severity-levels"><a class="header" href="#severity-levels">Severity levels</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Level</th><th>Use</th></tr>
+</thead>
+<tbody>
+<tr><td><code>error!</code></td><td>Unrecoverable: crash, fatal exec error, daemon cannot continue</td></tr>
+<tr><td><code>warn!</code></td><td>Security rejections, degraded behaviour, best-effort cleanup failures</td></tr>
+<tr><td><code>info!</code></td><td>Lifecycle milestones: container start/stop, image pull phases, overlay mount</td></tr>
+<tr><td><code>debug!</code></td><td>Syscall arguments, byte counts, internal state transitions</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="5-architecture"><a class="header" href="#5-architecture">5. Architecture</a></h2>
+<p>Minibox follows the <strong>hexagonal (ports and adapters)</strong> pattern:</p>
+<pre><code class="language-text">Domain Layer (minibox-core/src/domain.rs)
+  → Defines trait "ports": ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime
+  → Zero infrastructure imports
+
+Infrastructure Adapters (minibox/src/adapters/)
+  → Implement domain traits for real systems: DockerHubRegistry, OverlayFilesystem, etc.
+  → Each adapter is independently swappable
+
+Composition Root (miniboxd/src/main.rs)
+  → Wires adapters to domain via HandlerDependencies
+  → Only place that knows about concrete adapter types
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Domain traits live exclusively in <code>minibox-core/src/domain.rs</code>. Never add a trait there that
+imports from <code>nix</code>, <code>libc</code>, or any platform crate.</li>
+<li>New adapter suites are added to <code>minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
+(smolvm/krun macOS VM adapters) and exported from the module root.</li>
+<li><code>HandlerDependencies</code> is the single struct injected into all request handlers. Adding a field
+requires updating all adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</li>
+<li><code>Dyn</code> type aliases (<code>DynImageRegistry</code>, etc.) are defined alongside each trait and used in
+<code>HandlerDependencies</code> to avoid naming concrete types in handler code.</li>
+</ul>
+<h3 id="isp-sub-structs-on-handlerdependencies"><a class="header" href="#isp-sub-structs-on-handlerdependencies">ISP sub-structs on HandlerDependencies</a></h3>
+<p><code>HandlerDependencies</code> is composed of focused sub-structs so each handler only takes a dependency
+on the slice it actually uses (Interface Segregation Principle):</p>
+<pre><code class="language-rust ignore">pub struct HandlerDependencies {
+    pub image:     ImageDeps,     // registry routing, image loader, GC, local store
+    pub lifecycle: LifecycleDeps, // filesystem, limiter, runtime, state
+    pub exec:      ExecDeps,      // exec runtime, PTY registry
+    pub build:     BuildDeps,     // image builder
+    pub event:     EventDeps,     // event sink, metrics recorder
+}</code></pre>
+<p>When adding a new handler, declare it to accept the narrowest sub-struct it needs — not the full
+<code>HandlerDependencies</code>. When adding a field to <code>HandlerDependencies</code> or a sub-struct, update all
+adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
+<h3 id="channel-send-failures"><a class="header" href="#channel-send-failures">Channel-send failures</a></h3>
+<p>Never discard handler channel-send failures with <code>let _ = tx.send(...)</code>. Use or follow the
+<code>send_error</code> helper pattern so dropped client connections appear in logs:</p>
+<pre><code class="language-rust ignore">async fn send_error(tx: &amp;mpsc::Sender&lt;DaemonResponse&gt;, context: &amp;str, message: String) {
+    if tx.send(DaemonResponse::Error { message: message.clone() }).await.is_err() {
+        warn!(
+            context,
+            error_message = %message,
+            "client disconnected before error response could be sent"
+        );
+    }
+}</code></pre>
+<p>The same applies to non-error terminal responses — log at <code>warn!</code> when the receiver is gone.</p>
+<h3 id="test-doubles"><a class="header" href="#test-doubles">Test doubles</a></h3>
+<p>Test doubles live in two locations:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Location</th><th>Scope</th><th>Contents</th></tr>
+</thead>
+<tbody>
+<tr><td><code>minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
+<tr><td><code>minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Use <code>minibox::testing::mocks::*</code> for handler-level tests that need the full adapter suite.
+Use <code>minibox_core</code>’s mocks when writing conformance tests for domain traits directly.</p>
+<p>Mocks use <code>Arc&lt;Mutex&lt;…&gt;&gt;</code> for interior mutability so they can be cloned before injection and
+observed from the test after:</p>
+<pre><code class="language-rust ignore">pub struct MockRegistry {
+    state: Arc&lt;Mutex&lt;MockRegistryState&gt;&gt;,
+}</code></pre>
+<p>Builder methods configure pre-loaded images and failure modes before injection.</p>
+<p>No-op adapters (platforms/tests that don’t need a capability) use the <code>Noop</code> prefix:
+<code>NoopLimiter</code>, <code>NoopEventSink</code>, <code>NoopTraceStore</code>. They return <code>Ok(())</code> / empty values.</p>
+<hr>
+<h2 id="6-platform-gating"><a class="header" href="#6-platform-gating">6. Platform Gating</a></h2>
+<p>Linux-only code is gated with <code>#[cfg(target_os = "linux")]</code>. macOS-only code uses
+<code>#[cfg(target_os = "macos")]</code>. Cross-platform code uses <code>#[cfg(unix)]</code>.</p>
+<pre><code class="language-rust ignore">// Module-level gate in adapters/mod.rs
+#[cfg(target_os = "linux")]
+pub mod filesystem;
+#[cfg(target_os = "linux")]
+pub use filesystem::OverlayFilesystem;
+
+// Function-level gate
+#[cfg(target_os = "linux")]
+pub fn warn_if_native_without_root() { ... }</code></pre>
+<p>For files that are entirely Linux-only, place <code>#![cfg(target_os = "linux")]</code> (or <code>#[cfg(...)]</code>
+on the outer test module) at the top rather than gating each item individually.</p>
+<pre><code class="language-rust ignore">// Integration test file — entirely Linux
+#![cfg(target_os = "linux")]</code></pre>
+<p><strong>Important:</strong> macOS <code>cargo check</code> does not validate <code>#[cfg(target_os = "linux")]</code> paths.
+Always gate Linux-only imports inside the cfg block, not at the top of the file.</p>
+<hr>
+<h2 id="7-unsafe-code"><a class="header" href="#7-unsafe-code">7. Unsafe Code</a></h2>
+<p>Every <code>unsafe</code> block must have a <code>// SAFETY:</code> comment directly above it explaining:</p>
+<ol>
+<li>What invariant the caller upholds.</li>
+<li>Why it cannot be expressed in the type system.</li>
+</ol>
+<pre><code class="language-rust ignore">// SAFETY: We are inside a CLONE_NEWNS child process. The parent has called
+// std::mem::forget on all OwnedFds to prevent double-close. This raw fd
+// is valid because it was created before clone() and not closed in the parent.
+let _ = unsafe { libc::close(read_fd_raw) };</code></pre>
+<p>For <code>set_var</code>/<code>remove_var</code> in tests:</p>
+<pre><code class="language-rust ignore">// Serialize env-var-mutating tests to prevent parallel races.
+static ENV_LOCK: std::sync::Mutex&lt;()&gt; = std::sync::Mutex::new(());
+
+#[test]
+fn set_adapter_from_env() {
+    let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+    // SAFETY: env var mutation serialized by ENV_LOCK
+    unsafe { std::env::set_var("MINIBOX_ADAPTER", "smolvm"); }
+    // ...
+    unsafe { std::env::remove_var("MINIBOX_ADAPTER"); }
+}</code></pre>
+<hr>
+<h2 id="8-async--sync-boundary"><a class="header" href="#8-async--sync-boundary">8. Async / Sync Boundary</a></h2>
+<p>Container creation, namespace clone, and exec operations must never run inline in <code>async fn</code>.
+Wrap them in <code>tokio::task::spawn_blocking</code>:</p>
+<pre><code class="language-rust ignore">// ✅ Correct
+async fn handle_run(&amp;self, req: RunContainer) -&gt; Result&lt;ContainerId&gt; {
+    let id = tokio::task::spawn_blocking(move || {
+        create_container_namespaces(&amp;req)
+    })
+    .await
+    .context("spawn_blocking join")??;
+    Ok(id)
+}
+
+// ❌ Wrong — blocks tokio runtime, starves socket accept loop
+async fn handle_run(&amp;self, req: RunContainer) -&gt; Result&lt;ContainerId&gt; {
+    let id = create_container_namespaces(&amp;req)?;
+    Ok(id)
+}</code></pre>
+<p>After a <code>clone()</code> or <code>fork()</code>, do not use Rust’s <code>OwnedFd</code> — call <code>std::mem::forget</code> on all
+owned file descriptors in the parent before the fork to prevent double-close.</p>
+<hr>
+<h2 id="9-security-invariants"><a class="header" href="#9-security-invariants">9. Security Invariants</a></h2>
+<p>These must never be weakened. Any PR that touches them requires explicit justification.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Invariant</th><th>Location</th><th>Rule</th></tr>
+</thead>
+<tbody>
+<tr><td>Path traversal</td><td><code>container/filesystem.rs</code></td><td><code>validate_layer_path()</code> must be called before any fs op on external paths. Rejects <code>..</code> components (fast pre-check) and symlink escapes (canonicalization).</td></tr>
+<tr><td>Device nodes</td><td><code>image/layer.rs</code></td><td>Block and char device tar entries are rejected outright (<code>ImageError::DeviceNodeRejected</code>).</td></tr>
+<tr><td>Absolute symlinks</td><td><code>image/layer.rs</code></td><td>Absolute symlink targets are rewritten to relative paths. Targets still containing <code>..</code> after rewrite are rejected.</td></tr>
+<tr><td>Setuid/setgid stripping</td><td><code>image/layer.rs</code></td><td>Special permission bits (04000, 02000) are stripped before extraction.</td></tr>
+<tr><td>Unix socket auth</td><td><code>crates/minibox/src/daemon/server.rs:is_authorized</code></td><td><code>SO_PEERCRED</code> UID==0 check must run before any request processing. Never bypass.</td></tr>
+<tr><td>execve environment</td><td><code>container/process.rs</code></td><td>Container init uses <code>execve</code> with an explicit, minimal env — not <code>execvp</code>.</td></tr>
+<tr><td>Image pull size</td><td><code>image/registry.rs</code></td><td>Size limits are enforced during streaming layer download.</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="10-naming-conventions"><a class="header" href="#10-naming-conventions">10. Naming Conventions</a></h2>
+<h3 id="types-and-items"><a class="header" href="#types-and-items">Types and items</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kind</th><th>Convention</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>Structs, enums, traits</td><td><code>UpperCamelCase</code></td><td><code>ContainerState</code>, <code>ImageRegistry</code></td></tr>
+<tr><td>Functions, methods</td><td><code>snake_case</code></td><td><code>spawn_container_process</code>, <code>validate_layer_path</code></td></tr>
+<tr><td>Constants</td><td><code>UPPER_SNAKE_CASE</code></td><td><code>DAEMON_SOCKET_PATH</code>, <code>DEFAULT_ADAPTER_SUITE</code></td></tr>
+<tr><td>Type aliases</td><td><code>UpperCamelCase</code></td><td><code>DynImageRegistry</code>, <code>TraceId</code></td></tr>
+<tr><td>Lifetimes</td><td>short lowercase</td><td><code>'a</code>, <code>'buf</code></td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="naming-patterns-by-role"><a class="header" href="#naming-patterns-by-role">Naming patterns by role</a></h3>
+<ul>
+<li><strong>Domain traits (ports):</strong> noun-based, no verb prefix — <code>ImageRegistry</code>, <code>ResourceLimiter</code>.</li>
+<li><strong>Adapters:</strong> <code>&lt;Technology&gt;&lt;PortName&gt;</code> — <code>DockerHubRegistry</code>, <code>CgroupV2Limiter</code>,
+<code>OverlayFilesystem</code>.</li>
+<li><strong>Mock adapters:</strong> <code>Mock&lt;PortName&gt;</code> — <code>MockRegistry</code>, <code>MockRuntime</code>.</li>
+<li><strong>No-op adapters:</strong> <code>Noop&lt;PortName&gt;</code> — <code>NoopLimiter</code>, <code>NoopEventSink</code>.</li>
+<li><strong>Errors:</strong> <code>&lt;Subsystem&gt;Error</code> — <code>ImageError</code>, <code>RegistryError</code>, <code>CgroupError</code>.</li>
+<li><strong>State tags (typestate):</strong> lifecycle nouns — <code>Created</code>, <code>Running</code>, <code>Paused</code>, <code>Stopped</code>.</li>
+<li><strong>Tests:</strong> descriptive phrases, underscores, no <code>test_</code> prefix needed when inside <code>mod tests</code> —
+<code>parse_unknown_returns_structured_error_with_valid_options</code>.</li>
+</ul>
+<h3 id="container-ids"><a class="header" href="#container-ids">Container IDs</a></h3>
+<p>Container IDs are the first 12 characters of a UUID v4:</p>
+<pre><code class="language-rust ignore">let id = Uuid::new_v4().to_string().chars().take(12).collect::&lt;String&gt;();</code></pre>
+<hr>
+<h2 id="11-imports-and-visibility"><a class="header" href="#11-imports-and-visibility">11. Imports and Visibility</a></h2>
+<h3 id="import-ordering"><a class="header" href="#import-ordering">Import ordering</a></h3>
+<p><code>rustfmt</code> sorts imports alphabetically within each <code>use</code> block. There is no enforced blank-line
+grouping between <code>std</code>, external crates, and internal crates — <code>rustfmt</code> merges them. Local
+<code>crate::</code> / <code>super::</code> imports are typically placed last, separated by a blank line.</p>
+<pre><code class="language-rust ignore">// Typical observed pattern: alphabetical, local at end
+use anyhow::{Context, bail};
+use chrono::{DateTime, Utc};
+use nix::sys::signal::{Signal, kill};
+use std::path::{Path, PathBuf};
+use tracing::{debug, info, warn};
+use uuid::Uuid;
+
+use crate::container::cgroups::{CgroupConfig, CgroupManager};
+use crate::container::filesystem::{cleanup_mounts, setup_overlay};</code></pre>
+<p>Do not manually reorganize imports into groups — <code>rustfmt</code> will reorder them on the next format
+pass. Run <code>cargo fmt</code> after any import change.</p>
+<h3 id="visibility"><a class="header" href="#visibility">Visibility</a></h3>
+<ul>
+<li><code>pub</code> — part of the crate’s public API.</li>
+<li><code>pub(crate)</code> — needed across modules within the crate, not externally. Used sparingly; most
+items are either fully public or fully private.</li>
+<li><code>pub(super)</code> — needed only by the parent module.</li>
+<li>Private (<code>fn</code>, <code>struct</code> with no qualifier) is the default for helpers.</li>
+<li>Module structure: <code>pub mod</code> for public modules; <code>mod</code> for internal modules re-exported via
+<code>pub use</code> from the parent.</li>
+</ul>
+<hr>
+<h2 id="12-section-dividers"><a class="header" href="#12-section-dividers">12. Section Dividers</a></h2>
+<p>Two divider forms are used. Choose the appropriate one by context.</p>
+<h3 id="unlabeled-divider--the-standard-form"><a class="header" href="#unlabeled-divider--the-standard-form">Unlabeled divider — the standard form</a></h3>
+<p>Used everywhere: between logical sections in modules, between test groups, between error type
+blocks. This is the dominant form (900+ occurrences).</p>
+<pre><code class="language-rust ignore">// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+
+pub enum ContainerState { ... }</code></pre>
+<p>The rule is <code>// </code> followed by exactly 75 dashes, total line width 78 characters.</p>
+<h3 id="labeled-divider--for-large-files-with-many-named-sections"><a class="header" href="#labeled-divider--for-large-files-with-many-named-sections">Labeled divider — for large files with many named sections</a></h3>
+<p>Used in long files (<code>handler.rs</code>, <code>main.rs</code>) where a table-of-contents mental model helps. Uses
+Unicode box-drawing em-dashes (<code>─</code>) and embeds the section name inline.</p>
+<pre><code class="language-rust ignore">// ─── Run ────────────────────────────────────────────────────────────────────
+
+async fn handle_run(...) { ... }
+
+// ─── Stop ───────────────────────────────────────────────────────────────────</code></pre>
+<p>Use labeled dividers only when the file exceeds ~400 lines and has 5+ distinct top-level
+sections. Otherwise use the unlabeled form.</p>
+<hr>
+<h2 id="13-serialization"><a class="header" href="#13-serialization">13. Serialization</a></h2>
+<h3 id="protocol-enums"><a class="header" href="#protocol-enums">Protocol enums</a></h3>
+<p>Use <code>#[serde(tag = "type")]</code> for request/response enums so the discriminant appears as an
+explicit <code>"type"</code> field in the JSON wire format:</p>
+<pre><code class="language-rust ignore">#[derive(Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum DaemonRequest {
+    Run { image: String, tag: Option&lt;String&gt;, ... },
+    Stop { container_id: String },
+}
+// Wire: {"type":"Run","image":"ubuntu","tag":"22.04",...}</code></pre>
+<h3 id="wire-compatibility"><a class="header" href="#wire-compatibility">Wire compatibility</a></h3>
+<p>New fields added to existing protocol variants <strong>must</strong> use <code>#[serde(default)]</code>:</p>
+<pre><code class="language-rust ignore">#[derive(Serialize, Deserialize)]
+pub struct RunRequest {
+    pub image: String,
+    #[serde(default)]           // wire-compatible: missing field deserializes as None
+    pub session_id: Option&lt;String&gt;,
+}</code></pre>
+<h3 id="rename-conventions"><a class="header" href="#rename-conventions">Rename conventions</a></h3>
+<p>Enum variant names in JSON use <code>rename_all = "snake_case"</code> for event types:</p>
+<pre><code class="language-rust ignore">#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContainerEvent {
+    Created { ... },   // → "type":"created"
+    OomKilled { ... }, // → "type":"oom_killed"
+}</code></pre>
+<hr>
+<h2 id="14-testing"><a class="header" href="#14-testing">14. Testing</a></h2>
+<h3 id="test-structure"><a class="header" href="#test-structure">Test structure</a></h3>
+<p>All modules include a <code>#[cfg(test)] mod tests { ... }</code> block, even for Linux-only code. Tests that
+require Linux are individually gated:</p>
+<pre><code class="language-rust ignore">#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Cross-platform unit test — always runs
+    #[test]
+    fn parse_unknown_returns_structured_error() { ... }
+
+    // Linux-only test
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_native_succeeds() { ... }
+}</code></pre>
+<h3 id="test-categories"><a class="header" href="#test-categories">Test categories</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Category</th><th>Location</th><th>Requirements</th></tr>
+</thead>
+<tbody>
+<tr><td>Unit</td><td>inline <code>mod tests</code></td><td>None. In-memory only.</td></tr>
+<tr><td>Conformance</td><td><code>crates/*/tests/conformance_*.rs</code></td><td>None. Uses mock adapters.</td></tr>
+<tr><td>Property</td><td><code>tests/proptest_suite.rs</code></td><td>None. <code>proptest</code> crate.</td></tr>
+<tr><td>Integration</td><td><code>tests/integration_tests.rs</code></td><td>Linux + root + network.</td></tr>
+<tr><td>E2E</td><td><code>tests/system_tests.rs</code></td><td>Linux + root + running daemon.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Run with: <code>cargo xtask test-unit</code> (cross-platform), <code>just test-integration</code> (Linux+root).</p>
+<h3 id="test-double-usage"><a class="header" href="#test-double-usage">Test double usage</a></h3>
+<p>Use <code>MockRegistry</code>, <code>MockRuntime</code>, etc. from <code>adapters::mocks</code> for handler unit tests. Never
+construct real adapters (cgroups, overlay, network) in tests that run on macOS.</p>
+<h3 id="snapshot-tests"><a class="header" href="#snapshot-tests">Snapshot tests</a></h3>
+<p>Snapshot tests use <code>insta</code>. Run <code>cargo insta review</code> to accept new snapshots. Snapshots live in
+<code>tests/snapshots/</code> and are committed.</p>
+<h3 id="naming"><a class="header" href="#naming">Naming</a></h3>
+<p>Tests are named with descriptive phrases that read as specifications:</p>
+<pre><code class="language-rust ignore">fn parse_unknown_returns_structured_error_with_valid_options() { ... }
+fn compiled_adapters_matches_available_adapter_names() { ... }
+fn linux_only_adapters_are_unavailable_on_non_linux() { ... }</code></pre>
+<h3 id="expect-vs-unwrap-in-tests"><a class="header" href="#expect-vs-unwrap-in-tests"><code>expect</code> vs <code>unwrap</code> in tests</a></h3>
+<p>Use <code>expect("reason")</code> instead of <code>unwrap()</code> in tests. The reason string explains what the test
+expects:</p>
+<pre><code class="language-rust ignore">parse_adapter("native").expect("should parse native");
+adapter_from_env().expect("default adapter should parse on any unix platform");</code></pre>
+<hr>
+<h2 id="15-macros"><a class="header" href="#15-macros">15. Macros</a></h2>
+<p>Macros live in <code>minibox-macros/</code> and are declared with <code>macro_rules!</code>. Key macros:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Macro</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>as_any!</code></td><td>Implement <code>AsAny</code> (downcast support) for one or more types</td></tr>
+<tr><td><code>default_new!</code></td><td>Implement <code>Default</code> via <code>Self::new()</code></td></tr>
+<tr><td><code>adapt!</code></td><td>Implement both <code>AsAny</code> and <code>Default</code></td></tr>
+<tr><td><code>require_capability!</code></td><td>Skip a test when a host capability is absent (cgroups, overlay, etc.)</td></tr>
+<tr><td><code>normalize!</code></td><td>Replace <code>/</code> and <code>:</code> with <code>_</code> for filesystem path components</td></tr>
+<tr><td><code>test_run!</code></td><td>Construct a default <code>DaemonRequest::Run</code> for tests</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong><code>crate</code> vs <code>$crate</code> gotcha:</strong> <code>as_any!</code> references <code>crate::domain::AsAny</code>. In <code>macro_rules!</code>,
+<code>crate</code> resolves at the call site, not the defining crate. Do not change it to <code>$crate</code> — that
+would resolve to <code>minibox_macros</code> which does not define <code>AsAny</code>. The <code>#[allow(clippy::crate_in_macro_def)]</code>
+suppression is intentional.</p>
+<hr>
+<h2 id="16-typestate-pattern"><a class="header" href="#16-typestate-pattern">16. Typestate Pattern</a></h2>
+<p><code>crates/minibox-core/src/typestate.rs</code> encodes the container lifecycle in the type system using
+the typestate pattern. State tags are zero-sized structs; <code>Container&lt;S&gt;</code> is generic over the
+state tag. Transition methods consume <code>self</code> and return the container in its new state.</p>
+<pre><code class="language-rust ignore">pub struct Created;
+pub struct Running { pub pid: u32 }
+pub struct Stopped { pub exit_code: i32 }
+
+impl Container&lt;Created&gt; {
+    pub fn start(self, ...) -&gt; Result&lt;Container&lt;Running&gt;&gt; { ... }
+}
+impl Container&lt;Running&gt; {
+    pub fn stop(self, ...) -&gt; Result&lt;Container&lt;Stopped&gt;&gt; { ... }
+    pub fn pause(self, ...) -&gt; Result&lt;Container&lt;Paused&gt;&gt; { ... }
+}</code></pre>
+<p>Use this pattern for any new protocol-level state machine where invalid transitions should be
+caught at compile time rather than checked at runtime.</p>
+<hr>
+<h2 id="17-protocol-changes"><a class="header" href="#17-protocol-changes">17. Protocol Changes</a></h2>
+<p>Protocol types are canonical in <code>crates/minibox-core/src/protocol.rs</code>. When adding or modifying
+protocol types:</p>
+<ol>
+<li><strong>Add/modify the type</strong> in <code>protocol.rs</code>.</li>
+<li><strong>Add <code>#[serde(default)]</code></strong> on any new optional field for wire compatibility.</li>
+<li><strong>Update handlers</strong> in <code>minibox/src/daemon/handler.rs</code> that pattern-match on the changed variant.</li>
+<li><strong>Update CLI</strong> <code>mbx/src/commands/</code> for the corresponding subcommand.</li>
+<li><strong>Update snapshot tests</strong> — protocol evolution tests live in
+<code>crates/minibox-core/tests/protocol_evolution.rs</code>.</li>
+<li><strong>Run <code>cargo xtask verify</code></strong> to confirm fmt, clippy, and borrow fixtures pass.</li>
+</ol>
+<p><code>DaemonResponse::ContainerOutput</code> is <strong>non-terminal</strong> (a container can produce many output chunks
+before stopping). All other response variants end request streaming. When adding a new response
+variant, explicitly decide and document whether it is terminal or non-terminal, and update the
+terminal-response logic in the handler.</p>
+<hr>
+<h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
+<pre><code class="language-text">No .unwrap() in production        → use .context("description")?
+No println!/eprintln! in daemon   → use tracing::info!/warn!
+No platform imports in core       → minibox-core has zero OS deps
+No fork/clone in async fn         → use tokio::task::spawn_blocking
+No unsafe without SAFETY comment  → document the invariant
+No direct path from user input    → call validate_layer_path() first
+No env::set_var in parallel tests → use static Mutex&lt;()&gt; guard
+No new protocol field without     → #[serde(default)]
+  backward compat
+New adapter? Update composition   → miniboxd/src/main.rs (all suites)
+New HandlerDependencies field?    → update all construction sites
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="DEVELOPMENT.mbx.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="TESTING.mbx.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="DEVELOPMENT.mbx.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="TESTING.mbx.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-09f2665d.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-c22b7243.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

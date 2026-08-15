@@ -1,11 +1,3 @@
----
-watches:
-  - crates/minibox/tests/
-  - crates/minibox-core/tests/
-  - crates/miniboxd/tests/
-  - xtask/src/gates.rs
----
-
 # Testing Guide
 
 Full test strategy for minibox. Tests follow a six-dimension progression —
@@ -163,7 +155,7 @@ expectations. Not runtime tests — they validate that certain patterns
 compile (or correctly fail to compile).
 
 ```bash
-cargo xtask borrow-fixtures           # 11 fixtures
+cargo xtask borrow-fixtures           # 19 fixtures
 ```
 
 ---

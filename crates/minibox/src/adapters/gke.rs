@@ -99,7 +99,7 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
     fn setup_rootfs(&self, image_layers: &[PathBuf], container_dir: &Path) -> Result<RootfsLayout> {
         let merged = container_dir.join("merged");
         std::fs::create_dir_all(&merged)
-            .with_context(|| format!("creating merged dir {merged:?}"))?;
+            .with_context(|| format!("creating merged dir {}", merged.display()))?;
 
         debug!(
             "copy filesystem: merging {} layers into {:?}",
@@ -111,7 +111,7 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
         for layer in image_layers {
             if layer.is_dir() {
                 copy_dir_into(layer, &merged)
-                    .with_context(|| format!("copying layer {layer:?}"))?;
+                    .with_context(|| format!("copying layer {}", layer.display()))?;
             } else {
                 warn!("skipping non-directory layer: {:?}", layer);
             }
@@ -137,11 +137,14 @@ impl minibox_core::domain::RootfsSetup for CopyFilesystem {
                 path = %container_dir.display(),
                 "copy filesystem: refusing to remove suspicious path"
             );
-            anyhow::bail!("container_dir contains path traversal or is root: {container_dir:?}");
+            anyhow::bail!(
+                "container_dir contains path traversal or is root: {}",
+                container_dir.display()
+            );
         }
         if container_dir.exists() {
             std::fs::remove_dir_all(container_dir)
-                .with_context(|| format!("removing container dir {container_dir:?}"))?;
+                .with_context(|| format!("removing container dir {}", container_dir.display()))?;
         }
         Ok(())
     }
@@ -162,42 +165,49 @@ fn copy_dir_into(src: &Path, dst: &Path) -> Result<()> {
     use walkdir::WalkDir;
 
     for entry in WalkDir::new(src).min_depth(1) {
-        let entry = entry.with_context(|| format!("walking {src:?}"))?;
+        let entry = entry.with_context(|| format!("walking {}", src.display()))?;
         let relative = entry.path().strip_prefix(src).context("stripping prefix")?;
         let target = dst.join(relative);
 
         let ft = entry.file_type();
 
         if ft.is_dir() {
-            std::fs::create_dir_all(&target).with_context(|| format!("creating dir {target:?}"))?;
+            std::fs::create_dir_all(&target)
+                .with_context(|| format!("creating dir {}", target.display()))?;
             // Preserve directory permissions
             let metadata = entry.metadata().context("reading dir metadata")?;
             std::fs::set_permissions(&target, metadata.permissions())
-                .with_context(|| format!("setting permissions on {target:?}"))?;
+                .with_context(|| format!("setting permissions on {}", target.display()))?;
         } else if ft.is_symlink() {
             let link_target = std::fs::read_link(entry.path())
-                .with_context(|| format!("reading symlink {:?}", entry.path()))?;
+                .with_context(|| format!("reading symlink {}", entry.path().display()))?;
             // Remove existing file/symlink at target before creating new one
             if target.exists() || target.symlink_metadata().is_ok() {
                 std::fs::remove_file(&target).ok();
             }
             #[cfg(unix)]
-            std::os::unix::fs::symlink(&link_target, &target)
-                .with_context(|| format!("creating symlink {target:?} -> {link_target:?}"))?;
+            std::os::unix::fs::symlink(&link_target, &target).with_context(|| {
+                format!(
+                    "creating symlink {} -> {}",
+                    target.display(),
+                    link_target.display()
+                )
+            })?;
             #[cfg(not(unix))]
-            std::fs::copy(entry.path(), &target)
-                .with_context(|| format!("copying (non-unix symlink) {:?}", entry.path()))?;
+            std::fs::copy(entry.path(), &target).with_context(|| {
+                format!("copying (non-unix symlink) {}", entry.path().display())
+            })?;
         } else if ft.is_file() {
             // Ensure parent directory exists
             if let Some(parent) = target.parent() {
                 std::fs::create_dir_all(parent)?;
             }
             std::fs::copy(entry.path(), &target)
-                .with_context(|| format!("copying {:?}", entry.path()))?;
+                .with_context(|| format!("copying {}", entry.path().display()))?;
             // Preserve file permissions
             let metadata = entry.metadata().context("reading file metadata")?;
             std::fs::set_permissions(&target, metadata.permissions())
-                .with_context(|| format!("setting permissions on {target:?}"))?;
+                .with_context(|| format!("setting permissions on {}", target.display()))?;
         } else {
             // Device nodes, named pipes, sockets — skip with warning
             warn!(
@@ -243,7 +253,7 @@ impl ProotRuntime {
     pub fn new(proot_path: impl Into<PathBuf>) -> Result<Self> {
         let proot_path = proot_path.into();
         if !proot_path.exists() {
-            anyhow::bail!("proot binary not found at {proot_path:?}");
+            anyhow::bail!("proot binary not found at {}", proot_path.display());
         }
         Ok(Self { proot_path })
     }
@@ -344,12 +354,12 @@ impl ContainerRuntime for ProotRuntime {
                     cmd.stderr(unsafe { std::process::Stdio::from_raw_fd(stderr_raw) });
                     let child = cmd
                         .spawn()
-                        .with_context(|| format!("spawning proot at {proot_path:?}"))?;
+                        .with_context(|| format!("spawning proot at {}", proot_path.display()))?;
                     (child, Some(read_fd))
                 } else {
                     let child = cmd
                         .spawn()
-                        .with_context(|| format!("spawning proot at {proot_path:?}"))?;
+                        .with_context(|| format!("spawning proot at {}", proot_path.display()))?;
                     (child, None)
                 };
 

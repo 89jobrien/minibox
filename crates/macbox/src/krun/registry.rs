@@ -79,6 +79,16 @@ impl ImageRegistry for KrunRegistry {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs,
+    clippy::redundant_clone,
+    clippy::items_after_test_module,
+    clippy::doc_markdown,
+    clippy::map_unwrap_or
+)]
 mod tests {
     use super::*;
 

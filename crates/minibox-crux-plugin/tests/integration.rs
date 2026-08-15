@@ -1,3 +1,42 @@
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::doc_markdown,
+    clippy::redundant_field_names,
+    clippy::uninlined_format_args,
+    clippy::redundant_clone,
+    clippy::redundant_closure,
+    clippy::single_char_pattern,
+    clippy::unwrap_in_result,
+    clippy::collapsible_if,
+    clippy::match_same_arms,
+    clippy::only_used_in_recursion,
+    clippy::used_underscore_binding,
+    clippy::map_unwrap_or,
+    clippy::manual_assert,
+    clippy::as_ptr_cast_mut,
+    clippy::ptr_as_ptr,
+    clippy::must_use_candidate,
+    clippy::used_underscore_items,
+    clippy::missing_const_for_fn,
+    clippy::manual_string_new,
+    clippy::semicolon_if_nothing_returned,
+    clippy::unreadable_literal,
+    clippy::default_constructed_unit_structs,
+    clippy::ref_as_ptr,
+    clippy::allow_attributes_without_reason,
+    clippy::redundant_closure_for_method_calls,
+    clippy::needless_raw_string_hashes,
+    clippy::manual_is_variant_and,
+    clippy::ignore_without_reason,
+    clippy::default_trait_access,
+    clippy::cast_lossless,
+    clippy::match_wild_err_arm,
+    clippy::format_push_string,
+    clippy::bool_assert_comparison,
+    clippy::struct_excessive_bools
+)]
 //! Integration tests for minibox-crux-plugin.
 //!
 //! These tests drive the binary via stdin/stdout using the crux plugin wire
@@ -725,6 +764,83 @@ async fn invoke_stops_reading_at_terminal_workflow_complete() {
         "WorkflowComplete must be the single terminal response without \
          reading the trailing Success, got: {output}"
     );
+
+    h.shutdown().await;
+}
+
+// -- Tests: container::run end-to-end (#176) ----------------------------------
+
+#[tokio::test]
+async fn invoke_run_returns_container_created() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(mock_daemon_multi(
+        listener,
+        vec![
+            DaemonResponse::ContainerCreated { id: "abc".into() },
+            DaemonResponse::ContainerStopped { exit_code: 0 },
+        ],
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke("minibox::container::run", json!({"image": "alpine"}))
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+    let output = &resp["data"]["output"];
+    assert!(output.is_array(), "streaming output must be array");
+    let arr = output.as_array().expect("array");
+    assert_eq!(arr.len(), 2, "ContainerCreated + ContainerStopped");
+    assert_eq!(arr[0]["type"], "ContainerCreated");
+    assert_eq!(arr[1]["type"], "ContainerStopped");
+
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn invoke_run_with_mounts_and_env() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(mock_daemon_verify(
+        listener,
+        DaemonResponse::ContainerCreated { id: "abc".into() },
+        tx,
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke(
+            "minibox::container::run",
+            json!({
+                "image": "alpine:latest",
+                "command": ["/bin/sh"],
+                "mounts": [{
+                    "host_path": "/tmp/data",
+                    "container_path": "/data",
+                    "read_only": false
+                }],
+                "env": ["FOO=bar", "BAZ=qux"]
+            }),
+        )
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+
+    let req = rx.await.expect("request captured");
+    match req {
+        DaemonRequest::Run { mounts, env, .. } => {
+            assert_eq!(mounts.len(), 1, "expected 1 mount");
+            assert_eq!(mounts[0].host_path, std::path::PathBuf::from("/tmp/data"));
+            assert_eq!(mounts[0].container_path, std::path::PathBuf::from("/data"));
+            assert!(!mounts[0].read_only, "mount should not be read_only");
+            assert_eq!(
+                env,
+                vec!["FOO=bar".to_string(), "BAZ=qux".to_string()],
+                "env should round-trip in order"
+            );
+        }
+        other => panic!("expected Run, got: {other:?}"),
+    }
 
     h.shutdown().await;
 }

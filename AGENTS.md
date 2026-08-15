@@ -9,14 +9,14 @@ integration, and persistent context.
 Persistent context lives in `.ctx/memory-bank/`. Read before
 substantive work; update after milestones.
 
-| File                        | Purpose                          |
-| --------------------------- | -------------------------------- |
-| `projectbrief.mbx.md`      | Scope, non-goals, success criteria |
-| `productContext.mbx.md`    | Problem, users, UX principles    |
-| `systemPatterns.mbx.md`    | Crate layout, data flow, conventions |
-| `techContext.mbx.md`       | Stack, env vars, build commands  |
-| `activeContext.mbx.md`     | Current focus and in-progress work |
-| `progress.mbx.md`          | What works, backlog, known issues |
+| File                    | Purpose                              |
+| ----------------------- | ------------------------------------ |
+| `projectbrief.mbx.md`   | Scope, non-goals, success criteria   |
+| `productContext.mbx.md` | Problem, users, UX principles        |
+| `systemPatterns.mbx.md` | Crate layout, data flow, conventions |
+| `techContext.mbx.md`    | Stack, env vars, build commands      |
+| `activeContext.mbx.md`  | Current focus and in-progress work   |
+| `progress.mbx.md`       | What works, backlog, known issues    |
 
 Context layers (read deeper after foundations):
 **projectbrief** -> **productContext** / **systemPatterns** / **techContext**
@@ -32,6 +32,15 @@ Context layers (read deeper after foundations):
 - After subagents complete, verify their changes were committed
   (`git log --oneline -3`). A HANDOFF with `commits: []` is incomplete.
 - Cap parallel subagents at 5 concurrent to avoid API rate limits.
+- Parallel subagents editing code MUST use isolated worktrees, not a shared
+  checkout — a shared tree lets one agent's commit sweep in another agent's
+  uncommitted edits, misattributing content to the wrong commit.
+- Don't run parallel `cargo check`/`clippy`/`test` invocations against the
+  same `target/` dir — the shared build lock stalls agents for 600s+.
+  Use `CARGO_TARGET_DIR` per worktree, or serialize cargo invocations.
+- Subagents must not fix unrelated bugs discovered incidentally (e.g. while
+  manually testing) outside their assigned scope — file/flag them instead.
+  Fixing them risks editing files another concurrent agent owns.
 - If tests fail, debug and retry up to 3 times before escalating.
 
 ## Codex / Cargo AI
