@@ -9,7 +9,7 @@ A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux 
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.
 
-**Status:** Active development — `v0.30.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.31.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -32,8 +32,8 @@ structured tracing, property testing.
 - OCI image pull — Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
 - Image management — `prune` / `rmi` with lease-based GC
 - Bind mounts and privileged mode — `-v`/`--mount`, `--privileged`
-- Log capture — `minibox logs <id>` for stored stdout/stderr
-- Container events — `minibox events` streams lifecycle events
+- Log capture — `mbx logs <id>` for stored stdout/stderr
+- Container events — `mbx events` streams lifecycle events
 
 ### Experimental-ish
 
@@ -47,6 +47,9 @@ structured tracing, property testing.
 ## Quick Start
 
 Requires Linux, root, kernel 5.0+, cgroups v2, overlay FS.
+
+First-time contributors: run `just install-hooks` and `cargo xtask doctor` to verify your
+toolchain and environment before building — see [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
 ```bash
 # Build
@@ -73,14 +76,14 @@ sudo ./target/release/mbx rm <id>
 
 ## Platform Support
 
-| Platform              | Status         | Adapter         | Notes                                      |
-| --------------------- | -------------- | --------------- | ------------------------------------------ |
-| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay           |
-| Linux aarch64         | **Production** | `native`        | Same as x86_64                             |
-| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS      |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ blocked by Apple bug |
-| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                          |
-| Windows               | Planned        | `winbox` stub   | Returns error unconditionally              |
+| Platform              | Status         | Adapter         | Notes                                 |
+| --------------------- | -------------- | --------------- | ------------------------------------- |
+| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay      |
+| Linux aarch64         | **Production** | `native`        | Same as x86_64                        |
+| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed |
+| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                     |
+| Windows               | Planned        | `winbox` stub   | Returns error unconditionally         |
 
 See [`docs/core/FEATURE_MATRIX.mbx.md`](docs/core/FEATURE_MATRIX.mbx.md) for the full per-adapter capability
 breakdown.
@@ -89,7 +92,7 @@ breakdown.
 
 ## Architecture
 
-10 crates, Rust 2024 edition:
+14 crates plus `xtask` (15 workspace members), Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
@@ -97,14 +100,18 @@ minibox-macros          proc macros (as_any!, adapt!)
 minibox-core            cross-platform types, domain traits, protocol, OCI ops
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
-    ^         ^
-macbox      winbox      macOS backends (colima/krun/smolvm/vz) | Windows stub
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
+minibox-mcp             MCP stdio server for agent-controlled minibox tools
 minibox-testsuite       conformance test harness for adapter trait contracts
+minibox-bench           benchmark crate
+minibox-cni             CNI plugin exec protocol and chain orchestration
+ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
 
@@ -116,7 +123,7 @@ Tests use mock adapters — no real HTTP or filesystem required.
 in `spawn_blocking` to avoid blocking the runtime.
 
 **Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
-Canonical source: `minibox-core/src/protocol.rs`.
+Canonical source: `crates/minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITECTURE.mbx.md).
 
@@ -171,11 +178,40 @@ max_image_size_mb = 2048
 
 ---
 
+## Backup Setup
+
+This project has a local rustic repository configured by the SOPS-backed just recipes:
+
+- `RUSTIC_REPOSITORY=/Users/joe/.local/share/rustic/minibox`
+- `RUSTIC_PASSWORD_FILE=~/.config/rustic/password`
+
+The repository password is stored as an encrypted SOPS secret in
+`secrets/rustic.sops.yaml`. Do not commit the materialized password file under
+`~/.config/rustic/password`; regenerate it from SOPS when needed:
+
+```bash
+just rustic-password-materialize
+```
+
+Initialize and verify the local repository with:
+
+```bash
+just rustic-init
+just rustic-verify
+```
+
+The recipes default to the paths above and respect `RUSTIC_REPOSITORY` /
+`RUSTIC_PASSWORD_FILE` overrides. `just rustic-verify` runs `rustic snapshots` and should
+report that the repository password is correct. A newly initialized repository reports
+`0 snapshot(s)`.
+
+---
+
 ## Testing
 
 ```bash
-cargo xtask test-unit        # unit + conformance + property tests (any platform)
-cargo xtask test-conformance # OCI adapter conformance matrix
+cargo xtask test unit        # unit + conformance + property tests (any platform)
+cargo xtask test conformance # OCI adapter conformance matrix
 just test-integration        # cgroup tests (Linux + root)
 just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```
@@ -188,8 +224,8 @@ macOS without root. See [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_
 ## Developer Workflow
 
 ```bash
-cargo xtask pre-commit       # fmt + clippy + release build (macOS-safe gate)
-cargo xtask prepush          # nextest + coverage (Linux gate)
+cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
+cargo xtask prepush          # release build + release nextest + conformance
 just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 ```
@@ -202,9 +238,9 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 
 Issues and PRs are welcome. A few things to know before contributing:
 
-- Run `cargo xtask pre-commit` before pushing — it's the same gate as CI.
-- New adapters implement the domain traits in `minibox-core/src/domain.rs`.
-- Protocol changes start in `minibox-core/src/protocol.rs`; update handlers, CLI paths, and
+- Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
+- New adapters implement the domain traits under `crates/minibox-core/src/domain/`.
+- Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`
   still passes.
@@ -214,16 +250,16 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature                | Status                                |
-| ---------------------- | ------------------------------------- |
-| Bridge networking      | Experimental                          |
-| OCI push/commit/build  | Experimental                          |
-| macOS VZ.framework     | Blocked (Apple bug on ARM64 macOS 26) |
-| Seccomp / capabilities | Planned                               |
-| Rootless support       | Planned                               |
-| Port forwarding / DNS  | Planned                               |
-| Windows (WSL2)         | Planned                               |
-| MCP control surface    | Planned                               |
+| Feature                | Status                               |
+| ---------------------- | ------------------------------------ |
+| Bridge networking      | Experimental                         |
+| OCI push/commit/build  | Experimental                         |
+| macOS VZ.framework     | Removed after Apple ARM64 bug        |
+| Seccomp / capabilities | Planned                              |
+| Rootless support       | Planned                              |
+| Port forwarding / DNS  | Planned                              |
+| Windows (WSL2)         | Planned                              |
+| MCP control surface    | Initial MCP stdio server implemented |
 
 Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 

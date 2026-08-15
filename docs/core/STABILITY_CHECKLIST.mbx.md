@@ -1,10 +1,10 @@
 # Stability Checklist
 
 Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
-crate. See `docs/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
+crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-07-24
+Last updated: 2026-08-15
 
 ---
 
@@ -33,20 +33,30 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 
 ---
 
-## Gates
+## Mandatory Gates
 
-| #   | Item                                                       | Tag        | Status  | Evidence                                   |
-| --- | ---------------------------------------------------------- | ---------- | ------- | ------------------------------------------ |
-| 1   | Protocol types have a single source of truth               | [GATE]     | Met     | `minibox-core/src/protocol.rs` (#122/#128) |
-| 2   | Handler coverage >= 80% function coverage                  | [GATE]     | Not met | Current ~67.5% (`handler.rs`)              |
-| 3   | All wired adapters have at least one integration test      | [GATE]     | Met     | native, gke, colima, smolvm, krun all tested |
-| 4   | `cargo xtask pre-commit` passes on macOS                   | [GATE]     | Met     | fmt + clippy + release build               |
-| 5   | `cargo xtask test-unit` passes                             | [GATE]     | Met     | ~506 tests (macOS cross-platform subset)   |
-| 6   | `cargo deny check` passes                                  | [GATE]     | Met     | License + advisory audit in CI             |
-| 7   | New domain trait has an in-memory mock double in tests     | [ADVISORY] | —       | Required for hexagonal port compliance     |
-| 8   | No `.unwrap()` in production paths of new code             | [ADVISORY] | —       | See rust-patterns.md rule 1                |
-| 9   | Tracing events use structured fields, not message strings  | [ADVISORY] | —       | See rust-patterns.md tracing rules         |
-| 10  | New `unsafe` blocks include a SAFETY comment               | [ADVISORY] | —       | See rust-patterns.md rule 6                |
+These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `next` -> `staging`).
+
+| #   | Item                                                        | Status  | Evidence                                               |
+| --- | ------------------------------------------------------------ | ------- | ------------------------------------------------------- |
+| 1   | Protocol types have a single source of truth                | Met     | `crates/minibox-core/src/protocol.rs` (#122/#128)        |
+| 2   | Handler coverage >= 80% function coverage                   | Met     | 92.41% (207/224 functions, 2026-08-10)                   |
+| 3   | All wired adapters have at least one integration test       | Met     | native, gke, colima, smolvm, krun all tested             |
+| 4   | `cargo xtask pre-commit` passes on macOS                    | Met     | staged fmt/clippy + config/docs checks                   |
+| 5   | `cargo xtask test-unit` passes                               | Met     | ~506 tests (macOS cross-platform subset)                 |
+| 6   | `cargo deny check` passes                                    | Met     | License + advisory audit in CI                           |
+
+## Advisory Items
+
+These are review prompts, not merge blockers. Failing one must be acknowledged in the PR
+description (see "ADVISORY acknowledged" note above), not silently ignored.
+
+| #   | Item                                                        | Evidence                            |
+| --- | ------------------------------------------------------------ | ------------------------------------ |
+| A1  | New domain trait has an in-memory mock double in tests       | Required for hexagonal port compliance |
+| A2  | No `.unwrap()` in production paths of new code                | See rust-patterns.md rule 1          |
+| A3  | Tracing events use structured fields, not message strings     | See rust-patterns.md tracing rules   |
+| A4  | New `unsafe` blocks include a SAFETY comment                   | See rust-patterns.md rule 6          |
 
 ---
 
@@ -59,7 +69,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 cargo test -p minibox-core -- protocol
 
 # Gate 2: handler coverage (requires Linux + llvm-cov)
-cargo xtask prepush  # generates coverage report
+cargo xtask coverage-check
 
 # Gate 3: adapter integration tests
 just test-integration  # Linux + root
@@ -76,26 +86,35 @@ cargo deny check
 cargo audit
 ```
 
-### [ADVISORY] items
+### Advisory items
 
-Advisory items are checked during PR review. Reviewers annotate with "ADVISORY: acknowledged —
-\<rationale\>" when a prompt does not apply or is deferred with a tracked follow-up issue.
+Advisory items (A1-A4) are checked during PR review, not by CI. Reviewers annotate with
+"ADVISORY: acknowledged — \<rationale\>" when a prompt does not apply or is deferred with a
+tracked follow-up issue.
 
 ---
 
 ## Freeze Status
 
-The stabilization freeze (issues #117 and #127) applies to **net-new Core and Platform crates**.
-The freeze lifts when all **[GATE]** items above are verified green on the `next` branch.
+A narrow Core/Platform freeze applies until every mandatory gate is verified green
+on the promotion path. It freezes new public `minibox-core` protocol/domain API,
+native-platform capability expansion, and newly wired adapters.
 
-Gate 2 (handler coverage) is the primary remaining blocker. See
-[GH #158](https://github.com/89jobrien/minibox/issues/158) for tracking.
+Bug and security fixes, coverage work, documentation, compatibility-safe refactors,
+and isolated Tier 2/3 experiments remain permitted. An exception requires explicit
+maintainer approval and a tracking issue; it must state why the work cannot remain
+isolated from frozen Tier 1 contracts.
+
+The freeze lifts only after the 80% handler-coverage gate, promotion-path CI, Linux
+integration/e2e evidence, and supporting documentation are simultaneously current.
+Issue #127 records the final lift decision.
+
 ---
 
 ## CI Enforcement
 
-The following xtask gates are enforced in GitHub Actions (
-and ):
+The following xtask gates are enforced in GitHub Actions (`stability-gates.yml` and
+`protocol-drift.yml`):
 
 | Gate                       | CI Job                        | Workflow                |
 | -------------------------- | ----------------------------- | ----------------------- |
@@ -104,6 +123,5 @@ and ):
 | check-stale-names          | stale crate/binary name audit | stability-gates.yml     |
 | check-protocol-sites       | HandlerDependencies site count| stability-gates.yml     |
 
-Gates 1-6 in the table above are enforced via pre-commit () locally and
-the jobs listed here in CI. All four xtask-based gates (#133) were added in
-.
+Gates 1-6 in the table above are enforced via `cargo xtask pre-commit` locally and the jobs
+listed here in CI. All four xtask-based gates were added under issue #133.

@@ -701,6 +701,78 @@ mod tests {
         );
     }
 
+    /// All `AdapterSuite` variants must have a non-empty `as_str()` that round-trips
+    /// through `fmt::Display` and through `parse_adapter` (when available).
+    #[test]
+    fn adapter_suite_as_str_is_non_empty_for_all_variants() {
+        for suite in [
+            AdapterSuite::Native,
+            AdapterSuite::Gke,
+            AdapterSuite::Colima,
+            AdapterSuite::SmolVm,
+            AdapterSuite::Krun,
+        ] {
+            let s = suite.as_str();
+            assert!(
+                !s.is_empty(),
+                "AdapterSuite::{suite:?} as_str must be non-empty"
+            );
+            // Display must match as_str.
+            assert_eq!(
+                suite.to_string().as_str(),
+                s,
+                "AdapterSuite::{suite:?} Display must match as_str"
+            );
+        }
+    }
+
+    /// `AdapterSelectionError` for an *unknown* name must say "unknown … Valid options"
+    /// and must NOT say "not available".
+    #[test]
+    fn adapter_selection_error_unknown_message_format() {
+        let err = parse_adapter("totally_unknown").expect_err("should fail");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("unknown"),
+            "error for unknown name must contain 'unknown': {msg}"
+        );
+        assert!(
+            !msg.contains("not available"),
+            "error for unknown name must not say 'not available': {msg}"
+        );
+    }
+
+    /// `AdapterSelectionError` exposes `available` and `all_known` fields
+    /// and they satisfy the subset invariant.
+    #[test]
+    fn adapter_selection_error_fields_invariant() {
+        let err = parse_adapter("xyz_no_such_adapter").expect_err("should fail");
+        // Every available adapter must also appear in all_known.
+        for name in &err.available {
+            assert!(
+                err.all_known.contains(name),
+                "available adapter {name} must appear in all_known"
+            );
+        }
+        // The requested name must be in the error.
+        assert_eq!(err.requested, "xyz_no_such_adapter");
+    }
+
+    /// `AdapterInfo` derives Clone and Debug — ensure they produce sensible output.
+    #[test]
+    fn adapter_info_clone_and_debug() {
+        let info = AdapterInfo {
+            name: "test",
+            description: "test adapter",
+            available: true,
+            platform: "any",
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned, info);
+        let debug_str = format!("{info:?}");
+        assert!(debug_str.contains("test"));
+    }
+
     #[test]
     fn adapter_from_env_rejects_unknown() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");

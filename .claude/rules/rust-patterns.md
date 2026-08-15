@@ -13,6 +13,12 @@ These override general Rust conventions:
 5. **Tracing structured fields** — Use `key = value` syntax in `tracing::info!/warn!/error!/debug!` macros. Never embed structured values in the message string.
 6. **`unsafe` blocks require documented invariants** — Every `unsafe {}` must have a comment explaining what invariant the caller upholds and why it cannot be expressed in the type system.
 
+## Mutex Guard Binding
+
+`let _ = mutex.lock()` drops the guard immediately (no critical section held) —
+workspace clippy denies this. Bind to a named variable instead:
+`let _state = mutex.lock()...` (or an explicit `.expect(...)` if fallible).
+
 ## Error Handling
 
 ### Always context, always miette
@@ -318,7 +324,7 @@ fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output 
 ```
 
 Only reach for `qual:allow` once extraction genuinely doesn't apply — e.g. the function's whole
-job *is* orchestration (bootstrap, setup/teardown sequences) and splitting it would scatter
+job _is_ orchestration (bootstrap, setup/teardown sequences) and splitting it would scatter
 sequencing logic across files without reducing complexity.
 
 ## Clippy Allows in Test Modules
@@ -344,19 +350,47 @@ mod tests {
 
 Do this per-module as tests are added — don't pre-emptively blanket-allow at the crate level.
 
+## Preferred Idioms — Lint Policy (Issue #228)
+
+The workspace `[workspace.lints.clippy]` table in the root `Cargo.toml` denies a small set of
+named lints on top of the `all`/`pedantic`/`nursery` groups, to make specific idiom regressions
+fail the build immediately rather than relying on the broader group staying enabled:
+
+| Idiom                      | Anti-pattern                              | Clippy lint (denied)     |
+| -------------------------- | ----------------------------------------- | ------------------------ |
+| `std::io::Error::other(e)` | `io::Error::new(io::ErrorKind::Other, e)` | `clippy::io_other_error` |
+| `slice.first()`            | `slice.get(0)`                            | `clippy::get_first`      |
+| `collection.is_empty()`    | `collection.len() == 0`                   | `clippy::len_zero`       |
+
+These three are already covered transitively by `all = { level = "warn" }` (they live in
+clippy's `style` group), but are re-stated at `deny` explicitly so a future edit to the group
+levels above can't silently drop them, and so the intent is documented in one place.
+
+Two more idioms named in issue #228 are enforced by convention only — clippy has no lint that
+maps to them as of clippy 0.1.96 (verified: `clippy::from_ref` is not a real lint name and errors
+with `unknown_lints` if used; let-chains have no clippy lint pushing adoption of the syntax):
+
+- **`From::from_ref` / `AsRef`-based conversions** — prefer implementing `From<&T> for U` (or
+  using an existing `from_ref` associated fn where the standard library provides one, e.g.
+  `Arc::from_ref`-style patterns) over a hand-rolled `fn from_my_type(t: &T) -> U` that clones
+  fields one at a time. No clippy lint enforces this; catch it in code review.
+- **let-chains** (`if let X = a && let Y = b { ... }`, stable since edition 2024) — prefer a
+  single let-chain over nested `if let` blocks when both conditions must hold before entering the
+  branch. No clippy lint enforces this today; catch it in code review.
+
 ## Anti-Patterns (Minibox-Specific)
 
-| Pattern                                       | Problem                             | Fix                                           |
-| --------------------------------------------- | ----------------------------------- | --------------------------------------------- |
-| `.unwrap()` in production                     | Daemon panic orphans all containers | `.into_diagnostic().wrap_err()?`              |
-| `Path::join(user_input)` without validation   | Zip Slip / path traversal           | `validate_layer_path()` first                 |
-| `fork()`/`clone()` in async fn                | Blocks tokio runtime, possible UB   | `tokio::task::spawn_blocking`                 |
-| `println!` in daemon code                     | Contaminates container stdio        | `tracing::info!/warn!`                        |
-| Embedded values in tracing message            | Not queryable in log aggregators    | `key = value` structured fields               |
-| `unsafe` without SAFETY comment               | Reviewer can't verify correctness   | Document invariant                            |
-| Absolute symlink written without rewrite      | Host path leak after pivot_root     | `relative_path()` rewrite                     |
-| Missing cleanup on error path                 | Orphaned cgroups, stuck overlays    | Explicit cleanup with warn on secondary error |
-| `set_var`/`remove_var` in tests without mutex | Parallel test races                 | `static Mutex<()>` guard                      |
-| `OwnedFd` alive across `clone()`              | Double-close in parent and child    | `std::mem::forget` before clone               |
-| `.ok()` swallowing a fallible call            | Silent failure, e.g. network never attached | Propagate with `.wrap_err(...)?`      |
-| `format!("{val:?}")` on an enum for display   | Breaks if variant names/Debug repr change | Add/use `as_str()` or `Display`         |
+| Pattern                                       | Problem                                     | Fix                                           |
+| --------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
+| `.unwrap()` in production                     | Daemon panic orphans all containers         | `.into_diagnostic().wrap_err()?`              |
+| `Path::join(user_input)` without validation   | Zip Slip / path traversal                   | `validate_layer_path()` first                 |
+| `fork()`/`clone()` in async fn                | Blocks tokio runtime, possible UB           | `tokio::task::spawn_blocking`                 |
+| `println!` in daemon code                     | Contaminates container stdio                | `tracing::info!/warn!`                        |
+| Embedded values in tracing message            | Not queryable in log aggregators            | `key = value` structured fields               |
+| `unsafe` without SAFETY comment               | Reviewer can't verify correctness           | Document invariant                            |
+| Absolute symlink written without rewrite      | Host path leak after pivot_root             | `relative_path()` rewrite                     |
+| Missing cleanup on error path                 | Orphaned cgroups, stuck overlays            | Explicit cleanup with warn on secondary error |
+| `set_var`/`remove_var` in tests without mutex | Parallel test races                         | `static Mutex<()>` guard                      |
+| `OwnedFd` alive across `clone()`              | Double-close in parent and child            | `std::mem::forget` before clone               |
+| `.ok()` swallowing a fallible call            | Silent failure, e.g. network never attached | Propagate with `.wrap_err(...)?`              |
+| `format!("{val:?}")` on an enum for display   | Breaks if variant names/Debug repr change   | Add/use `as_str()` or `Display`               |

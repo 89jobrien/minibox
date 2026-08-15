@@ -15,6 +15,7 @@ workspace = true
 # inventory is re-exported via the test-utils feature for minibox-testsuite consumers
 ignored = ["inventory"]
 [features]
+default = ["registry"]
 # Enable test double adapters (MockRegistry, MockFilesystem, etc.) for use in
 # dev-dependencies of other crates without cfg(test) restrictions.
 # tempfile is pulled in as a real dependency because test_fixtures.rs and
@@ -23,6 +24,10 @@ test-utils = ["dep:tempfile", "dep:inventory"]
 # Exposes internal functions needed by the cargo-fuzz harnesses in fuzz/.
 # Never enable in production builds.
 fuzzing = []
+# OCI registry client (reqwest-based image pull/push). Disabling this drops
+# ~108 transitive dependencies for local-only container management builds.
+# See issue #447.
+registry = ["dep:reqwest"]
 
 [dependencies]
 serde = { workspace = true }
@@ -33,7 +38,7 @@ miette = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, optional = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 minibox-macros = { workspace = true }

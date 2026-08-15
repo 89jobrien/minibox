@@ -292,9 +292,29 @@ async fn commit_empty_upperdir_returns_error() -> Result<()> {
         .commit(&cid, "conformance/empty-upper:v1", &default_commit_config())
         .await;
 
-    // Either Ok (with any number of layers) or Err — but no panic.
-    // We only care that it doesn't panic; drop the result.
-    drop(result);
+    // Either Ok (with any number of layers) or Err are acceptable outcomes for an empty
+    // upperdir — different backends may legitimately choose to commit an empty layer or
+    // reject it outright. Assert the shape of whichever outcome occurred instead of
+    // silently discarding the result, so a future regression (e.g. a panic-swallowing
+    // change, or metadata corruption on the Ok path) is caught.
+    match result {
+        Ok(meta) => {
+            assert_eq!(
+                meta.name, "conformance/empty-upper",
+                "Ok metadata name must match target ref even for an empty upperdir"
+            );
+            assert_eq!(
+                meta.tag, "v1",
+                "Ok metadata tag must match target ref even for an empty upperdir"
+            );
+        }
+        Err(err) => {
+            assert!(
+                !err.to_string().is_empty(),
+                "Err result must carry a non-empty error message"
+            );
+        }
+    }
 
     Ok(())
 }

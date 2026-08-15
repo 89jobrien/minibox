@@ -747,8 +747,8 @@ impl DaemonResponse {
     /// `ContainerStopped`. Non-ephemeral runs send it and then drop the sender.
     ///
     /// `ContainerOutput`, `LogLine`, `ContainerCreated`, `ExecStarted`,
-    /// `PushProgress`, `BuildOutput`, `Event`, and `UpdateProgress` are
-    /// non-terminal.
+    /// `PushProgress`, `BuildOutput`, `Event`, `UpdateProgress`, and
+    /// `WorkflowStepComplete` are non-terminal.
     #[must_use]
     pub const fn is_terminal(&self) -> bool {
         matches!(
@@ -769,7 +769,6 @@ impl DaemonResponse {
                 | Self::ImageList { .. }
                 | Self::Manifest { .. }
                 | Self::VerifyResult { .. }
-                | Self::WorkflowStepComplete { .. }
                 | Self::WorkflowComplete { .. }
                 | Self::PipelineList { .. }
                 | Self::PipelineDetail { .. }
@@ -1853,14 +1852,14 @@ mod tests {
     #[test]
     fn push_credentials_debug_redacts_token() {
         let creds = PushCredentials::Token {
-            token: "ghp_secret123".to_string(),
+            token: "token-for-redaction-test".to_string(),
         };
         assert_eq!(creds.credential_type(), "token");
         // Verify the Debug impl on the SUT type redacts the token.
         let dbg = format!("{creds:?}");
         assert!(dbg.contains("[REDACTED]"), "token must be redacted: {dbg}");
         assert!(
-            !dbg.contains("ghp_secret123"),
+            !dbg.contains("token-for-redaction-test"),
             "raw token must not appear: {dbg}"
         );
     }
@@ -2317,7 +2316,7 @@ mod tests {
                     output: serde_json::json!({}),
                     status: StepStatus::Succeeded,
                 },
-                true,
+                false,
             ),
             (
                 DaemonResponse::WorkflowComplete {
@@ -2362,7 +2361,7 @@ mod tests {
                 DaemonResponse::ImageList { .. } => true,
                 DaemonResponse::Manifest { .. } => true,
                 DaemonResponse::VerifyResult { .. } => true,
-                DaemonResponse::WorkflowStepComplete { .. } => true,
+                DaemonResponse::WorkflowStepComplete { .. } => false,
                 DaemonResponse::WorkflowComplete { .. } => true,
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,

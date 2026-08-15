@@ -768,6 +768,83 @@ async fn invoke_stops_reading_at_terminal_workflow_complete() {
     h.shutdown().await;
 }
 
+// -- Tests: container::run end-to-end (#176) ----------------------------------
+
+#[tokio::test]
+async fn invoke_run_returns_container_created() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    tokio::spawn(mock_daemon_multi(
+        listener,
+        vec![
+            DaemonResponse::ContainerCreated { id: "abc".into() },
+            DaemonResponse::ContainerStopped { exit_code: 0 },
+        ],
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke("minibox::container::run", json!({"image": "alpine"}))
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+    let output = &resp["data"]["output"];
+    assert!(output.is_array(), "streaming output must be array");
+    let arr = output.as_array().expect("array");
+    assert_eq!(arr.len(), 2, "ContainerCreated + ContainerStopped");
+    assert_eq!(arr[0]["type"], "ContainerCreated");
+    assert_eq!(arr[1]["type"], "ContainerStopped");
+
+    h.shutdown().await;
+}
+
+#[tokio::test]
+async fn invoke_run_with_mounts_and_env() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(mock_daemon_verify(
+        listener,
+        DaemonResponse::ContainerCreated { id: "abc".into() },
+        tx,
+    ));
+    let mut h = PluginHarness::spawn(&socket_path);
+
+    let resp = h
+        .invoke(
+            "minibox::container::run",
+            json!({
+                "image": "alpine:latest",
+                "command": ["/bin/sh"],
+                "mounts": [{
+                    "host_path": "/tmp/data",
+                    "container_path": "/data",
+                    "read_only": false
+                }],
+                "env": ["FOO=bar", "BAZ=qux"]
+            }),
+        )
+        .await;
+    assert_eq!(resp["status"], "InvokeOk");
+
+    let req = rx.await.expect("request captured");
+    match req {
+        DaemonRequest::Run { mounts, env, .. } => {
+            assert_eq!(mounts.len(), 1, "expected 1 mount");
+            assert_eq!(mounts[0].host_path, std::path::PathBuf::from("/tmp/data"));
+            assert_eq!(mounts[0].container_path, std::path::PathBuf::from("/data"));
+            assert!(!mounts[0].read_only, "mount should not be read_only");
+            assert_eq!(
+                env,
+                vec!["FOO=bar".to_string(), "BAZ=qux".to_string()],
+                "env should round-trip in order"
+            );
+        }
+        other => panic!("expected Run, got: {other:?}"),
+    }
+
+    h.shutdown().await;
+}
+
 #[tokio::test]
 async fn invoke_logs_returns_streaming_output() {
     use minibox_core::protocol::OutputStreamKind;

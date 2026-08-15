@@ -9,8 +9,8 @@
     },
     {
       "name": "minibox-core-domain",
-      "path": "crates/minibox-core/src/domain.rs",
-      "hash": "8439863046f4b38c8a77d8b59a6b5a2405362a7f68432f764cdee0798c79ff24"
+      "path": "crates/minibox-core/src/domain/mod.rs",
+      "hash": "5bf3aa20054bfddfc1a8c93cb1c7911ad77ebeb2448769226950fc18d20453d7"
     },
     {
       "name": "minibox-core-trace",
@@ -50,7 +50,7 @@
     {
       "name": "xtask-preflight",
       "path": "xtask/src/preflight.rs",
-      "hash": "ad4c4c3d0fb57b3357fc996e3d8ffa8e7e10e32a62ed71341564b371a4494eca"
+      "hash": "c00b47d96b6c21106220036b2379f8ed5569fa5261d10a3a43174f2d6b21ea32"
     }
   ]
 }

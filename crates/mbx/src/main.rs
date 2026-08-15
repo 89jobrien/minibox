@@ -33,7 +33,7 @@ mod commands;
 pub(crate) mod terminal;
 
 use anyhow::Context as _;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use miette::Diagnostic;
 use std::path::Path;
 use thiserror::Error;
@@ -368,6 +368,9 @@ enum Commands {
     /// be selected given the current environment, and basic platform info.
     Doctor,
 
+    /// Open a read-only terminal dashboard: live container table + event log.
+    Tui,
+
     /// Show the execution manifest for a container.
     Manifest {
         /// Container ID or name.
@@ -618,6 +621,8 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
 
         Commands::Doctor => into_cli(commands::doctor::execute()),
 
+        Commands::Tui => into_cli(commands::tui::execute().await),
+
         Commands::Manifest { id } => into_cli(commands::manifest::execute(id, socket_path).await),
 
         Commands::Verify { id, policy } => {
@@ -672,11 +677,22 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
 /// [`run`] which owns all dispatch logic.
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("completions") {
+        clap_complete::generate(
+            clap_complete_nushell::Nushell,
+            &mut Cli::command(),
+            "mbx",
+            &mut std::io::stdout(),
+        );
+        return Ok(());
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
     let cli = Cli::parse();
+
     let socket_path = minibox_core::client::default_socket_path();
     run(cli, &socket_path).await?;
     Ok(())

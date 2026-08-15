@@ -186,7 +186,7 @@ use anyhow::{Context, Result};
 use minibox::adapters::NoopNetwork;
 #[cfg(unix)]
 use minibox::adapters::{
-    DockerHubRegistry, GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRuntime,
+    GhcrRegistry, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime,
 };
 #[cfg(unix)]
 use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionRegistry};
@@ -226,7 +226,7 @@ use tracing::{info, warn};
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
-    CgroupV2Limiter, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
+    CgroupV2Limiter, DockerHubRegistry, LinuxNamespaceRuntime, NativeImageLoader, OverlayFilesystem,
 };
 #[cfg(target_os = "linux")]
 use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
@@ -710,6 +710,19 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
     info!(network_mode = %mode, "network provider selected");
     match mode.as_str() {
+        #[cfg(feature = "cni")]
+        "bridge" => {
+            let cni_path =
+                std::env::var("MINIBOX_CNI_PATH").unwrap_or_else(|_| "/opt/cni/bin".to_string());
+            let cni_path: Vec<std::path::PathBuf> = std::env::split_paths(&cni_path).collect();
+            let config_dir = std::env::var("MINIBOX_CNI_CONFIG_DIR")
+                .unwrap_or_else(|_| "/etc/cni/net.d".to_string());
+            Ok(Arc::new(minibox_cni::CniNetworkProvider::new(
+                cni_path,
+                std::path::PathBuf::from(config_dir),
+            )))
+        }
+        #[cfg(not(feature = "cni"))]
         "bridge" => Ok(Arc::new(
             BridgeNetwork::new().context("BridgeNetwork init failed")?,
         )),
@@ -762,7 +775,7 @@ fn build_native_handler_dependencies(
         Arc::clone(&state.image_store),
         Arc::clone(&state) as minibox::container_state::StateHandle,
     );
-    let filesystem = Arc::new(OverlayFilesystem::new());
+    let filesystem = Arc::new(OverlayFilesystem::new_with_base(data_dir.join("images")));
     let runtime = Arc::new(LinuxNamespaceRuntime::new());
     let image_builder = minibox::adapters::builder::minibox_image_builder(
         Arc::clone(&state.image_store),
@@ -889,10 +902,15 @@ fn build_colima_handler_dependencies(
     run_containers_dir: PathBuf,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    use minibox::adapters::{LimaExecutor, LimaSpawner};
+    use minibox::adapters::{LimaExecutor, LimaSpawner, privileged_command};
 
+    // privileged_command drops back to $SUDO_USER when miniboxd runs as root
+    // (via sudo) — both `colima` and `limactl` refuse to run as root and look
+    // for VM state under the invoking user's home, not root's. A previous
+    // version of this closure called `colima ssh` directly as root, which
+    // always failed with "colima not running" regardless of actual VM state.
     let executor: LimaExecutor = Arc::new(move |args: &[&str]| {
-        let output = std::process::Command::new("colima")
+        let output = privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
@@ -908,7 +926,7 @@ fn build_colima_handler_dependencies(
     });
 
     let spawner: LimaSpawner = Arc::new(move |args: &[&str]| {
-        std::process::Command::new("colima")
+        privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
@@ -942,15 +960,12 @@ fn build_smolvm_handler_dependencies(
     event_broker: Arc<BroadcastEventBroker>,
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
-    let ghcr = Arc::new(
-        GhcrRegistry::new(Arc::clone(&state.image_store))
-            .context("creating GHCR registry adapter for smolvm")?,
-    ) as minibox_core::domain::DynImageRegistry;
+    let smolvm_registry = Arc::new(SmolVmRegistry::new());
+    let default_registry = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
+    let ghcr = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
+    let image_loader = smolvm_registry as minibox_core::domain::DynImageLoader;
     let registry_router = Arc::new(HostnameRegistryRouter::new(
-        Arc::new(
-            DockerHubRegistry::new(Arc::clone(&state.image_store))
-                .context("creating Docker Hub registry adapter for smolvm")?,
-        ) as minibox_core::domain::DynImageRegistry,
+        default_registry,
         [("ghcr.io", ghcr)],
     ));
     let filesystem = Arc::new(SmolVmFilesystem::new());
@@ -965,7 +980,7 @@ fn build_smolvm_handler_dependencies(
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
             registry_router,
-            image_loader: Arc::new(minibox::daemon::handler::NoopImageLoader),
+            image_loader,
             image_gc,
             image_store: Arc::clone(&state.image_store),
         },
@@ -1406,6 +1421,13 @@ mod tests {
         .expect("build smolvm handler dependencies");
 
         assert!(deps.build.image_pusher.is_none());
+        let image_ref = minibox_core::image::reference::ImageRef::parse("library/foo:latest")
+            .expect("parse image ref");
+        let routed = deps.image.registry_router.route(&image_ref);
+        assert!(
+            routed.as_any().is::<minibox::adapters::SmolVmRegistry>(),
+            "smolvm suite must route run cache checks and pulls through SmolVmRegistry"
+        );
     }
 
     #[tokio::test]
@@ -1452,6 +1474,116 @@ mod tests {
         assert!(deps.build.commit_adapter.is_none());
         // No image builder wired for GKE
         assert!(deps.build.image_builder.is_none());
+    }
+}
+
+// ── Policy resolution tests ───────────────────────────────────────────────
+
+#[cfg(all(unix, test))]
+mod policy_tests {
+    use super::*;
+    use miniboxd::config::{DaemonConfig, PolicyConfig};
+
+    static POLICY_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// When config explicitly sets both policy fields, those values are used
+    /// and the env-var defaults are ignored.
+    #[test]
+    fn config_policy_overrides_env_defaults() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        // Ensure env vars do not interfere.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: Some(true),
+                allow_privileged: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+        assert!(
+            policy.allow_bind_mounts,
+            "config allow_bind_mounts=true must propagate to resolved policy"
+        );
+        assert!(
+            policy.allow_privileged,
+            "config allow_privileged=true must propagate to resolved policy"
+        );
+    }
+
+    /// When config fields are None, the policy falls through to the env-var
+    /// (or deny-all) defaults, not to `true`.
+    #[test]
+    fn absent_config_policy_falls_back_to_env_defaults() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        // Guarantee deny-all env state.
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: None,
+                allow_privileged: None,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+        // ContainerPolicy::default() is deny-all; from_env with no env vars
+        // set also returns deny-all, so both must be false.
+        assert!(
+            !policy.allow_bind_mounts,
+            "absent config bind_mounts + no env var must default to false (deny)"
+        );
+        assert!(
+            !policy.allow_privileged,
+            "absent config privileged + no env var must default to false (deny)"
+        );
+    }
+
+    /// Config deny (false) must override env-var allow, since config is
+    /// higher priority than env vars per the config layer spec.
+    #[test]
+    fn config_deny_overrides_env_allow() {
+        let _guard = POLICY_ENV_LOCK.lock().expect("POLICY_ENV_LOCK poisoned");
+        unsafe {
+            std::env::set_var("MINIBOX_ALLOW_BIND_MOUNTS", "true");
+            std::env::set_var("MINIBOX_ALLOW_PRIVILEGED", "true");
+        }
+
+        let config = DaemonConfig {
+            policy: PolicyConfig {
+                allow_bind_mounts: Some(false),
+                allow_privileged: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let policy = resolve_container_policy(&config);
+
+        unsafe {
+            std::env::remove_var("MINIBOX_ALLOW_BIND_MOUNTS");
+            std::env::remove_var("MINIBOX_ALLOW_PRIVILEGED");
+        }
+
+        assert!(
+            !policy.allow_bind_mounts,
+            "config deny must win over env-var allow for bind_mounts"
+        );
+        assert!(
+            !policy.allow_privileged,
+            "config deny must win over env-var allow for privileged"
+        );
     }
 }
 

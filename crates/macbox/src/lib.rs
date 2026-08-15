@@ -26,7 +26,7 @@ use krun::registry::KrunRegistry;
 use krun::runtime::KrunRuntime;
 use minibox::adapters::{
     ColimaFilesystem, ColimaLimiter, ColimaRegistry, ColimaRuntime, LimaExecutor, LimaSpawner,
-    NoopNetwork,
+    NoopNetwork, privileged_command,
 };
 use minibox::daemon::handler::HandlerDependencies;
 use minibox::daemon::state::DaemonState;
@@ -244,8 +244,11 @@ pub async fn start() -> Result<()> {
     // Shared executor closure — runs fire-and-forget commands inside the Lima VM.
     // Uses `colima ssh --` rather than `limactl shell colima` because Colima manages
     // its own Lima instance directory and limactl may not find it via LIMA_HOME.
+    // privileged_command drops back to $SUDO_USER when this process runs as
+    // root (via sudo) — `colima` refuses to run as root and looks for VM
+    // state under the invoking user's home, not root's.
     let executor: LimaExecutor = Arc::new(move |args: &[&str]| {
-        let output = std::process::Command::new("colima")
+        let output = privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)
@@ -262,7 +265,7 @@ pub async fn start() -> Result<()> {
 
     // Spawner closure — starts a long-lived process with piped stdout.
     let spawner: LimaSpawner = Arc::new(move |args: &[&str]| {
-        std::process::Command::new("colima")
+        privileged_command("colima")
             .arg("ssh")
             .arg("--")
             .args(args)

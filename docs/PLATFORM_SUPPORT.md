@@ -3,20 +3,20 @@
 This document summarizes which minibox adapters work on which platforms and what
 capabilities each adapter provides. It is written for end users of minibox.
 
-Last updated: 2026-07-24
+Last updated: 2026-08-15
 
 ---
 
 ## Quick Reference
 
-| Adapter  | macOS | Linux | Windows | Status       | Use when...                          |
-| -------- | :---: | :---: | :-----: | ------------ | ------------------------------------ |
-| `smolvm` |  Yes  |  Yes  |   No    | Experimental | Default on all platforms             |
-| `krun`   |  Yes  |  Yes  |   No    | Experimental | Fallback when `smolvm` is not on PATH|
-| `native` |   No  |  Yes  |   No    | Production   | Linux with root, full isolation      |
-| `gke`    |   No  |  Yes  |   No    | Production   | Unprivileged GKE pods                |
-| `colima` |  Yes  |  Yes  |   No    | Experimental | Colima/Lima VM environment           |
-| `winbox` |   No  |   No  |  (stub) | Stub         | Not yet functional                   |
+| Adapter  | macOS | Linux | Windows | Status       | Use when...                           |
+| -------- | :---: | :---: | :-----: | ------------ | ------------------------------------- |
+| `smolvm` |  Yes  |  Yes  |   No    | Experimental | Default on all platforms              |
+| `krun`   |  Yes  |  Yes  |   No    | Experimental | Fallback when `smolvm` is not on PATH |
+| `native` |  No   |  Yes  |   No    | Production   | Linux with root, full isolation       |
+| `gke`    |  No   |  Yes  |   No    | Production   | Unprivileged GKE pods                 |
+| `colima` |  Yes  |  Yes  |   No    | Experimental | Colima/Lima VM environment            |
+| `winbox` |  No   |  No   | (stub)  | Stub         | Not yet functional                    |
 
 ---
 
@@ -49,6 +49,12 @@ MINIBOX_ADAPTER=colima miniboxd
   - `smolvm` binary on PATH (subsecond-boot lightweight VM manager)
   - No root required on macOS
   - On Linux, root or appropriate capabilities may be required depending on host setup
+  - **Guest-side `docker`:** image pull/load/inspect operations run `docker` _inside_ the
+    guest VM (a stock `ubuntu:24.04` cloud image, which does not ship a container runtime).
+    `SmolVmRegistry` self-heals by installing `docker.io` via `apt-get` on first use inside
+    a given VM instance; this adds `apt-get update && apt-get install` latency to the first
+    pull/load/run after a fresh VM boot. No user action is required, but expect a slower
+    first request per VM lifetime.
 - **Isolation:** provided by the smolvm VM, not Linux namespaces
 
 ### `krun` (macOS fallback)
@@ -67,6 +73,27 @@ MINIBOX_ADAPTER=colima miniboxd
   - cgroups v2 mounted at `/sys/fs/cgroup`
   - Overlay filesystem support in the kernel
 - **Isolation:** Linux PID, mount, network, UTS, and IPC namespaces + cgroups v2
+
+#### Optional: CNI-based bridge networking (`cni` feature)
+
+`native`'s bridge networking (`MINIBOX_NETWORK_MODE=bridge`) has two implementations, selected
+at compile time:
+
+- **Off (default):** the built-in `BridgeNetwork` adapter — veth pairs, IP allocation, and DNAT
+  implemented directly in Rust, no external dependencies.
+- **On (`cargo build --features cni` / `miniboxd --features cni`):** real CNI-spec plugin
+  execution via `minibox-cni`, gaining in-container DNS through the standard `dnsname` plugin.
+  Requires:
+  - The standard `containernetworking/plugins` release binaries — `bridge`, `host-local`,
+    `portmap`, `dnsname` — on `MINIBOX_CNI_PATH` (colon-separated, default `/opt/cni/bin`)
+  - A `.conflist` at `MINIBOX_CNI_CONFIG_DIR/10-minibox.conflist` (default
+    `/etc/cni/net.d/10-minibox.conflist`) listing the plugin chain
+  - Run `mbx doctor` to check plugin binary presence before relying on this feature — with the
+    feature compiled in but the plugins missing, container runs fail fast at the network-setup
+    step rather than silently falling back to the built-in implementation
+
+This is scoped to the `native` adapter only — `gke`, `colima`, `smolvm`, and `krun` have no
+host-visible per-container network namespace for a CNI plugin to attach to.
 
 ### `gke`
 
@@ -89,6 +116,7 @@ MINIBOX_ADAPTER=colima miniboxd
 ## Capability Matrix
 
 Legend:
+
 - **Yes** — implemented and tested
 - **No** — not implemented for this adapter
 - **Limited** — partially working, known gaps
@@ -97,18 +125,18 @@ Legend:
 
 ### Container Lifecycle
 
-| Operation    | smolvm | krun | native | gke | colima |
-| ------------ | :----: | :--: | :----: | :-: | :----: |
-| pull         |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| run          |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| stop         |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| rm           |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| ps           |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| restart      |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| pause/resume |   No   |  No  |  Yes   |  No |   No   |
-| exec (-it)   |   No   |  No  |  Yes   |  No | Limited|
-| logs         |   No   |  No  |  Yes   |  No | Limited|
-| events       |   No   |  No  |  Yes   | Yes |   No   |
+| Operation    | smolvm | krun | native | gke | colima  |
+| ------------ | :----: | :--: | :----: | :-: | :-----: |
+| pull         |  Yes   | Yes  |  Yes   | Yes |   Yes   |
+| run          |  Yes   | Yes  |  Yes   | Yes |   Yes   |
+| stop         |  Yes   | Yes  |  Yes   | Yes |   Yes   |
+| rm           |  Yes   | Yes  |  Yes   | Yes |   Yes   |
+| ps           |  Yes   | Yes  |  Yes   | Yes |   Yes   |
+| restart      |  Yes   | Yes  |  Yes   | Yes |   Yes   |
+| pause/resume |   No   |  No  |  Yes   | No  |   No    |
+| exec (-it)   |   No   |  No  |  Yes   | No  | Limited |
+| logs         |   No   |  No  |  Yes   | No  | Limited |
+| events       |   No   |  No  |  Yes   | Yes |   No    |
 
 Note: `pause`/`resume` requires cgroups v2 (`native` adapter, Linux only). `exec`
 into a running container requires `native` on Linux — not available on VM-based
@@ -116,45 +144,45 @@ adapters.
 
 ### Image Management
 
-| Operation           | smolvm | krun | native | gke | colima |
-| ------------------- | :----: | :--: | :----: | :-: | :----: |
-| Docker Hub pull     |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| ghcr.io pull        |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| Parallel layer pull |  Yes   | Yes  |  Yes   | Yes |  Yes   |
-| prune / rmi         |   No   |  No  |  Yes   |  No |   No   |
-| push (experimental) |   No   |  No  |  Yes   | Yes |  Yes   |
-| commit (experimental)|  No   |  No  |  Yes   |  No |  Yes   |
-| build (experimental)|  Yes   |  No  |  Yes   |  No |  Yes   |
+| Operation             | smolvm | krun | native | gke | colima |
+| --------------------- | :----: | :--: | :----: | :-: | :----: |
+| Docker Hub pull       |  Yes   | Yes  |  Yes   | Yes |  Yes   |
+| ghcr.io pull          |  Yes   | Yes  |  Yes   | Yes |  Yes   |
+| Parallel layer pull   |  Yes   | Yes  |  Yes   | Yes |  Yes   |
+| prune / rmi           |   No   |  No  |  Yes   | No  |   No   |
+| push (experimental)   |   No   |  No  |  Yes   | Yes |  Yes   |
+| commit (experimental) |   No   |  No  |  Yes   | No  |  Yes   |
+| build (experimental)  |  Yes   |  No  |  Yes   | No  |  Yes   |
 
 ### Isolation
 
-| Mechanism         | smolvm | krun | native | gke    | colima  |
-| ----------------- | :----: | :--: | :----: | :----: | :-----: |
-| PID namespace     |   VM   |  VM  |  Yes   |   No   | Lima VM |
-| Mount namespace   |   VM   |  VM  |  Yes   |   No   | Lima VM |
-| Network namespace |   VM   |  VM  |  Yes   |   No   | Lima VM |
-| UTS namespace     |   VM   |  VM  |  Yes   |   No   | Lima VM |
-| IPC namespace     |   VM   |  VM  |  Yes   |   No   | Lima VM |
-| cgroups v2        |   VM   |  No  |  Yes   |   No   | Lima VM |
-| Overlay FS        |   No   |  No  |  Yes   |  Copy  | nerdctl |
+| Mechanism         | smolvm | krun | native | gke  | colima  |
+| ----------------- | :----: | :--: | :----: | :--: | :-----: |
+| PID namespace     |   VM   |  VM  |  Yes   |  No  | Lima VM |
+| Mount namespace   |   VM   |  VM  |  Yes   |  No  | Lima VM |
+| Network namespace |   VM   |  VM  |  Yes   |  No  | Lima VM |
+| UTS namespace     |   VM   |  VM  |  Yes   |  No  | Lima VM |
+| IPC namespace     |   VM   |  VM  |  Yes   |  No  | Lima VM |
+| cgroups v2        |   VM   |  No  |  Yes   |  No  | Lima VM |
+| Overlay FS        |   No   |  No  |  Yes   | Copy | nerdctl |
 
 ### Networking
 
-| Feature             | smolvm | krun | native | gke | colima |
-| ------------------- | :----: | :--: | :----: | :-: | :----: |
-| Bridge (experimental)|  No   |  No  |  Yes   |  No |   No   |
-| Port forwarding     |   No   |  No  |   No   |  No |   No   |
-| DNS                 |   No   |  No  |   No   |  No |   No   |
+| Feature               | smolvm | krun | native | gke | colima |
+| --------------------- | :----: | :--: | :----: | :-: | :----: |
+| Bridge (experimental) |   No   |  No  |  Yes   | No  |   No   |
+| Port forwarding       |   No   |  No  |   No   | No  |   No   |
+| DNS                   |   No   |  No  |   No   | No  |   No   |
 
 Bridge networking is experimental and Linux-only (`native` adapter).
 Port forwarding and DNS are not yet implemented on any adapter.
 
 ### Mounts and Privileges
 
-| Feature         | smolvm | krun | native | gke | colima |
-| --------------- | :----: | :--: | :----: | :-: | :----: |
-| Bind mounts (-v)|   No   |  No  |  Yes   |  No |   No   |
-| Privileged mode |   No   |  No  |  Yes   |  No |   No   |
+| Feature          | smolvm | krun | native | gke | colima |
+| ---------------- | :----: | :--: | :----: | :-: | :----: |
+| Bind mounts (-v) |   No   |  No  |  Yes   | No  |   No   |
+| Privileged mode  |   No   |  No  |  Yes   | No  |   No   |
 
 Bind mounts and privileged mode are only available on the `native` Linux adapter
 and require root.
@@ -204,10 +232,10 @@ Execution manifests are supported on all adapters that implement `run`.
 
 Structured tracing and OTLP export are available on all adapters (except `winbox`).
 
-| Feature              | Env variable              | Notes                              |
-| -------------------- | ------------------------- | ---------------------------------- |
-| OTLP trace export    | `MINIBOX_OTLP_ENDPOINT`   | Requires the `otel` feature        |
-| Prometheus metrics   | `MINIBOX_METRICS_ADDR`    | e.g. `0.0.0.0:9090`; `metrics` feature required |
+| Feature            | Env variable            | Notes                                           |
+| ------------------ | ----------------------- | ----------------------------------------------- |
+| OTLP trace export  | `MINIBOX_OTLP_ENDPOINT` | Requires the `otel` feature                     |
+| Prometheus metrics | `MINIBOX_METRICS_ADDR`  | e.g. `0.0.0.0:9090`; `metrics` feature required |
 
 ---
 

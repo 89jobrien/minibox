@@ -13,6 +13,9 @@ members = [
     "crates/smolbox",
     "crates/ail",
     "crates/minibox-bench",
+    "crates/mcp",
+    "crates/minibox-cni",
+    "crates/minibox-tui",
     "xtask",
 ]
 
@@ -20,7 +23,7 @@ members = [
 name = "minibox"
 
 [workspace.package]
-version = "0.31.0"
+version = "0.32.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -72,16 +75,23 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 pin-project-lite = "0.2"
 ipnet = "2"
 
+# TUI
+ratatui = "0.29"
+crossterm = "0.28"
+
 # Benchmarking
 criterion = { version = "0.7", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
-minibox-core = { path = "crates/minibox-core", version = "0.31.0" }
+minibox-core = { path = "crates/minibox-core", version = "0.32.0" }
 minibox = { path = "crates/minibox" }
-minibox-macros = { path = "crates/minibox-macros", version = "0.31.0" }
+minibox-testsuite = { path = "crates/minibox-testsuite" }
+minibox-macros = { path = "crates/minibox-macros", version = "0.32.0" }
+minibox-cni = { path = "crates/minibox-cni" }
 macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
+minibox-tui = { path = "crates/minibox-tui" }
 slashcrux = "0.1"
 dirs = "6"
 secrecy = "0.10"
@@ -108,6 +118,15 @@ expect_used  = "deny"
 panic        = "deny"
 todo         = "deny"
 unimplemented = "deny"
+
+# Idiom policy (issue #228) — explicitly denied even though these are already
+# part of the `style` lint group covered by `all = warn` above. Denying them
+# by name documents intent and prevents a future workspace-lint refactor from
+# silently dropping the guarantee. See .claude/rules/rust-patterns.md for the
+# full policy and rationale.
+io_other_error = "deny"
+get_first      = "deny"
+len_zero       = "deny"
 
 # Style lints — intentional exceptions for this codebase
 # option_if_let_else: map_or_else rewrites are less readable when branches

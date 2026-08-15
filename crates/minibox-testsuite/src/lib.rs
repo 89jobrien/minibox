@@ -32,6 +32,7 @@
 
 pub mod adapters;
 pub mod harness;
+pub mod showcase;
 
 /// Declare a conformance test with inventory auto-registration.
 ///

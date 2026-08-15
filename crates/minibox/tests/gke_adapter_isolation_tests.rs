@@ -50,6 +50,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
+/// Serializes `MINIBOX_PROOT_PATH` mutations across parallel tests.
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
 // ============================================================================
 // NoopLimiter Tests
 // ============================================================================
@@ -336,8 +338,6 @@ fn proot_runtime_new_accepts_existing_binary() {
 
 #[test]
 fn proot_runtime_from_env_uses_env_var() {
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
     let _guard = ENV_MUTEX.lock().expect("unwrap in test");
 
     // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.
@@ -356,8 +356,6 @@ fn proot_runtime_from_env_uses_env_var() {
 
 #[test]
 fn proot_runtime_from_env_rejects_nonexistent_path_in_env() {
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
     let _guard = ENV_MUTEX.lock().expect("unwrap in test");
 
     // SAFETY: serialized by ENV_MUTEX; no other thread reads MINIBOX_PROOT_PATH concurrently.

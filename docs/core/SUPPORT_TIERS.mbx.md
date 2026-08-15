@@ -2,9 +2,9 @@
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-07-24
+Last updated: 2026-08-15
 
-See also: `docs/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/FEATURE_MATRIX.mbx.md`
+See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
 (per-adapter capability breakdown).
 
 ---
@@ -13,7 +13,7 @@ See also: `docs/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/FEATURE
 
 ### Tier 1 — Production
 
-Fully supported. All 7 mandatory stability gates must pass continuously. Breaking changes require a
+Fully supported. All six mandatory stability gates must pass continuously. Breaking changes require a
 deprecation cycle of at least one minor release with a compiler or runtime warning before removal.
 Security issues receive a response within 72 hours. Crates in this tier are covered by CI on every
 PR and every push to `next`.
@@ -73,7 +73,7 @@ in any release. No security response commitment. Exists to document intent or re
 | **Security response**      | Within 72 hours                           | Best-effort                        | No commitment           |
 | **Removal policy**         | Requires deprecation + major version bump | Noted in CHANGELOG                 | No notice required      |
 
-The 7 mandatory gates are defined in `docs/STABILITY_CHECKLIST.mbx.md`. Gates 1–6 are hard
+The 7 mandatory gates are defined in `docs/core/STABILITY_CHECKLIST.mbx.md`. Gates 1–6 are hard
 blockers enforced by CI; Gate 7 (in-memory mock double) is advisory but required for Tier 1
 promotion via human review.
 
@@ -83,8 +83,7 @@ promotion via human review.
 
 A Tier 2 adapter or crate may be promoted to Tier 1 when all of the following are satisfied:
 
-1. All 7 mandatory stability gates pass on the `next` branch (Gates 1–6 via CI; Gate 7 via PR
-   reviewer sign-off).
+1. All six mandatory stability gates pass on the `next` branch, with CI evidence and maintainer sign-off.
 2. The adapter has at least one integration test that runs in CI (Gate 3).
 3. Handler coverage for any new handler code meets the >= 80% function coverage threshold (Gate 2).
 4. A PR is opened targeting `next` with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`

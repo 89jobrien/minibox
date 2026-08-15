@@ -4,7 +4,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-07-24
+Last updated: 2026-08-15
 
 ---
 
@@ -36,7 +36,7 @@ that breaks callers outside the workspace is a semver-major event.
 **Stability expectations for Core crates:**
 
 - `cargo xtask pre-commit` must pass before merging any PR that touches these crates.
-- Handler coverage in `minibox/src/daemon/` must stay at or above the current baseline;
+- Handler coverage in `crates/minibox/src/daemon/` must stay at or above the current baseline;
   the target is >= 80% function coverage.
 - Protocol wire format is pinned by snapshot tests in `minibox-core`. Do not remove or
   rename existing variants without a deprecation period.
@@ -72,11 +72,15 @@ workspace and are no longer members of this workspace.
 Unstable crates. APIs may change or crates may be merged, split, or removed. Do not
 take a public dependency on these crates from outside the workspace.
 
-No crates are currently in this tier. Several former experimental crates
-(`minibox-agent`, `minibox-secrets`, `mbxctl`) were removed during the
-consolidation in sessions 29-31 (2026-04-21 to 2026-04-26) to reduce
-maintenance surface. `minibox-bench` was re-added as a benchmarking crate
-in v0.31.0.
+| Crate         | Path         | Role                                                                                 |
+| ------------- | ------------ | ------------------------------------------------------------------------------------ |
+| `minibox-mcp` | `crates/mcp` | MCP stdio server for agent-controlled minibox tools. First slice is implemented.     |
+| `ail`         | `crates/ail` | Placeholder binary for the agent-improvement loop. Minimal implementation today.     |
+
+Several former experimental crates (`minibox-agent`, `minibox-secrets`, `mbxctl`)
+were removed during the consolidation in sessions 29-31 (2026-04-21 to 2026-04-26)
+to reduce maintenance surface. `minibox-bench` was re-added as a benchmarking
+crate in v0.31.0.
 
 **Stability expectations for Experimental crates:**
 
@@ -85,7 +89,7 @@ in v0.31.0.
 - Must compile as part of `cargo check --workspace`. Build failures in Experimental
   crates block CI like any other crate.
 - May be promoted to Core or Platform tier only after meeting all gates in
-  `docs/STABILITY_CHECKLIST.md`.
+  `docs/core/STABILITY_CHECKLIST.mbx.md`.
 
 ---
 
@@ -96,9 +100,10 @@ in release binaries.
 
 | Crate                 | Path                         | Role                                                                                                               |
 | --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `xtask`               | `crates/xtask`               | Cargo xtask runner: `pre-commit`, `prepush`, `test-unit`, `test-conformance`, `bench`, `build-vm-image`, and more. |
+| `xtask`               | `xtask`                      | Cargo xtask runner: `pre-commit`, `prepush`, `test unit`/`test conformance`, `bench`, `build-test-image`, and more. |
 | `minibox-macros`      | `crates/minibox-macros`      | Proc-macro crate: `as_any!` and `adapt!` derive macros used by `minibox`.                                          |
 | `minibox-testsuite` | `crates/minibox-testsuite` | Conformance test harness (`run-conformance`, `generate-report`). Not published.                                    |
+| `minibox-bench`       | `crates/minibox-bench`       | Criterion benchmark crate and benchmark fixtures. Not published.                                                   |
 
 **Stability expectations for Internal crates:**
 
@@ -120,16 +125,17 @@ was removed during the v0.23.0 consolidation; only a pre-built binary artifact r
 
 ### No new Core or Platform crates until stabilization gates are met
 
-The workspace currently has 11 crates across all tiers. Adding more crates before
-the core runtime is hardened increases maintenance surface without shipping value.
+The workspace currently has 13 product/runtime crates under `crates/`, plus the
+`xtask` workspace dev-tool member. Adding more crates before the core runtime is
+hardened increases maintenance surface without shipping value.
 
 **A new crate MAY be added to the Core or Platform tier only when ALL of the
-following gates in `docs/STABILITY_CHECKLIST.md` are green:**
+following gates in `docs/core/STABILITY_CHECKLIST.mbx.md` are green:**
 
 1. Protocol types have a single source of truth (currently met — minibox-core #122/#128).
-2. Handler coverage >= 80% function coverage in `minibox/src/daemon/handler.rs`.
+2. Handler coverage >= 80% function coverage in `crates/minibox/src/daemon/handler/`.
 3. All wired adapters have at least one integration test.
-4. `cargo xtask pre-commit` passes on macOS (fmt + clippy + release build).
+4. `cargo xtask pre-commit` passes on macOS (staged fmt/clippy plus config/docs checks).
 5. `cargo xtask test-unit` passes (~506+ tests on macOS cross-platform subset).
 6. `cargo deny check` passes (license + advisory audit).
 

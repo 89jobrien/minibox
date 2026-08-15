@@ -101,6 +101,7 @@ pub enum ImageError {
 /// Errors from the OCI registry client.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RegistryError {
+    #[cfg(feature = "registry")]
     #[error("network error: {0}")]
     #[diagnostic(
         code(minibox::registry::network),
@@ -145,6 +146,24 @@ pub enum RegistryError {
         #[source]
         source: tokio::task::JoinError,
     },
+
+    #[error("manifest too large: {size} bytes (max {max} bytes)")]
+    #[diagnostic(
+        code(minibox::registry::manifest_too_large),
+        help(
+            "the registry returned a manifest that exceeds the safety limit; this may indicate a malformed or adversarial response"
+        )
+    )]
+    ManifestTooLarge { size: u64, max: u64 },
+
+    #[error("layer too large: {size} bytes (max {max} bytes)")]
+    #[diagnostic(
+        code(minibox::registry::layer_too_large),
+        help(
+            "the layer blob exceeds the maximum allowed size; use a smaller base image or increase MAX_LAYER_SIZE if intentional"
+        )
+    )]
+    LayerTooLarge { size: u64, max: u64 },
 
     #[error("registry error: {0}")]
     #[diagnostic(code(minibox::registry::other))]
@@ -303,6 +322,7 @@ pub enum PushError {
     #[diagnostic(code(minibox::push::manifest))]
     ManifestPushFailed { reason: String },
 
+    #[cfg(feature = "registry")]
     #[error("network error: {0}")]
     #[diagnostic(code(minibox::push::network))]
     Network(#[from] reqwest::Error),

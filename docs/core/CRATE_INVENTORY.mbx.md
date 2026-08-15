@@ -4,24 +4,26 @@
 
 | Crate               | Type       | LOC    | Source files | Test files              | Features                  |
 | ------------------- | ---------- | ------ | ------------ | ----------------------- | ------------------------- |
-| minibox-core        | lib        | ~12.6k | 28           | 7 integration + inline  | test-utils, fuzzing       |
-| minibox             | lib        | ~21.5k | 71           | 36 integration + inline | test-utils, metrics, otel |
+| minibox-core        | lib        | ~12.6k | 28           | 10 integration + inline | test-utils, fuzzing       |
+| minibox             | lib        | ~21.5k | 71           | 56 integration + inline | test-utils, metrics, otel |
 | minibox-macros      | proc-macro | ~175   | 9            | 1 integration           | --                        |
-| miniboxd            | bin+lib    | ~1.6k  | 4            | 7 integration + inline  | metrics, otel, tailnet    |
+| miniboxd            | bin+lib    | ~1.6k  | 4            | 13 integration + inline | metrics, otel, tailnet    |
 | macbox              | lib        | ~3.6k  | 16           | 4                       | --                        |
 | smolbox             | lib        | ~148   | 4            | 2 integration           | --                        |
-| winbox              | lib        | ~280   | 5            | 0                       | --                        |
-| mbx                 | bin        | ~3.2k  | 18           | 2 integration + inline  | subprocess-tests          |
+| winbox              | lib        | ~280   | 5            | 1 integration           | --                        |
+| mbx                 | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests          |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
+| minibox-mcp         | lib+bin    | ~1.6k  | 11           | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
 | minibox-bench       | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                        |
 | ail                 | bin        | ~4     | 1            | 0                       | --                        |
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
-**Estimated total:** ~79k lines of Rust across 345 source files. All crates at
-version 0.30.0 (xtask 0.1.0).
+**Estimated total:** run `cargo xtask info metrics` for the current workspace
+member count and Rust source-line total. All crates are at version 0.31.0
+(xtask 0.1.0).
 
-<!-- fact:workspace_version=0.30.0 -->
+<!-- fact:workspace_version=0.31.0 -->
 
 ---
 
@@ -30,8 +32,9 @@ version 0.30.0 (xtask 0.1.0).
 Cross-platform shared types. Single source of truth for protocol, domain
 traits, error types, image management, and the Unix socket client.
 
-**Key modules:** `domain.rs` (all trait ports), `protocol.rs` (DaemonRequest /
-DaemonResponse), `image/` (ImageStore, ImageRef, RegistryClient, layer
+**Key modules:** `protocol.rs` (DaemonRequest /
+DaemonResponse), `domain/` (domain ports, workflow/execution policy, runtime
+capabilities), `image/` (ImageStore, ImageRef, RegistryClient, layer
 extraction, GC, leases, dockerfile), `client/` (DaemonClient,
 DaemonResponseStream), `events.rs` (ContainerEvent, EventSink/Source,
 BroadcastEventBroker), `adapters/` (HostnameRegistryRouter, mocks,
@@ -49,12 +52,13 @@ implementations + daemon server/handler/state + testing infrastructure.
 
 **Key modules:**
 
+- `domain.rs` (compatibility re-exports of `minibox-core` domain ports)
 - `container/` (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
   process.rs
 - `adapters/`: native (overlay, cgroup, namespace, bridge network), gke
   (copy FS, proot, noop limiter), colima (lima/nerdctl), smolvm, stubs
   (vf, hcs, wsl2, docker_desktop), mocks
-- `daemon/`: handler.rs (HandlerDependencies, request routing), server.rs
+- `daemon/`: handler/ (HandlerDependencies, request routing), server.rs
   (Unix socket listener, SO_PEERCRED auth), state.rs (DaemonState),
   telemetry.rs, network_lifecycle.rs
 - `image/` (re-exported from minibox-core)
@@ -132,7 +136,8 @@ CLI client. Connects to daemon via Unix socket, sends JSON requests, streams
 responses.
 
 **Subcommands:** run, ps, stop, pause, resume, rm, pull, exec, logs, events,
-prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgrade.
+prune, rmi, sandbox, snapshot (save/restore/list), pipeline (run/list/show),
+load, doctor, manifest, verify, diagnose, update, upgrade.
 
 ---
 
@@ -143,6 +148,18 @@ rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
 the crux agentic DSL runtime.
 
 **Depends on:** minibox-core, crux-plugin (git dep).
+
+---
+
+## minibox-mcp
+
+MCP stdio server for agent-controlled minibox operations. Wraps existing daemon
+protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and
+rm, with MCP-specific policy gates around mutating and higher-risk run options.
+
+**Binaries:** `mcp`.
+
+**Depends on:** minibox-core, rmcp, miette.
 
 ---
 

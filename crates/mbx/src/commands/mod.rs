@@ -60,6 +60,14 @@ pub async fn send_request(
                 println!("{message}");
                 Ok(())
             }
+            DaemonResponse::ContainerPaused { id } => {
+                println!("{id} paused");
+                Ok(())
+            }
+            DaemonResponse::ContainerResumed { id } => {
+                println!("{id} resumed");
+                Ok(())
+            }
             DaemonResponse::Error { message } => Err(RequestError::DaemonError { message }.into()),
             other => Err(RequestError::UnexpectedResponse {
                 response: format!("{other:?}"),
@@ -90,6 +98,7 @@ pub mod run;
 pub mod sandbox;
 pub mod snapshot;
 pub mod stop;
+pub mod tui;
 pub mod update;
 pub mod upgrade;
 

@@ -64,7 +64,7 @@
 //! When adding a new `DaemonRequest` variant with optional/defaulted fields:
 //! - Add a case to `test_request_serde_default_fields`.
 
-use minibox_core::domain::SnapshotInfo;
+use minibox_core::domain::{PhaseOutcome, SnapshotInfo, StepStatus};
 use minibox_core::events::ContainerEvent;
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::time::SystemTime;
@@ -189,6 +189,21 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         DaemonResponse::PipelineDetail {
             id: "trace-1".to_string(),
             trace: serde_json::json!({"steps": []}),
+        },
+        DaemonResponse::Manifest {
+            manifest: serde_json::json!({"container_id": "abc123"}),
+        },
+        DaemonResponse::VerifyResult {
+            allowed: true,
+            reason: None,
+        },
+        DaemonResponse::WorkflowStepComplete {
+            alias: "build".to_string(),
+            output: serde_json::json!({"ok": true}),
+            status: StepStatus::Succeeded,
+        },
+        DaemonResponse::WorkflowComplete {
+            final_phase: PhaseOutcome::Succeeded,
         },
     ]
 }
@@ -460,12 +475,26 @@ fn test_terminal_classification_is_exhaustive() {
             id: "trace-1".to_string(),
             trace: serde_json::json!({"steps": []}),
         },
+        DaemonResponse::Manifest {
+            manifest: serde_json::json!({"container_id": "abc123"}),
+        },
+        DaemonResponse::VerifyResult {
+            allowed: true,
+            reason: None,
+        },
+        DaemonResponse::WorkflowComplete {
+            final_phase: PhaseOutcome::Succeeded,
+        },
     ];
 
     for v in &terminal_variants {
         assert!(
             classify_terminal(v),
             "expected terminal, got non-terminal for: {v:?}"
+        );
+        assert!(
+            v.is_terminal(),
+            "production is_terminal() disagrees for terminal variant: {v:?}"
         );
     }
 
@@ -506,12 +535,21 @@ fn test_terminal_classification_is_exhaustive() {
             image: "alpine:latest".to_string(),
             status: "updated".to_string(),
         },
+        DaemonResponse::WorkflowStepComplete {
+            alias: "build".to_string(),
+            output: serde_json::json!({"ok": true}),
+            status: StepStatus::Succeeded,
+        },
     ];
 
     for v in &non_terminal_variants {
         assert!(
             !classify_terminal(v),
             "expected non-terminal, got terminal for: {v:?}"
+        );
+        assert!(
+            !v.is_terminal(),
+            "production is_terminal() disagrees for non-terminal variant: {v:?}"
         );
     }
 

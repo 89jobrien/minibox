@@ -2,7 +2,7 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-07-24
+Last updated: 2026-08-15
 
 ---
 
@@ -95,15 +95,15 @@ Key implementation sites backing the "Yes" entries above:
 | --- | --- |
 | Container lifecycle (run/stop/rm/ps/restart) | `crates/minibox/src/daemon/handler/lifecycle.rs`, `handler/run.rs`, `handler/stop.rs` |
 | pause/resume (native, cgroup.freeze) | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
-| exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-core/src/domain.rs:ExecRuntime` |
+| exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-core/src/domain/exec.rs:ExecRuntime` |
 | logs | `crates/minibox/src/daemon/handler/logs.rs` |
 | events | `crates/minibox-core/src/events.rs:EventSink`/`EventSource` |
 | Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image` |
 | Image pull (ghcr.io) | `crates/minibox/src/adapters/ghcr.rs` |
 | prune/rmi | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector` |
-| push | `crates/minibox-core/src/domain.rs:ImagePusher` |
-| commit | `crates/minibox-core/src/domain.rs:ContainerCommitter` |
-| build | `crates/minibox-core/src/domain.rs:ImageBuilder` |
+| push | `crates/minibox-core/src/domain/image.rs:ImagePusher` |
+| commit | `crates/minibox-core/src/domain/image.rs:ContainerCommitter` |
+| build | `crates/minibox-core/src/domain/image.rs:ImageBuilder` |
 | PID/Mount/Net/UTS/IPC namespaces (native) | `crates/minibox/src/container/namespace.rs` |
 | cgroups v2 | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
 | Overlay FS | `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem` |
@@ -120,6 +120,14 @@ Key implementation sites backing the "Yes" entries above:
 | State persistence + PID reconciliation | `crates/minibox/src/daemon/state.rs:DaemonState` |
 | Structured tracing | `crates/miniboxd/src/main.rs` (tracing subscriber init) |
 | OTLP export | `crates/miniboxd/src/main.rs` (otel feature gate) |
+
+---
+
+## Control Surfaces
+
+- `mbx` is the primary CLI and connects directly to the daemon Unix socket.
+- `minibox-crux-plugin` exposes a JSON-RPC stdio bridge for Crux workflows.
+- `minibox-mcp` exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.
 
 ---
 

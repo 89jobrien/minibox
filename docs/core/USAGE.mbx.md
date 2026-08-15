@@ -102,7 +102,7 @@ MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
 ```
 
 Colima is the current macOS dogfood path. The Docker Desktop adapter exists in
-`minibox/src/adapters/docker_desktop.rs` but is not yet wired into `miniboxd`.
+`crates/minibox/src/adapters/docker_desktop.rs` but is not yet wired into `miniboxd`.
 
 **macOS Dogfood Flow**
 
@@ -142,7 +142,7 @@ Near-term work is concentrated in a few areas:
 - push commit/build/push parity further across `linux-native` and `colima`
 - let CI agents create and tear down their own minibox-managed test environments
 
-See `docs/ROADMAP.mbx.md` for the active roadmap.
+See `docs/core/ROADMAP.mbx.md` for the active roadmap.
 
 ## VM Image CAS Overlay
 
@@ -181,7 +181,7 @@ Exits non-zero if any drift is found.
 
 **In-VM drift check**
 
-After `cargo xtask build-vm-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
+After `cargo xtask build-test-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
 per ref, tab-separated: `<name>\t<sha256>`). Run `/sbin/check-drift.sh` inside the VM to verify
 installed files match their expected hashes.
 

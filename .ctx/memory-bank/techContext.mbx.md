@@ -25,7 +25,9 @@
 - `cargo check --workspace` — compile check
 - `cargo xtask verify` — fmt + check + clippy + borrow fixtures + docs lint
 - `cargo xtask pre-commit` — macOS pre-commit gate
-- `cargo xtask test-unit` — cross-platform unit + conformance subset
+- `cargo xtask test unit` — cross-platform unit + conformance subset
+- `cargo xtask doctor` — canonical preflight (tools, env, Linux system caps; absorbed
+  `scripts/preflight.nu`'s checks)
 - `just test-integration` — Linux+root cgroup tests
 - `just test-e2e` — Linux+root daemon/CLI tests
 - `cargo bench -p minibox` — criterion benchmarks

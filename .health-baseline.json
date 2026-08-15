@@ -1,15 +1,17 @@
 {
-  "date": "2026-06-28",
-  "branch": "next",
-  "clippy_errors": 52,
-  "clippy_clean": false,
-  "test_pass": 886,
-  "test_fail": 0,
-  "test_skip": 1,
-  "todo_count": 28,
-  "todo_files": 15,
-  "crate_count": 11,
-  "version_consistent": true,
-  "workspace_version": "0.30.0",
-  "depgraph_exit": 1
+  "date": "2026-08-08",
+  "tests": {
+    "total": 2209,
+    "passed": 2207,
+    "failed": 2,
+    "skipped": 0
+  },
+  "clippy": {
+    "warnings": 0,
+    "errors": 0
+  },
+  "todo_fixme": 29,
+  "crates": 16,
+  "versions_consistent": false,
+  "version": "0.31.0"
 }
