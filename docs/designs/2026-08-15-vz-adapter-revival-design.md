@@ -128,18 +128,30 @@ pub enum AdapterSuite {
       no new crates beyond what `00ee4427` removed.
 - [ ] Feature flag required: **yes** — `vz` cargo feature on `macbox`, matching the prior
       scheme (`vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation",
-    "dep:objc2-virtualization"]`).
+  "dep:objc2-virtualization"]`).
 
 ## Validation Plan (pre-merge, not part of the API surface)
 
-1. `git revert 00ee4427` (or cherry-pick the pre-removal tree) onto `develop`.
-2. `cargo build -p macbox --features vz` — confirm it still compiles against current
-   `objc2`/`objc2-virtualization` crate versions (may have advanced since removal; check
-   for breaking upstream API changes independently of the Apple OS bug).
-3. Re-run `just test-vz-isolation` (or `cargo xtask` equivalent) — confirm
-   `vz_isolation_tests.rs` passes without the `VZErrorInternal(1)` failure, using the
-   `dispatch_main()` + entitlements harness from `b53c7c68`.
-4. Re-run `vz_adapter_smoke.rs` against a live daemon with `MINIBOX_ADAPTER=vz`.
-5. Only after 2-4 pass: wire `AdapterSuite::Vz` into `adapter_registry.rs`
-   `VALID_ADAPTERS`/`parse_adapter`, and add `build_vz_handler_dependencies` call site in
-   `crates/miniboxd/src/main.rs`, gated the same way `krun`/`colima` are today.
+1. [x] Restore `crates/macbox/src/vz/*` and `start_vz`/`vz_main` from `00ee4427^`,
+       adapted to ~3.5 months of protocol/domain drift (`51bbce1d`, `5469ff25`, `50ba968e`).
+2. [x] `cargo build -p macbox --features vz` — compiles against current
+       `objc2 0.6.4`/`objc2-virtualization 0.3.2` with no upstream breaking changes; required
+       fixing a real `!Send` future bug in `vsock.rs`'s completion-handler poll loop
+       (`spawn_blocking`, mirroring `VzVm::wait_for_running`'s existing pattern) — see `5469ff25`.
+3. [x] Re-ran `just test-vz-isolation` — the `dispatch_main()` + entitlements harness
+       builds, codesigns, and runs cleanly end-to-end with **no `VZErrorInternal(1)`, no hang**
+       (`9c3766cc`). Caveat: all 10 tests report `SKIP` because no VM image exists at
+       `~/.minibox/vm/` — `cargo xtask build-vm-image`, referenced by the test's own skip
+       message, does not exist in this codebase and never has. This confirms the harness is
+       sound; it does **not** confirm `VZErrorInternal(1)` is gone against a real minibox VM
+       boot, only against Lima's separate `vz` driver (see Goal) and the harness plumbing
+       itself. Building a real kernel/rootfs image for `VZLinuxBootLoader` is out of scope here.
+4. [x] Re-ran `vz_adapter_smoke.rs` (`1b0bb5ea`) — passes, same VM-image-absent caveat as
+       step 3.
+5. [x] Wired `AdapterSuite::Vz` into `adapter_registry.rs` `VALID_ADAPTERS`/`parse_adapter`
+       (`e577f873`) — scope narrowed from what this line originally assumed:
+       `build_vz_handler_dependencies` was never added, because `vz` doesn't go through
+       `build_handler_deps` at all. `main()` diverts to `vz_main()` before `run_daemon()` ever
+       runs, since VM boot needs the OS main thread for GCD callbacks — a requirement that
+       predates, and remains incompatible with, the unified `AdapterSuite`/`build_handler_deps`
+       dispatch every other adapter now goes through.
