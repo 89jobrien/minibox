@@ -76,6 +76,19 @@ fn main() {
         unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
     }
 
+    // VZ needs GCD dispatch_main on the real main thread — peek at the fully
+    // resolved adapter name (CLI flag > env > config, all settled above) and
+    // divert before #[tokio::main]-style runtime setup would park this thread
+    // inside the tokio scheduler. vz intentionally never reaches run_daemon():
+    // its VM boot requires the OS main thread for GCD callbacks, which no
+    // other adapter needs, so it owns a fully separate entry point instead of
+    // participating in the unified AdapterSuite/build_handler_deps dispatch.
+    #[cfg(all(target_os = "macos", feature = "vz"))]
+    if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("vz") {
+        vz_main();
+        // vz_main never returns (dispatch_main is divergent)
+    }
+
     // Standard tokio runtime for all adapters.
     // Runtime build failure is fatal with no recovery path.
     #[allow(clippy::expect_used)]
@@ -120,6 +133,70 @@ fn graceful_restart() {
             eprintln!("miniboxd: --restart: pkill failed: {e} (continuing)");
         }
     }
+}
+
+/// VZ adapter entry point — keeps the main thread for GCD `dispatch_main`.
+///
+/// VZ.framework (Tahoe/macOS 26+) asserts that `VZVirtualMachineConfiguration`
+/// and `VZVirtualMachine` are constructed on the GCD main queue. `#[tokio::main]`
+/// parks the main thread inside the tokio scheduler, so `dispatch_sync` to
+/// the main queue from any worker thread deadlocks.
+///
+/// Fix: build the tokio runtime on a background thread, keep the main thread
+/// free, then call `dispatch_main()` to spin the GCD main-queue runloop.
+#[cfg(all(target_os = "macos", feature = "vz"))]
+// qual:allow(complexity) reason: "GCD main-queue entry point: spawn tokio-main thread, block_on macbox::start(), exit via dispatch_async_f trampoline"
+fn vz_main() -> ! {
+    #[link(name = "System", kind = "dylib")]
+    unsafe extern "C" {
+        static _dispatch_main_q: std::ffi::c_void;
+        fn dispatch_async_f(
+            queue: *const std::ffi::c_void,
+            context: *mut std::ffi::c_void,
+            work: unsafe extern "C" fn(*mut std::ffi::c_void),
+        );
+        fn dispatch_main() -> !;
+    }
+
+    // SAFETY: ctx is a valid Box<i32> allocated below; called exactly once by GCD.
+    unsafe extern "C" fn exit_trampoline(ctx: *mut std::ffi::c_void) {
+        // SAFETY: ctx was created via Box::into_raw(Box::new(code)) below.
+        let code = unsafe { *Box::from_raw(ctx.cast::<i32>()) };
+        std::process::exit(code);
+    }
+
+    // VZ adapter delegates to macbox::start() which handles the VZ-specific
+    // dispatch_sync_f pattern for VM creation on the GCD main queue.
+    // Thread spawn failure is fatal with no recovery path.
+    #[allow(clippy::expect_used)]
+    std::thread::Builder::new()
+        .name("tokio-main".into())
+        .spawn(move || {
+            // Runtime build failure is fatal with no recovery path.
+            #[allow(clippy::expect_used)]
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .expect("failed to build tokio runtime");
+            let code = match rt.block_on(macbox::start()) {
+                Ok(()) => 0i32,
+                Err(e) => {
+                    eprintln!("miniboxd: fatal: {e:#}");
+                    1
+                }
+            };
+            // SAFETY: _dispatch_main_q is a valid dispatch queue; ctx is a
+            // heap-allocated i32 owned by exit_trampoline.
+            unsafe {
+                let ctx = Box::into_raw(Box::new(code)).cast::<std::ffi::c_void>();
+                dispatch_async_f(&raw const _dispatch_main_q, ctx, exit_trampoline);
+            }
+        })
+        .expect("failed to spawn tokio-main thread");
+
+    // SAFETY: dispatch_main() is the documented entry point for GCD-based CLI
+    // processes on macOS. It does not return.
+    unsafe { dispatch_main() }
 }
 
 // ── CLI argument parsing ──────────────────────────────────────────────────
