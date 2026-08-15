@@ -768,6 +768,13 @@ async fn build_handler_deps(
         AdapterSuite::Native | AdapterSuite::Gke => {
             anyhow::bail!("{suite} adapter requires Linux");
         }
+        // vz never reaches this dispatch: main() peeks MINIBOX_ADAPTER and
+        // diverts to vz_main() (GCD dispatch_main on the OS main thread)
+        // before run_daemon()/build_handler_deps ever runs — see vz_main's
+        // doc comment for why it can't participate in this unified path.
+        AdapterSuite::Vz => {
+            unreachable!("vz adapter is dispatched via vz_main() before run_daemon() is called")
+        }
     }?;
 
     // Apply operator-configured policy, overriding the deny-all defaults
