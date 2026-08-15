@@ -20,7 +20,6 @@ crossterm = { workspace = true, features = ["event-stream"] }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 miette = { workspace = true }
-tracing = { workspace = true }
 
 [lints]
 workspace = true

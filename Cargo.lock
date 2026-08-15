@@ -2071,7 +2071,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
- "tracing",
  "tracing-subscriber",
 ]
 
@@ -2084,7 +2083,6 @@ dependencies = [
  "chrono",
  "inventory",
  "libc",
- "miette",
  "minibox",
  "minibox-core",
  "paste",
@@ -2107,7 +2105,6 @@ dependencies = [
  "ratatui",
  "tokio",
  "tokio-stream",
- "tracing",
 ]
 
 [[package]]
