@@ -5,6 +5,9 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[features]
+vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization"]
+
 [dependencies]
 minibox = { workspace = true }
 minibox-core = { workspace = true }
@@ -18,6 +21,24 @@ dirs = { workspace = true }
 libc = "0.2"
 which = "8"
 uuid = { workspace = true }
+block2 = { version = "0.6", optional = true }
+objc2 = { version = "0.6", optional = true }
+objc2-foundation = { version = "0.3", optional = true, features = ["NSString", "NSURL", "NSArray", "NSFileHandle"] }
+objc2-virtualization = { version = "0.3", optional = true, features = [
+    "VZBootLoader",
+    "VZDirectoryShare",
+    "VZDirectorySharingDeviceConfiguration",
+    "VZSerialPortAttachment",
+    "VZSerialPortConfiguration",
+    "VZSharedDirectory",
+    "VZSocketDevice",
+    "VZSocketDeviceConfiguration",
+    "VZVirtualMachine",
+    "VZVirtualMachineConfiguration",
+    "VZVirtioSocketConnection",
+    "VZVirtioSocketDevice",
+    "VZVirtioSocketDeviceConfiguration",
+] }
 [dev-dependencies]
 minibox-macros = { workspace = true }
 tempfile = { workspace = true }
