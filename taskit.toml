@@ -48,7 +48,7 @@ path = "crates/minibox-core/src/events.rs"
 
 [[protocol.surfaces]]
 name = "minibox-core-domain"
-path = "crates/minibox-core/src/domain.rs"
+path = "crates/minibox-core/src/domain/mod.rs"
 
 [[protocol.surfaces]]
 name = "minibox-core-trace"
