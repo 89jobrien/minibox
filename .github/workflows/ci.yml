@@ -30,9 +30,5 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - name: Install taskit
-        # TODO: remove fallback — `cargo install --path .` installs the repo root crate, not taskit
-        run: cargo install taskit || cargo install --path .
-
       - name: Run CI pipeline
         run: cargo xtask verify
