@@ -300,7 +300,7 @@ mod imp {
         /// free to dispatch the `startWithCompletionHandler` completion callback.
         /// Call this from a tokio `spawn_blocking` worker thread after
         /// `prepare_on_main_queue` returns.
-        pub(crate) fn wait_for_running(vm: Self, start_signal: StartSignal) -> Result<Self> {
+        pub fn wait_for_running(vm: Self, start_signal: StartSignal) -> Result<Self> {
             let deadline = Instant::now() + Duration::from_mins(1);
             loop {
                 {

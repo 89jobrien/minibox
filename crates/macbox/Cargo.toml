@@ -47,6 +47,10 @@ base64 = { workspace = true }
 nix = { workspace = true }
 
 [[test]]
+name = "vz_isolation_tests"
+harness = false
+
+[[test]]
 name = "krun_conformance_tests"
 
 [[test]]
