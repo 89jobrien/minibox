@@ -7,19 +7,17 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (3 files)
+  title: Uncommitted changes (2 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .minibox/checkpoints/prepush.json
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .minibox/checkpoints/prepush.json
   completed: null
   extra: []
 log:
-- date: '20260808.184304'
-  summary: done=141 running=0 pending=23 blocked=0
+- date: '20260815.140448'
+  summary: done=144 running=0 pending=20 blocked=0
   commits: []

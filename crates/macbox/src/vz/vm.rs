@@ -392,6 +392,12 @@ pub fn default_vm_dir() -> Option<std::path::PathBuf> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
 mod tests {
     use super::*;
 
@@ -401,7 +407,7 @@ mod tests {
         let cfg = VzVmConfig {
             vm_dir: tmp.clone(),
             images_dir: tmp.clone(),
-            containers_dir: tmp.clone(),
+            containers_dir: tmp,
             memory_bytes: 512 * 1024 * 1024,
             cpu_count: 2,
         };
@@ -413,8 +419,8 @@ mod tests {
         let vm_dir = std::path::PathBuf::from("/tmp/test-vm");
         let cfg = VzVmConfig {
             vm_dir: vm_dir.clone(),
-            images_dir: Default::default(),
-            containers_dir: Default::default(),
+            images_dir: std::path::PathBuf::default(),
+            containers_dir: std::path::PathBuf::default(),
             memory_bytes: 0,
             cpu_count: 0,
         };

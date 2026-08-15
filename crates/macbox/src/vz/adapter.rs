@@ -349,6 +349,7 @@ impl ResourceLimiter for VzLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_core::domain::FilesystemProvider;
 
     fn _assert_image_registry<T: ImageRegistry>() {}
     fn _assert_container_runtime<T: ContainerRuntime>() {}

@@ -158,6 +158,12 @@ impl<S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin> VzProxy<S> {
 // =============================================================================
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
 mod tests {
     use super::*;
     use minibox_core::protocol::OutputStreamKind;
@@ -312,7 +318,7 @@ mod tests {
 
         // Should succeed and collect the single ContainerCreated response
         // (ContainerCreated is terminal for non-ephemeral runs)
-        assert!(result.is_ok(), "Expected success, got error: {:?}", result);
+        assert!(result.is_ok(), "Expected success, got error: {result:?}");
         let responses = result.unwrap();
         assert_eq!(responses.len(), 1);
         assert!(matches!(
@@ -348,8 +354,7 @@ mod tests {
         let err_msg = result.unwrap_err().to_string();
         assert!(
             err_msg.contains("vsock closed before terminal response"),
-            "Expected error message to contain 'vsock closed before terminal response', got: {}",
-            err_msg
+            "Expected error message to contain 'vsock closed before terminal response', got: {err_msg}",
         );
     }
 

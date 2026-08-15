@@ -68,6 +68,12 @@ pub fn install_init_files(rootfs_dir: &Path) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
 mod tests {
     use super::*;
 

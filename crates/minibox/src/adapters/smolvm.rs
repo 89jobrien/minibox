@@ -151,6 +151,31 @@ fn smolvm_exec_full(
     })
 }
 
+/// Run a command inside the smolvm VM and return its stdout.
+///
+/// The real `smolvm` invocation blocks on a synchronous `Command::output()`
+/// call that can take well over a minute (VM boot + image pull), so it runs
+/// on a blocking-pool thread via `spawn_blocking` rather than inline on the
+/// async runtime — otherwise it starves whichever tokio worker picked up
+/// this request's task.
+async fn run_vm_exec(
+    image: &str,
+    executor: Option<&SmolVmExecutor>,
+    args: &[&str],
+) -> Result<String> {
+    if let Some(exec) = executor {
+        return exec(args);
+    }
+    let image = image.to_owned();
+    let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
+    tokio::task::spawn_blocking(move || {
+        let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
+        smolvm_exec(&image, &arg_refs)
+    })
+    .await
+    .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
+}
+
 // ============================================================================
 // SmolVm Image Registry Adapter
 // ============================================================================
@@ -213,24 +238,8 @@ impl SmolVmRegistry {
     }
 
     /// Run a command inside the smolvm VM and return its stdout.
-    ///
-    /// The real `smolvm` invocation blocks on a synchronous `Command::output()`
-    /// call that can take well over a minute (VM boot + image pull), so it runs
-    /// on a blocking-pool thread via `spawn_blocking` rather than inline on the
-    /// async runtime — otherwise it starves whichever tokio worker picked up
-    /// this request's task.
     async fn vm_exec(&self, args: &[&str]) -> Result<String> {
-        if let Some(exec) = &self.executor {
-            return exec(args);
-        }
-        let image = self.image.clone();
-        let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
-        tokio::task::spawn_blocking(move || {
-            let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
-            smolvm_exec(&image, &arg_refs)
-        })
-        .await
-        .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
+        run_vm_exec(&self.image, self.executor.as_ref(), args).await
     }
 
     /// Build the image reference used for VM-local docker operations.
@@ -418,17 +427,7 @@ impl SmolVmRuntime {
     ///
     /// See [`SmolVmRegistry::vm_exec`] — same rationale for `spawn_blocking`.
     async fn vm_exec(&self, args: &[&str]) -> Result<String> {
-        if let Some(exec) = &self.executor {
-            return exec(args);
-        }
-        let image = self.image.clone();
-        let args_owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
-        tokio::task::spawn_blocking(move || {
-            let arg_refs: Vec<&str> = args_owned.iter().map(String::as_str).collect();
-            smolvm_exec(&image, &arg_refs)
-        })
-        .await
-        .map_err(|e| anyhow!("smolvm_exec: join error: {e}"))?
+        run_vm_exec(&self.image, self.executor.as_ref(), args).await
     }
 }
 
