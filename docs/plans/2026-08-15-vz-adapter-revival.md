@@ -1,6 +1,18 @@
 # Plan: vz-adapter-revival
 
-## Goal
+## STATUS (2026-08-15, post-completion): all 8 tasks done, but the adapter does not work
+
+All 8 tasks below were completed and committed (`51bbce1d` through `08a72536`). The code
+compiles clean, passes clippy, and the isolation/smoke test harnesses run without
+crashing. However, a follow-up minimal repro proved `VZLinuxBootLoader` — the boot
+mechanism this adapter depends on — still fails with `VZErrorDomain code=1` on this
+machine's macOS 26.4, tested against two independent kernel images (including a freshly
+downloaded one) to rule out a bad image file. The premise that motivated this plan (the
+Tahoe regression is fixed) does not hold for this boot path. See
+`docs/designs/2026-08-15-vz-adapter-revival-design.md`'s status update for the full
+finding. Treat `vz` as restored-but-non-functional until this is resolved.
+
+## Goal (original)
 
 Restore the Apple Virtualization.framework (`vz`) macOS container adapter — removed in
 `00ee4427` due to a Tahoe-beta `VZErrorInternal(1)` regression now confirmed fixed on

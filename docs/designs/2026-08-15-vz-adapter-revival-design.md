@@ -1,6 +1,37 @@
 # Design: VZ.framework Adapter Revival
 
-## Goal
+## STATUS UPDATE (2026-08-15, post-implementation): regression NOT actually fixed
+
+The Goal statement below is **wrong** and is kept only for historical record of what was
+believed when this design was approved. A Lima `--vm-type=vz` boot repro was taken as proof
+the Tahoe `VZErrorInternal(1)` regression was fixed on macOS 26.4 — but Lima's successful
+boot used `VZEFIBootLoader` (disk-image based), not `VZLinuxBootLoader` (raw kernel +
+initramfs), which is what this adapter actually needs.
+
+A minimal, standalone repro isolating `VZLinuxBootLoader` from all of minibox's own
+configuration (no virtiofs, no vsock, no serial port — just boot loader + memory + cpu)
+reproduces the exact same failure the code once shipped against:
+
+```
+VM start FAILED: Internal Virtualization error. The virtual machine failed to start.
+(domain=VZErrorDomain code=1)
+```
+
+Tested against **two different kernel/initramfs pairs** to rule out a stale/bad image:
+the existing `~/.minibox/vm/boot/` files (~4 months old) and a freshly downloaded
+official Alpine v3.22 aarch64 `netboot` kernel+initramfs — **identical failure both
+times**. This rules out "stale kernel file" as the cause.
+
+**Conclusion**: `VZLinuxBootLoader` itself is still broken on macOS 26.4, independent of
+minibox's code and independent of which kernel is used. The adapter code restored by
+this plan is real, compiles clean, and is architecturally sound (see the rest of this
+doc and `docs/plans/2026-08-15-vz-adapter-revival.md`'s 8 completed tasks) — but it
+cannot actually boot a VM on this machine's OS build today. `vz` should be treated as
+**not functional**, not merely "unvalidated," until Apple fixes `VZLinuxBootLoader`
+specifically, or minibox switches to `VZEFIBootLoader` (a materially different,
+disk-image-based boot mechanism — out of scope for this design).
+
+## Goal (original, superseded by the status update above)
 
 Restore the Apple Virtualization.framework (`vz`) macOS container adapter, since the
 Tahoe-beta `VZErrorInternal(1)` regression that forced its removal is confirmed fixed on
@@ -128,7 +159,7 @@ pub enum AdapterSuite {
       no new crates beyond what `00ee4427` removed.
 - [ ] Feature flag required: **yes** — `vz` cargo feature on `macbox`, matching the prior
       scheme (`vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation",
-  "dep:objc2-virtualization"]`).
+"dep:objc2-virtualization"]`).
 
 ## Validation Plan (pre-merge, not part of the API surface)
 

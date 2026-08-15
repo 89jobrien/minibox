@@ -15,7 +15,7 @@ Last updated: 2026-08-15
 | `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
 | `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
 | `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
-| `vz`     | macOS only, `vz` feature [^5]   | Experimental | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
+| `vz`     | macOS only, `vz` feature [^5]   | Non-functional | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
 | `winbox` | Windows                         | Stub         | winbox  | --                                |
 
 [^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
@@ -28,10 +28,14 @@ Last updated: 2026-08-15
       `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 [^5]: `vz` requires macOS + the `vz` Cargo feature (off by default). Removed
       2026-05-07 (commit `00ee4427`, issue #305) after a Tahoe-beta VZ.framework
-      regression (`VZErrorInternal(1)`); restored 2026-08-15 after confirming
-      the regression is fixed on macOS 26.4. Bypasses the shared
-      `run_daemon()`/`AdapterSuite` dispatch entirely — selected in `main()`
-      before the tokio runtime starts, because VM boot needs the OS main
+      regression (`VZErrorInternal(1)`); code restored 2026-08-15, but the
+      adapter is **currently non-functional** — a follow-up minimal repro
+      showed `VZLinuxBootLoader` still fails with `VZErrorDomain code=1` on
+      macOS 26.4, confirmed against two independent kernel images. See the
+      status update at the top of
+      `docs/designs/2026-08-15-vz-adapter-revival-design.md`. Bypasses the
+      shared `run_daemon()`/`AdapterSuite` dispatch entirely — selected in
+      `main()` before the tokio runtime starts, because VM boot needs the OS main
       thread for GCD completion-handler callbacks.
 
 ---
@@ -191,8 +195,15 @@ Key implementation sites backing the "Yes" entries above:
   requires bypassing `#[tokio::main]` entirely
   (see `vz_main()`/`start_vz()` in `crates/miniboxd/src/main.rs` and
   `crates/macbox/src/lib.rs`). Removed 2026-05-07 (issue #305) after
-  a macOS 26 Tahoe-beta regression (`VZErrorInternal(1)`); restored
-  2026-08-15 after confirming the regression is fixed on macOS 26.4.
+  a macOS 26 Tahoe-beta regression (`VZErrorInternal(1)`); code
+  restored 2026-08-15, but **currently non-functional** — a follow-up
+  minimal repro (isolated from all minibox configuration, tested
+  against two independent kernel images) showed `VZLinuxBootLoader`
+  still fails with `VZErrorDomain code=1` on macOS 26.4. The earlier
+  belief that the regression was fixed was based on a Lima repro that
+  used `VZEFIBootLoader` — a different boot mechanism than this
+  adapter needs. See the status update in
+  `docs/designs/2026-08-15-vz-adapter-revival-design.md`.
   `exec`/`logs`/`push`/`commit`/`build` are unimplemented, same gaps
   as `krun`.
 - **`docker_desktop` adapter**
