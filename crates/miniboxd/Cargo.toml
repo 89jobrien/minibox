@@ -23,6 +23,7 @@ default = ["metrics", "otel"]
 metrics = ["minibox/metrics"]
 otel    = ["minibox/otel"]
 cni     = ["minibox/cni"]
+vz      = ["macbox/vz"]
 # tailnet feature is declared for cfg(feature = "tailnet") gating in main.rs;
 # the tailbox crate was moved to minibox-plugins — enable separately when available.
 tailnet = []

@@ -2,9 +2,9 @@ name: macOS
 
 on:
   push:
-    branches: [main, next, staging, "feature/*", "hotfix/*", "chore/*"]
+    branches: [main, staging, release, "feature/*", "hotfix/*", "chore/*"]
   pull_request:
-    branches: [main, next]
+    branches: [main, staging]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

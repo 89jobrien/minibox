@@ -10,7 +10,7 @@ crates = [
   { dir = "crates/mbx", pkg = "mbx" },
   { dir = "crates/minibox-crux-plugin", pkg = "minibox-crux-plugin" },
   { dir = "crates/minibox-testsuite", pkg = "minibox-testsuite" },
-  { dir = "xtask" },
+  { dir = "xtask", exclude_from_version_check = true },
 ]
 # offline_skip = "test(/.*network.*/)"
 
@@ -61,10 +61,6 @@ path = "crates/minibox-core/src/typestate.rs"
 [[protocol.surfaces]]
 name = "minibox-container_state"
 path = "crates/minibox/src/container_state.rs"
-
-[[protocol.surfaces]]
-name = "minibox-domain"
-path = "crates/minibox/src/domain.rs"
 
 [[protocol.surfaces]]
 name = "xtask-test_linux"
@@ -129,5 +125,5 @@ gate = false
 [flow]
 main = "main"
 develop = "develop"
-staging = "next"
-release = "staging"
+staging = "staging"
+release = "release"

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    # TODO: add develop and next — current triggers miss all active dev branches
+    # TODO: add develop and staging — current triggers miss all active dev branches
     branches: [main, staging, release]
   pull_request:
     # TODO: add develop so PRs targeting the primary dev branch are covered

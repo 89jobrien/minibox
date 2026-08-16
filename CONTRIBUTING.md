@@ -16,7 +16,7 @@ must be green on the `develop` branch in CI simultaneously. The current blocking
 
 ### Unlock condition
 
-All six mandatory gates green on the `develop` -> `next` -> `staging` promotion path, including Linux integration/e2e evidence. A maintainer will tag the freeze as lifted
+All six mandatory gates green on the `develop` -> `staging` -> `release` promotion path, including Linux integration/e2e evidence. A maintainer will tag the freeze as lifted
 in the tracking issue and update this file.
 
 ### What IS allowed during the freeze

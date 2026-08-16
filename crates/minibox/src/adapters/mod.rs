@@ -108,6 +108,7 @@ mod gke;
 mod colima;
 mod colima_commit;
 mod colima_push;
+mod docker_archive;
 mod docker_desktop;
 mod hcs;
 mod smolvm;

@@ -28,11 +28,6 @@
       "hash": "8992f3fbea047bb72fd1500fc4eb8236df67c78caa8adf2e255acc6c2b471730"
     },
     {
-      "name": "minibox-domain",
-      "path": "crates/minibox/src/domain.rs",
-      "hash": "9aa93d173de64d77598582b710eff416a9f62f08fa1070407f3bdb596fe0f8a5"
-    },
-    {
       "name": "xtask-test_linux",
       "path": "xtask/src/test_linux.rs",
       "hash": "c1169c280b038b1b50d123094dfb1668214b3e21f52bfb6cfaeae755b275b040"

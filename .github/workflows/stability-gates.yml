@@ -7,15 +7,15 @@ on:
       [
         develop,
         main,
-        next,
         staging,
+        release,
         "feature/*",
         "hotfix/*",
         "chore/*",
         "feat/*",
       ]
   pull_request:
-    branches: [main, next]
+    branches: [main, staging]
 
 jobs:
   doc-sync:
@@ -27,16 +27,16 @@ jobs:
           fetch-depth: 0
       - name: FEATURE_MATRIX must be updated within 90 days
         run: |
-          LAST_COMMIT=$(git log -1 --format="%ct" -- docs/FEATURE_MATRIX.md)
+          LAST_COMMIT=$(git log -1 --format="%ct" -- docs/core/FEATURE_MATRIX.mbx.md)
           if [ -z "$LAST_COMMIT" ]; then
-            echo "ERROR: docs/FEATURE_MATRIX.md has never been committed."
+            echo "ERROR: docs/core/FEATURE_MATRIX.mbx.md has never been committed."
             exit 1
           fi
           NOW=$(date +%s)
           AGE_DAYS=$(( (NOW - LAST_COMMIT) / 86400 ))
-          echo "docs/FEATURE_MATRIX.md last updated ${AGE_DAYS} days ago."
+          echo "docs/core/FEATURE_MATRIX.mbx.md last updated ${AGE_DAYS} days ago."
           if [ "$AGE_DAYS" -gt 90 ]; then
-            echo "ERROR: FEATURE_MATRIX.md is stale (${AGE_DAYS} days). Update it before merging."
+            echo "ERROR: FEATURE_MATRIX.mbx.md is stale (${AGE_DAYS} days). Update it before merging."
             exit 1
           fi
           echo "OK: within 90-day freshness window."

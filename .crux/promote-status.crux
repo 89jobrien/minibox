@@ -1,5 +1,5 @@
 pipeline: minibox_promote_status
-# Triage the promotion pipeline: develop -> next -> staging -> main.
+# Triage the promotion pipeline: develop -> staging -> release -> main.
 # Outputs structured JSON with ahead/behind counts and pending commits.
 #
 # Run: crux run .crux/promote-status.crux
@@ -34,8 +34,8 @@ steps:
             --argjson c "$commits" --argjson bc "$behind_commits" \
             '{from:$f,to:$t,status:$s,ahead:$a,behind:$b,commits:$c,behind_commits:$bc}'
         }
-        stages=$(for s in develop next staging main; do pair_args="$pair_args $s"; done
-          set -- develop next staging main
+        stages=$(for s in develop staging release main; do pair_args="$pair_args $s"; done
+          set -- develop staging release main
           while [ $# -ge 2 ]; do pair "$1" "$2"; shift; done)
         echo "$stages" | jq -s '{
           pipeline: .,

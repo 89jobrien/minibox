@@ -2,9 +2,9 @@ name: Conformance
 
 on:
   push:
-    branches: [develop, next, staging]
+    branches: [develop, staging, release]
   pull_request:
-    branches: [develop, next, staging]
+    branches: [develop, staging, release]
   workflow_dispatch:
 
 concurrency:
@@ -19,8 +19,8 @@ jobs:
     name: detect changes
     runs-on: ubuntu-latest
     outputs:
-      core:        ${{ steps.dc.outputs.core }}
-      runtime:     ${{ steps.dc.outputs.runtime }}
+      core: ${{ steps.dc.outputs.core }}
+      runtime: ${{ steps.dc.outputs.runtime }}
       conformance: ${{ steps.dc.outputs.conformance }}
     steps:
       - uses: actions/checkout@v5

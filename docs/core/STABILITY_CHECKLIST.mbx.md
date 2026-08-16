@@ -4,7 +4,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 
 ---
 
@@ -35,7 +35,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 
 ## Mandatory Gates
 
-These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `next` -> `staging`).
+These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `staging` -> `release`).
 
 | #   | Item                                                        | Status  | Evidence                                               |
 | --- | ------------------------------------------------------------ | ------- | ------------------------------------------------------- |

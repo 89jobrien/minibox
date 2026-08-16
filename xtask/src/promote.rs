@@ -1,6 +1,6 @@
 //! `cargo xtask promote` — cascade-merge through the stability pipeline.
 //!
-//! Default cascade: `develop` → `next` → `staging` → `main`
+//! Default cascade: `develop` → `staging` → `release` → `main`
 //!
 //! Each hop:
 //!   1. Optionally verifies CI is green on the source branch via `gh run list`.
@@ -18,7 +18,7 @@ use std::path::Path;
 use xshell::{Shell, cmd};
 
 /// Ordered stability pipeline branches.
-const PIPELINE: &[&str] = &["develop", "next", "staging", "main"];
+const PIPELINE: &[&str] = &["develop", "staging", "release", "main"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tier(usize);
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn pipeline_order_is_correct() {
-        assert_eq!(PIPELINE, &["develop", "next", "staging", "main"]);
+        assert_eq!(PIPELINE, &["develop", "staging", "release", "main"]);
     }
 
     #[test]
@@ -197,21 +197,21 @@ mod tests {
         assert_eq!(
             hops,
             vec![
-                ("develop", "next"),
-                ("next", "staging"),
-                ("staging", "main"),
+                ("develop", "staging"),
+                ("staging", "release"),
+                ("release", "main"),
             ]
         );
     }
 
     #[test]
-    fn hops_next_to_main() {
-        let from = Tier::from_str("next").unwrap();
+    fn hops_staging_to_main() {
+        let from = Tier::from_str("staging").unwrap();
         let to = Tier::from_str("main").unwrap();
         let hops: Vec<_> = (from.0..to.0)
             .map(|i| (PIPELINE[i], PIPELINE[i + 1]))
             .collect();
-        assert_eq!(hops, vec![("next", "staging"), ("staging", "main"),]);
+        assert_eq!(hops, vec![("staging", "release"), ("release", "main"),]);
     }
 
     #[test]
