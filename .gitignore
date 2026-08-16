@@ -175,3 +175,5 @@ bench/results/
 .taskit-state.json
 .taskit-cache/
 .taskit/
+dupehound-results.*
+dupehound-card.*

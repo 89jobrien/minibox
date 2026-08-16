@@ -1,6 +1,6 @@
-# Handoff — minibox (2026-08-15)
+# Handoff — minibox (2026-08-16)
 
-**Branch:** staging | **Build:** unknown | **Tests:** unknown
+**Branch:** develop | **Build:** unknown | **Tests:** unknown
 EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
@@ -31,8 +31,8 @@ d4fb4b7 ci: trigger workflow
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (3 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (2 files) |
 
 ## Log
 
-- 20260808.184304: done=141 running=0 pending=23 blocked=0
+- 20260815.140448: done=144 running=0 pending=20 blocked=0

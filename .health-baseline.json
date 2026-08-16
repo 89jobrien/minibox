@@ -1,9 +1,9 @@
 {
-  "date": "2026-08-08",
+  "date": "2026-08-15",
   "tests": {
-    "total": 2209,
-    "passed": 2207,
-    "failed": 2,
+    "total": 2217,
+    "passed": 2217,
+    "failed": 0,
     "skipped": 0
   },
   "clippy": {
@@ -11,7 +11,13 @@
     "errors": 0
   },
   "todo_fixme": 29,
+  "safety": {
+    "unwrap_count": 3337,
+    "warn_count": 149
+  },
+  "coverage": null,
+  "ci_duration_ms": 392771.0,
   "crates": 16,
-  "versions_consistent": false,
-  "version": "0.31.0"
+  "versions_consistent": true,
+  "version": "0.32.0"
 }

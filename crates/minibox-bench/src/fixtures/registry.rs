@@ -50,8 +50,10 @@ impl BenchRegistry {
             .await;
 
         // Manifest endpoint: single OCI image manifest listing every layer
-        // with its real digest and size. The config blob is never fetched by
-        // pull_image, so a placeholder digest is sufficient.
+        // with its real digest and size. `pull_image` also fetches and caches
+        // the config blob, so the placeholder "sha256:config" digest below
+        // must be backed by a real blob endpoint (see the config blob mock
+        // after the per-layer blob endpoints).
         let layer_entries: Vec<String> = layers
             .iter()
             .map(|bytes| {
@@ -89,6 +91,18 @@ impl BenchRegistry {
                 .mount(&server)
                 .await;
         }
+
+        // Config blob endpoint: matches the placeholder "sha256:config" digest
+        // referenced by the manifest's `config` field above.
+        Mock::given(method("GET"))
+            .and(path_regex(r"/blobs/sha256(:|%3A)config$"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", CONFIG_MEDIA_TYPE)
+                    .set_body_raw("{}", CONFIG_MEDIA_TYPE),
+            )
+            .mount(&server)
+            .await;
 
         Ok(Self { server })
     }

@@ -1,48 +1,48 @@
 name: Protocol Drift
 
 on:
-    push:
-        branches: [main, next, staging, "feature/*", "hotfix/*"]
-        paths:
-            - "crates/minibox-core/src/protocol.rs"
-            - "crates/minibox-core/src/domain.rs"
-            - "crates/minibox-core/src/domain/networking.rs"
-            - "crates/minibox-core/src/domain/extensions.rs"
-            - "crates/minibox-core/src/events.rs"
-            - "crates/minibox-core/src/domain/execution_manifest.rs"
-            - "crates/minibox-core/src/domain/execution_policy.rs"
-            - "crates/minibox-core/src/error.rs"
-            - "crates/minibox-core/src/client/mod.rs"
-            - "crates/minibox-core/src/typestate.rs"
-            - "xtask/protocol-drift.lock"
-            - "xtask/src/protocol_drift.rs"
-    pull_request:
-        branches: [main, next]
-        paths:
-            - "crates/minibox-core/src/protocol.rs"
-            - "crates/minibox-core/src/domain.rs"
-            - "crates/minibox-core/src/domain/networking.rs"
-            - "crates/minibox-core/src/domain/extensions.rs"
-            - "crates/minibox-core/src/events.rs"
-            - "crates/minibox-core/src/domain/execution_manifest.rs"
-            - "crates/minibox-core/src/domain/execution_policy.rs"
-            - "crates/minibox-core/src/error.rs"
-            - "crates/minibox-core/src/client/mod.rs"
-            - "crates/minibox-core/src/typestate.rs"
-            - "xtask/protocol-drift.lock"
-            - "xtask/src/protocol_drift.rs"
+  push:
+    branches: [main, staging, release, "feature/*", "hotfix/*"]
+    paths:
+      - "crates/minibox-core/src/protocol.rs"
+      - "crates/minibox-core/src/domain.rs"
+      - "crates/minibox-core/src/domain/networking.rs"
+      - "crates/minibox-core/src/domain/extensions.rs"
+      - "crates/minibox-core/src/events.rs"
+      - "crates/minibox-core/src/domain/execution_manifest.rs"
+      - "crates/minibox-core/src/domain/execution_policy.rs"
+      - "crates/minibox-core/src/error.rs"
+      - "crates/minibox-core/src/client/mod.rs"
+      - "crates/minibox-core/src/typestate.rs"
+      - "xtask/protocol-drift.lock"
+      - "xtask/src/protocol_drift.rs"
+  pull_request:
+    branches: [main, staging]
+    paths:
+      - "crates/minibox-core/src/protocol.rs"
+      - "crates/minibox-core/src/domain.rs"
+      - "crates/minibox-core/src/domain/networking.rs"
+      - "crates/minibox-core/src/domain/extensions.rs"
+      - "crates/minibox-core/src/events.rs"
+      - "crates/minibox-core/src/domain/execution_manifest.rs"
+      - "crates/minibox-core/src/domain/execution_policy.rs"
+      - "crates/minibox-core/src/error.rs"
+      - "crates/minibox-core/src/client/mod.rs"
+      - "crates/minibox-core/src/typestate.rs"
+      - "xtask/protocol-drift.lock"
+      - "xtask/src/protocol_drift.rs"
 
 permissions:
-    contents: read
+  contents: read
 
 jobs:
-    protocol-drift:
-        name: core contract hash check
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v5
-            - uses: dtolnay/rust-toolchain@stable
-            - uses: Swatinem/rust-cache@v2
+  protocol-drift:
+    name: core contract hash check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
-            - name: verify core contract hashes
-              run: cargo xtask check-protocol-drift
+      - name: verify core contract hashes
+        run: cargo xtask check-protocol-drift

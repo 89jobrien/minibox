@@ -45,6 +45,12 @@ pub enum AdapterSuite {
     SmolVm,
     /// krun: libkrun-based micro-VM (Linux via KVM, macOS via HVF).
     Krun,
+    /// macOS via Apple Virtualization.framework. Bypasses this registry's
+    /// `build_handler_deps` dispatch entirely — selected earlier, in
+    /// `main()`, because its VM boot needs the OS main thread for GCD
+    /// callbacks. Listed here only so `--adapter vz` / `MINIBOX_ADAPTER=vz`
+    /// validate and `--list-adapters` shows it.
+    Vz,
 }
 
 impl fmt::Display for AdapterSuite {
@@ -63,6 +69,7 @@ impl AdapterSuite {
             Self::Colima => "colima",
             Self::SmolVm => "smolvm",
             Self::Krun => "krun",
+            Self::Vz => "vz",
         }
     }
 }
@@ -72,7 +79,7 @@ impl AdapterSuite {
 /// This slice contains every adapter name regardless of platform availability.
 /// Use [`available_adapter_names`] to filter to adapters compiled into the
 /// current build, or [`all_adapters`] for full metadata (including `available`).
-pub const VALID_ADAPTERS: &[&str] = &["native", "gke", "colima", "smolvm", "krun"];
+pub const VALID_ADAPTERS: &[&str] = &["native", "gke", "colima", "smolvm", "krun", "vz"];
 
 /// Default adapter suite when `MINIBOX_ADAPTER` is unset.
 pub const DEFAULT_ADAPTER_SUITE: &str = "smolvm";
@@ -114,6 +121,12 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
             description: "libkrun micro-VM via KVM/HVF (recommended fallback, cross-platform)",
             available: true,
             platform: "any",
+        },
+        AdapterInfo {
+            name: "vz",
+            description: "Apple Virtualization.framework micro-VM (macOS, opt-in, feature-gated)",
+            available: cfg!(all(target_os = "macos", feature = "vz")),
+            platform: "macos",
         },
     ]
 }
@@ -176,6 +189,7 @@ pub fn parse_adapter(name: &str) -> Result<AdapterSuite, AdapterSelectionError> 
         "colima" => AdapterSuite::Colima,
         "smolvm" => AdapterSuite::SmolVm,
         "krun" => AdapterSuite::Krun,
+        "vz" => AdapterSuite::Vz,
         _ => {
             return Err(AdapterSelectionError {
                 requested: name.to_string(),
@@ -443,6 +457,7 @@ mod tests {
             AdapterSuite::Colima,
             AdapterSuite::SmolVm,
             AdapterSuite::Krun,
+            AdapterSuite::Vz,
         ] {
             let name = suite.to_string();
             if available.contains(&name.as_str()) {
@@ -711,6 +726,7 @@ mod tests {
             AdapterSuite::Colima,
             AdapterSuite::SmolVm,
             AdapterSuite::Krun,
+            AdapterSuite::Vz,
         ] {
             let s = suite.as_str();
             assert!(
@@ -771,6 +787,23 @@ mod tests {
         assert_eq!(cloned, info);
         let debug_str = format!("{info:?}");
         assert!(debug_str.contains("test"));
+    }
+
+    #[test]
+    #[cfg(all(target_os = "macos", feature = "vz"))]
+    fn parse_vz_succeeds_when_feature_enabled() {
+        assert_eq!(
+            parse_adapter("vz").expect("should parse vz on macOS with vz feature"),
+            AdapterSuite::Vz
+        );
+    }
+
+    #[test]
+    fn valid_adapters_contains_vz() {
+        assert!(
+            VALID_ADAPTERS.contains(&"vz"),
+            "VALID_ADAPTERS must include 'vz' regardless of platform availability, same as native/gke"
+        );
     }
 
     #[test]

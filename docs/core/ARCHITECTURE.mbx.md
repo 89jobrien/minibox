@@ -17,10 +17,10 @@
 
 ## Workspace Overview
 
-16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.31.0.
+16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.32.0.
 
 <!-- fact:crate_count=15 -->
-<!-- fact:workspace_version=0.31.0 -->
+<!-- fact:workspace_version=0.32.0 -->
 
 ```text
 minibox-macros          (proc-macro, ~300 LOC)
