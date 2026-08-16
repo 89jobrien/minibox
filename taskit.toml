@@ -63,10 +63,6 @@ name = "minibox-container_state"
 path = "crates/minibox/src/container_state.rs"
 
 [[protocol.surfaces]]
-name = "minibox-domain"
-path = "crates/minibox/src/domain.rs"
-
-[[protocol.surfaces]]
 name = "xtask-test_linux"
 path = "xtask/src/test_linux.rs"
 
