@@ -35,7 +35,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 
 ## Mandatory Gates
 
-These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `next` -> `staging`).
+These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `staging` -> `release`).
 
 | #   | Item                                                        | Status  | Evidence                                               |
 | --- | ------------------------------------------------------------ | ------- | ------------------------------------------------------- |

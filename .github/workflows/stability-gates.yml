@@ -7,15 +7,15 @@ on:
       [
         develop,
         main,
-        next,
         staging,
+        release,
         "feature/*",
         "hotfix/*",
         "chore/*",
         "feat/*",
       ]
   pull_request:
-    branches: [main, next]
+    branches: [main, staging]
 
 jobs:
   doc-sync:

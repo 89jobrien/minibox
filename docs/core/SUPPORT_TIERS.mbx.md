@@ -16,7 +16,7 @@ See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/co
 Fully supported. All six mandatory stability gates must pass continuously. Breaking changes require a
 deprecation cycle of at least one minor release with a compiler or runtime warning before removal.
 Security issues receive a response within 72 hours. Crates in this tier are covered by CI on every
-PR and every push to `next`.
+PR and every push to `staging`.
 
 ### Tier 2 — Experimental
 
@@ -83,10 +83,10 @@ promotion via human review.
 
 A Tier 2 adapter or crate may be promoted to Tier 1 when all of the following are satisfied:
 
-1. All six mandatory stability gates pass on the `next` branch, with CI evidence and maintainer sign-off.
+1. All six mandatory stability gates pass on the `staging` branch, with CI evidence and maintainer sign-off.
 2. The adapter has at least one integration test that runs in CI (Gate 3).
 3. Handler coverage for any new handler code meets the >= 80% function coverage threshold (Gate 2).
-4. A PR is opened targeting `next` with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`
+4. A PR is opened targeting `staging` with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`
    and a checklist confirming each gate.
 5. A maintainer reviews and approves. Approval constitutes the human sign-off.
 

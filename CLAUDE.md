@@ -99,11 +99,11 @@ No Python scripts are expected in the project; use Rust scripts or Nushell helpe
 
 Branches follow the stability pipeline:
 
-`develop` -> `next` -> `staging` -> `main` -> `v*` tag
+`develop` -> `staging` -> `release` -> `main` -> `v*` tag
 
 - Target feature, hotfix, and chore work at `develop`.
-- Do not promote `next` to `staging` without confirming `next` CI is green.
-- Do not promote `staging` to `main` without confirming `staging` CI is green.
+- Do not promote `staging` to `release` without confirming `staging` CI is green.
+- Do not promote `release` to `main` without confirming `release` CI is green.
 - Do not commit unless explicitly asked.
 - `.ctx/HANDOFF.*.*.yaml` is gitignored by default; use `git add -f` only when intentionally tracking it.
 
@@ -111,9 +111,9 @@ Branches follow the stability pipeline:
 
 - `main` is protected via GitHub rulesets. All changes land via PR
   with required status checks. Branch must be up-to-date before merge.
-- `next` and `staging` block force pushes and deletions; require
+- `staging` and `release` block force pushes and deletions; require
   `CI passed` status check.
-- `staging` -> `main` promotion creates a PR automatically via CI.
+- `release` -> `main` promotion creates a PR automatically via CI.
 - Required status checks on `main`: `CI passed`, stability gates,
   `actionlint`.
 

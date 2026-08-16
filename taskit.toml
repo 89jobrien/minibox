@@ -125,5 +125,5 @@ gate = false
 [flow]
 main = "main"
 develop = "develop"
-staging = "next"
-release = "staging"
+staging = "staging"
+release = "release"

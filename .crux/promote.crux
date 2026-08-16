@@ -1,6 +1,6 @@
 pipeline: minibox_promote
 # Cascade promotion through the stability pipeline:
-# develop -> next -> staging -> main.
+# develop -> staging -> release -> main.
 #
 # Each tier runs its gates, builds a release binary, smoke-tests it
 # in a smolvm container, then advances to the next branch.
@@ -8,7 +8,7 @@ pipeline: minibox_promote
 # Tier gates:
 #   dev     : lint, test-unit
 #   testing : test-conformance, test-property, borrow-fixtures
-#   staging : prepush, coverage-check
+#   release : prepush, coverage-check
 #   main    : check-protocol-drift, lint-docs
 #
 # Run: crux run .crux/promote.crux
@@ -48,20 +48,20 @@ steps:
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
 
-  # Advance: develop -> next
-  - step: merge_develop_to_next
+  # Advance: develop -> staging
+  - step: merge_develop_to_staging
     handler: shell::exec
     args:
       cmd: |
-        git fetch origin next
-        git checkout next
+        git fetch origin staging
+        git checkout staging
         git merge --ff-only develop
-        git push origin next
+        git push origin staging
         git checkout develop
-        echo "advanced develop -> next"
+        echo "advanced develop -> staging"
 
   # ============================================================
-  # Tier 2: Testing (next)
+  # Tier 2: Testing (staging)
   # ============================================================
   - step: gate_test_conformance
     handler: shell::exec
@@ -91,20 +91,20 @@ steps:
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
 
-  # Advance: next -> staging
-  - step: merge_next_to_staging
+  # Advance: staging -> release
+  - step: merge_staging_to_release
     handler: shell::exec
     args:
       cmd: |
-        git fetch origin staging
-        git checkout staging
-        git merge --ff-only next
-        git push origin staging
+        git fetch origin release
+        git checkout release
+        git merge --ff-only staging
+        git push origin release
         git checkout develop
-        echo "advanced next -> staging"
+        echo "advanced staging -> release"
 
   # ============================================================
-  # Tier 3: Staging
+  # Tier 3: Release
   # ============================================================
   - step: gate_prepush
     handler: shell::exec
@@ -116,16 +116,16 @@ steps:
     args:
       cmd: "cargo xtask coverage-check"
 
-  - step: smoke_staging
+  - step: smoke_release
     handler: shell::exec
     args:
       cmd: |
-        echo "--- smoke test: staging tier ---"
+        echo "--- smoke test: release tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
         sleep 2
         target/release/mbx pull alpine:latest
-        target/release/mbx run alpine:latest -- sh -c 'echo staging-ok && cat /etc/os-release'
+        target/release/mbx run alpine:latest -- sh -c 'echo release-ok && cat /etc/os-release'
         target/release/mbx ps
         target/release/mbx prune
         kill $DAEMON_PID 2>/dev/null || true
@@ -146,20 +146,20 @@ steps:
       cmd: "cargo xtask lint-docs"
 
   # PR for protected main branch
-  - step: pr_staging_to_main
+  - step: pr_release_to_main
     handler: shell::exec
     args:
       cmd: |
-        existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+        existing=$(gh pr list --base main --head release --state open --json number -q '.[0].number')
         if [ -n "$existing" ]; then
-          echo "PR #$existing already open: staging -> main"
+          echo "PR #$existing already open: release -> main"
         else
-          gh pr create --base main --head staging \
-            --title "Promote staging -> main" \
+          gh pr create --base main --head release \
+            --title "Promote release -> main" \
             --body "Automated promotion. All tiered gates and smoke tests passed."
         fi
 
   - step: done
     handler: ctrl::log
     args:
-      msg: "Promotion complete: develop->next->staging pushed with smoke tests, staging->main PR created"
+      msg: "Promotion complete: develop->staging->release pushed with smoke tests, release->main PR created"

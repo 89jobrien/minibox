@@ -127,7 +127,7 @@ Deprecated aliases: `collect-metrics`, `context`, `detect-changes`.
 | `bump` | `[patch\|minor\|major]` (default `patch`) | Bump the workspace version. |
 | `preflight` | — | Verify required tools are on PATH (`cargo`, `cargo-nextest`, `gh`). |
 | `doctor` | — | Full preflight diagnostics — same underlying probe as `mbx doctor`. |
-| `promote` | `--from <tier>` `--to <tier>` `--dry-run` | Cascade-merge one stability tier into the next (`develop -> next -> staging -> main`), gated on CI green for the source branch. `--from`/`--to` infer sensible defaults if omitted. |
+| `promote` | `--from <tier>` `--to <tier>` `--dry-run` | Cascade-merge one stability tier into the next (`develop -> staging -> release -> main`), gated on CI green for the source branch. `--from`/`--to` infer sensible defaults if omitted. |
 | `ci-watch` | `--branch <name>` | Watch the most recent GitHub Actions run with job-level detail; defaults to the current branch. |
 | `daily-orchestration` | `--ci` `--dry-run` | Run the daily maintenance orchestration pass. Unlike most xtask parsers, unrecognized flags here cause a hard usage error rather than a warning. |
 | `council` | `--base <ref>` (default `main`) `--mode core\|extended` (default `core`) `--no-synthesis` `--prod` | Run devloop council analysis against a base ref. |
