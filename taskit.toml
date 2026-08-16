@@ -10,7 +10,7 @@ crates = [
   { dir = "crates/mbx", pkg = "mbx" },
   { dir = "crates/minibox-crux-plugin", pkg = "minibox-crux-plugin" },
   { dir = "crates/minibox-testsuite", pkg = "minibox-testsuite" },
-  { dir = "xtask" },
+  { dir = "xtask", exclude_from_version_check = true },
 ]
 # offline_skip = "test(/.*network.*/)"
 
