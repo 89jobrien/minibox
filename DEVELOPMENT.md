@@ -212,7 +212,7 @@ Local validation should match CI. The commands that matter:
 3. **Before every push:** `cargo xtask prepush`
 
 GitHub Actions (`pr.yml` + `merge.yml`) runs the same xtask commands plus
-`cargo deny`, `cargo audit`, and `cargo machete` on the `next` and `staging` branches.
+`cargo deny`, `cargo audit`, and `cargo machete` on the `staging` and `release` branches.
 
 ## Environment Variables
 
@@ -331,7 +331,7 @@ The `scripts/` directory contains AI agent tooling and operational helpers. Thes
 | ------------------------- | -------------------------------------------------------- |
 | `ci-watch.nu`             | Watch latest GHA run with job-level detail (wraps xtask) |
 | `preflight.nu`            | SessionStart hook — lightweight tool/env check           |
-| `promote.nu`              | Cascade-merge through develop → next → staging → main    |
+| `promote.nu`              | Cascade-merge through develop → staging → release → main |
 | `sync-check.nu`           | Fetch + rebase check before push                         |
 | `ai-review.nu`            | AI-assisted code review of staged diff                   |
 | `council.nu`              | Multi-model council analysis                             |
