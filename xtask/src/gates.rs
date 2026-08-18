@@ -221,8 +221,8 @@ fn phase_2_skipped() -> bool {
     matches!(std::env::var("SKIP_PHASE_2").as_deref(), Ok("1" | "true"))
 }
 
-/// Musl cross-check gate: `cargo build --release --target x86_64-unknown-linux-musl`
-/// for the two crates the release workflow actually cross-compiles (`miniboxd`,
+/// Musl cross-check gate: a release cross-build for `x86_64-unknown-linux-musl`
+/// of the two crates the release workflow actually cross-compiles (`miniboxd`,
 /// `mbx`; see `.github/workflows/release.yml`'s `build` job, which uses `cross build
 /// --release --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
 ///
@@ -233,12 +233,21 @@ fn phase_2_skipped() -> bool {
 /// link time. Would have prevented the 2026-05-22 cluster of 5 iterative
 /// CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
 ///
-/// Requires the `x86_64-unknown-linux-musl` rustup target. If it isn't installed,
-/// this gate is skipped with a loud, unambiguous banner rather than failing the
-/// whole prepush gate — installing a cross target is a one-time local setup step,
-/// not something this gate should force on every invocation. Set
-/// `MINIBOX_REQUIRE_MUSL_CHECK=1` to turn that skip into a hard failure (e.g. for
-/// CI or a machine that must never silently skip this gate).
+/// Uses `cargo zigbuild` when available. A plain `cargo build --target
+/// <musl>` cannot link on a macOS host: Apple's `ld` rejects the GNU linker
+/// options rustc passes for an ELF target (`--as-needed`, `-Bstatic`,
+/// `--gc-sections`, ...). zig ships a cross-capable linker and is what
+/// `test_linux::ZigbuildCompiler` already uses for the same reason. On Linux,
+/// the native toolchain links musl directly, so plain `cargo build` is used.
+///
+/// Two prerequisites, each skipped with a loud banner rather than failing the
+/// whole prepush gate — both are one-time local setup, not something this gate
+/// should force on every invocation:
+/// - the `x86_64-unknown-linux-musl` rustup target
+/// - on macOS, `cargo-zigbuild`
+///
+/// Set `MINIBOX_REQUIRE_MUSL_CHECK=1` to turn either skip into a hard failure
+/// (e.g. for CI or a machine that must never silently skip this gate).
 pub fn musl_check(sh: &Shell) -> Result<()> {
     const TARGET: &str = "x86_64-unknown-linux-musl";
 
@@ -246,41 +255,71 @@ pub fn musl_check(sh: &Shell) -> Result<()> {
         .read()
         .unwrap_or_default();
     if !installed.lines().any(|l| l == TARGET) {
-        if musl_check_required() {
-            anyhow::bail!(
-                "musl-check: REQUIRED but target {TARGET} is not installed \
-                 (run `rustup target add {TARGET}`, or unset MINIBOX_REQUIRE_MUSL_CHECK \
-                 to allow a skip)"
-            );
-        }
-        eprintln!(
-            "\n\
-             ################################################################\n\
-             # musl-check: SKIPPED — target {TARGET} not installed\n\
-             # This gate did NOT run. Link-time musl failures will not be\n\
-             # caught locally and may only surface in CI.\n\
-             # Run `rustup target add {TARGET}` to enable this gate, or set\n\
-             # MINIBOX_REQUIRE_MUSL_CHECK=1 to make a missing target fatal.\n\
-             ################################################################\n"
+        return musl_check_skip(
+            &format!("target {TARGET} not installed"),
+            &format!("Run `rustup target add {TARGET}` to enable this gate"),
         );
-        return Ok(());
     }
 
-    eprintln!("--- musl-check: cargo build --release --target {TARGET} -p miniboxd -p mbx ---");
+    // zigbuild is required on macOS (Apple ld cannot link ELF) and harmless
+    // elsewhere; prefer it whenever it is installed.
+    // `cargo zigbuild --version` is not accepted by the subcommand; `--help`
+    // is the cheapest invocation that exits 0 only when it is actually installed.
+    let has_zigbuild = cmd!(sh, "cargo zigbuild --help")
+        .quiet()
+        .ignore_stdout()
+        .run()
+        .is_ok();
+    if !has_zigbuild && cfg!(target_os = "macos") {
+        return musl_check_skip(
+            "cargo-zigbuild not installed (required to link musl on macOS)",
+            "Run `cargo install cargo-zigbuild` and install zig to enable this gate",
+        );
+    }
+
+    let build: &[&str] = if has_zigbuild {
+        &["zigbuild"]
+    } else {
+        &["build"]
+    };
+    eprintln!(
+        "--- musl-check: cargo {} --release --target {TARGET} -p miniboxd -p mbx ---",
+        build.join(" ")
+    );
     cmd!(
         sh,
-        "cargo build --release --target {TARGET} -p miniboxd -p mbx"
+        "cargo {build...} --release --target {TARGET} -p miniboxd -p mbx"
     )
     .run()
-    .context(
-        "musl cross-check failed (cargo build --release --target x86_64-unknown-linux-musl)",
-    )?;
+    .context("musl cross-check failed (release cross-build for x86_64-unknown-linux-musl)")?;
     eprintln!("musl-check passed");
     Ok(())
 }
 
+/// Report a skipped musl gate with an unmissable banner, or fail hard when
+/// `MINIBOX_REQUIRE_MUSL_CHECK` demands the gate actually run.
+fn musl_check_skip(reason: &str, remedy: &str) -> Result<()> {
+    if musl_check_required() {
+        anyhow::bail!(
+            "musl-check: REQUIRED but did not run — {reason}. \
+             {remedy}, or unset MINIBOX_REQUIRE_MUSL_CHECK to allow a skip."
+        );
+    }
+    eprintln!(
+        "\n\
+         ################################################################\n\
+         # musl-check: SKIPPED — {reason}\n\
+         # This gate did NOT run. Link-time musl failures will not be\n\
+         # caught locally and may only surface in CI.\n\
+         # {remedy}, or set\n\
+         # MINIBOX_REQUIRE_MUSL_CHECK=1 to make this skip fatal.\n\
+         ################################################################\n"
+    );
+    Ok(())
+}
+
 /// Returns true if `MINIBOX_REQUIRE_MUSL_CHECK` is set to a truthy value (`1` or
-/// `true`). When set, a missing musl rustup target fails `musl_check` instead of
+/// `true`). When set, an unrunnable musl gate fails `musl_check` instead of
 /// silently skipping it.
 fn musl_check_required() -> bool {
     matches!(
