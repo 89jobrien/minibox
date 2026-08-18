@@ -6,75 +6,43 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (27 files)
+  title: Uncommitted changes (11 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .debtmap.toml
-    .minibox/checkpoints/prepush.json
-    CLAUDE.md
-    Cargo.lock
-    Cargo.toml
-    Cruxfile
-    Justfile
-    crates/mcp/Cargo.toml
-    crates/mcp/README.md
-    crates/mcp/src/client.rs
-    crates/mcp/src/error.rs
-    crates/mcp/src/policy.rs
-    crates/mcp/src/server.rs
-    crates/mcp/src/tools/containers.rs
-    crates/mcp/src/tools/doctor.rs
-    crates/mcp/src/tools/images.rs
-    crates/mcp/src/types.rs
-    crates/mcp/tests/integration.rs
-    crates/minibox/src/adapters/commit.rs
-    crates/minibox/src/adapters/docker_archive.rs
-    docs/notes/minibox-in-minibox.local.md
-    mise.toml
-    scripts/diagnose.nu
-    scripts/standup.nu
-    crux/
+    .claude/skills/docs/
+    .ctx/HANDOFF.macbox.minibox.state.yaml
+    .ctx/HANDOFF.mbx.minibox.state.yaml
+    .ctx/HANDOFF.minibox-core.minibox.state.yaml
+    .ctx/HANDOFF.minibox-macros.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.state.yaml
+    .ctx/HANDOFF.miniboxd.minibox.state.yaml
+    .ctx/HANDOFF.winbox.minibox.state.yaml
+    .ctx/HANDOFF.xtask.minibox.state.yaml
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .debtmap.toml
-  - .minibox/checkpoints/prepush.json
-  - CLAUDE.md
-  - Cargo.lock
-  - Cargo.toml
-  - Cruxfile
-  - Justfile
-  - crates/mcp/Cargo.toml
-  - crates/mcp/README.md
-  - crates/mcp/src/client.rs
-  - crates/mcp/src/error.rs
-  - crates/mcp/src/policy.rs
-  - crates/mcp/src/server.rs
-  - crates/mcp/src/tools/containers.rs
-  - crates/mcp/src/tools/doctor.rs
-  - crates/mcp/src/tools/images.rs
-  - crates/mcp/src/types.rs
-  - crates/mcp/tests/integration.rs
-  - crates/minibox/src/adapters/commit.rs
-  - crates/minibox/src/adapters/docker_archive.rs
-  - docs/notes/minibox-in-minibox.local.md
-  - mise.toml
-  - scripts/diagnose.nu
-  - scripts/standup.nu
-  - crux/
+  - .claude/skills/docs/
+  - .ctx/HANDOFF.macbox.minibox.state.yaml
+  - .ctx/HANDOFF.mbx.minibox.state.yaml
+  - .ctx/HANDOFF.minibox-core.minibox.state.yaml
+  - .ctx/HANDOFF.minibox-macros.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.state.yaml
+  - .ctx/HANDOFF.miniboxd.minibox.state.yaml
+  - .ctx/HANDOFF.winbox.minibox.state.yaml
+  - .ctx/HANDOFF.xtask.minibox.state.yaml
 log:
-- date: '20260818.175734'
-  summary: done=149 running=0 pending=15 blocked=0
+- date: '20260818.213511'
+  summary: done=163 running=0 pending=2 blocked=0
   commits:
-  - 8e2d8a738624e2908b438e4e8b9a8b794ef5b238
-  - a99407388633a50228b3898270522e6171b96f46
-  - bc01b5f5c604904f44bc76d22fbf382d7d8c9885
-  - 3f7ac2a564121307cc82fa491d78d1dd6157a6b3
-  - 3ed66acccb453374e6d134cb4630fbaa1b7f28bc
-  - ec59ccea3136a58e70284907f929ba87d59b4b5d
-  - b482a0aa4e555605e56b658b2b5a234aae3e098c
-  - d5b657d7e66a545f83a33b80b78a938322480314
-  - 44e221e6ec2678f65414b385411377223c5126a5
-  - c3cd3d3e99b78188a593d5bc0dbc7bc979907291
+  - d0a23a2e5b8f067b71467d716b659975b88dbfc1
+  - f8796ce57761963ee2010610bb31f7c7eb42a0fb
+  - fbe4e01cf039b1047d95e97ef8ad6056f809c570
+  - 4515618870fb2f57eec7bec4ab1febf611f31792
+  - 4add60894f29527483dd1200aae362faad78f589
+  - f1366813cabadef756d8d8249bcc75eb8cf8cee9
+  - b949f8c92b8f3e2f2fa7250312185060d623e925
+  - d0f6556adfbdbed5054bdce9b0052875b528b834
+  - 2b224d26a25509b8151db1545f21c1bc78ea2a54
+  - 8ce857c8a8c174521d702b54b58e8cdb2ecaeaf5

@@ -2,8 +2,8 @@
 
 | ID | P | Status | Title |
 |---|---|---|---|
-| uncommitted-work | P1 | open | Uncommitted changes (27 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (11 files) |
 
 ## Log
 
-- 20260818.175734: done=149 running=0 pending=15 blocked=0 [8e2d8a7, a994073, bc01b5f, 3f7ac2a, 3ed66ac, ec59cce, b482a0a, d5b657d, 44e221e, c3cd3d3]
+- 20260818.213511: done=163 running=0 pending=2 blocked=0 [d0a23a2, f8796ce, fbe4e01, 4515618, 4add608, f136681, b949f8c, d0f6556, 2b224d2, 8ce857c]
