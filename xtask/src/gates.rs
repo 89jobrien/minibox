@@ -221,20 +221,24 @@ fn phase_2_skipped() -> bool {
     matches!(std::env::var("SKIP_PHASE_2").as_deref(), Ok("1" | "true"))
 }
 
-/// Musl cross-check gate: `cargo check --target x86_64-unknown-linux-musl` for the
-/// two crates the release workflow actually cross-compiles (`miniboxd`, `mbx`; see
-/// `.github/workflows/release.yml`'s `build` job, which uses `cross build --release
-/// --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
+/// Musl cross-check gate: `cargo build --release --target x86_64-unknown-linux-musl`
+/// for the two crates the release workflow actually cross-compiles (`miniboxd`,
+/// `mbx`; see `.github/workflows/release.yml`'s `build` job, which uses `cross build
+/// --release --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
 ///
-/// Catches `#[cfg(target_os = "linux")]` compile failures locally, before push —
-/// macOS `cargo check` alone doesn't validate Linux-gated code paths (see
-/// `docs/core/GOTCHAS.mbx.md`). Would have prevented the 2026-05-22 cluster of 5
-/// iterative CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
+/// Catches `#[cfg(target_os = "linux")]` compile failures *and* link-time musl
+/// failures locally, before push — macOS `cargo check` alone doesn't validate
+/// Linux-gated code paths (see `docs/core/GOTCHAS.mbx.md`), and `cargo check`
+/// doesn't link, so it can pass while the release `cross build` still fails at
+/// link time. Would have prevented the 2026-05-22 cluster of 5 iterative
+/// CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
 ///
 /// Requires the `x86_64-unknown-linux-musl` rustup target. If it isn't installed,
-/// this gate is skipped with a warning rather than failing the whole prepush gate —
-/// installing a cross target is a one-time local setup step, not something this
-/// gate should force on every invocation.
+/// this gate is skipped with a loud, unambiguous banner rather than failing the
+/// whole prepush gate — installing a cross target is a one-time local setup step,
+/// not something this gate should force on every invocation. Set
+/// `MINIBOX_REQUIRE_MUSL_CHECK=1` to turn that skip into a hard failure (e.g. for
+/// CI or a machine that must never silently skip this gate).
 pub fn musl_check(sh: &Shell) -> Result<()> {
     const TARGET: &str = "x86_64-unknown-linux-musl";
 
@@ -242,19 +246,47 @@ pub fn musl_check(sh: &Shell) -> Result<()> {
         .read()
         .unwrap_or_default();
     if !installed.lines().any(|l| l == TARGET) {
+        if musl_check_required() {
+            anyhow::bail!(
+                "musl-check: REQUIRED but target {TARGET} is not installed \
+                 (run `rustup target add {TARGET}`, or unset MINIBOX_REQUIRE_MUSL_CHECK \
+                 to allow a skip)"
+            );
+        }
         eprintln!(
-            "musl-check: skipping — target {TARGET} not installed \
-             (run `rustup target add {TARGET}` to enable this gate)"
+            "\n\
+             ################################################################\n\
+             # musl-check: SKIPPED — target {TARGET} not installed\n\
+             # This gate did NOT run. Link-time musl failures will not be\n\
+             # caught locally and may only surface in CI.\n\
+             # Run `rustup target add {TARGET}` to enable this gate, or set\n\
+             # MINIBOX_REQUIRE_MUSL_CHECK=1 to make a missing target fatal.\n\
+             ################################################################\n"
         );
         return Ok(());
     }
 
-    eprintln!("--- musl-check: cargo check --target {TARGET} -p miniboxd -p mbx ---");
-    cmd!(sh, "cargo check --target {TARGET} -p miniboxd -p mbx")
-        .run()
-        .context("musl cross-check failed (cargo check --target x86_64-unknown-linux-musl)")?;
+    eprintln!("--- musl-check: cargo build --release --target {TARGET} -p miniboxd -p mbx ---");
+    cmd!(
+        sh,
+        "cargo build --release --target {TARGET} -p miniboxd -p mbx"
+    )
+    .run()
+    .context(
+        "musl cross-check failed (cargo build --release --target x86_64-unknown-linux-musl)",
+    )?;
     eprintln!("musl-check passed");
     Ok(())
+}
+
+/// Returns true if `MINIBOX_REQUIRE_MUSL_CHECK` is set to a truthy value (`1` or
+/// `true`). When set, a missing musl rustup target fails `musl_check` instead of
+/// silently skipping it.
+fn musl_check_required() -> bool {
+    matches!(
+        std::env::var("MINIBOX_REQUIRE_MUSL_CHECK").as_deref(),
+        Ok("1" | "true")
+    )
 }
 
 /// Unit tests (any platform, matches CI).
@@ -883,8 +915,8 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::{
-        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, nextest_output_is_zero_tests,
-        parse_handler_fn_coverage, phase_2_skipped,
+        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, musl_check_required,
+        nextest_output_is_zero_tests, parse_handler_fn_coverage, phase_2_skipped,
     };
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
@@ -920,6 +952,38 @@ mod tests {
         // SAFETY: serialized via ENV_LOCK
         unsafe { std::env::remove_var("SKIP_PHASE_2") };
         assert!(!phase_2_skipped());
+    }
+
+    #[test]
+    fn musl_check_required_true_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["1", "true"] {
+            // SAFETY: serialized via ENV_LOCK; no other thread reads this var.
+            unsafe { std::env::set_var("MINIBOX_REQUIRE_MUSL_CHECK", val) };
+            assert!(musl_check_required(), "expected true for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("MINIBOX_REQUIRE_MUSL_CHECK") };
+    }
+
+    #[test]
+    fn musl_check_required_false_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["0", "false", "yes", ""] {
+            // SAFETY: serialized via ENV_LOCK
+            unsafe { std::env::set_var("MINIBOX_REQUIRE_MUSL_CHECK", val) };
+            assert!(!musl_check_required(), "expected false for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("MINIBOX_REQUIRE_MUSL_CHECK") };
+    }
+
+    #[test]
+    fn musl_check_required_unset_is_false() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe { std::env::remove_var("MINIBOX_REQUIRE_MUSL_CHECK") };
+        assert!(!musl_check_required());
     }
 
     #[test]
