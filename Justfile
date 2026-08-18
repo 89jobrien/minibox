@@ -5,29 +5,29 @@ default:
 # ── Formatting ──────────────────────────────────────────────────────────────
 
 fmt:
-    cargo fmt --all
+    crux run crux/dev/fmt.crux
 
 fmt-check:
-    cargo fmt --all --check
+    crux run crux/dev/fmt_check.crux
 
 # ── Linting ─────────────────────────────────────────────────────────────────
 
 # Lint all crates (macOS-safe; miniboxd dispatches to macbox on macOS)
 lint:
-    cargo clippy -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p macbox -p miniboxd -- -D warnings
+    crux run crux/dev/lint.crux
 
 # ── Build ───────────────────────────────────────────────────────────────────
 
 build:
-    cargo build --release
+    crux run crux/dev/build.crux
 
 # Compile optimised binaries (macOS-safe; excludes miniboxd)
 build-release:
-    cargo build --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd
+    crux run crux/dev/build_release.crux
 
 # Build the sandbox toolchain image and load into minibox.
 build-sandbox:
-    bash images/sandbox/build.sh
+    crux run crux/dev/build_sandbox.crux
 
 # Build static Linux musl binaries matching the host architecture.
 # Output: target/<arch>-unknown-linux-musl/release/{miniboxd,minibox}
@@ -49,50 +49,48 @@ build-linux:
 # Install repo git hooks from .githooks/ — run once after cloning, and again
 # whenever .githooks/* changes upstream (git does not auto-sync .git/hooks/).
 install-hooks:
-    cp .githooks/pre-commit .git/hooks/pre-commit
-    chmod +x .git/hooks/pre-commit
+    crux run crux/dev/install_hooks.crux
     @echo "installed .git/hooks/pre-commit from .githooks/pre-commit"
 
 # fmt-check + lint + build-release
 pre-commit:
-    cargo xtask pre-commit
+    crux run crux/dev/pre_commit.crux
 
 # release build + nextest
 prepush:
-    cargo xtask prepush
+    crux run crux/dev/prepush.crux
 
 # fmt-check + lint + test-unit
 ci:
-    cargo fmt --all --check
+    just fmt-check
     just lint
     just test-unit
 
 # Read-only local gate: fmt, check, clippy, borrow fixtures, docs lint
 verify:
-    cargo xtask verify
+    crux run crux/dev/verify.crux
 
 # ── Testing ─────────────────────────────────────────────────────────────────
 
 # All unit + conformance tests (any platform)
 test-unit:
-    cargo xtask test-unit
+    crux run crux/dev/test_unit.crux
 
 # Property tests
 test-property:
-    cargo xtask test-property
+    crux run crux/dev/test_property.crux
 
 # Adapter isolation tests (any platform)
 test-adapters:
-    cargo test -p minibox --test adapter_colima_tests
-    cargo test -p minibox --test daemon_handler_adapter_swap_tests
+    crux run crux/dev/test_adapters.crux
 
 # Fast parallel test runner via nextest
 nextest:
-    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd -p minibox-cni
+    crux run crux/dev/nextest.crux
 
 # HTML coverage report (opens at target/llvm-cov/html/index.html)
 coverage:
-    cargo llvm-cov nextest -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd --html
+    crux run crux/dev/coverage.crux
     @echo "coverage: target/llvm-cov/html/index.html"
 
 # VZ isolation tests (macOS, requires VM image at ~/.minibox/vm/)
@@ -109,36 +107,35 @@ test-vz-isolation:
 
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
-    cargo build -p mbx
-    MINIBOX_TEST_BIN_DIR={{justfile_directory()}}/target/debug \
-        cargo test -p mbx --features subprocess-tests --test cli_subprocess
+    crux run crux/dev/test_cli_subprocess.crux
 
 # Cgroup integration tests (Linux, root)
 test-integration:
     sudo -E cargo xtask run-cgroup-tests
     sudo -E cargo test -p miniboxd --test integration_tests -- --test-threads=1 --ignored --nocapture
     sudo -E cargo test -p minibox --test native_adapter_isolation_tests -- --test-threads=1 --nocapture
+    sudo -E cargo test -p minibox --test native_adapter_lifecycle_failure_tests -- --test-threads=1 --nocapture
     cargo test -p minibox --test gke_adapter_isolation_tests -- --test-threads=1 --nocapture
 
 # Protocol e2e tests: any platform, no root, no cgroups
 test-e2e:
-    cargo xtask test-e2e
+    crux run crux/dev/test_e2e.crux
 
 # System tests: full-stack daemon+CLI (Linux, root, cgroups v2 required)
 test-system:
-    cargo xtask test-system-suite
+    crux run crux/dev/test_system.crux
 
 # Sandbox contract tests (Linux, root, Docker Hub)
 test-sandbox:
-    cargo xtask test-sandbox
+    crux run crux/dev/test_sandbox.crux
 
 # Linux dogfood: build test image + load + run all tests inside container
 test-linux:
-    cargo xtask test-linux
+    crux run crux/dev/test_linux.crux
 
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
-    ssh -t jobrien-vm 'cd ~/minibox && git pull && sudo -E env PATH="/home/dev/.cargo/bin:$PATH" cargo xtask test-system-suite'
+    crux run crux/dev/test_e2e_vps.crux
 
 # Clone an arbitrary branch fresh into a scratch dir on jobrien-vm (does not touch ~/minibox)
 verify-vps branch:
@@ -158,27 +155,27 @@ test-all: nuke-test-state doctor test-unit test-integration test-system nuke-tes
 # ── Benchmarks ──────────────────────────────────────────────────────────────
 
 bench:
-    cargo xtask bench
+    crux run crux/dev/bench.crux
 
 # Run benches and compare against the tracked per-env baseline
 bench-check:
-    cargo xtask bench --check
+    crux run crux/dev/bench_check.crux
 
 # Run benches and save results as the new per-env baseline
 bench-baseline:
-    cargo xtask bench --save-baseline
+    crux run crux/dev/bench_baseline.crux
 
 # Machine-readable repo context snapshot (JSON to stdout)
 context:
-    cargo xtask context
+    crux run crux/dev/context.crux
 
 # ── Daemon ──────────────────────────────────────────────────────────────────
 
 doctor:
-    @cargo test -p minibox preflight::tests -- --nocapture 2>&1 || true
+    @crux run crux/dev/doctor.crux || true
     @echo ""
     @echo "--- Host Capabilities Report ---"
-    @cargo test -p minibox preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
+    @cargo test -p minibox-core preflight::tests::test_format_report_does_not_panic -- --nocapture 2>&1 | grep -A 20 "Minibox Host Capabilities" || echo "Could not generate report (non-Linux host?)"
 
 # Trace miniboxd with uftrace.
 # macOS: cross-compiles Linux binary, runs it inside minibox via Colima.
@@ -250,10 +247,10 @@ trace:
 # ── Cleanup ─────────────────────────────────────────────────────────────────
 
 clean:
-    cargo clean
+    crux run crux/dev/clean.crux
 
 clean-artifacts:
-    cargo xtask clean-artifacts
+    crux run crux/dev/clean_artifacts.crux
 
 clean-test:
     find target/debug/deps -name '*_tests-*' -delete 2>/dev/null || true
@@ -264,7 +261,7 @@ clean-stale days="7":
     find target/ -type d -empty -delete 2>/dev/null || true
 
 nuke-test-state:
-    cargo xtask nuke-test-state
+    crux run crux/dev/nuke_test_state.crux
 
 # ── CI ──────────────────────────────────────────────────────────────────────
 

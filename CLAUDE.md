@@ -45,6 +45,15 @@ If changing container code, protocol types, adapters, or tests, read the relevan
 - `cargo fmt --all --check` (run by pre-commit) formats ALL workspace files
   including untracked ones. Run `cargo fmt --all` before committing if untracked
   `.rs` files exist.
+- `tar::Builder::append_dir_all` follows symlinks by default. Container
+  rootfs layers often contain symlinks that only resolve inside a live
+  mount namespace (e.g. Alpine's `etc/mtab -> ../proc/mounts`) — call
+  `.follow_symlinks(false)` before tarring an extracted layer/rootfs dir,
+  or it fails with ENOENT on the host. See docker_archive.rs, commit.rs,
+  push.rs, colima_push.rs.
+- `cargo xtask demo`/showcase binary resolution prefers `target/release`
+  over `target/debug`. After fixing a bug, rebuild release too or the
+  demo silently runs the stale binary.
 
 ## Core Commands
 
@@ -116,6 +125,12 @@ Branches follow the stability pipeline:
 - `release` -> `main` promotion creates a PR automatically via CI.
 - Required status checks on `main`: `CI passed`, stability gates,
   `actionlint`.
+- Version bumps must also update `<!-- fact:workspace_version=X.Y.Z -->`
+  markers in docs/core/{ARCHITECTURE,CRATE_INVENTORY}.mbx.md, or
+  `cargo xtask verify`'s docs-audit reports a mismatch.
+- If a file listed in taskit.toml's `[[protocol.surfaces]]` is deleted or
+  renamed, update the list and run `taskit check-protocol-drift --update`
+  to regenerate taskit-protocol.lock, or the check breaks.
 
 ## Hook Notes
 

@@ -130,6 +130,11 @@ fn tar_directory(dir: &std::path::Path) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     {
         let mut ar = Builder::new(&mut buf);
+        // See docker_archive::tar_directory for why this must be false:
+        // layers commonly contain symlinks (e.g. etc/mtab -> ../proc/mounts)
+        // that only resolve inside a live container mount namespace and
+        // would otherwise fail ENOENT when append_dir_all follows them.
+        ar.follow_symlinks(false);
         ar.append_dir_all(".", dir)
             .with_context(|| format!("tar {}", dir.display()))?;
         ar.finish().context("tar finish")?;
@@ -174,6 +179,20 @@ mod tests {
     fn tar_empty_dir_produces_bytes() {
         let tmp = tempfile::TempDir::new().unwrap();
         let bytes = tar_directory(tmp.path()).unwrap();
+        assert!(!bytes.is_empty());
+    }
+
+    /// Regression test: root filesystem layers commonly contain symlinks
+    /// that only resolve inside a live container mount namespace, e.g.
+    /// Alpine's `etc/mtab -> ../proc/mounts`. `tar_directory` must store
+    /// such symlinks as-is rather than following them, or `append_dir_all`
+    /// fails with ENOENT trying to stat the (host-side) dangling target.
+    #[cfg(unix)]
+    #[test]
+    fn tar_directory_preserves_dangling_symlinks() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::os::unix::fs::symlink("../proc/mounts", tmp.path().join("mtab")).unwrap();
+        let bytes = tar_directory(tmp.path()).expect("tar despite dangling symlink");
         assert!(!bytes.is_empty());
     }
 

@@ -19,6 +19,15 @@ pub enum McpServerError {
     #[error("daemon returned error: {0}")]
     #[diagnostic(code(minibox::mcp::daemon_error))]
     Daemon(String),
+    /// The daemon is reachable but sent frames the client could not decode.
+    #[error("daemon protocol error: {0}")]
+    #[diagnostic(
+        code(minibox::mcp::protocol_error),
+        help(
+            "the daemon is running but sent unparseable frames; check for version skew between the mcp binary and miniboxd"
+        )
+    )]
+    ProtocolError(String),
     /// Tool parameters were invalid.
     #[error("invalid tool input: {0}")]
     #[diagnostic(code(minibox::mcp::invalid_input))]
@@ -54,15 +63,52 @@ pub enum McpServerError {
     Json(#[from] serde_json::Error),
 }
 
-// TODO(review): this collapses every McpServerError variant (DaemonConnection,
-// PolicyDenied, InvalidInput, UnexpectedResponse, etc.) into a single opaque string at
-// the tool boundary (see server.rs `.map_err(Into::into)`), discarding the Diagnostic
-// structure and preventing a calling agent from distinguishing "retry later" from
-// "denied, don't retry" from "bad input, fix and retry". Preserve variant/code structure
-// through to the MCP error payload instead (e.g. implement From<McpServerError> for
-// rmcp's ErrorData with a distinct code per variant).
-impl From<McpServerError> for String {
+impl McpServerError {
+    /// Stable diagnostic code carried in the MCP error payload.
+    #[must_use]
+    pub const fn diagnostic_code(&self) -> &'static str {
+        match self {
+            Self::DaemonConnection(_) => "minibox::mcp::daemon_connection",
+            Self::Daemon(_) => "minibox::mcp::daemon_error",
+            Self::ProtocolError(_) => "minibox::mcp::protocol_error",
+            Self::InvalidInput(_) => "minibox::mcp::invalid_input",
+            Self::PolicyDenied { .. } => "minibox::mcp::policy_denied",
+            Self::UnexpectedResponse { .. } => "minibox::mcp::unexpected_response",
+            Self::OutputLimitExceeded => "minibox::mcp::output_limit_exceeded",
+            Self::Json(_) => "minibox::mcp::json",
+        }
+    }
+
+    /// Whether retrying the identical call can plausibly succeed.
+    ///
+    /// Connection and daemon-side failures are transient; policy denials and
+    /// invalid input are not and require a changed request or configuration.
+    #[must_use]
+    pub const fn retryable(&self) -> bool {
+        matches!(self, Self::DaemonConnection(_) | Self::Daemon(_))
+    }
+}
+
+/// Preserve variant structure through to the MCP error payload so a calling
+/// agent can distinguish "retry later" from "denied, don't retry" from "bad
+/// input, fix and retry" instead of receiving one opaque string.
+impl From<McpServerError> for rmcp::ErrorData {
     fn from(value: McpServerError) -> Self {
-        value.to_string()
+        let data = Some(serde_json::json!({
+            "code": value.diagnostic_code(),
+            "retryable": value.retryable(),
+        }));
+        let message = value.to_string();
+        match value {
+            McpServerError::InvalidInput(_) | McpServerError::Json(_) => {
+                Self::invalid_params(message, data)
+            }
+            McpServerError::PolicyDenied { .. } => Self::invalid_request(message, data),
+            McpServerError::DaemonConnection(_)
+            | McpServerError::Daemon(_)
+            | McpServerError::ProtocolError(_)
+            | McpServerError::UnexpectedResponse { .. }
+            | McpServerError::OutputLimitExceeded => Self::internal_error(message, data),
+        }
     }
 }

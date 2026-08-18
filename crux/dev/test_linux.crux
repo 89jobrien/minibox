@@ -1,0 +1,6 @@
+pipeline: test_linux
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo xtask test-linux"

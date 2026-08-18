@@ -11,6 +11,7 @@
 !USAGE.md
 !docs/*.mbx.md
 !docs/specs/*.md
+!docs/FEATURE_MATRIX.md
 !docs/PLATFORM_SUPPORT.md
 !docs/SOCKET_PATHS.md
 !docs/handoff-*.md
@@ -166,7 +167,6 @@ docs/archive/
 !.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.*.*.state.json
 .ctx/HANDOFF.hj.hj.state.json
-.ctx/HANDOFF.*.minibox.state.yaml
 .ctx/.initialized
 # handoff-end
 .claude/skills/whatidid/cache/

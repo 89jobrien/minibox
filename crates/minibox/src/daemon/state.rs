@@ -853,6 +853,47 @@ mod tests {
         DaemonState::new(image_store, tmp.path())
     }
 
+    fn record_with_overlay(id: &str, upper: &str) -> ContainerRecord {
+        let mut record = make_record_with_name(id, None);
+        record.rootfs_metadata = Some(minibox_core::domain::BackendRootfsMetadata::Overlay {
+            upper_dir: std::path::PathBuf::from(upper).into(),
+            metadata: std::collections::HashMap::new(),
+        });
+        record.upper_dir = Some(std::path::PathBuf::from(upper));
+        record
+    }
+
+    /// `get_overlay_upper` derives from `rootfs_metadata`; the persisted
+    /// `upper_dir` field is written from the same source in
+    /// `build_container_record`, so the two must agree (issue #80).
+    #[tokio::test]
+    async fn get_overlay_upper_agrees_with_record_upper_dir() {
+        use crate::container_state::ContainerStateAccess as _;
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        let record = record_with_overlay("abc123", "/var/lib/minibox/containers/abc123/upper");
+        let expected = record.upper_dir.clone().expect("record has upper_dir");
+        state.add_container(record).await;
+        assert_eq!(
+            state
+                .get_overlay_upper("abc123")
+                .await
+                .expect("overlay upper resolves"),
+            expected
+        );
+    }
+
+    #[tokio::test]
+    async fn get_overlay_upper_errors_when_metadata_absent() {
+        use crate::container_state::ContainerStateAccess as _;
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        state
+            .add_container(make_record_with_name("abc123", None))
+            .await;
+        assert!(state.get_overlay_upper("abc123").await.is_err());
+    }
+
     #[tokio::test]
     async fn resolve_id_finds_by_exact_id() {
         let tmp = TempDir::new().unwrap();

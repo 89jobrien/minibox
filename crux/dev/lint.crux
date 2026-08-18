@@ -1,0 +1,6 @@
+pipeline: lint
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo clippy -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p macbox -p miniboxd -- -D warnings"
