@@ -1,0 +1,6 @@
+pipeline: test_e2e_vps
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "ssh -t jobrien-vm cd ~/minibox && git pull && sudo -E env PATH=/home/dev/.cargo/bin:$PATH cargo xtask test system-suite"

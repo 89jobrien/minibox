@@ -19,7 +19,7 @@ on:
 
 jobs:
   doc-sync:
-    name: doc-sync (FEATURE_MATRIX staleness)
+    name: doc-sync (docs audit + FEATURE_MATRIX staleness)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -40,6 +40,10 @@ jobs:
             exit 1
           fi
           echo "OK: within 90-day freshness window."
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo xtask docs audit (full, strict)
+        run: cargo xtask docs audit --full --strict
 
   adapter-integration-tests:
     name: adapter integration test coverage

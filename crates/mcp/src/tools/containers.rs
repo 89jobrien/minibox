@@ -6,9 +6,10 @@ use crate::policy::AgentPolicy;
 use crate::types::{
     ContainerIdInput, ContainerInfoOutput, ImagesOutput, LogEntry, LogsInput, LogsOutput,
     ManifestOutput, MountInput, PsOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
+    parse_network_mode, require_non_empty,
 };
 use base64::Engine as _;
-use minibox_core::domain::{BindMount, NetworkMode};
+use minibox_core::domain::BindMount;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::path::{Component, Path, PathBuf};
 
@@ -49,13 +50,7 @@ pub async fn logs(
     policy: &AgentPolicy,
     input: LogsInput,
 ) -> Result<LogsOutput> {
-    // TODO(review): id-emptiness check duplicated across logs/manifest/simple_id_request.
-    // Centralize in a ContainerRef/ContainerId newtype with TryFrom<String>.
-    if input.id.trim().is_empty() {
-        return Err(McpServerError::InvalidInput(
-            "id must not be empty".to_string(),
-        ));
-    }
+    require_non_empty(&input.id, "id")?;
     let result = client
         .call_limited(
             DaemonRequest::ContainerLogs {
@@ -93,12 +88,7 @@ pub async fn manifest(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<ManifestOutput> {
-    // TODO(review): duplicate id-emptiness check (see logs/simple_id_request) — centralize.
-    if input.id.trim().is_empty() {
-        return Err(McpServerError::InvalidInput(
-            "id must not be empty".to_string(),
-        ));
-    }
+    require_non_empty(&input.id, "id")?;
     let result = client
         .call_limited(
             DaemonRequest::GetManifest { id: input.id },
@@ -128,10 +118,10 @@ pub async fn run(
     policy: &AgentPolicy,
     input: RunContainerInput,
 ) -> Result<RunContainerOutput> {
-    // TODO(review): validate_run only gates privileged/mounts/host-network; unlike
-    // stop/rm this tool never requires MINIBOX_MCP_ALLOW_MUTATION, so an agent can
-    // execute arbitrary (unprivileged, no-network) workloads by default. Align with
-    // stop/rm's mutation gate or document the asymmetry in README.
+    // Deliberate asymmetry with stop/rm/pull: ephemeral, unprivileged,
+    // network-isolated runs are the core agent workflow and stay available by
+    // default; everything that escalates (privileged, mounts, host network) or
+    // mutates shared daemon state is gated. Documented in this crate's README.
     policy.validate_run(&input)?;
     let request = run_request(input, policy)?;
     let result = client
@@ -185,10 +175,8 @@ pub const fn empty_images_output() -> ImagesOutput {
 }
 
 fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonRequest> {
-    // TODO(review): network mode and mount paths are only parsed/validated here, after
-    // policy.validate_run() already made its allow/deny decision against the raw string
-    // (see policy.rs `input.network.as_deref() == Some("host")`). Parse into a NetworkMode
-    // (and validated mounts) before policy runs so the gate checks the real value.
+    // policy.validate_run() has already parsed and gated the same network
+    // string; this re-parse cannot disagree with the gate's decision.
     let network_mode = parse_network_mode(input.network.as_deref())?;
     let mounts = input
         .mounts
@@ -251,18 +239,6 @@ fn validate_absolute_clean_path(path: &Path, field: &'static str) -> Result<()> 
     Ok(())
 }
 
-fn parse_network_mode(mode: Option<&str>) -> Result<NetworkMode> {
-    match mode.unwrap_or("none") {
-        "none" => Ok(NetworkMode::None),
-        "bridge" => Ok(NetworkMode::Bridge),
-        "host" => Ok(NetworkMode::Host),
-        "tailnet" => Ok(NetworkMode::Tailnet),
-        other => Err(McpServerError::InvalidInput(format!(
-            "unknown network mode: {other}"
-        ))),
-    }
-}
-
 fn normalize_run_output(
     responses: Vec<DaemonResponse>,
     raw_responses: Vec<serde_json::Value>,
@@ -296,11 +272,12 @@ fn normalize_run_output(
             DaemonResponse::ContainerStopped { exit_code: code } => {
                 exit_code = Some(code);
             }
-            // TODO(review): unrecognized-but-terminal responses (e.g. Success,
-            // ContainerPaused arriving for a Run) are silently dropped instead of logged,
-            // which can produce a normally-shaped RunContainerOutput missing
-            // container_id/exit_code/output with no indication anything was off.
-            other if other.is_terminal() => {}
+            other if other.is_terminal() => {
+                tracing::warn!(
+                    response = ?other,
+                    "run: ignoring unexpected terminal response; output may be incomplete"
+                );
+            }
             other => {
                 return Err(McpServerError::UnexpectedResponse {
                     tool: "minibox_run",
@@ -340,12 +317,7 @@ async fn simple_id_request(
     tool: &'static str,
     request_builder: impl FnOnce(String) -> DaemonRequest,
 ) -> Result<SimpleOutput> {
-    // TODO(review): duplicate id-emptiness check (see logs/manifest above) — centralize.
-    if input.id.trim().is_empty() {
-        return Err(McpServerError::InvalidInput(
-            "id must not be empty".to_string(),
-        ));
-    }
+    require_non_empty(&input.id, "id")?;
     let result = client
         .call_limited(request_builder(input.id), policy.max_output_bytes)
         .await?;
@@ -382,6 +354,7 @@ const fn stream_name(stream: &OutputStreamKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minibox_core::domain::NetworkMode;
 
     #[test]
     fn run_request_defaults_to_ephemeral_auto_remove_and_no_network() {

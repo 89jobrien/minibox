@@ -2,10 +2,19 @@
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-08-16
+Last updated: 2026-08-18
 
 See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
-(per-adapter capability breakdown).
+(per-adapter capability breakdown), `docs/core/CRATE_TIERS.mbx.md` (architectural layer
+classification — Core/Platform/Experimental/Internal/External).
+
+> **Relationship to CRATE_TIERS.mbx.md:** This document classifies by *support commitment level*
+> (SLA, CI coverage, breaking-change policy). CRATE_TIERS classifies by *architectural role*
+> (stable API contract, adapter suite, dev tooling). The two axes are independent: a crate can
+> be Platform-tier architecturally while still being Stub-tier by support level (e.g. `winbox`),
+> or Experimental-tier by support level while being Platform-tier architecturally (e.g. `macbox`
+> adapters). When in doubt, CRATE_TIERS answers "where does this code live?"; this document
+> answers "what guarantees does it carry?"
 
 ---
 
@@ -16,7 +25,7 @@ See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/co
 Fully supported. All six mandatory stability gates must pass continuously. Breaking changes require a
 deprecation cycle of at least one minor release with a compiler or runtime warning before removal.
 Security issues receive a response within 72 hours. Crates in this tier are covered by CI on every
-PR and every push to `staging`.
+PR and every push to `next`.
 
 ### Tier 2 — Experimental
 
@@ -83,10 +92,10 @@ promotion via human review.
 
 A Tier 2 adapter or crate may be promoted to Tier 1 when all of the following are satisfied:
 
-1. All six mandatory stability gates pass on the `staging` branch, with CI evidence and maintainer sign-off.
+1. All six mandatory stability gates pass on the `next` branch, with CI evidence and maintainer sign-off.
 2. The adapter has at least one integration test that runs in CI (Gate 3).
 3. Handler coverage for any new handler code meets the >= 80% function coverage threshold (Gate 2).
-4. A PR is opened targeting `staging` with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`
+4. A PR is opened targeting `next` with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`
    and a checklist confirming each gate.
 5. A maintainer reviews and approves. Approval constitutes the human sign-off.
 
