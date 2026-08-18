@@ -221,20 +221,33 @@ fn phase_2_skipped() -> bool {
     matches!(std::env::var("SKIP_PHASE_2").as_deref(), Ok("1" | "true"))
 }
 
-/// Musl cross-check gate: `cargo check --target x86_64-unknown-linux-musl` for the
-/// two crates the release workflow actually cross-compiles (`miniboxd`, `mbx`; see
-/// `.github/workflows/release.yml`'s `build` job, which uses `cross build --release
-/// --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
+/// Musl cross-check gate: a release cross-build for `x86_64-unknown-linux-musl`
+/// of the two crates the release workflow actually cross-compiles (`miniboxd`,
+/// `mbx`; see `.github/workflows/release.yml`'s `build` job, which uses `cross build
+/// --release --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
 ///
-/// Catches `#[cfg(target_os = "linux")]` compile failures locally, before push —
-/// macOS `cargo check` alone doesn't validate Linux-gated code paths (see
-/// `docs/core/GOTCHAS.mbx.md`). Would have prevented the 2026-05-22 cluster of 5
-/// iterative CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
+/// Catches `#[cfg(target_os = "linux")]` compile failures *and* link-time musl
+/// failures locally, before push — macOS `cargo check` alone doesn't validate
+/// Linux-gated code paths (see `docs/core/GOTCHAS.mbx.md`), and `cargo check`
+/// doesn't link, so it can pass while the release `cross build` still fails at
+/// link time. Would have prevented the 2026-05-22 cluster of 5 iterative
+/// CI-fix-push cycles. See `.ctx/memory-bank/mistakes.md`.
 ///
-/// Requires the `x86_64-unknown-linux-musl` rustup target. If it isn't installed,
-/// this gate is skipped with a warning rather than failing the whole prepush gate —
-/// installing a cross target is a one-time local setup step, not something this
-/// gate should force on every invocation.
+/// Uses `cargo zigbuild` when available. A plain `cargo build --target
+/// <musl>` cannot link on a macOS host: Apple's `ld` rejects the GNU linker
+/// options rustc passes for an ELF target (`--as-needed`, `-Bstatic`,
+/// `--gc-sections`, ...). zig ships a cross-capable linker and is what
+/// `test_linux::ZigbuildCompiler` already uses for the same reason. On Linux,
+/// the native toolchain links musl directly, so plain `cargo build` is used.
+///
+/// Two prerequisites, each skipped with a loud banner rather than failing the
+/// whole prepush gate — both are one-time local setup, not something this gate
+/// should force on every invocation:
+/// - the `x86_64-unknown-linux-musl` rustup target
+/// - on macOS, `cargo-zigbuild`
+///
+/// Set `MINIBOX_REQUIRE_MUSL_CHECK=1` to turn either skip into a hard failure
+/// (e.g. for CI or a machine that must never silently skip this gate).
 pub fn musl_check(sh: &Shell) -> Result<()> {
     const TARGET: &str = "x86_64-unknown-linux-musl";
 
@@ -242,19 +255,77 @@ pub fn musl_check(sh: &Shell) -> Result<()> {
         .read()
         .unwrap_or_default();
     if !installed.lines().any(|l| l == TARGET) {
-        eprintln!(
-            "musl-check: skipping — target {TARGET} not installed \
-             (run `rustup target add {TARGET}` to enable this gate)"
+        return musl_check_skip(
+            &format!("target {TARGET} not installed"),
+            &format!("Run `rustup target add {TARGET}` to enable this gate"),
         );
-        return Ok(());
     }
 
-    eprintln!("--- musl-check: cargo check --target {TARGET} -p miniboxd -p mbx ---");
-    cmd!(sh, "cargo check --target {TARGET} -p miniboxd -p mbx")
+    // zigbuild is required on macOS (Apple ld cannot link ELF) and harmless
+    // elsewhere; prefer it whenever it is installed.
+    // `cargo zigbuild --version` is not accepted by the subcommand; `--help`
+    // is the cheapest invocation that exits 0 only when it is actually installed.
+    let has_zigbuild = cmd!(sh, "cargo zigbuild --help")
+        .quiet()
+        .ignore_stdout()
         .run()
-        .context("musl cross-check failed (cargo check --target x86_64-unknown-linux-musl)")?;
+        .is_ok();
+    if !has_zigbuild && cfg!(target_os = "macos") {
+        return musl_check_skip(
+            "cargo-zigbuild not installed (required to link musl on macOS)",
+            "Run `cargo install cargo-zigbuild` and install zig to enable this gate",
+        );
+    }
+
+    let build: &[&str] = if has_zigbuild {
+        &["zigbuild"]
+    } else {
+        &["build"]
+    };
+    eprintln!(
+        "--- musl-check: cargo {} --release --target {TARGET} -p miniboxd -p mbx ---",
+        build.join(" ")
+    );
+    cmd!(
+        sh,
+        "cargo {build...} --release --target {TARGET} -p miniboxd -p mbx"
+    )
+    .run()
+    .context("musl cross-check failed (release cross-build for x86_64-unknown-linux-musl)")?;
     eprintln!("musl-check passed");
     Ok(())
+}
+
+/// Report a skipped musl gate with an unmissable banner, or fail hard when
+/// `MINIBOX_REQUIRE_MUSL_CHECK` demands the gate actually run.
+fn musl_check_skip(reason: &str, remedy: &str) -> Result<()> {
+    if musl_check_required() {
+        anyhow::bail!(
+            "musl-check: REQUIRED but did not run — {reason}. \
+             {remedy}, or unset MINIBOX_REQUIRE_MUSL_CHECK to allow a skip."
+        );
+    }
+    eprintln!(
+        "\n\
+         ################################################################\n\
+         # musl-check: SKIPPED — {reason}\n\
+         # This gate did NOT run. Link-time musl failures will not be\n\
+         # caught locally and may only surface in CI.\n\
+         # {remedy}, or set\n\
+         # MINIBOX_REQUIRE_MUSL_CHECK=1 to make this skip fatal.\n\
+         ################################################################\n"
+    );
+    Ok(())
+}
+
+/// Returns true if `MINIBOX_REQUIRE_MUSL_CHECK` is set to a truthy value (`1` or
+/// `true`). When set, an unrunnable musl gate fails `musl_check` instead of
+/// silently skipping it.
+fn musl_check_required() -> bool {
+    matches!(
+        std::env::var("MINIBOX_REQUIRE_MUSL_CHECK").as_deref(),
+        Ok("1" | "true")
+    )
 }
 
 /// Unit tests (any platform, matches CI).
@@ -281,8 +352,32 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
             .run()
             .context("nextest workspace --lib tests failed")?;
         }
+        check_minibox_testsuite_has_tests(&sh)?;
         Ok(())
     })
+}
+
+/// Zero-test guard for `minibox-testsuite` inline unit tests.
+///
+/// Running `cargo nextest run -p minibox-testsuite` through the `--workspace
+/// --lib` invocation in `test_unit` does not catch a per-package zero-test
+/// case: `--no-tests=fail` on a workspace run succeeds as long as *any* other
+/// package has tests, silently masking `minibox-testsuite` losing all of its
+/// inline tests (e.g. from a stray `#[cfg(...)]` gate or a broken
+/// `conformance_test!` macro expansion).
+///
+/// This dedicated `-p minibox-testsuite` invocation with `--no-tests=fail`
+/// (available since nextest 0.9.112) closes the gap: nextest exits 1 if the
+/// package contributes zero matched tests, making what would otherwise look
+/// like a pass into a hard build failure.
+fn check_minibox_testsuite_has_tests(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo nextest run --no-tests=fail -p minibox-testsuite")
+        .run()
+        .context(
+            "minibox-testsuite zero-test guard: no tests ran for \
+             `-p minibox-testsuite`; a cfg gate or broken conformance_test! \
+             expansion may have silently removed all inline tests",
+        )
 }
 
 /// Conformance suite: builds and runs the `minibox-testsuite` harness.
@@ -859,8 +954,8 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::{
-        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, parse_handler_fn_coverage,
-        phase_2_skipped,
+        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, musl_check_required,
+        nextest_output_is_zero_tests, parse_handler_fn_coverage, phase_2_skipped,
     };
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
@@ -896,6 +991,38 @@ mod tests {
         // SAFETY: serialized via ENV_LOCK
         unsafe { std::env::remove_var("SKIP_PHASE_2") };
         assert!(!phase_2_skipped());
+    }
+
+    #[test]
+    fn musl_check_required_true_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["1", "true"] {
+            // SAFETY: serialized via ENV_LOCK; no other thread reads this var.
+            unsafe { std::env::set_var("MINIBOX_REQUIRE_MUSL_CHECK", val) };
+            assert!(musl_check_required(), "expected true for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("MINIBOX_REQUIRE_MUSL_CHECK") };
+    }
+
+    #[test]
+    fn musl_check_required_false_values() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        for val in ["0", "false", "yes", ""] {
+            // SAFETY: serialized via ENV_LOCK
+            unsafe { std::env::set_var("MINIBOX_REQUIRE_MUSL_CHECK", val) };
+            assert!(!musl_check_required(), "expected false for {val:?}");
+        }
+        // SAFETY: same guard
+        unsafe { std::env::remove_var("MINIBOX_REQUIRE_MUSL_CHECK") };
+    }
+
+    #[test]
+    fn musl_check_required_unset_is_false() {
+        let _g = ENV_LOCK.lock().expect("env lock");
+        // SAFETY: serialized via ENV_LOCK
+        unsafe { std::env::remove_var("MINIBOX_REQUIRE_MUSL_CHECK") };
+        assert!(!musl_check_required());
     }
 
     #[test]
@@ -1055,6 +1182,75 @@ mod tests {
     fn returns_none_on_empty_input() {
         assert!(parse_handler_fn_coverage("").is_none());
         assert!(parse_handler_fn_coverage("not json").is_none());
+    }
+
+    /// Zero-test guard: `nextest_output_is_zero_tests` detects all known
+    /// nextest "no tests ran" output patterns and rejects normal-run output.
+    #[test]
+    fn nextest_zero_tests_detected_from_output() {
+        // Patterns that indicate zero tests ran.
+        assert!(
+            nextest_output_is_zero_tests("0 tests run in 0.02s"),
+            "should detect '0 tests run'"
+        );
+        assert!(
+            nextest_output_is_zero_tests("no tests ran"),
+            "should detect 'no tests ran'"
+        );
+        assert!(
+            nextest_output_is_zero_tests("no tests to run"),
+            "should detect 'no tests to run'"
+        );
+        // Multi-line output — the zero marker is on one of the lines.
+        assert!(
+            nextest_output_is_zero_tests("building tests...\n0 tests run in 0.01s\n"),
+            "should detect zero marker in multi-line output"
+        );
+        // Normal-run output must NOT be flagged as zero-tests.
+        assert!(
+            !nextest_output_is_zero_tests("1 tests run in 0.50s"),
+            "should not flag a run with ≥1 tests"
+        );
+        assert!(
+            !nextest_output_is_zero_tests("42 tests run, 0 failed"),
+            "should not flag a run with ≥1 tests even when 0 failed"
+        );
+        assert!(
+            !nextest_output_is_zero_tests(""),
+            "empty output should not be flagged"
+        );
+    }
+
+    /// Tripwire: `check_minibox_testsuite_has_tests` must use `--no-tests=fail`
+    /// with `-p minibox-testsuite` to close the per-package zero-test gap that
+    /// the workspace `--workspace --lib` run cannot catch on its own.
+    ///
+    /// If this test fails: either the guard was accidentally removed (restore
+    /// `check_minibox_testsuite_has_tests` and its call from `test_unit`) or
+    /// a refactor renamed/moved it (update the searched text to match).
+    #[test]
+    fn minibox_testsuite_zero_test_guard_present() {
+        assert!(
+            GATES_SOURCE.contains("--no-tests=fail"),
+            "gates.rs must contain `--no-tests=fail` to guard against silent \
+             zero-test runs for `-p minibox-testsuite`"
+        );
+        assert!(
+            GATES_SOURCE.contains("--no-tests=fail -p minibox-testsuite")
+                || (GATES_SOURCE.contains("--no-tests=fail")
+                    && GATES_SOURCE.contains("-p minibox-testsuite")),
+            "the --no-tests=fail flag and -p minibox-testsuite must appear \
+             together in the zero-test guard invocation"
+        );
+        // The guard function must be called from test_unit so the gate
+        // actually runs in the standard unit-test flow.
+        let body = extract_test_unit_body(GATES_SOURCE)
+            .expect("could not locate `pub fn test_unit` in gates.rs source");
+        assert!(
+            body.contains("check_minibox_testsuite_has_tests"),
+            "`test_unit` must call `check_minibox_testsuite_has_tests` — \
+             without it, a zero-test minibox-testsuite is silently ignored"
+        );
     }
 
     /// The published handler-coverage threshold remains enforceable.
@@ -1379,27 +1575,60 @@ fn parse_workspace_version(content: &str) -> Option<&str> {
     None
 }
 
-/// Check that every wired adapter has at least one integration test file.
+/// Check that every wired adapter has at least one integration test file
+/// that actually contains tests.
 ///
 /// Mirrors the `adapter-integration-tests` job in `stability-gates.yml`.
+/// Covers all five wired adapters (stability checklist Gate 3): smolvm's
+/// integration tests live in `crates/minibox/tests`, krun's in
+/// `crates/macbox/tests`. A matching filename alone is not enough — the file
+/// must contain a `#[test]`/`#[tokio::test]` attribute or a conformance-suite
+/// invocation, so an empty placeholder file cannot satisfy the gate.
 pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
-    let adapters = ["native", "gke", "colima"];
-    let test_dir = sh.current_dir().join("crates/minibox/tests");
+    // Adapter name -> directories that may hold its integration tests.
+    let adapters: &[(&str, &[&str])] = &[
+        ("native", &["crates/minibox/tests"]),
+        ("gke", &["crates/minibox/tests"]),
+        ("colima", &["crates/minibox/tests"]),
+        ("smolvm", &["crates/minibox/tests", "crates/smolbox/tests"]),
+        ("krun", &["crates/macbox/tests"]),
+    ];
+    let root = sh.current_dir();
     let mut missing = Vec::new();
 
-    for adapter in &adapters {
-        let has_test = fs::read_dir(&test_dir)
-            .with_context(|| format!("cannot read {}", test_dir.display()))?
-            .filter_map(std::result::Result::ok)
-            .any(|e| e.file_name().to_string_lossy().contains(adapter));
-        if has_test {
-            eprintln!("OK: adapter '{adapter}' has integration test file(s)");
+    for (adapter, dirs) in adapters {
+        let mut matched = Vec::new();
+        for dir in *dirs {
+            let test_dir = root.join(dir);
+            for entry in fs::read_dir(&test_dir)
+                .with_context(|| format!("cannot read {}", test_dir.display()))?
+                .filter_map(std::result::Result::ok)
+            {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let is_rust_file = std::path::Path::new(&name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("rs"));
+                if !name.contains(adapter) || !is_rust_file {
+                    continue;
+                }
+                let content = fs::read_to_string(entry.path())
+                    .with_context(|| format!("cannot read {}", entry.path().display()))?;
+                if content.contains("#[test]")
+                    || content.contains("#[tokio::test]")
+                    || content.contains("conformance")
+                {
+                    matched.push(name);
+                }
+            }
+        }
+        if matched.is_empty() {
+            eprintln!("ERROR: no integration test file with tests for adapter '{adapter}'");
+            missing.push(*adapter);
         } else {
             eprintln!(
-                "ERROR: no integration test file for adapter '{adapter}' in {}",
-                test_dir.display()
+                "OK: adapter '{adapter}' has integration test file(s): {}",
+                matched.join(", ")
             );
-            missing.push(*adapter);
         }
     }
 
@@ -1443,6 +1672,27 @@ pub fn test_gke_adapter(sh: &Shell) -> Result<()> {
             }
         }
     }
+}
+
+/// Returns `true` if a nextest output string indicates that zero tests ran.
+///
+/// Nextest 0.9.130 emits one of the following when `--no-tests=fail` is *not*
+/// supplied and no tests match the filter:
+///
+/// - `"no tests ran"` (older nextest summary line)
+/// - `"0 tests run"` (nextest ≥0.9.x summary line)
+/// - `"no tests to run"` (alternative phrasing)
+///
+/// This function is extracted as a pure predicate so the detection logic can
+/// be unit-tested with fixture strings independently of the live nextest
+/// process.  The primary guard (`check_minibox_testsuite_has_tests`) relies on
+/// `--no-tests=fail` rather than output parsing, but this function documents
+/// and verifies the fallback signal for diagnostic purposes.
+#[cfg(test)]
+pub fn nextest_output_is_zero_tests(output: &str) -> bool {
+    output.lines().any(|l| {
+        l.contains("0 tests run") || l.contains("no tests ran") || l.contains("no tests to run")
+    })
 }
 
 /// Returns true if a `#[cfg(...)]` attribute line's predicate contains a bare

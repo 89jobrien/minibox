@@ -1,0 +1,6 @@
+pipeline: install_hooks
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cp .githooks/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit"

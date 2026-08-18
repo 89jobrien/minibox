@@ -1,14 +1,11 @@
 //! Typed minibox daemon client adapter for MCP tools.
 
 use crate::error::{McpServerError, Result};
+use crate::policy::DEFAULT_MAX_OUTPUT_BYTES;
 use minibox_core::client::{ClientError, DaemonClient, default_socket_path};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use serde_json::Value;
 use std::path::PathBuf;
-
-// TODO(review): duplicated in policy.rs's DEFAULT_MAX_OUTPUT_BYTES; doctor() (via call())
-// always uses this fixed 1 MiB value rather than the policy-configurable max_output_bytes.
-const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
 /// Thin adapter over [`DaemonClient`] with terminal-aware response collection.
 #[derive(Clone, Debug)]
@@ -104,14 +101,8 @@ pub struct DaemonCallResult {
 fn map_client_error(error: ClientError) -> McpServerError {
     match error {
         ClientError::ConnectionFailed(e) => McpServerError::DaemonConnection(e.to_string()),
-        // TODO(review): DaemonError (daemon reachable, actively errored) and FrameError
-        // (transport/protocol-level corruption, e.g. version skew) are both mapped to
-        // DaemonConnection, whose help text says "ensure miniboxd is running" — misleading
-        // for a FrameError where the daemon is up and just sending unparseable frames.
-        // Give FrameError its own variant (e.g. ProtocolError) with distinct help text.
-        ClientError::DaemonError(message) | ClientError::FrameError(message) => {
-            McpServerError::DaemonConnection(message)
-        }
+        ClientError::DaemonError(message) => McpServerError::Daemon(message),
+        ClientError::FrameError(message) => McpServerError::ProtocolError(message),
         ClientError::SocketPathNotFound => {
             McpServerError::DaemonConnection(ClientError::SocketPathNotFound.to_string())
         }
@@ -120,10 +111,10 @@ fn map_client_error(error: ClientError) -> McpServerError {
 }
 
 /// Return the daemon response variant name.
-// TODO(review): silently returns "Unknown" if serialization fails or the "type" tag is
-// missing/renamed, rather than logging — masks protocol drift between this crate and
-// minibox-core::protocol::DaemonResponse instead of surfacing it. Add tracing::warn! when
-// the .ok()/.and_then() chain bottoms out.
+///
+/// Falls back to `"Unknown"` with a warning when the response cannot be
+/// serialized or carries no `type` tag — either indicates protocol drift
+/// between this crate and `minibox-core::protocol::DaemonResponse`.
 #[must_use]
 pub fn response_type(response: &DaemonResponse) -> String {
     serde_json::to_value(response)
@@ -134,7 +125,13 @@ pub fn response_type(response: &DaemonResponse) -> String {
                 .and_then(Value::as_str)
                 .map(std::string::ToString::to_string)
         })
-        .unwrap_or_else(|| "Unknown".to_string())
+        .unwrap_or_else(|| {
+            tracing::warn!(
+                response = ?response,
+                "client: daemon response missing type tag; possible protocol drift"
+            );
+            "Unknown".to_string()
+        })
 }
 
 #[cfg(test)]

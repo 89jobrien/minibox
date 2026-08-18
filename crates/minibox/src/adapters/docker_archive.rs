@@ -115,6 +115,12 @@ fn tar_directory(dir: &Path) -> Result<Vec<u8>> {
     let mut buf = Vec::new();
     {
         let mut builder = tar::Builder::new(&mut buf);
+        // Root filesystem layers commonly contain symlinks that only resolve
+        // inside a live container mount namespace (e.g. `etc/mtab ->
+        // ../proc/mounts`). `append_dir_all` follows symlinks by default and
+        // would fail with ENOENT stat-ing such a target on the host; storing
+        // the symlink itself instead avoids that and matches OCI semantics.
+        builder.follow_symlinks(false);
         builder
             .append_dir_all(".", dir)
             .with_context(|| format!("append_dir_all {}", dir.display()))?;
@@ -189,6 +195,31 @@ mod tests {
         assert!(names.contains(&"config.json".to_string()));
         assert!(names.contains(&"manifest.json".to_string()));
         assert!(names.iter().any(|n| n.starts_with("layer-0/")));
+    }
+
+    /// Regression test: root filesystem layers commonly contain symlinks
+    /// that only resolve inside a live container mount namespace, e.g.
+    /// Alpine's `etc/mtab -> ../proc/mounts`. `tar_directory` must store
+    /// such symlinks as-is rather than following them, or `append_dir_all`
+    /// fails with ENOENT trying to stat the (host-side) dangling target.
+    #[cfg(unix)]
+    #[test]
+    fn tar_directory_preserves_dangling_symlinks() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let store = Arc::new(ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"));
+        write_sample_image(&store, "alpine", "latest");
+
+        let layer_dir = store
+            .layers_dir_pub("alpine", "latest")
+            .expect("layers dir")
+            .join("sha256_deadbeef");
+        std::os::unix::fs::symlink("../proc/mounts", layer_dir.join("mtab"))
+            .expect("create dangling symlink");
+
+        let dest = tmp.path().join("export");
+        let tarball = build_docker_load_tarball(&store, "alpine", "latest", &dest)
+            .expect("build tarball despite dangling symlink");
+        assert!(tarball.exists());
     }
 
     #[test]

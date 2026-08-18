@@ -1,8 +1,41 @@
 //! Tool input and output types for the minibox MCP server.
 
+use crate::error::{McpServerError, Result};
+use minibox_core::domain::NetworkMode;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Reject empty or whitespace-only identifier fields with a uniform error.
+///
+/// # Errors
+///
+/// Returns [`McpServerError::InvalidInput`] when the trimmed value is empty.
+pub fn require_non_empty(value: &str, field: &'static str) -> Result<()> {
+    if value.trim().is_empty() {
+        return Err(McpServerError::InvalidInput(format!(
+            "{field} must not be empty"
+        )));
+    }
+    Ok(())
+}
+
+/// Parse a user-supplied network mode string into a domain [`NetworkMode`].
+///
+/// # Errors
+///
+/// Returns [`McpServerError::InvalidInput`] for unknown network modes.
+pub fn parse_network_mode(mode: Option<&str>) -> Result<NetworkMode> {
+    match mode.unwrap_or("none") {
+        "none" => Ok(NetworkMode::None),
+        "bridge" => Ok(NetworkMode::Bridge),
+        "host" => Ok(NetworkMode::Host),
+        "tailnet" => Ok(NetworkMode::Tailnet),
+        other => Err(McpServerError::InvalidInput(format!(
+            "unknown network mode: {other}"
+        ))),
+    }
+}
 
 /// Empty input for tools that take no parameters.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -180,10 +213,8 @@ pub struct LogsOutput {
 }
 
 /// Input for a single container ID operation.
-// TODO(review): `id` is a bare String with no validation at construction; emptiness is
-// checked ad hoc in four separate call sites (containers.rs logs/manifest/simple_id_request).
-// A ContainerRef/ContainerId newtype with TryFrom<String> (trim + non-empty) would make
-// "empty id" unrepresentable and remove the duplication.
+///
+/// Emptiness is validated once via [`require_non_empty`] at each tool boundary.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ContainerIdInput {
     /// Container ID or name.

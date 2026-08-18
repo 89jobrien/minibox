@@ -1,23 +1,80 @@
 project: minibox
 id: minibox
-updated: 2026-08-16
+updated: 2026-08-18
 items:
 - id: uncommitted-work
-  doob_uuid: null
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (2 files)
+  title: Uncommitted changes (27 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
+    .debtmap.toml
+    .minibox/checkpoints/prepush.json
+    CLAUDE.md
+    Cargo.lock
+    Cargo.toml
+    Cruxfile
+    Justfile
+    crates/mcp/Cargo.toml
+    crates/mcp/README.md
+    crates/mcp/src/client.rs
+    crates/mcp/src/error.rs
+    crates/mcp/src/policy.rs
+    crates/mcp/src/server.rs
+    crates/mcp/src/tools/containers.rs
+    crates/mcp/src/tools/doctor.rs
+    crates/mcp/src/tools/images.rs
+    crates/mcp/src/types.rs
+    crates/mcp/tests/integration.rs
+    crates/minibox/src/adapters/commit.rs
+    crates/minibox/src/adapters/docker_archive.rs
+    docs/notes/minibox-in-minibox.local.md
+    mise.toml
+    scripts/diagnose.nu
+    scripts/standup.nu
+    crux/
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  completed: null
-  extra: []
+  - .debtmap.toml
+  - .minibox/checkpoints/prepush.json
+  - CLAUDE.md
+  - Cargo.lock
+  - Cargo.toml
+  - Cruxfile
+  - Justfile
+  - crates/mcp/Cargo.toml
+  - crates/mcp/README.md
+  - crates/mcp/src/client.rs
+  - crates/mcp/src/error.rs
+  - crates/mcp/src/policy.rs
+  - crates/mcp/src/server.rs
+  - crates/mcp/src/tools/containers.rs
+  - crates/mcp/src/tools/doctor.rs
+  - crates/mcp/src/tools/images.rs
+  - crates/mcp/src/types.rs
+  - crates/mcp/tests/integration.rs
+  - crates/minibox/src/adapters/commit.rs
+  - crates/minibox/src/adapters/docker_archive.rs
+  - docs/notes/minibox-in-minibox.local.md
+  - mise.toml
+  - scripts/diagnose.nu
+  - scripts/standup.nu
+  - crux/
 log:
-- date: '20260815.140448'
-  summary: done=144 running=0 pending=20 blocked=0
-  commits: []
+- date: '20260818.175734'
+  summary: done=149 running=0 pending=15 blocked=0
+  commits:
+  - 8e2d8a738624e2908b438e4e8b9a8b794ef5b238
+  - a99407388633a50228b3898270522e6171b96f46
+  - bc01b5f5c604904f44bc76d22fbf382d7d8c9885
+  - 3f7ac2a564121307cc82fa491d78d1dd6157a6b3
+  - 3ed66acccb453374e6d134cb4630fbaa1b7f28bc
+  - ec59ccea3136a58e70284907f929ba87d59b4b5d
+  - b482a0aa4e555605e56b658b2b5a234aae3e098c
+  - d5b657d7e66a545f83a33b80b78a938322480314
+  - 44e221e6ec2678f65414b385411377223c5126a5
+  - c3cd3d3e99b78188a593d5bc0dbc7bc979907291

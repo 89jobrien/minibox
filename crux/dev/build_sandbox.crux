@@ -1,0 +1,6 @@
+pipeline: build_sandbox
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "bash images/sandbox/build.sh"

@@ -1,0 +1,6 @@
+pipeline: bench_baseline
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo xtask bench --save-baseline"
