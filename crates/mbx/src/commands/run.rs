@@ -30,6 +30,7 @@
     )
 )]
 
+use super::RequestError;
 use anyhow::{Context as _, Result};
 use base64::Engine;
 use minibox_core::client::DaemonClient;
@@ -194,12 +195,13 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
                 }
             }
             DaemonResponse::Error { message } => {
-                eprintln!("error: {message}");
-                std::process::exit(1);
+                return Err(RequestError::DaemonError { message }.into());
             }
             other => {
-                eprintln!("run: unexpected response: {other:?}");
-                std::process::exit(1);
+                return Err(RequestError::UnexpectedResponse {
+                    response: format!("{other:?}"),
+                }
+                .into());
             }
         }
     }
