@@ -545,6 +545,64 @@ mod tests {
         }
     }
 
+    /// Explicit `MINIBOX_ADAPTER` disables fallback: even when the smolvm
+    /// probe fails, the requested adapter must be selected, not the fallback
+    /// (issue #80 regression guard for the documented contract).
+    #[test]
+    fn explicit_adapter_does_not_fall_back_when_smolvm_probe_fails() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "smolvm");
+        }
+        let result = adapter_from_env_with_smolvm_available(false);
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = result.expect("explicit smolvm must parse regardless of probe");
+        assert_eq!(
+            suite,
+            AdapterSuite::SmolVm,
+            "explicit MINIBOX_ADAPTER must disable fallback"
+        );
+    }
+
+    /// An explicitly requested adapter that is unavailable on this platform
+    /// must be a hard error — never a silent fallback.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn explicit_unavailable_adapter_errors_instead_of_falling_back() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "native");
+        }
+        let result = adapter_from_env_with_smolvm_available(false);
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let err = result.expect_err("native is unavailable on macOS — must be a hard error");
+        assert_eq!(err.requested, "native");
+    }
+
+    /// Pin the macOS fallback: when smolvm is absent and no adapter is
+    /// requested, selection must land on krun, not error or pick native.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_fallback_is_krun() {
+        assert_eq!(FALLBACK_ADAPTER_SUITE, "krun");
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = adapter_from_env_with_smolvm_available(false)
+            .expect("krun fallback must parse on macOS");
+        assert_eq!(suite, AdapterSuite::Krun);
+    }
+
     #[test]
     fn parse_unavailable_adapter_returns_error() {
         // On macOS: native/gke are unavailable. On Linux: all adapters are available.

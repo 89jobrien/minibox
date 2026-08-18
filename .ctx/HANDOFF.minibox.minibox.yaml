@@ -1,27 +1,26 @@
 project: minibox
 id: minibox
-updated: 2026-08-16
+updated: 2026-08-17
 items: []
 log:
-- date: '20260816'
-  summary: |-
-    Completed taskit flow cycle (develop → staging → release → main → develop) with full branch pipeline promotion. Renamed branch pipeline roles to align with taskit convention (develop/staging/release/main). All five commits landed on develop branch with CI green. Workspace builds cleanly; no test failures.
-  commits:
-  - 3ed66acc3f8f0fe0f7f39f87b897e1f75c8f1c43
-  - ec59ccea7d17cc0b00a12d59cd39efbe58fac2e1
-  - b482a0aac559c6fb1c49a7b1e28705f9b05d2a34
-  - d5b657d7099d5b8de9a2af26eabdaa67c20f9fb8
-  - 44e221e68c5c7e30ff9c21afef74f03f4ac10b87
 - date: '20260816.075723'
   summary: done=145 running=0 pending=19 blocked=0
   commits:
-  - 44e221e6ec2678f65414b385411377223c5126a5
-  - c3cd3d3e99b78188a593d5bc0dbc7bc979907291
-  - ac2668e242330e916c8dff475a9c5cc097e2051d
-  - 19caf4c7e48f5d6cc4ccc2addda313fc601e83eb
-  - 6cff9986c76385a1c560da1a0fdbfcc408ae5995
-  - 99b6a3119151ea9306eb4732da21ee056b7fa113
-  - af9531927cb860388b5cf3b1ed55a6315c8c63bf
-  - b55c4b27a6a1a536742bf300f9e12eddbf3a97f2
-  - 61e1c706ba2b641885d38fe0fcf5a98d536659ca
-  - 08a72536c5284ad6e86dd90a43fc87289ae18faf
+  - !Sha 44e221e6ec2678f65414b385411377223c5126a5
+  - !Sha c3cd3d3e99b78188a593d5bc0dbc7bc979907291
+  - !Sha ac2668e242330e916c8dff475a9c5cc097e2051d
+  - !Sha 19caf4c7e48f5d6cc4ccc2addda313fc601e83eb
+  - !Sha 6cff9986c76385a1c560da1a0fdbfcc408ae5995
+  - !Sha 99b6a3119151ea9306eb4732da21ee056b7fa113
+  - !Sha af9531927cb860388b5cf3b1ed55a6315c8c63bf
+  - !Sha b55c4b27a6a1a536742bf300f9e12eddbf3a97f2
+  - !Sha 61e1c706ba2b641885d38fe0fcf5a98d536659ca
+  - !Sha 08a72536c5284ad6e86dd90a43fc87289ae18faf
+- date: '20260816'
+  summary: Completed taskit flow cycle (develop → staging → release → main → develop) with full branch pipeline promotion. Renamed branch pipeline roles to align with taskit convention (develop/staging/release/main). All five commits landed on develop branch with CI green. Workspace builds cleanly; no test failures.
+  commits:
+  - !Sha 3ed66acc3f8f0fe0f7f39f87b897e1f75c8f1c43
+  - !Sha ec59ccea7d17cc0b00a12d59cd39efbe58fac2e1
+  - !Sha b482a0aac559c6fb1c49a7b1e28705f9b05d2a34
+  - !Sha d5b657d7099d5b8de9a2af26eabdaa67c20f9fb8
+  - !Sha 44e221e68c5c7e30ff9c21afef74f03f4ac10b87

@@ -1298,3 +1298,120 @@ mod run_inner_tests {
         );
     }
 }
+
+// ── build_container_record rootfs-metadata projection (issue #80) ────────────
+
+#[cfg(all(test, unix))]
+mod build_container_record_tests {
+    use super::*;
+    use minibox_core::domain::{BackendRootfsMetadata, RootfsLayout};
+    use minibox_core::path::InternalPath;
+    use std::collections::HashMap;
+
+    fn layout_with_upper(upper: &str) -> RootfsLayout {
+        RootfsLayout {
+            merged_dir: PathBuf::from("/var/lib/minibox/containers/abc/merged").into(),
+            rootfs_metadata: Some(BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from(upper).into(),
+                metadata: HashMap::new(),
+            }),
+            source_image_ref: None,
+        }
+    }
+
+    fn layout_without_metadata() -> RootfsLayout {
+        RootfsLayout {
+            merged_dir: PathBuf::from("/var/lib/minibox/containers/abc/merged").into(),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        }
+    }
+
+    fn record_from(layout: &RootfsLayout) -> ContainerRecord {
+        let merged: InternalPath = PathBuf::from("/var/lib/minibox/containers/abc/merged").into();
+        let cgroup = std::path::Path::new("/sys/fs/cgroup/minibox/abc");
+        let command = vec!["/bin/sh".to_string()];
+        let name: Option<String> = None;
+        let platform: Option<String> = None;
+        let cgroup_parent: Option<String> = None;
+        build_container_record(ContainerRecordBuildParams {
+            id: "abc123",
+            name: &name,
+            image_label: "alpine:latest",
+            command: &command,
+            merged_dir: &merged,
+            cgroup_dir: cgroup,
+            rootfs_layout: layout,
+            image: "alpine",
+            tag: "latest",
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            network: None,
+            env: &[],
+            mounts: &[],
+            privileged: false,
+            platform: &platform,
+            cgroup_parent: &cgroup_parent,
+        })
+    }
+
+    #[test]
+    fn populates_upper_dir_from_overlay_metadata() {
+        let layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        let record = record_from(&layout);
+        assert_eq!(
+            record.upper_dir,
+            Some(PathBuf::from("/var/lib/minibox/containers/abc/upper")),
+            "upper_dir must be projected from RootfsLayout::rootfs_metadata"
+        );
+    }
+
+    #[test]
+    fn leaves_upper_dir_none_without_metadata() {
+        let record = record_from(&layout_without_metadata());
+        assert_eq!(
+            record.upper_dir, None,
+            "copy-based backends expose no overlay upper dir"
+        );
+    }
+
+    #[test]
+    fn merged_dir_matches_rootfs_path() {
+        let layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        let record = record_from(&layout);
+        assert_eq!(
+            record.merged_dir.as_deref(),
+            Some(record.rootfs_path.as_path()),
+            "merged_dir and rootfs_path derive from the same InternalPath"
+        );
+    }
+
+    #[test]
+    fn preserves_rootfs_metadata_verbatim() {
+        let layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        let record = record_from(&layout);
+        assert_eq!(record.rootfs_metadata, layout.rootfs_metadata);
+    }
+
+    #[test]
+    fn prefers_layout_source_image_ref_over_image_label() {
+        let mut layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        layout.source_image_ref = Some("docker.io/library/alpine@sha256:dead".to_string());
+        let record = record_from(&layout);
+        assert_eq!(
+            record.source_image_ref.as_deref(),
+            Some("docker.io/library/alpine@sha256:dead"),
+            "layout ref wins over the image_label fallback"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_image_label_when_layout_ref_absent() {
+        let record = record_from(&layout_without_metadata());
+        assert_eq!(
+            record.source_image_ref.as_deref(),
+            Some("alpine:latest"),
+            "image_label is the fallback source_image_ref"
+        );
+    }
+}

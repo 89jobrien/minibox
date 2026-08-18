@@ -1379,27 +1379,60 @@ fn parse_workspace_version(content: &str) -> Option<&str> {
     None
 }
 
-/// Check that every wired adapter has at least one integration test file.
+/// Check that every wired adapter has at least one integration test file
+/// that actually contains tests.
 ///
 /// Mirrors the `adapter-integration-tests` job in `stability-gates.yml`.
+/// Covers all five wired adapters (stability checklist Gate 3): smolvm's
+/// integration tests live in `crates/minibox/tests`, krun's in
+/// `crates/macbox/tests`. A matching filename alone is not enough — the file
+/// must contain a `#[test]`/`#[tokio::test]` attribute or a conformance-suite
+/// invocation, so an empty placeholder file cannot satisfy the gate.
 pub fn check_adapter_coverage(sh: &Shell) -> Result<()> {
-    let adapters = ["native", "gke", "colima"];
-    let test_dir = sh.current_dir().join("crates/minibox/tests");
+    // Adapter name -> directories that may hold its integration tests.
+    let adapters: &[(&str, &[&str])] = &[
+        ("native", &["crates/minibox/tests"]),
+        ("gke", &["crates/minibox/tests"]),
+        ("colima", &["crates/minibox/tests"]),
+        ("smolvm", &["crates/minibox/tests", "crates/smolbox/tests"]),
+        ("krun", &["crates/macbox/tests"]),
+    ];
+    let root = sh.current_dir();
     let mut missing = Vec::new();
 
-    for adapter in &adapters {
-        let has_test = fs::read_dir(&test_dir)
-            .with_context(|| format!("cannot read {}", test_dir.display()))?
-            .filter_map(std::result::Result::ok)
-            .any(|e| e.file_name().to_string_lossy().contains(adapter));
-        if has_test {
-            eprintln!("OK: adapter '{adapter}' has integration test file(s)");
+    for (adapter, dirs) in adapters {
+        let mut matched = Vec::new();
+        for dir in *dirs {
+            let test_dir = root.join(dir);
+            for entry in fs::read_dir(&test_dir)
+                .with_context(|| format!("cannot read {}", test_dir.display()))?
+                .filter_map(std::result::Result::ok)
+            {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                let is_rust_file = std::path::Path::new(&name)
+                    .extension()
+                    .is_some_and(|ext| ext.eq_ignore_ascii_case("rs"));
+                if !name.contains(adapter) || !is_rust_file {
+                    continue;
+                }
+                let content = fs::read_to_string(entry.path())
+                    .with_context(|| format!("cannot read {}", entry.path().display()))?;
+                if content.contains("#[test]")
+                    || content.contains("#[tokio::test]")
+                    || content.contains("conformance")
+                {
+                    matched.push(name);
+                }
+            }
+        }
+        if matched.is_empty() {
+            eprintln!("ERROR: no integration test file with tests for adapter '{adapter}'");
+            missing.push(*adapter);
         } else {
             eprintln!(
-                "ERROR: no integration test file for adapter '{adapter}' in {}",
-                test_dir.display()
+                "OK: adapter '{adapter}' has integration test file(s): {}",
+                matched.join(", ")
             );
-            missing.push(*adapter);
         }
     }
 

@@ -563,3 +563,54 @@ async fn test_container_state_is_domain_type() {
     let record = state.get_container(id).await.expect("container must exist");
     assert_eq!(record.info.state, "Paused");
 }
+
+// ---------------------------------------------------------------------------
+// rootfs metadata persistence (issue #80)
+// ---------------------------------------------------------------------------
+
+/// A record carrying overlay metadata must survive save → reload intact.
+/// Regression guard for the upper_dir/merged_dir population added in
+/// 1ae7528e — losing these silently breaks `mbx commit` after a daemon
+/// restart. State transitions are deliberately not asserted here:
+/// load_from_disk rewrites stale Created/Running states.
+#[tokio::test]
+async fn populated_rootfs_metadata_survives_state_reload() {
+    let tmp = TempDir::new().expect("unwrap in test");
+    let upper = PathBuf::from("/var/lib/minibox/containers/meta-1/upper");
+    let merged = PathBuf::from("/var/lib/minibox/containers/meta-1/merged");
+
+    let mut record = make_record("meta-1", "Stopped", None);
+    record.rootfs_metadata = Some(minibox_core::domain::BackendRootfsMetadata::Overlay {
+        upper_dir: upper.clone().into(),
+        metadata: std::collections::HashMap::new(),
+    });
+    record.upper_dir = Some(upper.clone());
+    record.merged_dir = Some(merged.clone());
+    record.rootfs_path = merged.clone();
+
+    let state = make_state(&tmp);
+    state.add_container(record.clone()).await;
+
+    // Fresh DaemonState over the same data_dir — the real restart path.
+    let reloaded = make_state(&tmp);
+    reloaded.load_from_disk().await;
+
+    let restored = reloaded
+        .get_container("meta-1")
+        .await
+        .expect("meta-1 must be present after reload");
+    assert_eq!(
+        restored.upper_dir,
+        Some(upper),
+        "upper_dir lost across reload"
+    );
+    assert_eq!(
+        restored.merged_dir,
+        Some(merged),
+        "merged_dir lost across reload"
+    );
+    assert_eq!(
+        restored.rootfs_metadata, record.rootfs_metadata,
+        "rootfs_metadata lost across reload"
+    );
+}

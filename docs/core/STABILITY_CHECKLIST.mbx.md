@@ -4,7 +4,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-08-16
+Last updated: 2026-08-18
 
 ---
 
@@ -113,15 +113,25 @@ Issue #127 records the final lift decision.
 
 ## CI Enforcement
 
-The following xtask gates are enforced in GitHub Actions (`stability-gates.yml` and
-`protocol-drift.yml`):
+The following jobs enforce checklist items in GitHub Actions (issue #133):
 
-| Gate                       | CI Job                        | Workflow                |
-| -------------------------- | ----------------------------- | ----------------------- |
-| coverage-check             | handler coverage gate (>=80%) | stability-gates.yml     |
-| check-protocol-drift       | core contract hash check      | protocol-drift.yml      |
-| check-stale-names          | stale crate/binary name audit | stability-gates.yml     |
-| check-protocol-sites       | HandlerDependencies site count| stability-gates.yml     |
+| Enforces  | CI Job                                        | Command                                        | Workflow            |
+| --------- | --------------------------------------------- | ---------------------------------------------- | ------------------- |
+| Gate 1    | protocol-drift (core contract hash check)     | `cargo xtask check-protocol-drift`             | protocol-drift.yml  |
+| Gate 1    | check-protocol-sites                          | `cargo xtask check-protocol-sites`             | stability-gates.yml |
+| Gate 2    | handler-coverage (>=80% function coverage)    | `cargo xtask coverage-check`                   | stability-gates.yml |
+| Gate 3    | adapter-integration-tests (all five adapters) | `cargo xtask check adapter-coverage`           | stability-gates.yml |
+| Gate 5    | test-unit                                     | `cargo xtask test unit`                        | pr.yml / merge.yml  |
+| Gate 6    | deny + audit                                  | `cargo deny check` / `cargo audit`             | pr.yml / merge.yml  |
+| A2        | no-unwrap-in-prod (enforced as hard job)      | `cargo xtask check-no-unwrap --strict`         | stability-gates.yml |
+| doc sync  | doc-sync (docs audit + FEATURE_MATRIX age)    | `cargo xtask docs audit --full --strict`       | stability-gates.yml |
+| doc names | check-stale-names                             | `cargo xtask check-stale-names`                | stability-gates.yml |
+| compile   | stability-compile (check + clippy)            | `cargo check --workspace` + targeted clippy    | stability-gates.yml |
 
-Gates 1-6 in the table above are enforced via `cargo xtask pre-commit` locally and the jobs
-listed here in CI. All four xtask-based gates were added under issue #133.
+Known gaps (tracked, not yet CI-enforced):
+
+- Gate 4 (`cargo xtask pre-commit` on macOS) has no CI job — all stability jobs run on
+  `ubuntu-latest`. It remains a local gate.
+- Gates 5 and 6 run in `pr.yml`/`merge.yml`, not in the `stability-gates.yml` fan-in, so the
+  six gates are not verified green as a single unit.
+- Advisory items A1, A3, and A4 are review-time only; A2 is the only automated advisory.
