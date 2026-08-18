@@ -164,8 +164,10 @@ Promotion requires:
 ### Freeze notice (issues #117 and #127)
 
 This document was created as part of a stabilization milestone declared in issues
-#117 and #127. The freeze applies to **net-new Core and Platform crates**. Existing
-crates in all tiers continue to receive fixes and enhancements.
+#117 and #127. The freeze applied to **net-new Core and Platform crates**; it was
+**lifted on 2026-08-18** after all six stabilization gates were verified green on
+the promotion path (`develop` -> `staging` -> `release`). See the Freeze Status
+section of `docs/core/STABILITY_CHECKLIST.mbx.md` for the lift record.
 
-The freeze lifts when all six stabilization gates above are verified green on the
-`next` branch.
+The gate criteria above remain the standing bar for adding or promoting Core and
+Platform crates.

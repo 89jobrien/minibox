@@ -140,9 +140,24 @@ impl Container {
             .create()
             .with_context(|| format!("failed to create cgroup for container {}", self.id))?;
 
-        // 2. Mount overlay rootfs.
-        let merged = setup_overlay(image_layers, base_dir)
-            .with_context(|| format!("failed to set up overlay for container {}", self.id))?;
+        // 2. Mount overlay rootfs. On failure, unwind the cgroup created in
+        // step 1 — best-effort, mirroring the daemon's spawn-failure rollback
+        // in handler/run.rs.
+        let merged = match setup_overlay(image_layers, base_dir) {
+            Ok(m) => m,
+            Err(e) => {
+                if let Err(ce) = cgroup_manager.cleanup() {
+                    warn!(
+                        container_id = %self.id,
+                        error = %ce,
+                        "container: cgroup cleanup failed after overlay error"
+                    );
+                }
+                return Err(e).with_context(|| {
+                    format!("failed to set up overlay for container {}", self.id)
+                });
+            }
+        };
         self.rootfs_path.clone_from(&merged);
 
         // 3. Spawn child process.
@@ -164,8 +179,29 @@ impl Container {
             pty: None,
         };
 
-        let spawn = spawn_container_process(process_config)
-            .with_context(|| format!("failed to spawn container process for {}", self.id))?;
+        let spawn = match spawn_container_process(process_config) {
+            Ok(s) => s,
+            Err(e) => {
+                // Unwind both the overlay mount (step 2) and the cgroup
+                // (step 1) so a spawn failure doesn't orphan them.
+                if let Err(ce) = cleanup_mounts(base_dir) {
+                    warn!(
+                        container_id = %self.id,
+                        error = %ce,
+                        "container: mount cleanup failed after spawn error"
+                    );
+                }
+                if let Err(ce) = cgroup_manager.cleanup() {
+                    warn!(
+                        container_id = %self.id,
+                        error = %ce,
+                        "container: cgroup cleanup failed after spawn error"
+                    );
+                }
+                return Err(e)
+                    .with_context(|| format!("failed to spawn container process for {}", self.id));
+            }
+        };
 
         self.pid = Some(spawn.pid);
         self.state = ContainerState::Running;

@@ -96,18 +96,25 @@ tracked follow-up issue.
 
 ## Freeze Status
 
-A narrow Core/Platform freeze applies until every mandatory gate is verified green
-on the promotion path. It freezes new public `minibox-core` protocol/domain API,
-native-platform capability expansion, and newly wired adapters.
+**Lifted 2026-08-18.** The net-new surface freeze declared 2026-05-14 under issue
+#127 (`CONTRIBUTING.md` "Feature Freeze", commit b23575db) is lifted. Lift
+evidence, per the conditions this section previously stated:
 
-Bug and security fixes, coverage work, documentation, compatibility-safe refactors,
-and isolated Tier 2/3 experiments remain permitted. An exception requires explicit
-maintainer approval and a tracking issue; it must state why the work cannot remain
-isolated from frozen Tier 1 contracts.
+- All six mandatory gates green simultaneously on `develop`: Stability Gates,
+  Conformance, and Merge workflows all passing on commits bc01b5f5 and a9940738
+  (2026-08-18), including the protocol-drift gate after its lock regeneration.
+- Handler coverage 92.41% against the 80% threshold (Gate 2).
+- Linux integration/e2e evidence: conformance suite 123/123 on the pre-push gate
+  and self-hosted Linux CI; `native_adapter_isolation_tests` plus the new
+  `native_adapter_lifecycle_failure_tests` (#74) green on a Linux VM under
+  root + cgroup v2 (2026-08-18).
 
-The freeze lifts only after the 80% handler-coverage gate, promotion-path CI, Linux
-integration/e2e evidence, and supporting documentation are simultaneously current.
-Issue #127 records the final lift decision.
+Normal contribution rules resume. New crates and public surface follow the
+Stabilization Policy in `docs/core/CRATE_TIERS.mbx.md` — the gate criteria are
+now a standing promotion bar, not a freeze. Chain I issues are unblocked.
+
+Issue #127 records the lift decision; the original freeze declaration is
+preserved in git history and in `CONTRIBUTING.md`.
 
 ---
 
