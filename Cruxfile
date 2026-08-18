@@ -1,18 +1,55 @@
-# Cruxfile for minibox
-name: minibox-ci
+# Cruxfile for minibox — local CI gate, mirrors the `verify`/`ci` Just recipes.
+#
+# Run:
+#   crux run Cruxfile
+#   crux run Cruxfile -v          # with timing
+#   crux run Cruxfile -q          # errors only
+pipeline: minibox-ci
+budget: { calls: 10 }
+
 steps:
-  - name: self-check
-    run: taskit self-check
-    gate: true
-  - name: fmt --check
-    run: taskit fmt --check
-  - name: lint
-    run: taskit lint
-  - name: compile-tests
-    run: taskit compile-tests
-  - name: test
-    run: taskit test
-  - name: check-deps
-    run: taskit check-deps
-  - name: check-protocol-drift
-    run: taskit check-protocol-drift
+  - step: self_check
+    handler: shell::capture
+    args:
+      cmd: "taskit self-check"
+
+  - step: fmt_check
+    handler: shell::capture
+    args:
+      cmd: "taskit fmt --check"
+
+  - step: lint
+    handler: shell::capture
+    args:
+      cmd: "taskit lint"
+
+  - step: compile_tests
+    handler: shell::capture
+    args:
+      cmd: "taskit compile-tests"
+
+  - step: test
+    handler: shell::capture
+    args:
+      cmd: "taskit test"
+
+  - step: check_deps
+    handler: shell::capture
+    args:
+      cmd: "taskit check-deps"
+
+  - step: check_protocol_drift
+    handler: shell::capture
+    args:
+      cmd: "taskit check-protocol-drift"
+
+  - step: summary
+    handler: shell::capture
+    args:
+      cmd: "echo 'CI gate passed'"
+
+  - step: log_summary
+    handler: ctrl::log
+    args:
+      compact: true
+      field: stdout

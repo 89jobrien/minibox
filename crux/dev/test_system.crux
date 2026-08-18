@@ -1,0 +1,6 @@
+pipeline: test_system
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo xtask test system-suite"
