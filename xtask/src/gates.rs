@@ -281,8 +281,32 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
             .run()
             .context("nextest workspace --lib tests failed")?;
         }
+        check_minibox_testsuite_has_tests(&sh)?;
         Ok(())
     })
+}
+
+/// Zero-test guard for `minibox-testsuite` inline unit tests.
+///
+/// Running `cargo nextest run -p minibox-testsuite` through the `--workspace
+/// --lib` invocation in `test_unit` does not catch a per-package zero-test
+/// case: `--no-tests=fail` on a workspace run succeeds as long as *any* other
+/// package has tests, silently masking `minibox-testsuite` losing all of its
+/// inline tests (e.g. from a stray `#[cfg(...)]` gate or a broken
+/// `conformance_test!` macro expansion).
+///
+/// This dedicated `-p minibox-testsuite` invocation with `--no-tests=fail`
+/// (available since nextest 0.9.112) closes the gap: nextest exits 1 if the
+/// package contributes zero matched tests, making what would otherwise look
+/// like a pass into a hard build failure.
+fn check_minibox_testsuite_has_tests(sh: &Shell) -> Result<()> {
+    cmd!(sh, "cargo nextest run --no-tests=fail -p minibox-testsuite")
+        .run()
+        .context(
+            "minibox-testsuite zero-test guard: no tests ran for \
+             `-p minibox-testsuite`; a cfg gate or broken conformance_test! \
+             expansion may have silently removed all inline tests",
+        )
 }
 
 /// Conformance suite: builds and runs the `minibox-testsuite` harness.
@@ -859,8 +883,8 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::{
-        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, parse_handler_fn_coverage,
-        phase_2_skipped,
+        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, nextest_output_is_zero_tests,
+        parse_handler_fn_coverage, phase_2_skipped,
     };
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
@@ -1055,6 +1079,75 @@ mod tests {
     fn returns_none_on_empty_input() {
         assert!(parse_handler_fn_coverage("").is_none());
         assert!(parse_handler_fn_coverage("not json").is_none());
+    }
+
+    /// Zero-test guard: `nextest_output_is_zero_tests` detects all known
+    /// nextest "no tests ran" output patterns and rejects normal-run output.
+    #[test]
+    fn nextest_zero_tests_detected_from_output() {
+        // Patterns that indicate zero tests ran.
+        assert!(
+            nextest_output_is_zero_tests("0 tests run in 0.02s"),
+            "should detect '0 tests run'"
+        );
+        assert!(
+            nextest_output_is_zero_tests("no tests ran"),
+            "should detect 'no tests ran'"
+        );
+        assert!(
+            nextest_output_is_zero_tests("no tests to run"),
+            "should detect 'no tests to run'"
+        );
+        // Multi-line output — the zero marker is on one of the lines.
+        assert!(
+            nextest_output_is_zero_tests("building tests...\n0 tests run in 0.01s\n"),
+            "should detect zero marker in multi-line output"
+        );
+        // Normal-run output must NOT be flagged as zero-tests.
+        assert!(
+            !nextest_output_is_zero_tests("1 tests run in 0.50s"),
+            "should not flag a run with ≥1 tests"
+        );
+        assert!(
+            !nextest_output_is_zero_tests("42 tests run, 0 failed"),
+            "should not flag a run with ≥1 tests even when 0 failed"
+        );
+        assert!(
+            !nextest_output_is_zero_tests(""),
+            "empty output should not be flagged"
+        );
+    }
+
+    /// Tripwire: `check_minibox_testsuite_has_tests` must use `--no-tests=fail`
+    /// with `-p minibox-testsuite` to close the per-package zero-test gap that
+    /// the workspace `--workspace --lib` run cannot catch on its own.
+    ///
+    /// If this test fails: either the guard was accidentally removed (restore
+    /// `check_minibox_testsuite_has_tests` and its call from `test_unit`) or
+    /// a refactor renamed/moved it (update the searched text to match).
+    #[test]
+    fn minibox_testsuite_zero_test_guard_present() {
+        assert!(
+            GATES_SOURCE.contains("--no-tests=fail"),
+            "gates.rs must contain `--no-tests=fail` to guard against silent \
+             zero-test runs for `-p minibox-testsuite`"
+        );
+        assert!(
+            GATES_SOURCE.contains("--no-tests=fail -p minibox-testsuite")
+                || (GATES_SOURCE.contains("--no-tests=fail")
+                    && GATES_SOURCE.contains("-p minibox-testsuite")),
+            "the --no-tests=fail flag and -p minibox-testsuite must appear \
+             together in the zero-test guard invocation"
+        );
+        // The guard function must be called from test_unit so the gate
+        // actually runs in the standard unit-test flow.
+        let body = extract_test_unit_body(GATES_SOURCE)
+            .expect("could not locate `pub fn test_unit` in gates.rs source");
+        assert!(
+            body.contains("check_minibox_testsuite_has_tests"),
+            "`test_unit` must call `check_minibox_testsuite_has_tests` — \
+             without it, a zero-test minibox-testsuite is silently ignored"
+        );
     }
 
     /// The published handler-coverage threshold remains enforceable.
@@ -1476,6 +1569,27 @@ pub fn test_gke_adapter(sh: &Shell) -> Result<()> {
             }
         }
     }
+}
+
+/// Returns `true` if a nextest output string indicates that zero tests ran.
+///
+/// Nextest 0.9.130 emits one of the following when `--no-tests=fail` is *not*
+/// supplied and no tests match the filter:
+///
+/// - `"no tests ran"` (older nextest summary line)
+/// - `"0 tests run"` (nextest ≥0.9.x summary line)
+/// - `"no tests to run"` (alternative phrasing)
+///
+/// This function is extracted as a pure predicate so the detection logic can
+/// be unit-tested with fixture strings independently of the live nextest
+/// process.  The primary guard (`check_minibox_testsuite_has_tests`) relies on
+/// `--no-tests=fail` rather than output parsing, but this function documents
+/// and verifies the fallback signal for diagnostic purposes.
+#[cfg(test)]
+pub fn nextest_output_is_zero_tests(output: &str) -> bool {
+    output.lines().any(|l| {
+        l.contains("0 tests run") || l.contains("no tests ran") || l.contains("no tests to run")
+    })
 }
 
 /// Returns true if a `#[cfg(...)]` attribute line's predicate contains a bare
