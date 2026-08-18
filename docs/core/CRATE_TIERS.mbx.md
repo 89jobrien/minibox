@@ -6,6 +6,16 @@ crates and wiring new adapter suites.
 
 Last updated: 2026-08-18
 
+See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
+Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
+
+> **Relationship to SUPPORT_TIERS.mbx.md:** This document classifies by *architectural role*
+> (Core/Platform/Experimental/Internal/External). SUPPORT_TIERS classifies by *support
+> commitment level*. The axes are independent: a Platform crate can be Tier 3 (Stub) support
+> (e.g. `winbox`); an Experimental crate architecturally may still receive best-effort (Tier 2)
+> support. When in doubt, this document answers "where does this code live?"; SUPPORT_TIERS
+> answers "what guarantees does it carry?"
+
 ---
 
 ## Tier Definitions
@@ -164,10 +174,9 @@ Promotion requires:
 ### Freeze notice (issues #117 and #127)
 
 This document was created as part of a stabilization milestone declared in issues
-#117 and #127. The freeze applied to **net-new Core and Platform crates**; it was
-**lifted on 2026-08-18** after all six stabilization gates were verified green on
-the promotion path (`develop` -> `staging` -> `release`). See the Freeze Status
-section of `docs/core/STABILITY_CHECKLIST.mbx.md` for the lift record.
+#117 and #127. The freeze applied to **net-new Core and Platform crates**. Existing
+crates in all tiers continue to receive fixes and enhancements.
 
-The gate criteria above remain the standing bar for adding or promoting Core and
-Platform crates.
+**Freeze lifted 2026-08-18** (issue #127 closed). All six stabilization gates were
+verified green on the `next` branch. New Core and Platform crates may now be proposed
+subject to the standard PR gate process described above.
