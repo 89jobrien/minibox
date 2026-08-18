@@ -5,7 +5,7 @@
     {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "b06d2fbbc7ef0b4e438f9819c2efd55cebc2d796d3662cf29465f82ca0f8e45e"
+      "hash": "fb44be98e1d47502d795016e0799aff03badcbf4da487c824d77fe7088566c92"
     },
     {
       "name": "domain-capability",
@@ -95,7 +95,7 @@
     {
       "name": "error-types",
       "path": "crates/minibox-core/src/error.rs",
-      "hash": "1920e4357dd7217a69db2ac81c3d09ac2c4bcd8fe891576a171b4e5ab341da71"
+      "hash": "f4acf285769d13db166d97951be3ae6349bb9caaa11dc649677042907770b342"
     },
     {
       "name": "client-api",
