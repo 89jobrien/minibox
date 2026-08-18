@@ -7,10 +7,9 @@
 )]
 //! Integration tests for the minibox MCP server.
 //
-// TODO(review): coverage gaps identified in review —
-// - No test flips MINIBOX_MCP_ALLOW_* env vars and confirms the allow path actually
-//   works (only safe_default()/deny path is unit-tested in policy.rs). from_env() is the
-//   real binary's boot path and is completely untested.
+// TODO(review): remaining end-to-end coverage gaps —
+// (from_env()/MINIBOX_MCP_ALLOW_* allow-path behavior is now unit-tested in policy.rs,
+// but nothing below exercises it through the real MCP/stdio stack.)
 // - No test calls minibox_stop/minibox_rm/minibox_pull through this real MCP/stdio
 //   stack, so nothing proves a mutating tool is actually blocked (or allowed) end-to-end;
 //   a regression dropping a validate_mutation() call would pass every existing test.
