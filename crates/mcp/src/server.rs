@@ -172,13 +172,8 @@ impl MiniboxMcpServer {
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for MiniboxMcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            instructions: Some(
-                "Control a local minibox daemon through safe, typed MCP tools.".into(),
-            ),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            ..Default::default()
-        }
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_instructions("Control a local minibox daemon through safe, typed MCP tools.")
     }
 }
 
