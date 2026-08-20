@@ -452,7 +452,7 @@ impl ImageLoader for ColimaRegistry {
 // Colima Filesystem Adapter
 // ============================================================================
 
-/// Colima implementation of [`FilesystemProvider`].
+/// Colima implementation of [`crate::domain::FilesystemProvider`].
 ///
 /// Sets up and tears down overlay mounts inside the Lima VM by running
 /// `mount`/`umount` commands via `limactl shell`. The container directory

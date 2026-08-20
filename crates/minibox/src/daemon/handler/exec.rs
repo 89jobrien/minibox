@@ -123,7 +123,7 @@ pub async fn handle_exec(
 
 /// Forward base64-encoded stdin bytes to a running PTY session.
 ///
-/// Looks up the session in [`PtySessionRegistry`] and forwards decoded bytes.
+/// Looks up the session in the PTY session registry and forwards decoded bytes.
 /// Returns `Success` on delivery, `Error` when the session is unknown or the
 /// channel has been closed.
 pub async fn handle_send_input(
@@ -170,7 +170,7 @@ pub async fn handle_send_input(
 
 /// Forward a terminal resize event to a running PTY session.
 ///
-/// Looks up the session in [`PtySessionRegistry`] and sends `(cols, rows)`.
+/// Looks up the session in the PTY session registry and sends `(cols, rows)`.
 /// Returns `Success` on delivery, `Error` when the session is unknown or the
 /// channel has been closed.
 pub async fn handle_resize_pty(

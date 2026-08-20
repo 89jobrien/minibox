@@ -61,7 +61,7 @@ async fn resolve_update_targets(
 ///
 /// # Image resolution order
 ///
-/// 1. If `all` is `true`: every image returned by [`ImageStore::list_all_images`].
+/// 1. If `all` is `true`: every image returned by [`minibox_core::image::ImageStore::list_all_images`].
 /// 2. If `containers` is `true`: deduplicated `source_image_ref` values from all
 ///    container records held in `state`.
 /// 3. Otherwise: the explicit `images` list.

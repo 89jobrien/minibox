@@ -229,7 +229,7 @@ pub struct ContainerRecord {
     pub source_image_ref: Option<String>,
     /// Host-visible writable-layer (overlay upper) directory for this
     /// container's rootfs, when the backend exposes one. Mirrors
-    /// [`BackendRootfsMetadata::overlay_upper_dir`] but is kept as a
+    /// [`minibox_core::domain::BackendRootfsMetadata::overlay_upper_dir`] but is kept as a
     /// top-level field so callers don't need to match on `rootfs_metadata`
     /// to locate the writable layer. `None` for adapters without an
     /// overlay filesystem (GKE, VZ) or when not yet populated.
@@ -412,7 +412,7 @@ impl DaemonState {
     /// For each container still marked `"Paused"`, verify the PID is alive and
     /// `cgroup.freeze` contains `1`.  If either check fails, mark `"Orphaned"`.
     ///
-    /// Call this **after** [`load_from_disk`] on daemon startup.
+    /// Call this **after** [`Self::load_from_disk`] on daemon startup.
     pub async fn reconcile_on_startup(
         &self,
         checker: &dyn ProcessChecker,
@@ -496,7 +496,7 @@ impl DaemonState {
     /// Register a new container record and persist state to disk.
     ///
     /// The caller is expected to create the record in `"Created"` state before
-    /// the container process is forked. Use [`set_container_pid`] to transition
+    /// the container process is forked. Use [`Self::set_container_pid`] to transition
     /// the record to `"Running"` once the PID is known.
     pub async fn add_container(&self, record: ContainerRecord) {
         debug!("adding container {}", record.info.id);

@@ -50,6 +50,41 @@ impl MiniboxMcpServer {
         Self::new(MiniboxDaemonClient::from_env(), AgentPolicy::from_env())
     }
 
+    /// Render a startup banner describing the daemon socket and available tools.
+    #[must_use]
+    pub fn banner(&self) -> String {
+        const TITLE: &str = r"
+       _      _ _
+ _ __ (_)_ _ (_) |__  _____ __
+| '  \| | ' \| | '_ \/ _ \ \ /
+|_|_|_|_|_||_|_|_.__/\___/_\_\    MCP control server
+";
+
+        let mut tools: Vec<String> = self
+            .tool_router
+            .list_all()
+            .iter()
+            .map(|tool| tool.name.to_string())
+            .collect();
+        tools.sort_unstable();
+
+        use std::fmt::Write as _;
+
+        let mut out = String::from(TITLE);
+        let _ = write!(
+            out,
+            "transport   : stdio (MCP over stdin/stdout)\n\
+             daemon      : {}\n\
+             tools ({}) :\n",
+            self.client.socket_path.display(),
+            tools.len(),
+        );
+        for name in tools {
+            let _ = writeln!(out, "  - {name}");
+        }
+        out
+    }
+
     /// Check daemon connectivity.
     #[tool(
         name = "minibox_doctor",

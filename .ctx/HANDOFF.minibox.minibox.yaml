@@ -1,41 +1,71 @@
 project: minibox
 id: minibox
-updated: 2026-08-18
+updated: 2026-08-20
 items:
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (11 files)
+  title: Uncommitted changes (25 files)
   description: |-
     Working tree has uncommitted changes:
-    .ctx/HANDOFF.md
-    .ctx/HANDOFF.minibox.minibox.yaml
-    .claude/skills/docs/
     .ctx/HANDOFF.macbox.minibox.state.yaml
     .ctx/HANDOFF.mbx.minibox.state.yaml
+    .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox-core.minibox.state.yaml
     .ctx/HANDOFF.minibox-macros.minibox.state.yaml
     .ctx/HANDOFF.minibox.minibox.state.yaml
+    .ctx/HANDOFF.minibox.minibox.yaml
     .ctx/HANDOFF.miniboxd.minibox.state.yaml
+    .ctx/HANDOFF.tools.yaml
     .ctx/HANDOFF.winbox.minibox.state.yaml
     .ctx/HANDOFF.xtask.minibox.state.yaml
+    Cargo.lock
+    Cargo.toml
+    crates/mcp/src/main.rs
+    crates/mcp/src/server.rs
+    crates/minibox/src/adapters/colima.rs
+    crates/minibox/src/adapters/hcs.rs
+    crates/minibox/src/adapters/mod.rs
+    crates/minibox/src/adapters/smolvm.rs
+    crates/minibox/src/daemon/handler/exec.rs
+    crates/minibox/src/daemon/handler/update.rs
+    crates/minibox/src/daemon/server.rs
+    crates/minibox/src/daemon/state.rs
+    crates/minibox/src/lib.rs
+    kani.crux
   files:
-  - .ctx/HANDOFF.md
-  - .ctx/HANDOFF.minibox.minibox.yaml
-  - .claude/skills/docs/
   - .ctx/HANDOFF.macbox.minibox.state.yaml
   - .ctx/HANDOFF.mbx.minibox.state.yaml
+  - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox-core.minibox.state.yaml
   - .ctx/HANDOFF.minibox-macros.minibox.state.yaml
   - .ctx/HANDOFF.minibox.minibox.state.yaml
+  - .ctx/HANDOFF.minibox.minibox.yaml
   - .ctx/HANDOFF.miniboxd.minibox.state.yaml
+  - .ctx/HANDOFF.tools.yaml
   - .ctx/HANDOFF.winbox.minibox.state.yaml
   - .ctx/HANDOFF.xtask.minibox.state.yaml
+  - Cargo.lock
+  - Cargo.toml
+  - crates/mcp/src/main.rs
+  - crates/mcp/src/server.rs
+  - crates/minibox/src/adapters/colima.rs
+  - crates/minibox/src/adapters/hcs.rs
+  - crates/minibox/src/adapters/mod.rs
+  - crates/minibox/src/adapters/smolvm.rs
+  - crates/minibox/src/daemon/handler/exec.rs
+  - crates/minibox/src/daemon/handler/update.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/minibox/src/daemon/state.rs
+  - crates/minibox/src/lib.rs
+  - kani.crux
 log:
-- date: '20260818.213511'
+- date: '20260820.232101'
   summary: done=163 running=0 pending=2 blocked=0
   commits:
+  - a96ce554f0276d0c994d7d78b5c633c27cc5aeae
+  - f708089844f598582384d17ffd12a8d0b9a09cf2
   - d0a23a2e5b8f067b71467d716b659975b88dbfc1
   - f8796ce57761963ee2010610bb31f7c7eb42a0fb
   - fbe4e01cf039b1047d95e97ef8ad6056f809c570
@@ -44,5 +74,3 @@ log:
   - f1366813cabadef756d8d8249bcc75eb8cf8cee9
   - b949f8c92b8f3e2f2fa7250312185060d623e925
   - d0f6556adfbdbed5054bdce9b0052875b528b834
-  - 2b224d26a25509b8151db1545f21c1bc78ea2a54
-  - 8ce857c8a8c174521d702b54b58e8cdb2ecaeaf5

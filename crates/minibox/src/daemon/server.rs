@@ -67,6 +67,9 @@ pub trait ServerListener: Send + 'static {
 #[cfg(target_os = "linux")]
 pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
     use std::mem;
+    // SAFETY: `ucred` is a C struct of plain integer fields (uid/gid/pid);
+    // all-zero is a valid bit pattern and it is immediately overwritten by
+    // getsockopt below before being read.
     let mut cred: nix::libc::ucred = unsafe { mem::zeroed() };
     let mut len = mem::size_of::<nix::libc::ucred>() as nix::libc::socklen_t;
     // SAFETY: fd is a valid connected Unix socket fd. getsockopt with

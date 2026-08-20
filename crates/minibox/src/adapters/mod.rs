@@ -19,10 +19,10 @@
 //! # Adapters
 //!
 //! **Platform-Native (Linux):**
-//! - [`DockerHubRegistry`]: Docker Hub implementation of [`ImageRegistry`]
-//! - [`OverlayFilesystem`]: Overlay filesystem implementation of [`FilesystemProvider`]
-//! - [`CgroupV2Limiter`]: cgroups v2 implementation of [`ResourceLimiter`]
-//! - [`LinuxNamespaceRuntime`]: Linux namespaces implementation of [`ContainerRuntime`]
+//! - [`DockerHubRegistry`]: Docker Hub implementation of [`crate::domain::ImageRegistry`]
+//! - [`OverlayFilesystem`]: Overlay filesystem implementation of [`crate::domain::FilesystemProvider`]
+//! - [`CgroupV2Limiter`]: cgroups v2 implementation of [`crate::domain::ResourceLimiter`]
+//! - [`LinuxNamespaceRuntime`]: Linux namespaces implementation of [`crate::domain::ContainerRuntime`]
 //!
 //! **GKE Unprivileged (Linux, no `CAP_SYS_ADMIN)`:**
 //! - [`NoopLimiter`]: No-op resource limiter (cgroups unavailable)
@@ -52,13 +52,13 @@
 //! - [`DockerDesktopLimiter`]: Docker Desktop-based resource limiter
 //!
 //! **Cross-Platform (macOS via Colima/Lima):**
-//! - [`ColimaRegistry`]: Colima VM implementation of [`ImageRegistry`]
+//! - [`ColimaRegistry`]: Colima VM implementation of [`crate::domain::ImageRegistry`]
 //! - [`ColimaRuntime`]: Colima VM implementation
 //! - [`ColimaFilesystem`]: Colima-based filesystem provider
 //! - [`ColimaLimiter`]: Colima-based resource limiter
 //!
 //! **Cross-Platform (macOS via SmolVM):**
-//! - [`SmolVmRegistry`]: `SmolVM` implementation of [`ImageRegistry`]
+//! - [`SmolVmRegistry`]: `SmolVM` implementation of [`crate::domain::ImageRegistry`]
 //! - [`SmolVmRuntime`]: `SmolVM` lightweight VM runtime
 //! - [`SmolVmFilesystem`]: SmolVM-based filesystem provider (no-op on host)
 //! - [`SmolVmLimiter`]: SmolVM-based resource limiter (no-op on host)

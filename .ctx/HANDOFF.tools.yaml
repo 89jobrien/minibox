@@ -1,113 +1,111 @@
-generated: 2026-07-08
+generated: 2026-08-20
 since_days: 30
-sessions_scanned: 18
-total_commands: 1714
+sessions_scanned: 42
+total_commands: 3213
 top_supported:
   - command: grep
-    count: 58
+    count: 275
+    rule: no-grep-use-tool
+    est_savings_tokens: 33503
+  - command: cd /Users/joe/dev/minibox
+    count: 247
     rule: no-bash-use-nu
-    est_savings_tokens: 7348
-  - command: find-generic-password
-    count: 30
+    est_savings_tokens: 75663
+  - command: item get
+    count: 121
     rule: no-bash-use-nu
-    est_savings_tokens: 11063
+    est_savings_tokens: 29375
+  - command: cd ~/dev/ragrs
+    count: 71
+    rule: no-bash-use-nu
+    est_savings_tokens: 9873
   - command: sed
-    count: 26
+    count: 66
     rule: no-sed-n-use-read
-    est_savings_tokens: 10914
-  - command: git
-    count: 19
-    rule: no-bash-use-nu
-    est_savings_tokens: 6379
+    est_savings_tokens: 29279
+  - command: ls
+    count: 48
+    rule: no-ls-use-glob
+    est_savings_tokens: 10692
   - command: tail
-    count: 10
+    count: 40
     rule: no-head-tail-use-read
-    est_savings_tokens: 2611
-  - command: git branch
-    count: 9
-    rule: no-bash-use-nu
-    est_savings_tokens: 985
-  - command: cat
-    count: 8
-    rule: no-cat-use-read
-    est_savings_tokens: 5588
-  - command: rustqual .
-    count: 7
-    rule: no-bash-use-nu
-    est_savings_tokens: 363
-  - command: cargo clippy
-    count: 7
-    rule: no-bash-use-nu
-    rtk_equivalent: rtk cargo
-    est_savings_tokens: 36175
-    est_savings_pct: 90
-  - command: cargo xtask
-    count: 7
-    rule: no-bash-use-nu
-    est_savings_tokens: 4530
-  - command: # Check
-    count: 6
-    rule: no-bash-use-nu
-    est_savings_tokens: 2279
-  - command: # The
-    count: 5
-    rule: no-bash-use-nu
-    est_savings_tokens: 272
-  - command: cargo check
-    count: 5
-    rule: no-bash-use-nu
-    est_savings_tokens: 461
-  - command: godmode task
-    count: 5
-    rule: no-bash-use-nu
-    est_savings_tokens: 457
-  - command: # Look
-    count: 4
+    est_savings_tokens: 28210
+  - command: cd ~/dev/godmode
+    count: 39
     rule: no-sed-n-use-read
-    est_savings_tokens: 1680
+    est_savings_tokens: 10157
+  - command: git
+    count: 36
+    rule: no-bash-use-nu
+    est_savings_tokens: 8428
+  - command: for i
+    count: 25
+    rule: no-bash-use-nu
+    est_savings_tokens: 6666
+  - command: git branch
+    count: 23
+    rule: no-bash-use-nu
+    est_savings_tokens: 2224
+  - command: cat
+    count: 23
+    rule: no-cat-use-read
+    est_savings_tokens: 15411
+  - command: git log
+    count: 21
+    rule: no-bash-use-nu
+    est_savings_tokens: 4877
+  - command: git status
+    count: 18
+    rule: no-bash-use-nu
+    est_savings_tokens: 4206
+  - command: cd /Users/joe/dev/taskit
+    count: 16
+    rule: no-bash-use-nu
+    est_savings_tokens: 4981
 top_unhandled:
   - base_command: nu
-    count: 1087
-    example: "nu -c 'godmode task next' 2>/dev/null || cat .ctx/GODMODE.tasks.yaml 2>/dev/null..."
+    count: 503
+    example: "nu -c \"git branch --show-current; git status --short | lines | first 20\""
   - base_command: grep
-    count: 62
-    example: "grep -n 'with_max_total_image_size' crates/minibox-core/src/image/registry.rs | ..."
-  - base_command: cargo xtask
-    count: 31
-    example: "cargo xtask bench 2>&1 | tail -8"
-  - base_command: cargo clippy
-    count: 30
-    example: "cargo clippy -p minibox --features test-utils --message-format short 2>&1 | grep..."
-  - base_command: cargo check
-    count: 27
-    example: "cargo check -p minibox-testsuite 2>&1 | tail -5"
+    count: 146
+    example: "grep -n \"fn build_colima_handler_dependencies\" -A 40 /Users/joe/dev/minibox/crat..."
   - base_command: git
-    count: 23
-    example: "git push"
+    count: 80
+    example: "git status"
+  - base_command: cargo check
+    count: 61
+    example: "cargo check --workspace 2>&1 | tail -30"
+  - base_command: cargo clippy
+    count: 48
+    example: "cargo clippy -p minibox -p miniboxd -p mbx --release 2>&1 | tail -30"
+  - base_command: cargo xtask
+    count: 44
+    example: "cargo xtask verify 2>&1 | tail -20"
+  - base_command: git show
+    count: 43
+    example: "git show --stat 94f227b9 | head -20"
   - base_command: gh run
-    count: 14
-    example: "gh run list --branch develop --repo 89jobrien/minibox --limit 3 --json databaseI..."
-  - base_command: git commit
-    count: 7
-    example: "git commit -m \"$(cat <<'EOF'\nfeat(testsuite): replace ConformanceTest boilerplat..."
-  - base_command: cargo nextest
-    count: 6
-    example: "cargo nextest run --workspace -E 'not binary(smolvm_e2e_tests)' 2>&1 | tail -6"
-  - base_command: rustqual .
-    count: 6
-    example: "rustqual . --no-fail 2>&1 | grep -E \"^(Score|Quality|Total|Findings|WARNING)\" | ..."
-  - base_command: git status
-    count: 5
-    example: "git status --short"
+    count: 39
+    example: "GH_PROMPT_DISABLED=1 gh run list --branch develop --repo 89jobrien/minibox --lim..."
   - base_command: git push
-    count: 4
+    count: 33
     example: "git push 2>&1"
-  - base_command: op item
-    count: 4
-    example: "op item get oh3qzaefimnzzmzvssy33eba6u --account my.1password.com --format json ..."
-  - base_command: mkdir
-    count: 4
-    example: "mkdir -p /Users/joe/dev/minibox/docs/plans"
+  - base_command: git status
+    count: 33
+    example: "git status --short | grep -v '^??' "
+  - base_command: git branch
+    count: 32
+    example: "git branch --show-current"
   - base_command: git add
-    count: 4
-    example: "git add \\\n  Cargo.toml Cargo.lock \\\n  crates/minibox-core/Cargo.toml \\\n  crates/..."
+    count: 30
+    example: "git add .ctx/HANDOFF.md .ctx/HANDOFF.minibox.minibox.yaml .debtmap.toml docs/des..."
+  - base_command: cargo nextest
+    count: 30
+    example: "cargo nextest run --workspace --no-fail-fast 2>&1 | tail -30"
+  - base_command: git diff
+    count: 29
+    example: "git diff --stat docs/PLATFORM_SUPPORT.md docs/core/FEATURE_MATRIX.mbx.md docs/co..."
+  - base_command: sudo
+    count: 28
+    example: "SUDO_ASKPASS=/Users/joe/.local/bin/askpass-gui.sh sudo -A mbx run -v /Users/joe/..."

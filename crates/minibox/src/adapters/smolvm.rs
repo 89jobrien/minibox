@@ -335,12 +335,23 @@ impl ImageLoader for SmolVmRegistry {
         let target = Self::target_ref(name, tag);
         let (tarball, parent, guest_path) = Self::load_paths(path)?;
 
+        // Write the loader script to a file inside the mounted directory
+        // rather than passing it inline as a `sh -c <script>` argument.
+        // smolvm's `machine run -- <args>` transport does not preserve a
+        // multi-line string as a single argv element (embedded newlines get
+        // re-split), which corrupts `-c`'s script argument and causes the
+        // guest to attempt to exec a bare word from mid-script (observed:
+        // `docker` — the first external command name in the script) instead
+        // of running it. A script file survives the transport intact.
+        let script_path = parent.join("docker-load-and-tag.sh");
+        std::fs::write(&script_path, DOCKER_LOAD_AND_TAG_SCRIPT)
+            .with_context(|| format!("write loader script to {}", script_path.display()))?;
+        let guest_script_path = format!("{LOAD_MOUNT}/docker-load-and-tag.sh");
+
         if self.executor.is_some() {
             self.vm_exec(&[
                 "sh",
-                "-c",
-                DOCKER_LOAD_AND_TAG_SCRIPT,
-                "smolvm-load",
+                &guest_script_path,
                 tarball
                     .to_str()
                     .context("image tarball path is not valid UTF-8")?,
@@ -359,14 +370,7 @@ impl ImageLoader for SmolVmRegistry {
         let output = tokio::task::spawn_blocking(move || {
             smolvm_exec_full(
                 &image,
-                &[
-                    "sh",
-                    "-c",
-                    DOCKER_LOAD_AND_TAG_SCRIPT,
-                    "smolvm-load",
-                    &guest_path,
-                    &target_for_exec,
-                ],
+                &["sh", &guest_script_path, &guest_path, &target_for_exec],
                 &[(parent.as_str(), LOAD_MOUNT)],
                 &[],
                 LOAD_TIMEOUT_SECS,
@@ -555,7 +559,7 @@ impl ContainerRuntime for SmolVmRuntime {
 // SmolVm Filesystem Adapter
 // ============================================================================
 
-/// `SmolVM` implementation of [`FilesystemProvider`].
+/// `SmolVM` implementation of [`crate::domain::FilesystemProvider`].
 ///
 /// Filesystem operations are handled inside the VM. All methods are no-ops
 /// on the host side — the VM's kernel manages overlay mounts and `pivot_root`.

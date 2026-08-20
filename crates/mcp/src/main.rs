@@ -13,7 +13,10 @@ async fn main() -> miette::Result<()> {
         .with_env_filter(env_filter)
         .init();
 
-    let service = MiniboxMcpServer::from_env()
+    let server = MiniboxMcpServer::from_env();
+    print_banner(&server);
+
+    let service = server
         .serve(stdio())
         .await
         .into_diagnostic()
@@ -25,4 +28,9 @@ async fn main() -> miette::Result<()> {
         .wrap_err("run minibox MCP server")?;
 
     Ok(())
+}
+
+/// Print the startup banner to stderr — stdout is reserved for the MCP protocol.
+fn print_banner(server: &MiniboxMcpServer) {
+    eprintln!("{}", server.banner());
 }

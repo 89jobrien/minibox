@@ -1,0 +1,15 @@
+pipeline: kani_proofs
+budget: { duration_ms: 1800000 } # 30min ceiling, Kani proofs are slow
+
+steps:
+  - join_all: run_proofs
+    arms:
+      - step: minibox_core
+        handler: shell::exec
+        args: { cmd: "cargo kani --package minibox-core {{ input.extra_args }}" }
+      - step: minibox
+        handler: shell::exec
+        args: { cmd: "cargo kani --package minibox {{ input.extra_args }}" }
+      - step: miniboxd
+        handler: shell::exec
+        args: { cmd: "cargo kani --package miniboxd {{ input.extra_args }}" }
