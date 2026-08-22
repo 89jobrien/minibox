@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,8 +177,24 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="gotchas-and-non-obvious-patterns"><a class="header" href="#gotchas-and-non-obvious-patterns">Gotchas and Non-Obvious Patterns</a></h1>
-<p>Last updated: 2026-05-08</p>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox/src/lib.rs</li>
+<li>crates/minibox-macros</li>
+<li>crates/minibox-core/src/protocol.rs</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/miniboxd/src/adapter_registry.rs</li>
+<li>crates/minibox/src/container/process.rs</li>
+<li>crates/minibox/src/container/filesystem.rs</li>
+<li>crates/minibox/src/adapters/limiter.rs</li>
+<li>crates/macbox
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="gotchas-and-non-obvious-patterns"><a class="header" href="#gotchas-and-non-obvious-patterns">Gotchas and Non-Obvious Patterns</a></h1>
+<p>Last updated: 2026-08-22</p>
 <p>Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see <code>.claude/rules/rust-patterns.md</code>.</p>
 <h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
@@ -194,6 +210,16 @@ Add them explicitly to <code>[dev-dependencies]</code> or <code>cargo nextest</c
 <code>MINIBOX_TEST_BIN_DIR</code> env var — never <code>Command::cargo_bin()</code>, which triggers a full
 recompile. Gate with <code>#![cfg(all(unix, feature = "subprocess-tests"))]</code>; run via
 <code>just test-cli-subprocess</code>.</li>
+<li><strong><code>minibox::testing</code> import path</strong> (<code>crates/minibox/src/lib.rs:80</code>) — <code>pub mod testing;</code>
+is gated behind <code>#[cfg(feature = "test-utils")]</code>. Enable with <code>--features test-utils</code> (or
+the workspace’s default dev-profile) to import <code>minibox::testing::mocks::*</code>,
+<code>::fixtures::*</code>, <code>::helpers::*</code>, and <code>::backend::*</code> (conformance descriptors). It is
+consumed today by in-crate integration tests, <code>minibox-testsuite</code>’s conformance harness,
+and <code>minibox-bench</code>’s dispatch/state benches (<code>minibox::testing::helpers::daemon</code>
+builders). See <code>docs/core/TESTING.mbx.md</code> and <code>docs/core/TEST_INFRASTRUCTURE.mbx.md</code> for
+the full helper inventory — this entry only documents the current, as-shipped behavior
+(feature-gated, workspace-internal consumers today) and takes no position on whether it
+should be promoted to documented public API for out-of-workspace downstream consumers.</li>
 </ul>
 <h3 id="proptest"><a class="header" href="#proptest">Proptest</a></h3>
 <ul>
@@ -227,7 +253,7 @@ inaccessible in doctest context and will fail to compile.</li>
 <code>crates/minibox-core/src/protocol.rs</code>. <code>minibox</code> re-exports it. Wire format snapshot tests
 pin serialization; add a snapshot test when adding a field.</li>
 <li><strong><code>HandlerDependencies</code> construction sites</strong> — Adding fields requires updating all five
-adapter suites in <code>miniboxd/src/main.rs</code> (native, gke, colima, smolvm, krun). These are
+adapter suites in <code>crates/miniboxd/src/main.rs</code> (native, gke, colima, smolvm, krun). These are
 <code>#[cfg(target_os = "linux")]</code> and won’t fail on macOS <code>cargo check</code>.</li>
 <li><strong><code>handle_run</code> param chain</strong> — Adding a parameter requires updating in order:
 <code>daemon/server.rs</code> dispatch → <code>handle_run</code> → <code>handle_run_streaming</code> → <code>run_inner_capture</code> →
@@ -244,6 +270,43 @@ clippy. Lints like <code>clone_on_copy</code> only surface on Linux CI runners.<
 <li><strong>Linux-only cfg-gated imports</strong> — manually verify all <code>use</code> statements in Linux-only modules
 (<code>cgroup_tests.rs</code>, <code>bridge.rs</code>, etc.) — the macOS compiler won’t catch missing imports.</li>
 </ul>
+<h2 id="adapters-minibox_adapter"><a class="header" href="#adapters-minibox_adapter">Adapters (<code>MINIBOX_ADAPTER</code>)</a></h2>
+<p>Selection logic is centralized in <code>crates/miniboxd/src/adapter_registry.rs</code>; read that
+file’s module doc for the authoritative flow. Summary, grounded in the current code:</p>
+<ul>
+<li><strong>Valid values</strong> (<code>adapter_registry::VALID_ADAPTERS</code>): <code>native</code>, <code>gke</code>, <code>colima</code>, <code>smolvm</code>,
+<code>krun</code>. <code>native</code>/<code>gke</code> are compiled only on Linux (<code>cfg!(target_os = "linux")</code>); <code>colima</code>/
+<code>smolvm</code> compile on any Unix; <code>krun</code> is always available. See per-adapter descriptions in
+<code>adapter_registry::all_adapters()</code>.</li>
+<li><strong>Unset <code>MINIBOX_ADAPTER</code></strong> — <code>adapter_from_env()</code> probes for the <code>smolvm</code> binary on PATH
+(<code>smolvm --version</code>). If found, uses <code>smolvm</code> (<code>DEFAULT_ADAPTER_SUITE</code>). If absent, silently
+falls back to <code>FALLBACK_ADAPTER_SUITE</code>: <code>native</code> on Linux, <code>krun</code> on macOS/other.</li>
+<li><strong>Explicit <code>MINIBOX_ADAPTER=&lt;value&gt;</code></strong> — disables the fallback entirely. The value is parsed
+via <code>parse_adapter()</code>; there is no silent substitution once the env var is set.</li>
+<li><strong>Unrecognized value</strong> (not in <code>VALID_ADAPTERS</code>) — hard error at daemon startup:
+<code>AdapterSelectionError</code> with message <code>"unknown MINIBOX_ADAPTER value ..."</code>, listing valid
+options.</li>
+<li><strong>Known but platform-unavailable value</strong> (e.g. <code>MINIBOX_ADAPTER=native</code> on a macOS build) —
+also a hard error, message <code>"... is known but not available in this build"</code>, distinct from
+the unknown-value error text (both are asserted by name in
+<code>adapter_registry::tests::adapter_selection_error_unknown_message_format</code> and
+<code>unavailable_adapter_error_message_says_not_available</code>).</li>
+<li><strong><code>native</code> without root</strong> — not rejected by <code>parse_adapter</code>/<code>adapter_from_env</code> (it is a
+compiled, known adapter on Linux); instead <code>warn_if_native_without_root()</code> (Linux-only)
+emits a <code>tracing::warn!</code> at startup if UID != 0, since namespace/overlay/cgroup setup will
+fail later at runtime rather than at selection time.</li>
+<li>See <code>docs/core/FEATURE_MATRIX.mbx.md</code> for the full per-adapter capability matrix and
+<code>docs/core/ARCHITECTURE.mbx.md</code> for the adapter trait/composition overview.</li>
+</ul>
+<h3 id="migration-pointer-for-removed-docs"><a class="header" href="#migration-pointer-for-removed-docs">Migration pointer for removed docs</a></h3>
+<p>Several one-off design/plan documents were deleted or consolidated during doc cleanups
+(<code>8377af53</code> pruned <code>docs/superpowers/plans/*</code>, <code>1d3a3579</code> archived stale plan statuses,
+<code>109a9683</code> deleted <code>docs/notes/</code>). The flat <code>docs/*.md</code> files that used to hold canonical
+reference content (<code>docs/FEATURE_MATRIX.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/GOTCHAS.md</code>, etc.)
+were also renamed to <code>docs/core/*.mbx.md</code> — if a link or search result points at an old flat
+<code>docs/&lt;NAME&gt;.md</code> path or a <code>docs/superpowers/...</code> path that 404s, the canonical replacement is
+almost always the matching <code>docs/core/&lt;NAME&gt;.mbx.md</code> file. Start from the “Read First” list in
+<code>CLAUDE.md</code> for the current canonical doc set.</p>
 <h2 id="macbox"><a class="header" href="#macbox">macbox</a></h2>
 <ul>
 <li><strong>Stale crate name</strong> — the CLI binary crate was renamed from <code>minibox-cli</code> to <code>mbx</code>

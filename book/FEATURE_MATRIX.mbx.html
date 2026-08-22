@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -178,30 +178,53 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/miniboxd/src/adapter_registry.rs</li>
-<li>crates/minibox/src/adapters/</li>
-<li>crates/macbox/src/</li>
+<li>crates/minibox/src/daemon/handler</li>
+<li>crates/minibox/src/adapters/limiter.rs</li>
+<li>crates/minibox-core/src/domain/exec.rs</li>
+<li>crates/minibox-core/src/events.rs</li>
+<li>crates/minibox-core/src/image/registry.rs</li>
+<li>crates/minibox/src/adapters/ghcr.rs</li>
+<li>crates/minibox-core/src/image/gc.rs</li>
+<li>crates/minibox-core/src/domain/image.rs</li>
+<li>crates/minibox/src/container/namespace.rs</li>
+<li>crates/minibox/src/adapters/filesystem.rs</li>
+<li>crates/minibox/src/adapters/network/bridge.rs</li>
+<li>crates/minibox/src/daemon/server.rs</li>
+<li>crates/minibox-core/src/image/layer.rs</li>
+<li>crates/minibox-core/src/domain/execution_manifest.rs</li>
+<li>crates/minibox-core/src/domain/execution_policy.rs</li>
+<li>crates/minibox/src/daemon/state.rs</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/minibox/src/adapters/gke.rs</li>
+<li>crates/minibox/src/adapters/colima.rs</li>
+<li>crates/minibox/src/adapters/smolvm.rs</li>
+<li>crates/macbox/src/krun</li>
+<li>crates/macbox/src/vz</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>crates/mcp
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="feature-matrix"><a class="header" href="#feature-matrix">Feature Matrix</a></h1>
 <p>Per-platform capability breakdown for minibox adapters.</p>
-<p>Last updated: 2026-05-29</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="adapter-suites"><a class="header" href="#adapter-suites">Adapter Suites</a></h2>
-<!-- fact:adapter_suites=colima,gke,krun,native,smolvm -->
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Adapter</th><th>Platform</th><th>Status</th><th>Crate</th><th>Default?</th></tr>
 </thead>
 <tbody>
-<tr><td><code>native</code></td><td>Linux (x86_64/arm64)</td><td>Production</td><td>minibox</td><td>Fallback on Linux</td></tr>
-<tr><td><code>gke</code></td><td>Linux (GKE pods)</td><td>Production</td><td>minibox</td><td>–</td></tr>
-<tr><td><code>colima</code></td><td>macOS/Linux (Colima)</td><td>Experimental</td><td>minibox</td><td>–</td></tr>
-<tr><td><code>smolvm</code></td><td>macOS/Linux (SmolVM)</td><td>Experimental</td><td>smolbox</td><td>Yes (all platforms)</td></tr>
-<tr><td><code>krun</code></td><td>macOS/Linux (krun)</td><td>Experimental</td><td>smolbox</td><td>Fallback on macOS</td></tr>
+<tr><td><code>native</code></td><td>Linux only (x86_64/arm64) <sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup></td><td>Production</td><td>minibox</td><td>Fallback on Linux</td></tr>
+<tr><td><code>gke</code></td><td>Linux only (GKE pods) <sup class="footnote-reference" id="fr-2-1"><a href="#footnote-2">2</a></sup></td><td>Production</td><td>minibox</td><td>–</td></tr>
+<tr><td><code>colima</code></td><td>Unix (macOS/Linux, Colima)</td><td>Experimental</td><td>minibox</td><td>–</td></tr>
+<tr><td><code>smolvm</code></td><td>Unix (macOS/Linux, SmolVM) <sup class="footnote-reference" id="fr-3-1"><a href="#footnote-3">3</a></sup></td><td>Experimental</td><td>minibox</td><td>Yes (Unix; not available on Win)</td></tr>
+<tr><td><code>krun</code></td><td>Unix (macOS/Linux, krun)</td><td>Experimental</td><td>macbox</td><td>Fallback when smolvm absent <sup class="footnote-reference" id="fr-4-1"><a href="#footnote-4">4</a></sup></td></tr>
+<tr><td><code>vz</code></td><td>macOS only, <code>vz</code> feature <sup class="footnote-reference" id="fr-5-1"><a href="#footnote-5">5</a></sup></td><td>Non-functional</td><td>macbox</td><td>Opt-in only (<code>MINIBOX_ADAPTER=vz</code>)</td></tr>
 <tr><td><code>winbox</code></td><td>Windows</td><td>Stub</td><td>winbox</td><td>–</td></tr>
 </tbody>
 </table>
@@ -211,61 +234,61 @@
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th>native</th><th>gke</th><th>colima</th><th>smolvm</th><th>krun</th><th>winbox</th></tr>
+<tr><th>Feature</th><th>native</th><th>gke</th><th>colima</th><th>smolvm</th><th>krun</th><th>vz</th><th>winbox</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Container lifecycle</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>run</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>stop</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>rm</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>ps</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>pause/resume</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>exec (-it)</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>logs</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>events</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Image management</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Docker Hub v2</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>ghcr.io</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Parallel layer pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>prune / rmi</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>push (exp)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>commit (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>build (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Isolation</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>PID namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>Mount namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>Network namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>UTS namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>IPC namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>cgroups v2</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>No</td><td>No</td></tr>
-<tr><td>Overlay FS</td><td>Yes</td><td>Copy</td><td>nerdctl</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Networking</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Bridge (exp)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>Port forwarding</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>DNS</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Mounts &amp; Privileges</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Bind mounts (<code>-v</code>)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>Privileged mode</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Security</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>SO_PEERCRED auth</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Tar path validation</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Setuid stripping</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Device node rejection</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Layer digest verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Request frame limits</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Env redaction in logs</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td><strong>Execution integrity</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Execution manifest</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>manifest get/verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Admission policy gate</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td><strong>State persistence</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Records survive restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>PID reconciliation</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Observability</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Structured tracing</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>OTLP export (opt-in)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>Container lifecycle</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>run</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>stop</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>rm</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>ps</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>pause/resume</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>exec (-it)</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>logs</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>events</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Image management</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Docker Hub v2</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>ghcr.io</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Parallel layer pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>prune / rmi</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>push (exp)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>commit (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>build (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Isolation</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>PID namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>Mount namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>Network namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>UTS namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>IPC namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>cgroups v2</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>No</td><td>Yes</td><td>No</td></tr>
+<tr><td>Overlay FS</td><td>Yes</td><td>Copy</td><td>nerdctl</td><td>No</td><td>No</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>Networking</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Bridge (exp)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>Port forwarding</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>DNS</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Mounts &amp; Privileges</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Bind mounts (<code>-v</code>)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>Privileged mode</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Security</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>SO_PEERCRED auth</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Tar path validation</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Setuid stripping</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Device node rejection</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Layer digest verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Request frame limits</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Env redaction in logs</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>Execution integrity</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Execution manifest</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>manifest get/verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Admission policy gate</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>State persistence</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Records survive restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>PID reconciliation</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Observability</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Structured tracing</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>OTLP export (opt-in)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
 </tbody>
 </table>
 </div>
@@ -280,15 +303,15 @@
 <tbody>
 <tr><td>Container lifecycle (run/stop/rm/ps/restart)</td><td><code>crates/minibox/src/daemon/handler/lifecycle.rs</code>, <code>handler/run.rs</code>, <code>handler/stop.rs</code></td></tr>
 <tr><td>pause/resume (native, cgroup.freeze)</td><td><code>crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter</code></td></tr>
-<tr><td>exec</td><td><code>crates/minibox/src/daemon/handler/exec.rs</code>, <code>crates/minibox-core/src/domain.rs:ExecRuntime</code></td></tr>
+<tr><td>exec</td><td><code>crates/minibox/src/daemon/handler/exec.rs</code>, <code>crates/minibox-core/src/domain/exec.rs:ExecRuntime</code></td></tr>
 <tr><td>logs</td><td><code>crates/minibox/src/daemon/handler/logs.rs</code></td></tr>
 <tr><td>events</td><td><code>crates/minibox-core/src/events.rs:EventSink</code>/<code>EventSource</code></td></tr>
 <tr><td>Image pull (Docker Hub v2 + parallel layers)</td><td><code>crates/minibox-core/src/image/registry.rs:pull_image</code></td></tr>
 <tr><td>Image pull (ghcr.io)</td><td><code>crates/minibox/src/adapters/ghcr.rs</code></td></tr>
 <tr><td>prune/rmi</td><td><code>crates/minibox-core/src/image/gc.rs:ImageGarbageCollector</code></td></tr>
-<tr><td>push</td><td><code>crates/minibox-core/src/domain.rs:ImagePusher</code></td></tr>
-<tr><td>commit</td><td><code>crates/minibox-core/src/domain.rs:ContainerCommitter</code></td></tr>
-<tr><td>build</td><td><code>crates/minibox-core/src/domain.rs:ImageBuilder</code></td></tr>
+<tr><td>push</td><td><code>crates/minibox-core/src/domain/image.rs:ImagePusher</code></td></tr>
+<tr><td>commit</td><td><code>crates/minibox-core/src/domain/image.rs:ContainerCommitter</code></td></tr>
+<tr><td>build</td><td><code>crates/minibox-core/src/domain/image.rs:ImageBuilder</code></td></tr>
 <tr><td>PID/Mount/Net/UTS/IPC namespaces (native)</td><td><code>crates/minibox/src/container/namespace.rs</code></td></tr>
 <tr><td>cgroups v2</td><td><code>crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter</code></td></tr>
 <tr><td>Overlay FS</td><td><code>crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem</code></td></tr>
@@ -309,6 +332,13 @@
 </table>
 </div>
 <hr>
+<h2 id="control-surfaces"><a class="header" href="#control-surfaces">Control Surfaces</a></h2>
+<ul>
+<li><code>mbx</code> is the primary CLI and connects directly to the daemon Unix socket.</li>
+<li><code>minibox-crux-plugin</code> exposes a JSON-RPC stdio bridge for Crux workflows.</li>
+<li><code>minibox-mcp</code> exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.</li>
+</ul>
+<hr>
 <h2 id="legend"><a class="header" href="#legend">Legend</a></h2>
 <ul>
 <li><strong>Yes</strong> – implemented and tested</li>
@@ -323,9 +353,10 @@ minibox namespaces</li>
 <h2 id="notes"><a class="header" href="#notes">Notes</a></h2>
 <ul>
 <li><strong><code>gke</code> adapter</strong> uses proot for filesystem isolation
-(see <code>crates/minibox/src/adapters/gke.rs:GkeRuntime</code>) and a
-no-op resource limiter. Designed for running inside unprivileged
-GKE pods where namespaces and cgroups are unavailable.</li>
+(see <code>crates/minibox/src/adapters/gke.rs:ProotRuntime</code>) and a
+no-op resource limiter (<code>crates/minibox/src/adapters/gke.rs:NoopLimiter</code>).
+Designed for running inside unprivileged GKE pods where namespaces and
+cgroups are unavailable.</li>
 <li><strong><code>colima</code> adapter</strong> delegates to <code>nerdctl</code>/<code>limactl</code> inside a
 Lima VM
 (see <code>crates/minibox/src/adapters/colima.rs:ColimaRuntime</code>).
@@ -333,11 +364,12 @@ Exec and logs are limited because they go through Lima’s SSH
 tunnel. Push, commit, and build are wired via
 <code>ColimaImagePusher</code>, <code>OverlayCommitAdapter</code>, and
 <code>MiniboxImageBuilder</code>.</li>
-<li><strong><code>smolvm</code> adapter</strong> is the <strong>default</strong> when <code>MINIBOX_ADAPTER</code>
-is unset and the <code>smolvm</code> binary is present on PATH
-(see <code>crates/miniboxd/src/adapter_registry.rs:adapter_from_env</code>). Falls back
+<li><strong><code>smolvm</code> adapter</strong> is the <strong>default on Unix</strong> when
+<code>MINIBOX_ADAPTER</code> is unset and the <code>smolvm</code> binary is present on
+PATH (see <code>crates/miniboxd/src/adapter_registry.rs</code>). Falls back
 to <code>native</code> on Linux or <code>krun</code> on macOS when the binary is
-absent. Lightweight Linux VMs with subsecond boot
+absent. Not available on Windows (<code>cfg!(unix)</code>). Lightweight Linux
+VMs with subsecond boot
 (see <code>crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime</code>).</li>
 <li><strong><code>krun</code> adapter</strong> uses libkrun to run containers in
 lightweight VMs
@@ -347,11 +379,33 @@ are wired into the daemon
 (see <code>crates/miniboxd/src/main.rs:build_krun_handler_dependencies</code>)
 and pass 31 conformance tests. Acts as the fallback when
 <code>smolvm</code> is unavailable.</li>
+<li><strong><code>vz</code> adapter</strong> uses Apple’s Virtualization.framework directly
+(see <code>crates/macbox/src/vz/</code>), communicating with the in-VM
+<code>minibox-agent</code> over vsock
+(<code>crates/macbox/src/vz/vsock.rs</code>, <code>proxy.rs</code>). Opt-in only via
+<code>MINIBOX_ADAPTER=vz</code> and the <code>vz</code> Cargo feature — not wired into
+<code>AdapterSuite</code>’s <code>build_handler_deps</code> dispatch like the other
+adapters, because <code>VZVirtualMachine</code> construction and its
+completion-handler callbacks must run on the GCD main queue, which
+requires bypassing <code>#[tokio::main]</code> entirely
+(see <code>vz_main()</code>/<code>start_vz()</code> in <code>crates/miniboxd/src/main.rs</code> and
+<code>crates/macbox/src/lib.rs</code>). Removed 2026-05-07 (issue #305) after
+a macOS 26 Tahoe-beta regression (<code>VZErrorInternal(1)</code>); code
+restored 2026-08-15, but <strong>currently non-functional</strong> — a follow-up
+minimal repro (isolated from all minibox configuration, tested
+against two independent kernel images) showed <code>VZLinuxBootLoader</code>
+still fails with <code>VZErrorDomain code=1</code> on macOS 26.4. The earlier
+belief that the regression was fixed was based on a Lima repro that
+used <code>VZEFIBootLoader</code> — a different boot mechanism than this
+adapter needs. See the status update in
+<code>docs/designs/2026-08-15-vz-adapter-revival-design.md</code>.
+<code>exec</code>/<code>logs</code>/<code>push</code>/<code>commit</code>/<code>build</code> are unimplemented, same gaps
+as <code>krun</code>.</li>
 <li><strong><code>docker_desktop</code> adapter</strong>
 (<code>DockerDesktopRuntime</code>/<code>Filesystem</code>/<code>Limiter</code>) exists in
 <code>crates/minibox/src/adapters/docker_desktop.rs</code> and is publicly
 exported, but is not registered in <code>AdapterSuite</code> or wired into
-the daemon. Not included in the matrix above.  <!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
+the daemon. Not included in the matrix above.<!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
 </li>
 <li><strong><code>winbox</code></strong> returns an error unconditionally. Phase 2 (Named Pipe
 server, HCS/WSL2 wiring) has not started.</li>
@@ -375,6 +429,38 @@ see <code>crates/miniboxd/src/main.rs</code>):
 </ul>
 </li>
 </ul>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p><code>native</code> requires root (UID 0). Rejected at startup if non-root. Linux only
+(<code>cfg!(target_os = "linux")</code>). Cgroup v2 and overlay FS require kernel support. <a href="#fr-1-1">↩</a></p>
+</li>
+<li id="footnote-2">
+<p><code>gke</code> is Linux only (<code>cfg!(target_os = "linux")</code>). Unprivileged — no root required.
+Uses proot (ptrace) and copy-based filesystem instead of overlay. <a href="#fr-2-1">↩</a></p>
+</li>
+<li id="footnote-3">
+<p><code>smolvm</code> is compiled only on Unix (<code>cfg!(unix)</code>). Not available on Windows builds.
+Requires the <code>smolvm</code> binary on PATH at runtime. <a href="#fr-3-1">↩</a></p>
+</li>
+<li id="footnote-4">
+<p><code>krun</code> fallback platform-splits: <code>native</code> on Linux, <code>krun</code> on macOS, when
+<code>smolvm</code> binary is absent and <code>MINIBOX_ADAPTER</code> is unset. <a href="#fr-4-1">↩</a></p>
+</li>
+<li id="footnote-5">
+<p><code>vz</code> requires macOS + the <code>vz</code> Cargo feature (off by default). Removed
+2026-05-07 (commit <code>00ee4427</code>, issue #305) after a Tahoe-beta VZ.framework
+regression (<code>VZErrorInternal(1)</code>); code restored 2026-08-15, but the
+adapter is <strong>currently non-functional</strong> — a follow-up minimal repro
+showed <code>VZLinuxBootLoader</code> still fails with <code>VZErrorDomain code=1</code> on
+macOS 26.4, confirmed against two independent kernel images. See the
+status update at the top of
+<code>docs/designs/2026-08-15-vz-adapter-revival-design.md</code>. Bypasses the
+shared <code>run_daemon()</code>/<code>AdapterSuite</code> dispatch entirely — selected in
+<code>main()</code> before the tokio runtime starts, because VM boot needs the OS main
+thread for GCD completion-handler callbacks. <a href="#fr-5-1">↩</a></p>
+</li>
+</ol>
 
                     </main>
 

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,15 +177,42 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="support-tiers"><a class="header" href="#support-tiers">Support Tiers</a></h1>
+                        <hr>
+<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+sources:</p>
+<ul>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/minibox/src/adapters/colima.rs</li>
+<li>crates/winbox</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>docs/core/STABILITY_CHECKLIST.mbx.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="support-tiers"><a class="header" href="#support-tiers">Support Tiers</a></h1>
 <p>Formal support-tier definitions for minibox crates and adapters.</p>
-<p>Last updated: 2026-05-14</p>
-<p>See also: <code>docs/STABILITY_CHECKLIST.mbx.md</code> (mandatory gate list), <code>docs/FEATURE_MATRIX.mbx.md</code>
-(per-adapter capability breakdown).</p>
+<p>Last updated: 2026-08-22</p>
+<p>See also: <code>docs/core/STABILITY_CHECKLIST.mbx.md</code> (mandatory gate list), <code>docs/core/FEATURE_MATRIX.mbx.md</code>
+(per-adapter capability breakdown), <code>docs/core/CRATE_TIERS.mbx.md</code> (architectural layer
+classification — Core/Platform/Experimental/Internal/External).</p>
+<blockquote>
+<p><strong>Relationship to CRATE_TIERS.mbx.md:</strong> This document classifies by <em>support commitment level</em>
+(SLA, CI coverage, breaking-change policy). CRATE_TIERS classifies by <em>architectural role</em>
+(stable API contract, adapter suite, dev tooling). The two axes are independent: a crate can
+be Platform-tier architecturally while still being Stub-tier by support level (e.g. <code>winbox</code>),
+or Experimental-tier by support level while being Platform-tier architecturally (e.g. <code>macbox</code>
+adapters). When in doubt, CRATE_TIERS answers “where does this code live?”; this document
+answers “what guarantees does it carry?”</p>
+</blockquote>
 <hr>
 <h2 id="tier-definitions"><a class="header" href="#tier-definitions">Tier Definitions</a></h2>
 <h3 id="tier-1--production"><a class="header" href="#tier-1--production">Tier 1 — Production</a></h3>
-<p>Fully supported. All 7 mandatory stability gates must pass continuously. Breaking changes require a
+<p>Fully supported. All six mandatory stability gates must pass continuously. Breaking changes require a
 deprecation cycle of at least one minor release with a compiler or runtime warning before removal.
 Security issues receive a response within 72 hours. Crates in this tier are covered by CI on every
 PR and every push to <code>next</code>.</p>
@@ -257,15 +284,14 @@ in any release. No security response commitment. Exists to document intent or re
 </tbody>
 </table>
 </div>
-<p>The 7 mandatory gates are defined in <code>docs/STABILITY_CHECKLIST.mbx.md</code>. Gates 1–6 are hard
+<p>The 7 mandatory gates are defined in <code>docs/core/STABILITY_CHECKLIST.mbx.md</code>. Gates 1–6 are hard
 blockers enforced by CI; Gate 7 (in-memory mock double) is advisory but required for Tier 1
 promotion via human review.</p>
 <hr>
 <h2 id="promotion-tier-2--tier-1"><a class="header" href="#promotion-tier-2--tier-1">Promotion: Tier 2 → Tier 1</a></h2>
 <p>A Tier 2 adapter or crate may be promoted to Tier 1 when all of the following are satisfied:</p>
 <ol>
-<li>All 7 mandatory stability gates pass on the <code>next</code> branch (Gates 1–6 via CI; Gate 7 via PR
-reviewer sign-off).</li>
+<li>All six mandatory stability gates pass on the <code>next</code> branch, with CI evidence and maintainer sign-off.</li>
 <li>The adapter has at least one integration test that runs in CI (Gate 3).</li>
 <li>Handler coverage for any new handler code meets the &gt;= 80% function coverage threshold (Gate 2).</li>
 <li>A PR is opened targeting <code>next</code> with a title prefixed <code>promote(&lt;adapter&gt;): Tier 2 → Tier 1</code>

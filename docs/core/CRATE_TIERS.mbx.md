@@ -1,5 +1,5 @@
 ---
-source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
 sources:
   - Cargo.toml
   - crates/minibox-core
@@ -16,7 +16,6 @@ sources:
   - xtask
   - crates/minibox-macros
   - crates/minibox-testsuite
-  - docs/core/STABILITY_CHECKLIST.mbx.md
 generated: 2026-08-22
 ---
 

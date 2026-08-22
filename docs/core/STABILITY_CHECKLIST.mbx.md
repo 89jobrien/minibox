@@ -1,11 +1,9 @@
 ---
-source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
 sources:
   - .github/workflows
   - xtask/src/main.rs
   - CONTRIBUTING.md
-  - docs/core/SUPPORT_TIERS.mbx.md
-  - docs/core/CRATE_TIERS.mbx.md
 generated: 2026-08-22
 ---
 

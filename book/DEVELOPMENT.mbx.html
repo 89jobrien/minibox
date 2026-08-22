@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,15 +177,26 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="development-guide"><a class="header" href="#development-guide">Development Guide</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>xtask/src/main.rs</li>
+<li>Justfile</li>
+<li>scripts</li>
+<li>crates/miniboxd/src/adapter_registry.rs
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="development-guide"><a class="header" href="#development-guide">Development Guide</a></h1>
 <p>Canonical developer workflow for minibox. See <code>CLAUDE.md</code> for architecture
-details, <code>TESTING.md</code> for the full test strategy, and <code>docs/SUPPORT_TIERS.mbx.md</code> for crate and
+details, <code>docs/core/TESTING.mbx.md</code> for the full test strategy, and <code>docs/core/SUPPORT_TIERS.mbx.md</code> for crate and
 adapter support-tier definitions.</p>
 <h2 id="quick-start-for-new-contributors"><a class="header" href="#quick-start-for-new-contributors">Quick Start for New Contributors</a></h2>
 <p>Three commands cover 95% of daily development:</p>
-<pre><code class="language-bash">cargo xtask pre-commit   # before every commit: fmt-check + clippy + release build
+<pre><code class="language-bash">cargo xtask pre-commit   # before every commit: staged fmt/clippy + config/docs checks
 cargo xtask test-unit    # run all unit + conformance tests (any platform)
-cargo xtask prepush      # before every push: nextest suite + coverage
+cargo xtask prepush      # before every push: release build + release nextest + conformance
 </code></pre>
 <p>Install git hooks once after cloning:</p>
 <pre><code class="language-bash">just install-hooks
@@ -196,7 +207,6 @@ cargo xtask prepush      # before every push: nextest suite + coverage
 <li>Rust stable (edition 2024)</li>
 <li><a href="https://nexte.st/">cargo-nextest</a> for test filtering</li>
 <li><a href="https://github.com/casey/just">just</a> for convenience recipes</li>
-<li><a href="https://docs.astral.sh/uv/">uv</a> for Python script dependencies</li>
 <li>Linux + root for integration/e2e tests (unit tests run on macOS)</li>
 </ul>
 <h2 id="good-to-have"><a class="header" href="#good-to-have">Good to have</a></h2>
@@ -241,10 +251,9 @@ cargo xtask borrow-fixtures
 # Unit tests (any platform)
 cargo xtask test-unit
 
-# Pre-commit gate (format check + clippy + release build)
+# Pre-commit gate (staged fmt/clippy plus config/docs checks)
 cargo xtask pre-commit
-
-# Pre-push gate (nextest + llvm-cov coverage)
+# Pre-push gate (release build + release nextest + conformance)
 cargo xtask prepush
 </code></pre>
 <h2 id="running-the-daemon"><a class="header" href="#running-the-daemon">Running the Daemon</a></h2>
@@ -346,10 +355,15 @@ to surface obvious missing deps. It is not a substitute for <code>cargo xtask do
 <pre><code class="language-bash">just test-all                # nuke state -&gt; doctor -&gt; unit + integration + e2e -&gt; nuke
 </code></pre>
 <h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
-<pre><code class="language-bash">cargo xtask bench            # run locally, save to bench/results/
-just bench-sync              # sync VPS results to local jsonl
-just flamegraph [suite]      # profile with samply/flamegraph
-just bench-agent report      # AI bench analysis
+<p>All criterion benchmarks live in <code>crates/minibox-bench</code>. Results are written to
+<code>bench/results/</code> (gitignored); tracked per-env baselines live at
+<code>bench/baseline.{local,selfhosted,hosted}.json</code>. The nightly CI bench job produces the
+canonical numbers.</p>
+<pre><code class="language-bash">just bench                       # run benches, save to bench/results/
+just bench-check                 # run benches, compare against the per-env baseline
+just bench-baseline              # run benches, save results as the new baseline
+cargo xtask bench --skip-bench   # re-parse existing criterion output without re-running
+nu scripts/bench-agent.nu report # AI bench analysis
 </code></pre>
 <h2 id="ci-gates"><a class="header" href="#ci-gates">CI Gates</a></h2>
 <p>Local validation should match CI. The commands that matter:</p>
@@ -393,8 +407,8 @@ marked <em>(Linux/root)</em> require a Linux host with root privileges.</p>
 <tr><th>Task</th><th>Command</th><th>When to use</th></tr>
 </thead>
 <tbody>
-<tr><td>Before every commit</td><td><code>cargo xtask pre-commit</code></td><td>fmt-check + clippy + release build</td></tr>
-<tr><td>Before every push</td><td><code>cargo xtask prepush</code></td><td>nextest suite + coverage check</td></tr>
+<tr><td>Before every commit</td><td><code>cargo xtask pre-commit</code></td><td>staged fmt/clippy + config/docs checks</td></tr>
+<tr><td>Before every push</td><td><code>cargo xtask prepush</code></td><td>release build + release nextest + conformance</td></tr>
 <tr><td>Read-only local verification</td><td><code>cargo xtask verify</code></td><td>fmt + clippy + borrow fixtures + docs</td></tr>
 <tr><td>Auto-fix formatting/clippy</td><td><code>cargo xtask fix</code></td><td>mutates files; review diff after</td></tr>
 <tr><td>Lint only (no build)</td><td><code>cargo xtask lint</code></td><td>fmt-check + clippy (CI lint gate)</td></tr>
@@ -438,7 +452,7 @@ marked <em>(Linux/root)</em> require a Linux host with root privileges.</p>
 <tr><td>Scan for <code>.unwrap()</code> in production</td><td><code>cargo xtask check-no-unwrap</code></td><td>Advisory; use <code>--strict</code> to fail</td></tr>
 <tr><td>Verify adapter test coverage</td><td><code>cargo xtask check-adapter-coverage</code></td><td>After adding a new adapter</td></tr>
 <tr><td>Check for tracked generated artifacts</td><td><code>cargo xtask check-repo-clean</code></td><td>Before PRs</td></tr>
-<tr><td>Lint docs frontmatter</td><td><code>cargo xtask lint-docs</code></td><td>After editing docs/superpowers/</td></tr>
+<tr><td>Lint docs frontmatter</td><td><code>cargo xtask docs lint</code></td><td>After editing docs/core/</td></tr>
 </tbody>
 </table>
 </div>
@@ -494,10 +508,10 @@ marked <em>(Linux/root)</em> require a Linux host with root privileges.</p>
 <tr><th>Task</th><th>Command</th><th>When to use</th></tr>
 </thead>
 <tbody>
-<tr><td>Run criterion benchmarks</td><td><code>cargo xtask bench</code></td><td>Save results to bench/results/</td></tr>
-<tr><td>Sync VPS bench results locally</td><td><code>just bench-sync</code></td><td>Pull jsonl from remote</td></tr>
-<tr><td>Profile with samply/flamegraph</td><td><code>just flamegraph [suite]</code></td><td>macOS: samply; Linux: cargo-flamegraph</td></tr>
-<tr><td>AI bench analysis</td><td><code>just bench-agent report</code></td><td>Summarise bench/results/ with AI</td></tr>
+<tr><td>Run criterion benchmarks</td><td><code>just bench</code></td><td>Targets in crates/minibox-bench</td></tr>
+<tr><td>Check against per-env baseline</td><td><code>just bench-check</code></td><td>Compares vs bench/baseline.{env}.json</td></tr>
+<tr><td>Save new per-env baseline</td><td><code>just bench-baseline</code></td><td>Writes bench/baseline.{env}.json</td></tr>
+<tr><td>AI bench analysis</td><td><code>nu scripts/bench-agent.nu report</code></td><td>Summarise bench/results/ with AI</td></tr>
 </tbody>
 </table>
 </div>

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -178,15 +178,16 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/minibox/src/daemon/state.rs</li>
-<li>crates/minibox-core/src/protocol.rs</li>
+<li>crates/minibox/src/daemon/state.rs
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="state-persistence-model"><a class="header" href="#state-persistence-model">State Persistence Model</a></h1>
 <p>How minibox tracks container state across daemon restarts.</p>
-<p>Last updated: 2026-05-14</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p><code>DaemonState</code> (defined in
@@ -254,7 +255,7 @@ adjusts stale records:</p>
 </table>
 </div>
 <p>The PID liveness check is performed by the <code>ProcessChecker</code> port
-(see <code>crates/minibox-core/src/domain.rs:ProcessChecker</code>; default
+(see <code>crates/minibox/src/daemon/state.rs:ProcessChecker</code>; default
 adapter uses <code>kill(pid, 0)</code>). Tests inject doubles that always
 return alive or dead.</p>
 <h2 id="container-state-machine"><a class="header" href="#container-state-machine">Container State Machine</a></h2>

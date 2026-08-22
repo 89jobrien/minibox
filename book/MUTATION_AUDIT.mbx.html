@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,7 +177,22 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="mutation-audit-checklist--security-critical-modules"><a class="header" href="#mutation-audit-checklist--security-critical-modules">Mutation Audit Checklist — Security-Critical Modules</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox-core/src/image/layer.rs</li>
+<li>crates/minibox/src/daemon/server.rs</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/minibox-core/src/domain/execution_manifest.rs</li>
+<li>crates/minibox/src/container/process.rs</li>
+<li>crates/minibox-core/src/image/registry.rs</li>
+<li>crates/minibox/src/adapters/ghcr.rs</li>
+<li>crates/minibox/tests/security_regression.rs
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="mutation-audit-checklist--security-critical-modules"><a class="header" href="#mutation-audit-checklist--security-critical-modules">Mutation Audit Checklist — Security-Critical Modules</a></h1>
 <p>Produced for issue #341. Each guard, sanitisation step, and error-return path is
 listed with a pass/fail verdict: <strong>PASS</strong> means at least one test exists that
 would fail if the guard were deleted or inverted; <strong>FAIL</strong> means no such test

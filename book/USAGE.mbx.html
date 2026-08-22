@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,7 +177,20 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="usage"><a class="header" href="#usage">Usage</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/mbx</li>
+<li>crates/miniboxd</li>
+<li>ops/install-systemd.sh</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>xtask/src/main.rs</li>
+<li>crates/minibox-bench
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="usage"><a class="header" href="#usage">Usage</a></h1>
 <p>This document provides practical usage workflows for <code>minibox</code> across local Linux, systemd ops, macOS/Colima dogfooding, and experimental controller-driven flows.</p>
 <p><strong>Quick Start (Linux)</strong></p>
 <pre><code class="language-bash"># Build
@@ -260,7 +273,7 @@ colima start
 MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
 </code></pre>
 <p>Colima is the current macOS dogfood path. The Docker Desktop adapter exists in
-<code>minibox/src/adapters/docker_desktop.rs</code> but is not yet wired into <code>miniboxd</code>.</p>
+<code>crates/minibox/src/adapters/docker_desktop.rs</code> but is not yet wired into <code>miniboxd</code>.</p>
 <p><strong>macOS Dogfood Flow</strong></p>
 <pre><code class="language-bash"># Build the Linux test image tarball
 cargo xtask build-test-image
@@ -291,7 +304,7 @@ The CLI communicates with the daemon over a Unix socket at <code>/run/minibox/mi
 <li>push commit/build/push parity further across <code>linux-native</code> and <code>colima</code></li>
 <li>let CI agents create and tear down their own minibox-managed test environments</li>
 </ul>
-<p>See <code>docs/ROADMAP.mbx.md</code> for the active roadmap.</p>
+<p>See <code>docs/core/ROADMAP.mbx.md</code> for the active roadmap.</p>
 <h2 id="vm-image-cas-overlay"><a class="header" href="#vm-image-cas-overlay">VM Image CAS Overlay</a></h2>
 <p>The VM image build supports a content-addressed overlay at <code>~/.mbx/vm/overlay/</code>. Files placed here
 are copied into the rootfs at build time. CAS (content-addressed storage) tracking lets you detect
@@ -316,18 +329,23 @@ cargo xtask cas-add /path/to/myconfig --ref myconfig
 </code></pre>
 <p>Exits non-zero if any drift is found.</p>
 <p><strong>In-VM drift check</strong></p>
-<p>After <code>cargo xtask build-vm-image</code>, <code>/etc/minibox-cas-refs</code> is written into the rootfs (one line
+<p>After <code>cargo xtask build-test-image</code>, <code>/etc/minibox-cas-refs</code> is written into the rootfs (one line
 per ref, tab-separated: <code>&lt;name&gt;\t&lt;sha256&gt;</code>). Run <code>/sbin/check-drift.sh</code> inside the VM to verify
 installed files match their expected hashes.</p>
 <pre><code class="language-bash"># Inside the Alpine VM shell
 /sbin/check-drift.sh
 </code></pre>
 <h2 id="benchmark"><a class="header" href="#benchmark">Benchmark</a></h2>
-<pre><code class="language-bash">cargo xtask bench                        # run locally, save to bench/results/
-cargo xtask bench-vps                    # run on VPS, fetch results
+<p>All criterion benchmarks live in <code>crates/minibox-bench</code>.</p>
+<pre><code class="language-bash">just bench                               # run benches, save to bench/results/
+just bench-check                         # compare against the per-env baseline
+just bench-baseline                      # save results as the new per-env baseline
+cargo xtask bench                        # underlying command (--check / --save-baseline / --env)
 </code></pre>
 <blockquote>
-<p>Results are written to <code>bench/results/bench.jsonl</code> (append-only history) and <code>bench/results/latest.json</code>.</p>
+<p>Results are written to <code>bench/results/</code> (gitignored). Tracked per-env baselines live at
+<code>bench/baseline.{local,selfhosted,hosted}.json</code>; the nightly CI bench job produces the
+canonical numbers.</p>
 </blockquote>
 <pre><code class="language-mmd">graph TD
   subgraph BUGS ["Bugs"]

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -178,11 +178,21 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
+<li>crates/minibox-core/src/image/layer.rs</li>
+<li>crates/minibox/src/container/process.rs</li>
 <li>crates/minibox/src/daemon/server.rs</li>
-<li>crates/minibox-core/src/image/</li>
-<li>crates/minibox/src/container/</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/minibox-core/src/image/registry.rs</li>
+<li>crates/minibox/src/adapters/ghcr.rs</li>
+<li>crates/minibox/src/container/mount_seccomp.rs</li>
+<li>crates/minibox-core/src/domain/execution_manifest.rs</li>
+<li>crates/minibox/src/daemon/handler/run.rs</li>
+<li>crates/minibox/tests/security_regression.rs</li>
+<li>crates/minibox/tests/daemon_security_regression.rs
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="security-invariants"><a class="header" href="#security-invariants">Security Invariants</a></h1>
@@ -190,7 +200,7 @@
 the regression test that pins the behaviour. If a test listed here starts failing, a
 security-critical invariant has been broken.</p>
 <p>Reference commits: <code>8ea4f73</code> (tar extraction safety), <code>2fc7036</code> (symlink rewrite + setuid strip).</p>
-<p>Last updated: 2026-05-12</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="1-zip-slip--path-traversal-prevention"><a class="header" href="#1-zip-slip--path-traversal-prevention">1. Zip Slip / Path Traversal Prevention</a></h2>
 <p><strong>Invariant:</strong> Tar entries whose paths contain <code>..</code> components must be rejected before any
@@ -485,6 +495,62 @@ pulls.</li>
 requirement; enforced by the <code>LimitedStream</code> wrapper and its own unit tests in
 the same file.)</em></p>
 <hr>
+<h2 id="13-mount-immutability-ratchet-seccomp"><a class="header" href="#13-mount-immutability-ratchet-seccomp">13. Mount Immutability Ratchet (Seccomp)</a></h2>
+<p><strong>Invariant:</strong> Once the container’s init-time mounts are in place (overlay, bind mounts,
+<code>pivot_root</code>’s <code>proc</code>/<code>sysfs</code>/<code>dev</code>), no process in the container — including the exec’d
+workload and anything it spawns — may widen a mount back to read-write via
+<code>mount(2, MS_REMOUNT)</code>. Remounting to read-only is always allowed (tightening is safe). Fresh,
+non-remount mounts created after init remain unrestricted. This mirrors the sysbox mount
+interception model described in <code>docs/ideas/sysbox-security.md</code>.</p>
+<p><strong>Code path:</strong></p>
+<ul>
+<li><code>crates/minibox/src/container/mount_seccomp.rs</code> — <code>build_mount_immutability_program()</code>
+constructs a classic (non-eBPF) seccomp BPF program; <code>install_mount_immutability_filter()</code>
+sets <code>PR_SET_NO_NEW_PRIVS</code> then installs it via <code>prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)</code>.</li>
+<li><code>crates/minibox/src/container/process.rs</code> — <code>child_init()</code> calls
+<code>install_mount_immutability_filter()</code> immediately after <code>pivot_root_to()</code> (step 4b), before
+capability/exec setup, so the filter is in place before any workload code runs and is
+inherited across <code>fork</code>/<code>clone</code>/<code>execve</code> for the lifetime of the container process tree.</li>
+</ul>
+<p><strong>Enforcement model (scope, read before modifying):</strong></p>
+<p>The filter inspects only the raw <code>mount(2)</code> argument bits — the syscall number, target
+architecture, and the low 32 bits of the <code>mountflags</code> argument (<code>args[3]</code> in
+<code>struct seccomp_data</code>). It denies (<code>EPERM</code>) any call with <code>MS_REMOUNT</code> set and <code>MS_RDONLY</code>
+unset, and allows everything else. This is a deliberately coarse approximation of sysbox’s
+per-mount policy: it cannot distinguish “this mount was originally read-only” from “this mount
+was originally read-write” (classic BPF has no access to kernel mount-table state), so it
+denies <code>remount,rw</code> universally rather than only for mounts that started read-only. The
+practical effect matches the acceptance criteria (ro mounts can’t become rw; rw mounts can be
+tightened to ro; fresh mounts are unrestricted), at the cost of also denying a redundant
+<code>remount,rw</code> re-assertion on an already-read-write mount.</p>
+<p><strong>Deferred (not implemented):</strong> A precise per-mount policy that also allows <code>remount,rw</code> on
+mounts that started read-write would require <code>SECCOMP_RET_USER_NOTIF</code> plus a supervisor
+process resolving the target from <code>/proc/[pid]/mountinfo</code> against a per-container mount
+policy, or a BPF LSM hook on <code>security_sb_mount</code>. Both are substantially larger changes
+(new supervisor process/IPC, or a BPF LSM program) and were out of scope for this change.</p>
+<p><strong>Regression tests:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Test name</th><th>File</th></tr>
+</thead>
+<tbody>
+<tr><td><code>program_has_expected_instruction_count</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>program_ends_with_allow</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>program_denies_remount_without_rdonly</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>remount_rdonly_check_masks_match_kernel_flags</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>interpreter_matches_documented_policy</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit, BPF-program interpreter covering all acceptance-criteria cases)</td></tr>
+<tr><td><code>kernel_enforces_remount_rw_denial_after_filter_install</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (Linux + root integration test: real <code>fork()</code>, real <code>mount(2)</code>, asserts <code>remount,rw</code> fails EPERM, <code>remount,ro</code> succeeds, and a fresh mount succeeds)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Verification status:</strong> Type-checked and clippy-clean cross-compiled to
+<code>aarch64-unknown-linux-gnu</code> from macOS (no cross-linker available in the dev sandbox, so the
+test binary could not be linked/executed there). The <code>#[cfg(target_os = "linux")]</code>-gated
+kernel integration test has not yet been run on real Linux + root — run
+<code>cargo nextest run -p minibox mount_seccomp</code> on the VPS or self-hosted CI runner before
+relying on this invariant in production.</p>
+<hr>
 <h2 id="mutation-audit-coverage-checklist"><a class="header" href="#mutation-audit-coverage-checklist">Mutation Audit Coverage Checklist</a></h2>
 <p>Every invariant below has at least one test that passes <strong>only</strong> because the
 guard is present. Removing or weakening the guard causes the test to fail.</p>
@@ -506,10 +572,11 @@ guard is present. Removing or weakening the guard causes the test to fail.</p>
 <tr><td>10</td><td>Request size limit</td><td><code>minibox/.../server.rs</code> <code>MAX_REQUEST_SIZE</code> + <code>bounded_read_line</code></td><td><code>mutation_audit_request_size_limit_exists</code>, <code>test_handle_connection_oversized_request</code></td><td>minibox</td></tr>
 <tr><td>11</td><td>Image pull limits</td><td><code>minibox-core/.../registry.rs</code> <code>MAX_MANIFEST_SIZE</code>, <code>MAX_LAYER_SIZE</code>, <code>MAX_TOTAL_IMAGE_SIZE</code>, <code>LimitedStream</code></td><td><code>mutation_audit_image_pull_size_limits_exist</code>, <code>test_constants_*</code>, <code>get_manifest_errors_when_content_length_exceeds_limit</code></td><td>minibox, minibox-core</td></tr>
 <tr><td>12</td><td>Execution manifest integrity</td><td><code>minibox-core/.../execution_manifest.rs</code> <code>seal()</code>, SHA-256 env hashing; <code>minibox/.../handler/run.rs</code> <code>prepare_run()</code></td><td><code>mutation_audit_execution_manifest_env_hashing</code>, <code>env_var_value_is_never_plaintext</code>, <code>seal_sets_workload_digest</code></td><td>minibox, minibox-core</td></tr>
+<tr><td>13</td><td>Mount immutability ratchet (seccomp)</td><td><code>minibox/.../container/mount_seccomp.rs</code> <code>build_mount_immutability_program</code>, <code>install_mount_immutability_filter</code>; called from <code>minibox/.../container/process.rs</code> <code>child_init</code></td><td><code>program_denies_remount_without_rdonly</code>, <code>interpreter_matches_documented_policy</code>, <code>kernel_enforces_remount_rw_denial_after_filter_install</code></td><td>minibox</td></tr>
 </tbody>
 </table>
 </div>
-<p>Last audited: 2026-05-21 (issue #368)</p>
+<p>Last audited: 2026-08-03 (issue #449)</p>
 <hr>
 <h2 id="appendix-newtype-wrappers-for-validated-paths-consideration"><a class="header" href="#appendix-newtype-wrappers-for-validated-paths-consideration">Appendix: Newtype Wrappers for Validated Paths (Consideration)</a></h2>
 <p>The acceptance criteria for issue #157 mention considering newtype wrappers for validated

@@ -155,7 +155,7 @@ expectations. Not runtime tests — they validate that certain patterns
 compile (or correctly fail to compile).
 
 ```bash
-cargo xtask borrow-fixtures           # 11 fixtures
+cargo xtask borrow-fixtures           # 19 fixtures
 ```
 
 ---

@@ -15,8 +15,8 @@ just doctor
 sudo ./target/release/miniboxd
 
 # Pull and run
-sudo ./target/release/minibox pull alpine
-sudo ./target/release/minibox run alpine -- /bin/echo "Hello from minibox!"
+sudo ./target/release/mbx pull alpine
+sudo ./target/release/mbx run alpine -- /bin/echo "Hello from minibox!"
 ```
 
 **Local Ops (systemd)**
@@ -33,43 +33,43 @@ sudo systemctl enable --now miniboxd
 
 # Verify
 sudo systemctl status miniboxd --no-pager
-sudo /usr/local/bin/minibox ps
+sudo /usr/local/bin/mbx ps
 ```
 
 **Common CLI Workflows**
 
 ```bash
 # List containers
-sudo /usr/local/bin/minibox ps
+sudo /usr/local/bin/mbx ps
 
 # Pull image
-sudo /usr/local/bin/minibox pull alpine
+sudo /usr/local/bin/mbx pull alpine
 
 # Run container
-sudo /usr/local/bin/minibox run alpine -- /bin/echo "Hello from minibox!"
+sudo /usr/local/bin/mbx run alpine -- /bin/echo "Hello from minibox!"
 
 # Name it for later exec/logs/stop calls
-sudo /usr/local/bin/minibox run --name demo alpine -- /bin/sh
+sudo /usr/local/bin/mbx run --name demo alpine -- /bin/sh
 
 # Exec into an existing container
-sudo /usr/local/bin/minibox exec demo -- /bin/sh
+sudo /usr/local/bin/mbx exec demo -- /bin/sh
 
 # Pause / resume
-sudo /usr/local/bin/minibox pause demo
-sudo /usr/local/bin/minibox resume demo
+sudo /usr/local/bin/mbx pause demo
+sudo /usr/local/bin/mbx resume demo
 
 # Inspect logs and lifecycle events
-sudo /usr/local/bin/minibox logs demo
-sudo /usr/local/bin/minibox logs --follow demo
-sudo /usr/local/bin/minibox events
+sudo /usr/local/bin/mbx logs demo
+sudo /usr/local/bin/mbx logs --follow demo
+sudo /usr/local/bin/mbx events
 
 # Load a local OCI tarball and run it
-sudo /usr/local/bin/minibox load ./mbx-tester.tar --name mbx-tester
-sudo /usr/local/bin/minibox run mbx-tester -- /run-tests.sh
+sudo /usr/local/bin/mbx load ./mbx-tester.tar --name mbx-tester
+sudo /usr/local/bin/mbx run mbx-tester -- /run-tests.sh
 
 # Clean up images
-sudo /usr/local/bin/minibox prune
-sudo /usr/local/bin/minibox rmi alpine:latest
+sudo /usr/local/bin/mbx prune
+sudo /usr/local/bin/mbx rmi alpine:latest
 ```
 
 **Environment-Specific Usage**
@@ -90,7 +90,7 @@ MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke sudo ./target/releas
 # Build and run inside WSL2
 cargo build --release
 sudo ./target/release/miniboxd
-sudo ./target/release/minibox ps
+sudo ./target/release/mbx ps
 ```
 
 **macOS (Colima)**
@@ -101,7 +101,8 @@ colima start
 MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
 ```
 
-Colima is the current macOS dogfood path. The Docker Desktop adapter exists in `mbx` but is not yet wired into `miniboxd`.
+Colima is the current macOS dogfood path. The Docker Desktop adapter exists in
+`crates/minibox/src/adapters/docker_desktop.rs` but is not yet wired into `miniboxd`.
 
 **macOS Dogfood Flow**
 
@@ -118,21 +119,14 @@ cargo xtask test-linux
 
 **macOS (VZ.framework)**
 
-`MINIBOX_ADAPTER=vz` is wired, but the isolation test path is currently blocked by an upstream Apple `VZErrorInternal(code=1)` bug on macOS 26 ARM64. Treat Colima as the stable path for now.
+`MINIBOX_ADAPTER=vz` was removed in 2026-05-08. The vz adapter code has been dropped from the
+workspace. Use Colima or smolvm as the macOS path.
 
-**Experimental Controller (`mbxctl`)**
+**Experimental Controller (`mbxctl`) — REMOVED**
 
-`mbxctl` is a small HTTP/SSE controller around `miniboxd` for job-style orchestration.
-
-```bash
-# Run from source
-cargo run -p mbxctl -- --listen 127.0.0.1:9999
-
-# Point it at a non-default daemon socket if needed
-cargo run -p mbxctl -- --listen 127.0.0.1:9999 --socket /tmp/minibox/miniboxd.sock
-```
-
-Today `mbxctl` is job-oriented. The next planned step is an MCP-friendly control surface for agent-driven container orchestration.
+> NOTE: The `mbxctl` crate no longer exists in the workspace. It was extracted to the
+> `minibox-plugins` workspace. The HTTP/SSE controller surface is not currently available
+> from this workspace.
 
 **Integration Notes**
 The CLI communicates with the daemon over a Unix socket at `/run/minibox/miniboxd.sock` on Linux. If `minibox ps` fails with “No such file or directory,” the daemon is not running or the socket has not been created yet. Ensure the daemon is started and healthy (`systemctl status miniboxd` or `journalctl -u miniboxd -f`).
@@ -148,7 +142,7 @@ Near-term work is concentrated in a few areas:
 - push commit/build/push parity further across `linux-native` and `colima`
 - let CI agents create and tear down their own minibox-managed test environments
 
-See `docs/ROADMAP.mbx.md` for the active roadmap.
+See `docs/core/ROADMAP.mbx.md` for the active roadmap.
 
 ## VM Image CAS Overlay
 
@@ -187,7 +181,7 @@ Exits non-zero if any drift is found.
 
 **In-VM drift check**
 
-After `cargo xtask build-vm-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
+After `cargo xtask build-test-image`, `/etc/minibox-cas-refs` is written into the rootfs (one line
 per ref, tab-separated: `<name>\t<sha256>`). Run `/sbin/check-drift.sh` inside the VM to verify
 installed files match their expected hashes.
 

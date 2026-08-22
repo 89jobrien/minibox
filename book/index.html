@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,11 +177,32 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="about-minibox"><a class="header" href="#about-minibox">About minibox</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>Cargo.toml</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/mcp</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox-bench</li>
+<li>crates/ail</li>
+<li>xtask
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="about-minibox"><a class="header" href="#about-minibox">About minibox</a></h1>
 <p>A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.</p>
-<p><strong>Status:</strong> Active development — <code>v0.30.0</code>. Linux runs natively and is production-ready; macOS feels like native but requires <code>smolvm</code>
+<p><strong>Status:</strong> Active development — <code>v0.31.0</code>. Linux runs natively and is production-ready; macOS feels like native but requires <code>smolvm</code>
 (VM-backed). See the <a href="#platform-support">Platform Support</a> table.</p>
 <hr>
 <h2 id="why"><a class="header" href="#why">Why</a></h2>
@@ -198,8 +219,8 @@ structured tracing, property testing.</p>
 <li>OCI image pull — Docker Hub v2 + ghcr.io, anonymous auth, parallel layers</li>
 <li>Image management — <code>prune</code> / <code>rmi</code> with lease-based GC</li>
 <li>Bind mounts and privileged mode — <code>-v</code>/<code>--mount</code>, <code>--privileged</code></li>
-<li>Log capture — <code>minibox logs &lt;id&gt;</code> for stored stdout/stderr</li>
-<li>Container events — <code>minibox events</code> streams lifecycle events</li>
+<li>Log capture — <code>mbx logs &lt;id&gt;</code> for stored stdout/stderr</li>
+<li>Container events — <code>mbx events</code> streams lifecycle events</li>
 </ul>
 <h3 id="experimental-ish"><a class="header" href="#experimental-ish">Experimental-ish</a></h3>
 <ul>
@@ -241,7 +262,7 @@ sudo ./target/release/mbx rm &lt;id&gt;
 <tr><td>Linux x86_64</td><td><strong>Production</strong></td><td><code>native</code></td><td>Full namespace/cgroup v2/overlay</td></tr>
 <tr><td>Linux aarch64</td><td><strong>Production</strong></td><td><code>native</code></td><td>Same as x86_64</td></tr>
 <tr><td>Linux (GKE)</td><td><strong>Production</strong></td><td><code>gke</code></td><td>Unprivileged pods via proot + copy-FS</td></tr>
-<tr><td>macOS (Apple Silicon)</td><td>Experimental</td><td><code>smolvm</code>/<code>krun</code></td><td>exec/logs limited; VZ blocked by Apple bug</td></tr>
+<tr><td>macOS (Apple Silicon)</td><td>Experimental</td><td><code>smolvm</code>/<code>krun</code></td><td>exec/logs limited; VZ adapter removed</td></tr>
 <tr><td>macOS (Intel)</td><td>Experimental</td><td><code>colima</code></td><td>exec/logs limited</td></tr>
 <tr><td>Windows</td><td>Planned</td><td><code>winbox</code> stub</td><td>Returns error unconditionally</td></tr>
 </tbody>
@@ -249,30 +270,32 @@ sudo ./target/release/mbx rm &lt;id&gt;
 </div>
 <hr>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<p>10 crates, Rust 2024 edition:</p>
+<p>13 crates plus <code>xtask</code> (14 workspace members), Rust 2024 edition:</p>
 <pre><code>minibox-macros          proc macros (as_any!, adapt!)
     ^
 minibox-core            cross-platform types, domain traits, protocol, OCI ops
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
-    ^         ^
-macbox      winbox      macOS backends: colima (macbox) + smolvm/krun (smolbox) | Windows stub
-smolbox
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
-minibox-testsuite     conformance test harness for adapter trait contracts
+minibox-mcp             MCP stdio server for agent-controlled minibox tools
+minibox-testsuite       conformance test harness for adapter trait contracts
+minibox-bench           benchmark crate
+ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 </code></pre>
 <p><strong>Hexagonal ports.</strong> Domain traits (<code>ImageRegistry</code>, <code>FilesystemProvider</code>, <code>ResourceLimiter</code>,
-<code>ContainerRuntime</code>, <code>NetworkProvider</code>, …) live in <code>minibox-core</code>. Adapters implement them.
+<code>ContainerRuntime</code>, <code>NetworkProvider</code>, …) live under <code>crates/minibox-core/src/domain/</code>. Adapters implement them.
 Tests use mock adapters — no real HTTP or filesystem required.</p>
 <p><strong>Async/sync boundary.</strong> Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in <code>spawn_blocking</code> to avoid blocking the runtime.</p>
-<p><strong>Protocol.</strong> JSON-over-newline on a Unix socket. 27 request variants, 28 response variants.
-Canonical source: <code>minibox-core/src/protocol.rs</code>.</p>
+<p><strong>Protocol.</strong> JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
+Canonical source: <code>crates/minibox-core/src/protocol.rs</code>.</p>
 <p>Full architecture reference: <a href="ARCHITECTURE.mbx.html"><code>ARCHITECTURE</code></a>.</p>
 <hr>
 <h2 id="security-model"><a class="header" href="#security-model">Security Model</a></h2>
@@ -337,8 +360,8 @@ just test-e2e                # daemon + CLI end-to-end (Linux + root)
 macOS without root. See <a href="TEST_INFRASTRUCTURE.mbx.html"><code>TEST_INFRASTRUCTURE</code></a>.</p>
 <hr>
 <h2 id="developer-workflow"><a class="header" href="#developer-workflow">Developer Workflow</a></h2>
-<pre><code class="language-bash">cargo xtask pre-commit       # fmt + clippy + release build (macOS-safe gate)
-cargo xtask prepush          # nextest + coverage (Linux gate)
+<pre><code class="language-bash">cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
+cargo xtask prepush          # release build + release nextest + conformance
 just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 </code></pre>
@@ -347,9 +370,9 @@ mbx doctor                   # preflight: show compiled adapters and capabilitie
 <h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
 <p>Issues and PRs are welcome. A few things to know before contributing:</p>
 <ul>
-<li>Run <code>cargo xtask pre-commit</code> before pushing — it’s the same gate as CI.</li>
-<li>New adapters implement the domain traits in <code>minibox-core/src/domain.rs</code>.</li>
-<li>Protocol changes start in <code>minibox-core/src/protocol.rs</code>; update handlers, CLI paths, and
+<li>Run <code>cargo xtask pre-commit</code> before committing and <code>cargo xtask prepush</code> before pushing.</li>
+<li>New adapters implement the domain traits under <code>crates/minibox-core/src/domain/</code>.</li>
+<li>Protocol changes start in <code>crates/minibox-core/src/protocol.rs</code>; update handlers, CLI paths, and
 snapshot tests together.</li>
 <li>Linux-only code must be gated with <code>#[cfg(target_os = "linux")]</code> so macOS <code>cargo check</code>
 still passes.</li>
@@ -365,12 +388,12 @@ still passes.</li>
 <tbody>
 <tr><td>Bridge networking</td><td>Experimental</td></tr>
 <tr><td>OCI push/commit/build</td><td>Experimental</td></tr>
-<tr><td>macOS VZ.framework</td><td>Blocked (Apple bug on ARM64 macOS 26)</td></tr>
+<tr><td>macOS VZ.framework</td><td>Removed after Apple ARM64 bug</td></tr>
 <tr><td>Seccomp / capabilities</td><td>Planned</td></tr>
 <tr><td>Rootless support</td><td>Planned</td></tr>
 <tr><td>Port forwarding / DNS</td><td>Planned</td></tr>
 <tr><td>Windows (WSL2)</td><td>Planned</td></tr>
-<tr><td>MCP control surface</td><td>Planned</td></tr>
+<tr><td>MCP control surface</td><td>Initial MCP stdio server implemented</td></tr>
 </tbody>
 </table>
 </div>

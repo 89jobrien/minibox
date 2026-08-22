@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,11 +177,23 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="stability-checklist"><a class="header" href="#stability-checklist">Stability Checklist</a></h1>
+                        <hr>
+<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+sources:</p>
+<ul>
+<li>.github/workflows</li>
+<li>xtask/src/main.rs</li>
+<li>CONTRIBUTING.md</li>
+<li>docs/core/SUPPORT_TIERS.mbx.md</li>
+<li>docs/core/CRATE_TIERS.mbx.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="stability-checklist"><a class="header" href="#stability-checklist">Stability Checklist</a></h1>
 <p>Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
-crate. See <code>docs/SUPPORT_TIERS.mbx.md</code> for the full support-tier definitions and promotion
+crate. See <code>docs/core/SUPPORT_TIERS.mbx.md</code> for the full support-tier definitions and promotion
 criteria.</p>
-<p>Last updated: 2026-05-06</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="quick-reference-gates-vs-advisory"><a class="header" href="#quick-reference-gates-vs-advisory">Quick Reference: Gates vs Advisory</a></h2>
 <p><strong>[GATE] items are hard blockers.</strong> A PR or crate promotion cannot merge until every [GATE] item
@@ -208,23 +220,36 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 </table>
 </div>
 <hr>
-<h2 id="gates"><a class="header" href="#gates">Gates</a></h2>
+<h2 id="mandatory-gates"><a class="header" href="#mandatory-gates">Mandatory Gates</a></h2>
+<p>These block promotion/merge. All six must be green simultaneously on the promotion path (<code>develop</code> -&gt; <code>staging</code> -&gt; <code>release</code>).</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>#</th><th>Item</th><th>Tag</th><th>Status</th><th>Evidence</th></tr>
+<tr><th>#</th><th>Item</th><th>Status</th><th>Evidence</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>Protocol types have a single source of truth</td><td>[GATE]</td><td>Met</td><td><code>minibox-core/src/protocol.rs</code> (#122/#128)</td></tr>
-<tr><td>2</td><td>Handler coverage &gt;= 80% function coverage</td><td>[GATE]</td><td>Not met</td><td>Current ~67.5% (<code>handler.rs</code>)</td></tr>
-<tr><td>3</td><td>All wired adapters have at least one integration test</td><td>[GATE]</td><td>Met</td><td>native, gke, colima, smolvm, krun all tested</td></tr>
-<tr><td>4</td><td><code>cargo xtask pre-commit</code> passes on macOS</td><td>[GATE]</td><td>Met</td><td>fmt + clippy + release build</td></tr>
-<tr><td>5</td><td><code>cargo xtask test-unit</code> passes</td><td>[GATE]</td><td>Met</td><td>~506 tests (macOS cross-platform subset)</td></tr>
-<tr><td>6</td><td><code>cargo deny check</code> passes</td><td>[GATE]</td><td>Met</td><td>License + advisory audit in CI</td></tr>
-<tr><td>7</td><td>New domain trait has an in-memory mock double in tests</td><td>[ADVISORY]</td><td>—</td><td>Required for hexagonal port compliance</td></tr>
-<tr><td>8</td><td>No <code>.unwrap()</code> in production paths of new code</td><td>[ADVISORY]</td><td>—</td><td>See rust-patterns.md rule 1</td></tr>
-<tr><td>9</td><td>Tracing events use structured fields, not message strings</td><td>[ADVISORY]</td><td>—</td><td>See rust-patterns.md tracing rules</td></tr>
-<tr><td>10</td><td>New <code>unsafe</code> blocks include a SAFETY comment</td><td>[ADVISORY]</td><td>—</td><td>See rust-patterns.md rule 6</td></tr>
+<tr><td>1</td><td>Protocol types have a single source of truth</td><td>Met</td><td><code>crates/minibox-core/src/protocol.rs</code> (#122/#128)</td></tr>
+<tr><td>2</td><td>Handler coverage &gt;= 80% function coverage</td><td>Met</td><td>92.41% (207/224 functions, 2026-08-10)</td></tr>
+<tr><td>3</td><td>All wired adapters have at least one integration test</td><td>Met</td><td>native, gke, colima, smolvm, krun all tested</td></tr>
+<tr><td>4</td><td><code>cargo xtask pre-commit</code> passes on macOS</td><td>Met</td><td>staged fmt/clippy + config/docs checks</td></tr>
+<tr><td>5</td><td><code>cargo xtask test-unit</code> passes</td><td>Met</td><td>~506 tests (macOS cross-platform subset)</td></tr>
+<tr><td>6</td><td><code>cargo deny check</code> passes</td><td>Met</td><td>License + advisory audit in CI</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="advisory-items"><a class="header" href="#advisory-items">Advisory Items</a></h2>
+<p>These are review prompts, not merge blockers. Failing one must be acknowledged in the PR
+description (see “ADVISORY acknowledged” note above), not silently ignored.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>#</th><th>Item</th><th>Evidence</th></tr>
+</thead>
+<tbody>
+<tr><td>A1</td><td>New domain trait has an in-memory mock double in tests</td><td>Required for hexagonal port compliance</td></tr>
+<tr><td>A2</td><td>No <code>.unwrap()</code> in production paths of new code</td><td>See rust-patterns.md rule 1</td></tr>
+<tr><td>A3</td><td>Tracing events use structured fields, not message strings</td><td>See rust-patterns.md tracing rules</td></tr>
+<tr><td>A4</td><td>New <code>unsafe</code> blocks include a SAFETY comment</td><td>See rust-patterns.md rule 6</td></tr>
 </tbody>
 </table>
 </div>
@@ -235,7 +260,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 cargo test -p minibox-core -- protocol
 
 # Gate 2: handler coverage (requires Linux + llvm-cov)
-cargo xtask prepush  # generates coverage report
+cargo xtask coverage-check
 
 # Gate 3: adapter integration tests
 just test-integration  # Linux + root
@@ -251,35 +276,60 @@ cargo xtask test-unit
 cargo deny check
 cargo audit
 </code></pre>
-<h3 id="advisory-items"><a class="header" href="#advisory-items">[ADVISORY] items</a></h3>
-<p>Advisory items are checked during PR review. Reviewers annotate with “ADVISORY: acknowledged —
-&lt;rationale&gt;” when a prompt does not apply or is deferred with a tracked follow-up issue.</p>
+<h3 id="advisory-items-1"><a class="header" href="#advisory-items-1">Advisory items</a></h3>
+<p>Advisory items (A1-A4) are checked during PR review, not by CI. Reviewers annotate with
+“ADVISORY: acknowledged — &lt;rationale&gt;” when a prompt does not apply or is deferred with a
+tracked follow-up issue.</p>
 <hr>
 <h2 id="freeze-status"><a class="header" href="#freeze-status">Freeze Status</a></h2>
-<p>The stabilization freeze (issues #117 and #127) applies to <strong>net-new Core and Platform crates</strong>.
-The freeze lifts when all <strong>[GATE]</strong> items above are verified green on the <code>next</code> branch.</p>
-<p>Gate 2 (handler coverage) is the primary remaining blocker. See
-<a href="https://github.com/89jobrien/minibox/issues/158">GH #158</a> for tracking.</p>
+<p><strong>Lifted 2026-08-18.</strong> The net-new surface freeze declared 2026-05-14 under issue
+#127 (<code>CONTRIBUTING.md</code> “Feature Freeze”, commit b23575db) is lifted. Lift
+evidence, per the conditions this section previously stated:</p>
+<ul>
+<li>All six mandatory gates green simultaneously on <code>develop</code>: Stability Gates,
+Conformance, and Merge workflows all passing on commits bc01b5f5 and a9940738
+(2026-08-18), including the protocol-drift gate after its lock regeneration.</li>
+<li>Handler coverage 92.41% against the 80% threshold (Gate 2).</li>
+<li>Linux integration/e2e evidence: conformance suite 123/123 on the pre-push gate
+and self-hosted Linux CI; <code>native_adapter_isolation_tests</code> plus the new
+<code>native_adapter_lifecycle_failure_tests</code> (#74) green on a Linux VM under
+root + cgroup v2 (2026-08-18).</li>
+</ul>
+<p>Normal contribution rules resume. New crates and public surface follow the
+Stabilization Policy in <code>docs/core/CRATE_TIERS.mbx.md</code> — the gate criteria are
+now a standing promotion bar, not a freeze. Chain I issues are unblocked.</p>
+<p>Issue #127 records the lift decision; the original freeze declaration is
+preserved in git history and in <code>CONTRIBUTING.md</code>.</p>
 <hr>
 <h2 id="ci-enforcement"><a class="header" href="#ci-enforcement">CI Enforcement</a></h2>
-<p>The following xtask gates are enforced in GitHub Actions (
-and ):</p>
+<p>The following jobs enforce checklist items in GitHub Actions (issue #133):</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Gate</th><th>CI Job</th><th>Workflow</th></tr>
+<tr><th>Enforces</th><th>CI Job</th><th>Command</th><th>Workflow</th></tr>
 </thead>
 <tbody>
-<tr><td>coverage-check</td><td>handler coverage gate (&gt;=80%)</td><td>stability-gates.yml</td></tr>
-<tr><td>check-protocol-drift</td><td>core contract hash check</td><td>protocol-drift.yml</td></tr>
-<tr><td>check-stale-names</td><td>stale crate/binary name audit</td><td>stability-gates.yml</td></tr>
-<tr><td>check-protocol-sites</td><td>HandlerDependencies site count</td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 1</td><td>protocol-drift (core contract hash check)</td><td><code>cargo xtask check-protocol-drift</code></td><td>protocol-drift.yml</td></tr>
+<tr><td>Gate 1</td><td>check-protocol-sites</td><td><code>cargo xtask check-protocol-sites</code></td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 2</td><td>handler-coverage (&gt;=80% function coverage)</td><td><code>cargo xtask coverage-check</code></td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 3</td><td>adapter-integration-tests (all five adapters)</td><td><code>cargo xtask check adapter-coverage</code></td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 5</td><td>test-unit</td><td><code>cargo xtask test unit</code></td><td>pr.yml / merge.yml</td></tr>
+<tr><td>Gate 6</td><td>deny + audit</td><td><code>cargo deny check</code> / <code>cargo audit</code></td><td>pr.yml / merge.yml</td></tr>
+<tr><td>A2</td><td>no-unwrap-in-prod (enforced as hard job)</td><td><code>cargo xtask check-no-unwrap --strict</code></td><td>stability-gates.yml</td></tr>
+<tr><td>doc sync</td><td>doc-sync (docs audit + FEATURE_MATRIX age)</td><td><code>cargo xtask docs audit --full --strict</code></td><td>stability-gates.yml</td></tr>
+<tr><td>doc names</td><td>check-stale-names</td><td><code>cargo xtask check-stale-names</code></td><td>stability-gates.yml</td></tr>
+<tr><td>compile</td><td>stability-compile (check + clippy)</td><td><code>cargo check --workspace</code> + targeted clippy</td><td>stability-gates.yml</td></tr>
 </tbody>
 </table>
 </div>
-<p>Gates 1-6 in the table above are enforced via pre-commit () locally and
-the jobs listed here in CI. All four xtask-based gates (#133) were added in
-.</p>
+<p>Known gaps (tracked, not yet CI-enforced):</p>
+<ul>
+<li>Gate 4 (<code>cargo xtask pre-commit</code> on macOS) has no CI job — all stability jobs run on
+<code>ubuntu-latest</code>. It remains a local gate.</li>
+<li>Gates 5 and 6 run in <code>pr.yml</code>/<code>merge.yml</code>, not in the <code>stability-gates.yml</code> fan-in, so the
+six gates are not verified green as a single unit.</li>
+<li>Advisory items A1, A3, and A4 are review-time only; A2 is the only automated advisory.</li>
+</ul>
 
                     </main>
 

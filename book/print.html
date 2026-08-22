@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -178,11 +178,32 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="about-minibox"><a class="header" href="#about-minibox">About minibox</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>Cargo.toml</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/mcp</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox-bench</li>
+<li>crates/ail</li>
+<li>xtask
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="about-minibox"><a class="header" href="#about-minibox">About minibox</a></h1>
 <p>A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.</p>
-<p><strong>Status:</strong> Active development — <code>v0.30.0</code>. Linux runs natively and is production-ready; macOS feels like native but requires <code>smolvm</code>
+<p><strong>Status:</strong> Active development — <code>v0.31.0</code>. Linux runs natively and is production-ready; macOS feels like native but requires <code>smolvm</code>
 (VM-backed). See the <a href="#platform-support">Platform Support</a> table.</p>
 <hr>
 <h2 id="why"><a class="header" href="#why">Why</a></h2>
@@ -199,8 +220,8 @@ structured tracing, property testing.</p>
 <li>OCI image pull — Docker Hub v2 + ghcr.io, anonymous auth, parallel layers</li>
 <li>Image management — <code>prune</code> / <code>rmi</code> with lease-based GC</li>
 <li>Bind mounts and privileged mode — <code>-v</code>/<code>--mount</code>, <code>--privileged</code></li>
-<li>Log capture — <code>minibox logs &lt;id&gt;</code> for stored stdout/stderr</li>
-<li>Container events — <code>minibox events</code> streams lifecycle events</li>
+<li>Log capture — <code>mbx logs &lt;id&gt;</code> for stored stdout/stderr</li>
+<li>Container events — <code>mbx events</code> streams lifecycle events</li>
 </ul>
 <h3 id="experimental-ish"><a class="header" href="#experimental-ish">Experimental-ish</a></h3>
 <ul>
@@ -242,7 +263,7 @@ sudo ./target/release/mbx rm &lt;id&gt;
 <tr><td>Linux x86_64</td><td><strong>Production</strong></td><td><code>native</code></td><td>Full namespace/cgroup v2/overlay</td></tr>
 <tr><td>Linux aarch64</td><td><strong>Production</strong></td><td><code>native</code></td><td>Same as x86_64</td></tr>
 <tr><td>Linux (GKE)</td><td><strong>Production</strong></td><td><code>gke</code></td><td>Unprivileged pods via proot + copy-FS</td></tr>
-<tr><td>macOS (Apple Silicon)</td><td>Experimental</td><td><code>smolvm</code>/<code>krun</code></td><td>exec/logs limited; VZ blocked by Apple bug</td></tr>
+<tr><td>macOS (Apple Silicon)</td><td>Experimental</td><td><code>smolvm</code>/<code>krun</code></td><td>exec/logs limited; VZ adapter removed</td></tr>
 <tr><td>macOS (Intel)</td><td>Experimental</td><td><code>colima</code></td><td>exec/logs limited</td></tr>
 <tr><td>Windows</td><td>Planned</td><td><code>winbox</code> stub</td><td>Returns error unconditionally</td></tr>
 </tbody>
@@ -250,31 +271,33 @@ sudo ./target/release/mbx rm &lt;id&gt;
 </div>
 <hr>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<p>10 crates, Rust 2024 edition:</p>
+<p>13 crates plus <code>xtask</code> (14 workspace members), Rust 2024 edition:</p>
 <pre><code>minibox-macros          proc macros (as_any!, adapt!)
     ^
 minibox-core            cross-platform types, domain traits, protocol, OCI ops
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
-    ^         ^
-macbox      winbox      macOS backends: colima (macbox) + smolvm/krun (smolbox) | Windows stub
-smolbox
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
-minibox-testsuite     conformance test harness for adapter trait contracts
+minibox-mcp             MCP stdio server for agent-controlled minibox tools
+minibox-testsuite       conformance test harness for adapter trait contracts
+minibox-bench           benchmark crate
+ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 </code></pre>
 <p><strong>Hexagonal ports.</strong> Domain traits (<code>ImageRegistry</code>, <code>FilesystemProvider</code>, <code>ResourceLimiter</code>,
-<code>ContainerRuntime</code>, <code>NetworkProvider</code>, …) live in <code>minibox-core</code>. Adapters implement them.
+<code>ContainerRuntime</code>, <code>NetworkProvider</code>, …) live under <code>crates/minibox-core/src/domain/</code>. Adapters implement them.
 Tests use mock adapters — no real HTTP or filesystem required.</p>
 <p><strong>Async/sync boundary.</strong> Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in <code>spawn_blocking</code> to avoid blocking the runtime.</p>
-<p><strong>Protocol.</strong> JSON-over-newline on a Unix socket. 27 request variants, 28 response variants.
-Canonical source: <code>minibox-core/src/protocol.rs</code>.</p>
-<p>Full architecture reference: <a href="#architecture-1"><code>ARCHITECTURE</code></a>.</p>
+<p><strong>Protocol.</strong> JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
+Canonical source: <code>crates/minibox-core/src/protocol.rs</code>.</p>
+<p>Full architecture reference: <a href="#minibox-architecture-reference"><code>ARCHITECTURE</code></a>.</p>
 <hr>
 <h2 id="security-model"><a class="header" href="#security-model">Security Model</a></h2>
 <div class="table-wrapper">
@@ -338,8 +361,8 @@ just test-e2e                # daemon + CLI end-to-end (Linux + root)
 macOS without root. See <a href="#test-infrastructure-report"><code>TEST_INFRASTRUCTURE</code></a>.</p>
 <hr>
 <h2 id="developer-workflow"><a class="header" href="#developer-workflow">Developer Workflow</a></h2>
-<pre><code class="language-bash">cargo xtask pre-commit       # fmt + clippy + release build (macOS-safe gate)
-cargo xtask prepush          # nextest + coverage (Linux gate)
+<pre><code class="language-bash">cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
+cargo xtask prepush          # release build + release nextest + conformance
 just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 </code></pre>
@@ -348,9 +371,9 @@ mbx doctor                   # preflight: show compiled adapters and capabilitie
 <h2 id="contributing"><a class="header" href="#contributing">Contributing</a></h2>
 <p>Issues and PRs are welcome. A few things to know before contributing:</p>
 <ul>
-<li>Run <code>cargo xtask pre-commit</code> before pushing — it’s the same gate as CI.</li>
-<li>New adapters implement the domain traits in <code>minibox-core/src/domain.rs</code>.</li>
-<li>Protocol changes start in <code>minibox-core/src/protocol.rs</code>; update handlers, CLI paths, and
+<li>Run <code>cargo xtask pre-commit</code> before committing and <code>cargo xtask prepush</code> before pushing.</li>
+<li>New adapters implement the domain traits under <code>crates/minibox-core/src/domain/</code>.</li>
+<li>Protocol changes start in <code>crates/minibox-core/src/protocol.rs</code>; update handlers, CLI paths, and
 snapshot tests together.</li>
 <li>Linux-only code must be gated with <code>#[cfg(target_os = "linux")]</code> so macOS <code>cargo check</code>
 still passes.</li>
@@ -366,12 +389,12 @@ still passes.</li>
 <tbody>
 <tr><td>Bridge networking</td><td>Experimental</td></tr>
 <tr><td>OCI push/commit/build</td><td>Experimental</td></tr>
-<tr><td>macOS VZ.framework</td><td>Blocked (Apple bug on ARM64 macOS 26)</td></tr>
+<tr><td>macOS VZ.framework</td><td>Removed after Apple ARM64 bug</td></tr>
 <tr><td>Seccomp / capabilities</td><td>Planned</td></tr>
 <tr><td>Rootless support</td><td>Planned</td></tr>
 <tr><td>Port forwarding / DNS</td><td>Planned</td></tr>
 <tr><td>Windows (WSL2)</td><td>Planned</td></tr>
-<tr><td>MCP control surface</td><td>Planned</td></tr>
+<tr><td>MCP control surface</td><td>Initial MCP stdio server implemented</td></tr>
 </tbody>
 </table>
 </div>
@@ -381,14 +404,30 @@ still passes.</li>
 <p>Licensed under either of <a href="LICENSE-MIT">MIT</a> or <a href="LICENSE-APACHE">Apache-2.0</a> at your option.</p>
 <p><sup>Previously named <code>mbx</code> during early development.</sup></p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="architecture-1"><a href="#architecture-1" class="header">Architecture</a></h1>
 <hr>
-<h2 id="watches---cratescargotoml---cratesminiboxdsrcadapter_registryrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcprotocolrs"><a class="header" href="#watches---cratescargotoml---cratesminiboxdsrcadapter_registryrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcprotocolrs">watches:
-- crates/<em>/Cargo.toml
-- crates/miniboxd/src/adapter_registry.rs
-- crates/minibox-core/src/domain.rs
-- crates/minibox-core/src/domain/</em>.rs
-- crates/minibox-core/src/protocol.rs</a></h2>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>Cargo.toml</li>
+<li>crates/minibox-macros</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/mcp</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox-bench</li>
+<li>crates/minibox-cni</li>
+<li>crates/minibox-tui</li>
+<li>crates/ail</li>
+<li>xtask
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="minibox-architecture-reference"><a class="header" href="#minibox-architecture-reference">Minibox Architecture Reference</a></h1>
 <blockquote>
 <p>Generated 2026-04-27 from automated codebase analysis.
@@ -399,27 +438,35 @@ vz wiring row corrected (selectable via macbox env-var branch, feature-gated,
 macOS only — not in AdapterSuite enum). Colima push/commit/build are now wired
 via macbox::build_colima_handler_dependencies.
 Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
-removed.</p>
+removed.
+Updated 2026-07-25: crate count corrected to 13 crates, plus xtask as the
+workspace dev-tool member (added ail and minibox-bench).
+Updated 2026-07-26: added <code>minibox-mcp</code> MCP stdio control surface.
+Updated 2026-08-08: crate count corrected to 15 crates, plus xtask (added
+<code>minibox-cni</code> and <code>minibox-tui</code>).</p>
 </blockquote>
 <h2 id="workspace-overview"><a class="header" href="#workspace-overview">Workspace Overview</a></h2>
-<p>10 crates, Rust 2024 edition, workspace version 0.30.0.</p>
-<!-- fact:crate_count=10 -->
-<!-- fact:workspace_version=0.30.0 -->
+<p>16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.32.0.</p>
+<!-- fact:crate_count=15 -->
+<!-- fact:workspace_version=0.32.0 -->
 <pre><code class="language-text">minibox-macros          (proc-macro, ~300 LOC)
     ^
 minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain traits, protocol, image ops
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
-    ^     ^
-macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm) | Windows stub
-    ^
-smolbox                 (macOS VM backend) — smolvm adapter; default macOS runtime
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  (platform libs) — Colima | smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
+minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
 minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
+minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
+minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
+minibox-tui             (bin) — read-only TUI dashboard (ratatui + crossterm), `mbx tui`
+ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 </code></pre>
 <h3 id="cross-crate-dependency-graph"><a class="header" href="#cross-crate-dependency-graph">Cross-Crate Dependency Graph</a></h3>
@@ -433,19 +480,27 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 <tr><td>minibox-core</td><td>minibox-macros</td></tr>
 <tr><td>minibox</td><td>minibox-core, minibox-macros</td></tr>
 <tr><td>macbox</td><td>minibox, minibox-core</td></tr>
+<tr><td>smolbox</td><td>minibox, minibox-core</td></tr>
 <tr><td>winbox</td><td>minibox, minibox-core</td></tr>
-<tr><td>miniboxd</td><td>minibox, minibox-core (unix), macbox (unix), winbox (windows)</td></tr>
+<tr><td>miniboxd</td><td>minibox, minibox-core (unix), macbox/smolbox (unix), winbox (windows)</td></tr>
 <tr><td>mbx</td><td>minibox-core</td></tr>
 <tr><td>minibox-crux-plugin</td><td>minibox-core</td></tr>
+<tr><td>minibox-mcp</td><td>minibox-core</td></tr>
 <tr><td>minibox-testsuite</td><td>minibox, minibox-core</td></tr>
+<tr><td>minibox-bench</td><td>minibox, minibox-core, minibox-macros</td></tr>
+<tr><td>minibox-cni</td><td>minibox-core</td></tr>
+<tr><td>minibox-tui</td><td>minibox-core</td></tr>
+<tr><td>ail</td><td>–</td></tr>
 <tr><td>xtask</td><td>(standalone)</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h2 id="domain-traits-hexagonal-ports"><a class="header" href="#domain-traits-hexagonal-ports">Domain Traits (Hexagonal Ports)</a></h2>
-<p>All defined in <code>crates/minibox-core/src/domain.rs</code> and re-exported
-via <code>crates/minibox/src/domain.rs</code>.</p>
+<p>Most are defined under <code>crates/minibox-core/src/domain/</code>; <code>NetworkProvider</code> is in
+<code>crates/minibox-core/src/domain/networking.rs</code>. The <code>minibox</code> crate re-exports the
+core domain surface via <code>crates/minibox/src/domain.rs</code> for adapter and macro
+compatibility.</p>
 <h3 id="primary-ports-wired-in-handlerdependencies"><a class="header" href="#primary-ports-wired-in-handlerdependencies">Primary Ports (wired in HandlerDependencies)</a></h3>
 <div class="table-wrapper">
 <table>
@@ -471,6 +526,7 @@ via <code>crates/minibox/src/domain.rs</code>.</p>
 </table>
 </div>
 <h3 id="extension-ports-defined-not-in-handlerdependencies"><a class="header" href="#extension-ports-defined-not-in-handlerdependencies">Extension Ports (defined, not in HandlerDependencies)</a></h3>
+<p>Defined in <code>crates/minibox-core/src/domain/extensions.rs</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -562,20 +618,22 @@ broker — an inconsistency vs native/gke/smolvm.</p>
 </code></pre>
 <hr>
 <h2 id="protocol-json-over-newline-on-unix-socket"><a class="header" href="#protocol-json-over-newline-on-unix-socket">Protocol (JSON-over-newline on Unix socket)</a></h2>
-<p>27 request variants, 28 response variants. Canonical source:
+<p>29 request variants, 28 response variants. Canonical source:
 <code>crates/minibox-core/src/protocol.rs</code>.</p>
 <h3 id="daemonrequest-variants"><a class="header" href="#daemonrequest-variants">DaemonRequest Variants</a></h3>
 <p>Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
-RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest</p>
+RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest,
+ListPipelines, ShowPipeline, RunWorkflow</p>
 <h3 id="daemonresponse-variants"><a class="header" href="#daemonresponse-variants">DaemonResponse Variants</a></h3>
 <p><strong>Terminal</strong> (end a request): ContainerCreated, Success, ContainerPaused,
 ContainerResumed, ContainerList, ImageLoaded, ImageList, Error,
-ContainerStopped, BuildComplete, Pruned, PipelineComplete, SnapshotSaved,
-SnapshotRestored, SnapshotList, Manifest, VerifyResult</p>
+ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
+PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
+Manifest, VerifyResult, WorkflowComplete</p>
 <p><strong>Non-terminal</strong> (streaming): ContainerOutput, ExecStarted, PushProgress,
-BuildOutput, Event, LogLine, UpdateProgress</p>
+BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete</p>
 <hr>
 <h2 id="execution-manifest"><a class="header" href="#execution-manifest">Execution Manifest</a></h2>
 <p>(see <code>crates/minibox-core/src/domain/execution_manifest.rs</code>,
@@ -665,7 +723,7 @@ container records to disk (atomic rename) on every add/remove.
 Records survive daemon restart; running processes do not reattach.
 State machine: Created -&gt; Running -&gt; Paused -&gt; Stopped
 (+ Failed, Orphaned).
-See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
+See <code>docs/core/STATE_MODEL.mbx.md</code> for full detail.</p>
 <hr>
 <h2 id="reference-documents"><a class="header" href="#reference-documents">Reference Documents</a></h2>
 <div class="table-wrapper">
@@ -685,30 +743,53 @@ See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
 </div>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/miniboxd/src/adapter_registry.rs</li>
-<li>crates/minibox/src/adapters/</li>
-<li>crates/macbox/src/</li>
+<li>crates/minibox/src/daemon/handler</li>
+<li>crates/minibox/src/adapters/limiter.rs</li>
+<li>crates/minibox-core/src/domain/exec.rs</li>
+<li>crates/minibox-core/src/events.rs</li>
+<li>crates/minibox-core/src/image/registry.rs</li>
+<li>crates/minibox/src/adapters/ghcr.rs</li>
+<li>crates/minibox-core/src/image/gc.rs</li>
+<li>crates/minibox-core/src/domain/image.rs</li>
+<li>crates/minibox/src/container/namespace.rs</li>
+<li>crates/minibox/src/adapters/filesystem.rs</li>
+<li>crates/minibox/src/adapters/network/bridge.rs</li>
+<li>crates/minibox/src/daemon/server.rs</li>
+<li>crates/minibox-core/src/image/layer.rs</li>
+<li>crates/minibox-core/src/domain/execution_manifest.rs</li>
+<li>crates/minibox-core/src/domain/execution_policy.rs</li>
+<li>crates/minibox/src/daemon/state.rs</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/minibox/src/adapters/gke.rs</li>
+<li>crates/minibox/src/adapters/colima.rs</li>
+<li>crates/minibox/src/adapters/smolvm.rs</li>
+<li>crates/macbox/src/krun</li>
+<li>crates/macbox/src/vz</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>crates/mcp
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="feature-matrix"><a class="header" href="#feature-matrix">Feature Matrix</a></h1>
 <p>Per-platform capability breakdown for minibox adapters.</p>
-<p>Last updated: 2026-05-29</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="adapter-suites"><a class="header" href="#adapter-suites">Adapter Suites</a></h2>
-<!-- fact:adapter_suites=colima,gke,krun,native,smolvm -->
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Adapter</th><th>Platform</th><th>Status</th><th>Crate</th><th>Default?</th></tr>
 </thead>
 <tbody>
-<tr><td><code>native</code></td><td>Linux (x86_64/arm64)</td><td>Production</td><td>minibox</td><td>Fallback on Linux</td></tr>
-<tr><td><code>gke</code></td><td>Linux (GKE pods)</td><td>Production</td><td>minibox</td><td>–</td></tr>
-<tr><td><code>colima</code></td><td>macOS/Linux (Colima)</td><td>Experimental</td><td>minibox</td><td>–</td></tr>
-<tr><td><code>smolvm</code></td><td>macOS/Linux (SmolVM)</td><td>Experimental</td><td>smolbox</td><td>Yes (all platforms)</td></tr>
-<tr><td><code>krun</code></td><td>macOS/Linux (krun)</td><td>Experimental</td><td>smolbox</td><td>Fallback on macOS</td></tr>
+<tr><td><code>native</code></td><td>Linux only (x86_64/arm64) <sup class="footnote-reference" id="fr-1-1"><a href="#footnote-1">1</a></sup></td><td>Production</td><td>minibox</td><td>Fallback on Linux</td></tr>
+<tr><td><code>gke</code></td><td>Linux only (GKE pods) <sup class="footnote-reference" id="fr-2-1"><a href="#footnote-2">2</a></sup></td><td>Production</td><td>minibox</td><td>–</td></tr>
+<tr><td><code>colima</code></td><td>Unix (macOS/Linux, Colima)</td><td>Experimental</td><td>minibox</td><td>–</td></tr>
+<tr><td><code>smolvm</code></td><td>Unix (macOS/Linux, SmolVM) <sup class="footnote-reference" id="fr-3-1"><a href="#footnote-3">3</a></sup></td><td>Experimental</td><td>minibox</td><td>Yes (Unix; not available on Win)</td></tr>
+<tr><td><code>krun</code></td><td>Unix (macOS/Linux, krun)</td><td>Experimental</td><td>macbox</td><td>Fallback when smolvm absent <sup class="footnote-reference" id="fr-4-1"><a href="#footnote-4">4</a></sup></td></tr>
+<tr><td><code>vz</code></td><td>macOS only, <code>vz</code> feature <sup class="footnote-reference" id="fr-5-1"><a href="#footnote-5">5</a></sup></td><td>Non-functional</td><td>macbox</td><td>Opt-in only (<code>MINIBOX_ADAPTER=vz</code>)</td></tr>
 <tr><td><code>winbox</code></td><td>Windows</td><td>Stub</td><td>winbox</td><td>–</td></tr>
 </tbody>
 </table>
@@ -718,61 +799,61 @@ See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Feature</th><th>native</th><th>gke</th><th>colima</th><th>smolvm</th><th>krun</th><th>winbox</th></tr>
+<tr><th>Feature</th><th>native</th><th>gke</th><th>colima</th><th>smolvm</th><th>krun</th><th>vz</th><th>winbox</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>Container lifecycle</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>run</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>stop</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>rm</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>ps</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>pause/resume</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>exec (-it)</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>logs</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>events</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Image management</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Docker Hub v2</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>ghcr.io</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Parallel layer pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>prune / rmi</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>push (exp)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>commit (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>build (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Isolation</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>PID namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>Mount namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>Network namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>UTS namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>IPC namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>No</td></tr>
-<tr><td>cgroups v2</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>No</td><td>No</td></tr>
-<tr><td>Overlay FS</td><td>Yes</td><td>Copy</td><td>nerdctl</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Networking</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Bridge (exp)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>Port forwarding</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>DNS</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Mounts &amp; Privileges</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Bind mounts (<code>-v</code>)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td>Privileged mode</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Security</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>SO_PEERCRED auth</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Tar path validation</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Setuid stripping</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Device node rejection</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
-<tr><td>Layer digest verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Request frame limits</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Env redaction in logs</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td><strong>Execution integrity</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Execution manifest</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>manifest get/verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>Admission policy gate</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td><strong>State persistence</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Records survive restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>PID reconciliation</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
-<tr><td><strong>Observability</strong></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-<tr><td>Structured tracing</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
-<tr><td>OTLP export (opt-in)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>Container lifecycle</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>run</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>stop</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>rm</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>ps</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>pause/resume</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>exec (-it)</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>logs</td><td>Yes</td><td>No</td><td>Limited</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>events</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Image management</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Docker Hub v2</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>ghcr.io</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Parallel layer pull</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>prune / rmi</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>push (exp)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>commit (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>build (exp)</td><td>Yes</td><td>No</td><td>Yes</td><td>Yes</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Isolation</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>PID namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>Mount namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>Network namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>UTS namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>IPC namespace</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>VM</td><td>VM</td><td>No</td></tr>
+<tr><td>cgroups v2</td><td>Yes</td><td>No</td><td>Lima VM</td><td>VM</td><td>No</td><td>Yes</td><td>No</td></tr>
+<tr><td>Overlay FS</td><td>Yes</td><td>Copy</td><td>nerdctl</td><td>No</td><td>No</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>Networking</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Bridge (exp)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>Port forwarding</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>DNS</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Mounts &amp; Privileges</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Bind mounts (<code>-v</code>)</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td>Privileged mode</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Security</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>SO_PEERCRED auth</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Tar path validation</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Setuid stripping</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Device node rejection</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Layer digest verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Request frame limits</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Env redaction in logs</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>Execution integrity</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Execution manifest</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>manifest get/verify</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Admission policy gate</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td><strong>State persistence</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Records survive restart</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>PID reconciliation</td><td>Yes</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td><td>No</td></tr>
+<tr><td><strong>Observability</strong></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr><td>Structured tracing</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>OTLP export (opt-in)</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td><td>No</td></tr>
 </tbody>
 </table>
 </div>
@@ -787,15 +868,15 @@ See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
 <tbody>
 <tr><td>Container lifecycle (run/stop/rm/ps/restart)</td><td><code>crates/minibox/src/daemon/handler/lifecycle.rs</code>, <code>handler/run.rs</code>, <code>handler/stop.rs</code></td></tr>
 <tr><td>pause/resume (native, cgroup.freeze)</td><td><code>crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter</code></td></tr>
-<tr><td>exec</td><td><code>crates/minibox/src/daemon/handler/exec.rs</code>, <code>crates/minibox-core/src/domain.rs:ExecRuntime</code></td></tr>
+<tr><td>exec</td><td><code>crates/minibox/src/daemon/handler/exec.rs</code>, <code>crates/minibox-core/src/domain/exec.rs:ExecRuntime</code></td></tr>
 <tr><td>logs</td><td><code>crates/minibox/src/daemon/handler/logs.rs</code></td></tr>
 <tr><td>events</td><td><code>crates/minibox-core/src/events.rs:EventSink</code>/<code>EventSource</code></td></tr>
 <tr><td>Image pull (Docker Hub v2 + parallel layers)</td><td><code>crates/minibox-core/src/image/registry.rs:pull_image</code></td></tr>
 <tr><td>Image pull (ghcr.io)</td><td><code>crates/minibox/src/adapters/ghcr.rs</code></td></tr>
 <tr><td>prune/rmi</td><td><code>crates/minibox-core/src/image/gc.rs:ImageGarbageCollector</code></td></tr>
-<tr><td>push</td><td><code>crates/minibox-core/src/domain.rs:ImagePusher</code></td></tr>
-<tr><td>commit</td><td><code>crates/minibox-core/src/domain.rs:ContainerCommitter</code></td></tr>
-<tr><td>build</td><td><code>crates/minibox-core/src/domain.rs:ImageBuilder</code></td></tr>
+<tr><td>push</td><td><code>crates/minibox-core/src/domain/image.rs:ImagePusher</code></td></tr>
+<tr><td>commit</td><td><code>crates/minibox-core/src/domain/image.rs:ContainerCommitter</code></td></tr>
+<tr><td>build</td><td><code>crates/minibox-core/src/domain/image.rs:ImageBuilder</code></td></tr>
 <tr><td>PID/Mount/Net/UTS/IPC namespaces (native)</td><td><code>crates/minibox/src/container/namespace.rs</code></td></tr>
 <tr><td>cgroups v2</td><td><code>crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter</code></td></tr>
 <tr><td>Overlay FS</td><td><code>crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem</code></td></tr>
@@ -816,6 +897,13 @@ See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
 </table>
 </div>
 <hr>
+<h2 id="control-surfaces"><a class="header" href="#control-surfaces">Control Surfaces</a></h2>
+<ul>
+<li><code>mbx</code> is the primary CLI and connects directly to the daemon Unix socket.</li>
+<li><code>minibox-crux-plugin</code> exposes a JSON-RPC stdio bridge for Crux workflows.</li>
+<li><code>minibox-mcp</code> exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.</li>
+</ul>
+<hr>
 <h2 id="legend"><a class="header" href="#legend">Legend</a></h2>
 <ul>
 <li><strong>Yes</strong> – implemented and tested</li>
@@ -830,9 +918,10 @@ minibox namespaces</li>
 <h2 id="notes"><a class="header" href="#notes">Notes</a></h2>
 <ul>
 <li><strong><code>gke</code> adapter</strong> uses proot for filesystem isolation
-(see <code>crates/minibox/src/adapters/gke.rs:GkeRuntime</code>) and a
-no-op resource limiter. Designed for running inside unprivileged
-GKE pods where namespaces and cgroups are unavailable.</li>
+(see <code>crates/minibox/src/adapters/gke.rs:ProotRuntime</code>) and a
+no-op resource limiter (<code>crates/minibox/src/adapters/gke.rs:NoopLimiter</code>).
+Designed for running inside unprivileged GKE pods where namespaces and
+cgroups are unavailable.</li>
 <li><strong><code>colima</code> adapter</strong> delegates to <code>nerdctl</code>/<code>limactl</code> inside a
 Lima VM
 (see <code>crates/minibox/src/adapters/colima.rs:ColimaRuntime</code>).
@@ -840,11 +929,12 @@ Exec and logs are limited because they go through Lima’s SSH
 tunnel. Push, commit, and build are wired via
 <code>ColimaImagePusher</code>, <code>OverlayCommitAdapter</code>, and
 <code>MiniboxImageBuilder</code>.</li>
-<li><strong><code>smolvm</code> adapter</strong> is the <strong>default</strong> when <code>MINIBOX_ADAPTER</code>
-is unset and the <code>smolvm</code> binary is present on PATH
-(see <code>crates/miniboxd/src/adapter_registry.rs:adapter_from_env</code>). Falls back
+<li><strong><code>smolvm</code> adapter</strong> is the <strong>default on Unix</strong> when
+<code>MINIBOX_ADAPTER</code> is unset and the <code>smolvm</code> binary is present on
+PATH (see <code>crates/miniboxd/src/adapter_registry.rs</code>). Falls back
 to <code>native</code> on Linux or <code>krun</code> on macOS when the binary is
-absent. Lightweight Linux VMs with subsecond boot
+absent. Not available on Windows (<code>cfg!(unix)</code>). Lightweight Linux
+VMs with subsecond boot
 (see <code>crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime</code>).</li>
 <li><strong><code>krun</code> adapter</strong> uses libkrun to run containers in
 lightweight VMs
@@ -854,11 +944,33 @@ are wired into the daemon
 (see <code>crates/miniboxd/src/main.rs:build_krun_handler_dependencies</code>)
 and pass 31 conformance tests. Acts as the fallback when
 <code>smolvm</code> is unavailable.</li>
+<li><strong><code>vz</code> adapter</strong> uses Apple’s Virtualization.framework directly
+(see <code>crates/macbox/src/vz/</code>), communicating with the in-VM
+<code>minibox-agent</code> over vsock
+(<code>crates/macbox/src/vz/vsock.rs</code>, <code>proxy.rs</code>). Opt-in only via
+<code>MINIBOX_ADAPTER=vz</code> and the <code>vz</code> Cargo feature — not wired into
+<code>AdapterSuite</code>’s <code>build_handler_deps</code> dispatch like the other
+adapters, because <code>VZVirtualMachine</code> construction and its
+completion-handler callbacks must run on the GCD main queue, which
+requires bypassing <code>#[tokio::main]</code> entirely
+(see <code>vz_main()</code>/<code>start_vz()</code> in <code>crates/miniboxd/src/main.rs</code> and
+<code>crates/macbox/src/lib.rs</code>). Removed 2026-05-07 (issue #305) after
+a macOS 26 Tahoe-beta regression (<code>VZErrorInternal(1)</code>); code
+restored 2026-08-15, but <strong>currently non-functional</strong> — a follow-up
+minimal repro (isolated from all minibox configuration, tested
+against two independent kernel images) showed <code>VZLinuxBootLoader</code>
+still fails with <code>VZErrorDomain code=1</code> on macOS 26.4. The earlier
+belief that the regression was fixed was based on a Lima repro that
+used <code>VZEFIBootLoader</code> — a different boot mechanism than this
+adapter needs. See the status update in
+<code>docs/designs/2026-08-15-vz-adapter-revival-design.md</code>.
+<code>exec</code>/<code>logs</code>/<code>push</code>/<code>commit</code>/<code>build</code> are unimplemented, same gaps
+as <code>krun</code>.</li>
 <li><strong><code>docker_desktop</code> adapter</strong>
 (<code>DockerDesktopRuntime</code>/<code>Filesystem</code>/<code>Limiter</code>) exists in
 <code>crates/minibox/src/adapters/docker_desktop.rs</code> and is publicly
 exported, but is not registered in <code>AdapterSuite</code> or wired into
-the daemon. Not included in the matrix above.  <!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
+the daemon. Not included in the matrix above.<!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
 </li>
 <li><strong><code>winbox</code></strong> returns an error unconditionally. Phase 2 (Named Pipe
 server, HCS/WSL2 wiring) has not started.</li>
@@ -882,7 +994,52 @@ see <code>crates/miniboxd/src/main.rs</code>):
 </ul>
 </li>
 </ul>
+<hr>
+<ol class="footnote-definition">
+<li id="footnote-1">
+<p><code>native</code> requires root (UID 0). Rejected at startup if non-root. Linux only
+(<code>cfg!(target_os = "linux")</code>). Cgroup v2 and overlay FS require kernel support. <a href="#fr-1-1">↩</a></p>
+</li>
+<li id="footnote-2">
+<p><code>gke</code> is Linux only (<code>cfg!(target_os = "linux")</code>). Unprivileged — no root required.
+Uses proot (ptrace) and copy-based filesystem instead of overlay. <a href="#fr-2-1">↩</a></p>
+</li>
+<li id="footnote-3">
+<p><code>smolvm</code> is compiled only on Unix (<code>cfg!(unix)</code>). Not available on Windows builds.
+Requires the <code>smolvm</code> binary on PATH at runtime. <a href="#fr-3-1">↩</a></p>
+</li>
+<li id="footnote-4">
+<p><code>krun</code> fallback platform-splits: <code>native</code> on Linux, <code>krun</code> on macOS, when
+<code>smolvm</code> binary is absent and <code>MINIBOX_ADAPTER</code> is unset. <a href="#fr-4-1">↩</a></p>
+</li>
+<li id="footnote-5">
+<p><code>vz</code> requires macOS + the <code>vz</code> Cargo feature (off by default). Removed
+2026-05-07 (commit <code>00ee4427</code>, issue #305) after a Tahoe-beta VZ.framework
+regression (<code>VZErrorInternal(1)</code>); code restored 2026-08-15, but the
+adapter is <strong>currently non-functional</strong> — a follow-up minimal repro
+showed <code>VZLinuxBootLoader</code> still fails with <code>VZErrorDomain code=1</code> on
+macOS 26.4, confirmed against two independent kernel images. See the
+status update at the top of
+<code>docs/designs/2026-08-15-vz-adapter-revival-design.md</code>. Bypasses the
+shared <code>run_daemon()</code>/<code>AdapterSuite</code> dispatch entirely — selected in
+<code>main()</code> before the tokio runtime starts, because VM boot needs the OS main
+thread for GCD completion-handler callbacks. <a href="#fr-5-1">↩</a></p>
+</li>
+</ol>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/mbx</li>
+<li>crates/miniboxd</li>
+<li>ops/install-systemd.sh</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>xtask/src/main.rs</li>
+<li>crates/minibox-bench
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="usage"><a class="header" href="#usage">Usage</a></h1>
 <p>This document provides practical usage workflows for <code>minibox</code> across local Linux, systemd ops, macOS/Colima dogfooding, and experimental controller-driven flows.</p>
 <p><strong>Quick Start (Linux)</strong></p>
@@ -966,7 +1123,7 @@ colima start
 MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
 </code></pre>
 <p>Colima is the current macOS dogfood path. The Docker Desktop adapter exists in
-<code>minibox/src/adapters/docker_desktop.rs</code> but is not yet wired into <code>miniboxd</code>.</p>
+<code>crates/minibox/src/adapters/docker_desktop.rs</code> but is not yet wired into <code>miniboxd</code>.</p>
 <p><strong>macOS Dogfood Flow</strong></p>
 <pre><code class="language-bash"># Build the Linux test image tarball
 cargo xtask build-test-image
@@ -997,7 +1154,7 @@ The CLI communicates with the daemon over a Unix socket at <code>/run/minibox/mi
 <li>push commit/build/push parity further across <code>linux-native</code> and <code>colima</code></li>
 <li>let CI agents create and tear down their own minibox-managed test environments</li>
 </ul>
-<p>See <code>docs/ROADMAP.mbx.md</code> for the active roadmap.</p>
+<p>See <code>docs/core/ROADMAP.mbx.md</code> for the active roadmap.</p>
 <h2 id="vm-image-cas-overlay"><a class="header" href="#vm-image-cas-overlay">VM Image CAS Overlay</a></h2>
 <p>The VM image build supports a content-addressed overlay at <code>~/.mbx/vm/overlay/</code>. Files placed here
 are copied into the rootfs at build time. CAS (content-addressed storage) tracking lets you detect
@@ -1022,18 +1179,23 @@ cargo xtask cas-add /path/to/myconfig --ref myconfig
 </code></pre>
 <p>Exits non-zero if any drift is found.</p>
 <p><strong>In-VM drift check</strong></p>
-<p>After <code>cargo xtask build-vm-image</code>, <code>/etc/minibox-cas-refs</code> is written into the rootfs (one line
+<p>After <code>cargo xtask build-test-image</code>, <code>/etc/minibox-cas-refs</code> is written into the rootfs (one line
 per ref, tab-separated: <code>&lt;name&gt;\t&lt;sha256&gt;</code>). Run <code>/sbin/check-drift.sh</code> inside the VM to verify
 installed files match their expected hashes.</p>
 <pre><code class="language-bash"># Inside the Alpine VM shell
 /sbin/check-drift.sh
 </code></pre>
 <h2 id="benchmark"><a class="header" href="#benchmark">Benchmark</a></h2>
-<pre><code class="language-bash">cargo xtask bench                        # run locally, save to bench/results/
-cargo xtask bench-vps                    # run on VPS, fetch results
+<p>All criterion benchmarks live in <code>crates/minibox-bench</code>.</p>
+<pre><code class="language-bash">just bench                               # run benches, save to bench/results/
+just bench-check                         # compare against the per-env baseline
+just bench-baseline                      # save results as the new per-env baseline
+cargo xtask bench                        # underlying command (--check / --save-baseline / --env)
 </code></pre>
 <blockquote>
-<p>Results are written to <code>bench/results/bench.jsonl</code> (append-only history) and <code>bench/results/latest.json</code>.</p>
+<p>Results are written to <code>bench/results/</code> (gitignored). Tracked per-env baselines live at
+<code>bench/baseline.{local,selfhosted,hosted}.json</code>; the nightly CI bench job produces the
+canonical numbers.</p>
 </blockquote>
 <pre><code class="language-mmd">graph TD
   subgraph BUGS ["Bugs"]
@@ -1094,15 +1256,26 @@ cargo xtask bench-vps                    # run on VPS, fetch results
   end
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>xtask/src/main.rs</li>
+<li>Justfile</li>
+<li>scripts</li>
+<li>crates/miniboxd/src/adapter_registry.rs
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="development-guide"><a class="header" href="#development-guide">Development Guide</a></h1>
 <p>Canonical developer workflow for minibox. See <code>CLAUDE.md</code> for architecture
-details, <code>TESTING.md</code> for the full test strategy, and <code>docs/SUPPORT_TIERS.mbx.md</code> for crate and
+details, <code>docs/core/TESTING.mbx.md</code> for the full test strategy, and <code>docs/core/SUPPORT_TIERS.mbx.md</code> for crate and
 adapter support-tier definitions.</p>
 <h2 id="quick-start-for-new-contributors"><a class="header" href="#quick-start-for-new-contributors">Quick Start for New Contributors</a></h2>
 <p>Three commands cover 95% of daily development:</p>
-<pre><code class="language-bash">cargo xtask pre-commit   # before every commit: fmt-check + clippy + release build
+<pre><code class="language-bash">cargo xtask pre-commit   # before every commit: staged fmt/clippy + config/docs checks
 cargo xtask test-unit    # run all unit + conformance tests (any platform)
-cargo xtask prepush      # before every push: nextest suite + coverage
+cargo xtask prepush      # before every push: release build + release nextest + conformance
 </code></pre>
 <p>Install git hooks once after cloning:</p>
 <pre><code class="language-bash">just install-hooks
@@ -1113,7 +1286,6 @@ cargo xtask prepush      # before every push: nextest suite + coverage
 <li>Rust stable (edition 2024)</li>
 <li><a href="https://nexte.st/">cargo-nextest</a> for test filtering</li>
 <li><a href="https://github.com/casey/just">just</a> for convenience recipes</li>
-<li><a href="https://docs.astral.sh/uv/">uv</a> for Python script dependencies</li>
 <li>Linux + root for integration/e2e tests (unit tests run on macOS)</li>
 </ul>
 <h2 id="good-to-have"><a class="header" href="#good-to-have">Good to have</a></h2>
@@ -1158,10 +1330,9 @@ cargo xtask borrow-fixtures
 # Unit tests (any platform)
 cargo xtask test-unit
 
-# Pre-commit gate (format check + clippy + release build)
+# Pre-commit gate (staged fmt/clippy plus config/docs checks)
 cargo xtask pre-commit
-
-# Pre-push gate (nextest + llvm-cov coverage)
+# Pre-push gate (release build + release nextest + conformance)
 cargo xtask prepush
 </code></pre>
 <h2 id="running-the-daemon"><a class="header" href="#running-the-daemon">Running the Daemon</a></h2>
@@ -1263,10 +1434,15 @@ to surface obvious missing deps. It is not a substitute for <code>cargo xtask do
 <pre><code class="language-bash">just test-all                # nuke state -&gt; doctor -&gt; unit + integration + e2e -&gt; nuke
 </code></pre>
 <h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
-<pre><code class="language-bash">cargo xtask bench            # run locally, save to bench/results/
-just bench-sync              # sync VPS results to local jsonl
-just flamegraph [suite]      # profile with samply/flamegraph
-just bench-agent report      # AI bench analysis
+<p>All criterion benchmarks live in <code>crates/minibox-bench</code>. Results are written to
+<code>bench/results/</code> (gitignored); tracked per-env baselines live at
+<code>bench/baseline.{local,selfhosted,hosted}.json</code>. The nightly CI bench job produces the
+canonical numbers.</p>
+<pre><code class="language-bash">just bench                       # run benches, save to bench/results/
+just bench-check                 # run benches, compare against the per-env baseline
+just bench-baseline              # run benches, save results as the new baseline
+cargo xtask bench --skip-bench   # re-parse existing criterion output without re-running
+nu scripts/bench-agent.nu report # AI bench analysis
 </code></pre>
 <h2 id="ci-gates"><a class="header" href="#ci-gates">CI Gates</a></h2>
 <p>Local validation should match CI. The commands that matter:</p>
@@ -1310,8 +1486,8 @@ marked <em>(Linux/root)</em> require a Linux host with root privileges.</p>
 <tr><th>Task</th><th>Command</th><th>When to use</th></tr>
 </thead>
 <tbody>
-<tr><td>Before every commit</td><td><code>cargo xtask pre-commit</code></td><td>fmt-check + clippy + release build</td></tr>
-<tr><td>Before every push</td><td><code>cargo xtask prepush</code></td><td>nextest suite + coverage check</td></tr>
+<tr><td>Before every commit</td><td><code>cargo xtask pre-commit</code></td><td>staged fmt/clippy + config/docs checks</td></tr>
+<tr><td>Before every push</td><td><code>cargo xtask prepush</code></td><td>release build + release nextest + conformance</td></tr>
 <tr><td>Read-only local verification</td><td><code>cargo xtask verify</code></td><td>fmt + clippy + borrow fixtures + docs</td></tr>
 <tr><td>Auto-fix formatting/clippy</td><td><code>cargo xtask fix</code></td><td>mutates files; review diff after</td></tr>
 <tr><td>Lint only (no build)</td><td><code>cargo xtask lint</code></td><td>fmt-check + clippy (CI lint gate)</td></tr>
@@ -1355,7 +1531,7 @@ marked <em>(Linux/root)</em> require a Linux host with root privileges.</p>
 <tr><td>Scan for <code>.unwrap()</code> in production</td><td><code>cargo xtask check-no-unwrap</code></td><td>Advisory; use <code>--strict</code> to fail</td></tr>
 <tr><td>Verify adapter test coverage</td><td><code>cargo xtask check-adapter-coverage</code></td><td>After adding a new adapter</td></tr>
 <tr><td>Check for tracked generated artifacts</td><td><code>cargo xtask check-repo-clean</code></td><td>Before PRs</td></tr>
-<tr><td>Lint docs frontmatter</td><td><code>cargo xtask lint-docs</code></td><td>After editing docs/superpowers/</td></tr>
+<tr><td>Lint docs frontmatter</td><td><code>cargo xtask docs lint</code></td><td>After editing docs/core/</td></tr>
 </tbody>
 </table>
 </div>
@@ -1411,10 +1587,10 @@ marked <em>(Linux/root)</em> require a Linux host with root privileges.</p>
 <tr><th>Task</th><th>Command</th><th>When to use</th></tr>
 </thead>
 <tbody>
-<tr><td>Run criterion benchmarks</td><td><code>cargo xtask bench</code></td><td>Save results to bench/results/</td></tr>
-<tr><td>Sync VPS bench results locally</td><td><code>just bench-sync</code></td><td>Pull jsonl from remote</td></tr>
-<tr><td>Profile with samply/flamegraph</td><td><code>just flamegraph [suite]</code></td><td>macOS: samply; Linux: cargo-flamegraph</td></tr>
-<tr><td>AI bench analysis</td><td><code>just bench-agent report</code></td><td>Summarise bench/results/ with AI</td></tr>
+<tr><td>Run criterion benchmarks</td><td><code>just bench</code></td><td>Targets in crates/minibox-bench</td></tr>
+<tr><td>Check against per-env baseline</td><td><code>just bench-check</code></td><td>Compares vs bench/baseline.{env}.json</td></tr>
+<tr><td>Save new per-env baseline</td><td><code>just bench-baseline</code></td><td>Writes bench/baseline.{env}.json</td></tr>
+<tr><td>AI bench analysis</td><td><code>nu scripts/bench-agent.nu report</code></td><td>Summarise bench/results/ with AI</td></tr>
 </tbody>
 </table>
 </div>
@@ -1454,6 +1630,17 @@ for recipes that wrap them.</p>
 </table>
 </div>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/minibox-macros
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="code-style-and-conventions"><a class="header" href="#code-style-and-conventions">Code Style and Conventions</a></h1>
 <p>Minibox is a Rust 2024 container runtime. This document records the patterns observed throughout
 the codebase — follow them when adding or modifying code.</p>
@@ -1555,8 +1742,8 @@ pub enum ImageError {
 <li>Use named fields (<code>{ path: String }</code>) not tuple variants for anything beyond a bare wrapper.</li>
 <li>Always include <code>#[source]</code> on the field that is a wrapped lower-level error.</li>
 <li>Include <code>Other(String)</code> as a catch-all last variant for un-enumerated cases.</li>
-<li>Cross-platform error types live in <code>minibox-core/src/error.rs</code>. Linux-specific errors
-(anything depending on <code>nix</code>) live in <code>minibox/src/error.rs</code>.</li>
+<li>Cross-platform error types live in <code>crates/minibox-core/src/error.rs</code>. Linux-specific errors
+(anything depending on <code>nix</code>) live in <code>crates/minibox/src/error.rs</code>.</li>
 </ul>
 <h3 id="anyhow-for-propagation"><a class="header" href="#anyhow-for-propagation"><code>anyhow</code> for propagation</a></h3>
 <p>Production functions return <code>anyhow::Result&lt;T&gt;</code>. Always attach context to every <code>?</code>:</p>
@@ -1633,7 +1820,7 @@ tracing::info!("Container {} started with PID {}", id, pid);</code></pre>
 <hr>
 <h2 id="5-architecture"><a class="header" href="#5-architecture">5. Architecture</a></h2>
 <p>Minibox follows the <strong>hexagonal (ports and adapters)</strong> pattern:</p>
-<pre><code class="language-text">Domain Layer (minibox-core/src/domain.rs)
+<pre><code class="language-text">Domain Layer (minibox-core/src/domain/)
   → Defines trait "ports": ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime
   → Zero infrastructure imports
 
@@ -1647,12 +1834,12 @@ Composition Root (miniboxd/src/main.rs)
 </code></pre>
 <p>Rules:</p>
 <ul>
-<li>Domain traits live exclusively in <code>minibox-core/src/domain.rs</code>. Never add a trait there that
+<li>Domain traits live under <code>crates/minibox-core/src/domain/</code>. Never add a trait there that
 imports from <code>nix</code>, <code>libc</code>, or any platform crate.</li>
-<li>New adapter suites are added to <code>minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
+<li>New adapter suites are added to <code>crates/minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
 (smolvm/krun macOS VM adapters) and exported from the module root.</li>
 <li><code>HandlerDependencies</code> is the single struct injected into all request handlers. Adding a field
-requires updating all adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</li>
+requires updating all adapter suite construction sites in <code>crates/miniboxd/src/main.rs</code>.</li>
 <li><code>Dyn</code> type aliases (<code>DynImageRegistry</code>, etc.) are defined alongside each trait and used in
 <code>HandlerDependencies</code> to avoid naming concrete types in handler code.</li>
 </ul>
@@ -1668,7 +1855,7 @@ on the slice it actually uses (Interface Segregation Principle):</p>
 }</code></pre>
 <p>When adding a new handler, declare it to accept the narrowest sub-struct it needs — not the full
 <code>HandlerDependencies</code>. When adding a field to <code>HandlerDependencies</code> or a sub-struct, update all
-adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
+adapter suite construction sites in <code>crates/miniboxd/src/main.rs</code>.</p>
 <h3 id="channel-send-failures"><a class="header" href="#channel-send-failures">Channel-send failures</a></h3>
 <p>Never discard handler channel-send failures with <code>let _ = tx.send(...)</code>. Use or follow the
 <code>send_error</code> helper pattern so dropped client connections appear in logs:</p>
@@ -1690,8 +1877,8 @@ adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
 <tr><th>Location</th><th>Scope</th><th>Contents</th></tr>
 </thead>
 <tbody>
-<tr><td><code>minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
-<tr><td><code>minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
+<tr><td><code>crates/minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
+<tr><td><code>crates/minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -1993,8 +2180,8 @@ protocol types:</p>
 <ol>
 <li><strong>Add/modify the type</strong> in <code>protocol.rs</code>.</li>
 <li><strong>Add <code>#[serde(default)]</code></strong> on any new optional field for wire compatibility.</li>
-<li><strong>Update handlers</strong> in <code>minibox/src/daemon/handler.rs</code> that pattern-match on the changed variant.</li>
-<li><strong>Update CLI</strong> <code>mbx/src/commands/</code> for the corresponding subcommand.</li>
+<li><strong>Update handlers</strong> in <code>crates/minibox/src/daemon/handler/</code> that pattern-match on the changed variant.</li>
+<li><strong>Update CLI</strong> <code>crates/mbx/src/commands/</code> for the corresponding subcommand.</li>
 <li><strong>Update snapshot tests</strong> — protocol evolution tests live in
 <code>crates/minibox-core/tests/protocol_evolution.rs</code>.</li>
 <li><strong>Run <code>cargo xtask verify</code></strong> to confirm fmt, clippy, and borrow fixtures pass.</li>
@@ -2018,10 +2205,220 @@ New adapter? Update composition   → miniboxd/src/main.rs (all suites)
 New HandlerDependencies field?    → update all construction sites
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>xtask/src/main.rs</li>
+<li>Justfile</li>
+<li>fuzz</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox/src/testing</li>
+<li>crates/minibox-core/src/adapters</li>
+<li>.github/workflows
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="testing-guide"><a class="header" href="#testing-guide">Testing Guide</a></h1>
-<p>Full test strategy for minibox. See <code>DEVELOPMENT.md</code> for the developer workflow and
-<code>docs/TEST_INFRASTRUCTURE.md</code> for the generated codebase analysis this document summarises.</p>
-<h2 id="test-categories-1"><a class="header" href="#test-categories-1">Test Categories</a></h2>
+<p>Full test strategy for minibox. Tests follow a six-dimension progression —
+each dimension unlocks confidence at a different stage. Applying the wrong
+dimension at the wrong stage wastes effort; skipping one leaves a gap.</p>
+<h2 id="the-six-dimensions"><a class="header" href="#the-six-dimensions">The Six Dimensions</a></h2>
+<pre><code>Idea -&gt; Unit -&gt; Property -&gt; Fuzz -&gt; Conformance -&gt; Integration -&gt; Regression
+         |          |        |           |              |              |
+      always   non-trivial  |        new impl        wiring        bug fixed
+               input space  |        complete
+                         unsafe/parser/
+                         protocol boundary
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Dimension</th><th>When to apply</th><th>Question it answers</th></tr>
+</thead>
+<tbody>
+<tr><td>Unit</td><td>Function exists</td><td>Does this function do what I think it does?</td></tr>
+<tr><td>Property</td><td>Input space is non-trivial</td><td>Does this invariant hold for all valid inputs?</td></tr>
+<tr><td>Fuzz</td><td>Unsafe, parser, or protocol boundary</td><td>Does this code survive malformed or adversarial input?</td></tr>
+<tr><td>Conformance</td><td>Trait contract defined, impl complete</td><td>Does this impl satisfy the contract the trait promises?</td></tr>
+<tr><td>Integration</td><td>Components wired together</td><td>Do these parts work correctly when connected?</td></tr>
+<tr><td>Regression</td><td>Bug reproduced and fixed</td><td>Will this specific failure mode ever recur?</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="dimension-1-unit--always-first"><a class="header" href="#dimension-1-unit--always-first">Dimension 1: Unit — always, first</a></h2>
+<p>Write unit tests the moment a function exists. A function without a unit
+test has no verified behaviour.</p>
+<ul>
+<li>Scope: one function, pure logic</li>
+<li>Fakes over mocks — pass a <code>Vec</code>, not a <code>MockRepository</code></li>
+<li>Live in <code>#[cfg(test)]</code> in the same file</li>
+<li>Name: <code>fn &lt;thing&gt;_&lt;scenario&gt;_&lt;expected&gt;()</code></li>
+<li>Use <code>expect("reason")</code>, never bare <code>.unwrap()</code></li>
+</ul>
+<h3 id="platform-gating"><a class="header" href="#platform-gating">Platform gating</a></h3>
+<p>Gate Linux-only tests explicitly. macOS <code>cargo check</code> does not validate
+<code>#[cfg(target_os = "linux")]</code> paths.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(target_os = "linux")]
+#[test]
+fn test_cgroup_limits() { ... }
+<span class="boring">}</span></code></pre>
+<h3 id="environment-mutation"><a class="header" href="#environment-mutation">Environment mutation</a></h3>
+<p><code>std::env::set_var</code> and <code>remove_var</code> are <code>unsafe</code> in Rust 2024. Serialize
+any test that mutates the environment with a shared mutex.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>static ENV_LOCK: std::sync::Mutex&lt;()&gt; = std::sync::Mutex::new(());
+
+#[test]
+fn test_env_var() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    unsafe { std::env::set_var("KEY", "val") };
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<h3 id="commands"><a class="header" href="#commands">Commands</a></h3>
+<pre><code class="language-bash">cargo xtask test-unit          # lib + select integration + conformance
+just test-unit                 # equivalent shorthand
+</code></pre>
+<hr>
+<h2 id="dimension-2-property--when-the-input-space-is-non-trivial"><a class="header" href="#dimension-2-property--when-the-input-space-is-non-trivial">Dimension 2: Property — when the input space is non-trivial</a></h2>
+<p>If a function accepts strings, integers, collections, or any type with many
+possible values, a unit test only proves it works for the inputs you thought
+of. Property tests prove invariants hold for inputs you didn’t think of.</p>
+<ul>
+<li>Use <code>proptest</code>; strategies via <code>prop_compose!</code> for domain types</li>
+<li>Test invariants, not specific values: “output is always sorted”,
+“round-trip is lossless”</li>
+<li>Commit <code>proptest-regressions/</code> — these are found counterexamples, never
+delete them</li>
+<li>Good candidates: parsers, graph operations, serialisation, arithmetic</li>
+</ul>
+<h3 id="commands-1"><a class="header" href="#commands-1">Commands</a></h3>
+<pre><code class="language-bash">cargo xtask test-property      # ~46 proptest tests
+</code></pre>
+<p>Not in CI — run manually before pushing to <code>next</code>.</p>
+<hr>
+<h2 id="dimension-3-fuzz--for-unsafe-parsers-and-protocol-boundaries"><a class="header" href="#dimension-3-fuzz--for-unsafe-parsers-and-protocol-boundaries">Dimension 3: Fuzz — for unsafe, parsers, and protocol boundaries</a></h2>
+<p>If a function touches raw bytes, parses external input, handles untrusted
+data, or contains <code>unsafe</code>, fuzz it. Property tests generate structured
+inputs; fuzz tests generate arbitrary byte sequences.</p>
+<ul>
+<li>Use <code>cargo-fuzz</code> (libFuzzer); targets in <code>fuzz/fuzz_targets/</code></li>
+<li>Seed corpus in <code>fuzz/corpus/&lt;target&gt;/</code> — commit representative inputs</li>
+<li>Run locally: <code>cargo xtask fuzz</code> or
+<code>cargo fuzz run &lt;target&gt; -- -max_total_time=60</code></li>
+<li>Good candidates: tar extraction, OCI manifest parsing, socket framing,
+path validation, any function that calls <code>unsafe</code></li>
+<li>Fuzz seeds, corpus, and artifacts are gitignored</li>
+</ul>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// fuzz/fuzz_targets/fuzz_parse_manifest.rs
+#![no_main]
+use libfuzzer_sys::fuzz_target;
+
+fuzz_target!(|data: &amp;[u8]| {
+    if let Ok(s) = std::str::from_utf8(data) {
+        let _ = minibox_core::image::parse_manifest(s);
+    }
+});
+<span class="boring">}</span></code></pre>
+<hr>
+<h2 id="dimension-4-conformance--for-every-new-impl-trait"><a class="header" href="#dimension-4-conformance--for-every-new-impl-trait">Dimension 4: Conformance — for every new <code>impl Trait</code></a></h2>
+<p>A trait defines a contract. An impl that compiles is not necessarily correct.
+Conformance tests verify the impl satisfies the semantic invariants the trait
+promises — one suite per trait, reusable across all impls.</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn assert_port_contract&lt;T: MyPort&gt;(impl_under_test: T) {
+    // assert every invariant the trait doc promises
+}
+
+#[test]
+fn my_adapter_satisfies_port_contract() {
+    assert_port_contract(MyAdapter::new());
+}
+<span class="boring">}</span></code></pre>
+<h3 id="commands-2"><a class="header" href="#commands-2">Commands</a></h3>
+<pre><code class="language-bash">cargo xtask test-conformance          # run + report (Markdown/JSON)
+cargo xtask test-krun-conformance     # krun-specific variant
+</code></pre>
+<h3 id="borrow-reasoning-fixtures"><a class="header" href="#borrow-reasoning-fixtures">Borrow-reasoning fixtures</a></h3>
+<p>Standalone must-pass/must-fail Rust snippets that verify borrow-checker
+expectations. Not runtime tests — they validate that certain patterns
+compile (or correctly fail to compile).</p>
+<pre><code class="language-bash">cargo xtask borrow-fixtures           # 19 fixtures
+</code></pre>
+<hr>
+<h2 id="dimension-5-integration--when-wiring-is-complete"><a class="header" href="#dimension-5-integration--when-wiring-is-complete">Dimension 5: Integration — when wiring is complete</a></h2>
+<p>Integration tests verify that components work correctly when connected.
+They are slower and more expensive than unit tests — write them after the
+components are individually verified, not before.</p>
+<ul>
+<li>Live in <code>tests/</code> (separate compilation unit)</li>
+<li>Use real I/O boundaries where the test is specifically about that boundary</li>
+<li>Do not duplicate unit test coverage — test the wiring, not the logic</li>
+</ul>
+<h3 id="cli-subprocess-tests"><a class="header" href="#cli-subprocess-tests">CLI subprocess tests</a></h3>
+<p>Do not use <code>Command::cargo_bin()</code>. Use the existing <code>find_minibox()</code> helper
+or set <code>MINIBOX_TEST_BIN_DIR</code>.</p>
+<h3 id="protocol-changes"><a class="header" href="#protocol-changes">Protocol changes</a></h3>
+<p>Changes to <code>crates/minibox-core/src/protocol.rs</code> must be accompanied by
+updates to handlers, CLI paths, and snapshot tests in the same commit. New
+request fields use <code>#[serde(default)]</code> for wire compatibility.</p>
+<h3 id="snapshot-tests-1"><a class="header" href="#snapshot-tests-1">Snapshot tests</a></h3>
+<p>After <code>cargo nextest</code> runs, check for <code>.snap.new</code> files:</p>
+<pre><code class="language-bash">cargo insta review
+</code></pre>
+<h3 id="commands-3"><a class="header" href="#commands-3">Commands</a></h3>
+<pre><code class="language-bash"># Cgroup integration — Linux + root
+just test-integration
+
+# E2E daemon+CLI — Linux + root
+just test-e2e               # single lifecycle scenario
+just test-e2e-suite         # full suite (15 scenarios)
+just test-e2e-vps           # run suite on VPS via SSH
+
+# Adapter swap tests — cross-platform
+just test-adapters
+just test-cli-subprocess    # 30 CLI subprocess tests
+
+# Sandbox — Linux + root
+cargo xtask test-sandbox
+</code></pre>
+<hr>
+<h2 id="dimension-6-regression--after-every-bug-fix"><a class="header" href="#dimension-6-regression--after-every-bug-fix">Dimension 6: Regression — after every bug fix</a></h2>
+<p>Every bug that reaches production or a failing test represents a gap in the
+test suite. Close that gap permanently.</p>
+<ol>
+<li>Reproduce the bug with a minimal failing test</li>
+<li>Fix the bug</li>
+<li>Verify the test now passes</li>
+<li>If found by a property test, commit the <code>proptest-regressions/</code> file</li>
+</ol>
+<p>Never fix a bug without a regression test.</p>
+<h3 id="naming-1"><a class="header" href="#naming-1">Naming</a></h3>
+<pre><code class="language-text">regression_gh_NNN_short_description
+</code></pre>
+<p>Where <code>NNN</code> is the GitHub issue number. Examples:</p>
+<ul>
+<li><code>regression_gh_42_symlink_escape_in_tar</code></li>
+<li><code>regression_gh_108_overlay_cleanup_on_cgroup_error</code></li>
+</ul>
+<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
+<ul>
+<li>Never delete a regression test. If the code it covers is removed, mark it
+<code>#[ignore]</code> with a comment explaining why.</li>
+<li>Regression tests live alongside related unit/integration tests in the
+appropriate crate, not in a separate file.</li>
+<li>If the bug was found by a property test, commit the counterexample file.</li>
+</ul>
+<hr>
+<h2 id="test-counts"><a class="header" href="#test-counts">Test Counts</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2043,84 +2440,19 @@ New HandlerDependencies field?    → update all construction sites
 </tbody>
 </table>
 </div>
-<p><code>cargo nextest</code> on macOS reports ~506 tests — that is the cross-platform subset. Linux-only,
-feature-gated, and root-required tests add ~700 more. Total estimate: ~1,467.</p>
-<h2 id="quick-reference-1"><a class="header" href="#quick-reference-1">Quick Reference</a></h2>
-<pre><code class="language-bash"># Cross-platform unit tests (any machine, no root)
-cargo xtask test-unit
-
-# Property tests
-cargo xtask test-property
-
-# Integration tests — Linux + root
-just test-integration
-
-# E2E single lifecycle test — Linux + root
-just test-e2e
-
-# Full E2E suite — Linux + root
-just test-e2e-suite
-
-# Run E2E suite on VPS over SSH
-just test-e2e-vps
-
-# Adapter swap tests (Colima + handler)
-just test-adapters
-
-# CLI subprocess integration tests
-just test-cli-subprocess
-
-# Coverage HTML report
-just coverage
-
-# Full pipeline: nuke -&gt; doctor -&gt; unit + integration + e2e -&gt; nuke
-just test-all
-</code></pre>
-<h2 id="running-tests-by-category"><a class="header" href="#running-tests-by-category">Running Tests by Category</a></h2>
-<h3 id="unit-tests"><a class="header" href="#unit-tests">Unit tests</a></h3>
-<p>Run on any platform, no root required. Use these during local development.</p>
-<pre><code class="language-bash">cargo xtask test-unit          # canonical: lib + select integration + conformance
-just test-unit                 # equivalent shorthand
-</code></pre>
-<h3 id="property-tests"><a class="header" href="#property-tests">Property tests</a></h3>
-<p>Fuzz-style tests using <code>proptest</code>. Not in CI; run manually before pushing to <code>next</code>.</p>
-<pre><code class="language-bash">cargo xtask test-property
-</code></pre>
-<h3 id="integration-tests-linux--root-1"><a class="header" href="#integration-tests-linux--root-1">Integration tests (Linux + root)</a></h3>
-<p>Cgroup resource limit tests and native adapter isolation. Require a Linux host with root.</p>
-<pre><code class="language-bash">just test-integration
-</code></pre>
-<h3 id="e2e-tests-linux--root"><a class="header" href="#e2e-tests-linux--root">E2E tests (Linux + root)</a></h3>
-<p>Full daemon + CLI round-trip tests. Use the VPS target for Linux when developing on macOS.</p>
-<pre><code class="language-bash">just test-e2e               # single lifecycle scenario
-just test-e2e-suite         # full suite (15 scenarios)
-just test-e2e-vps           # run suite on VPS via SSH
-</code></pre>
-<h3 id="adapter-tests"><a class="header" href="#adapter-tests">Adapter tests</a></h3>
-<p>Colima and handler adapter swap tests. Cross-platform; no root required.</p>
-<pre><code class="language-bash">just test-adapters
-just test-cli-subprocess    # 30 CLI subprocess tests
-</code></pre>
-<h3 id="conformance-suite"><a class="header" href="#conformance-suite">Conformance suite</a></h3>
-<p>Backend-agnostic capability tests tracked against a Markdown/JSON report.</p>
-<pre><code class="language-bash">cargo xtask test-conformance          # run + report
-cargo xtask test-krun-conformance     # krun-specific variant
-</code></pre>
-<h3 id="security-regression"><a class="header" href="#security-regression">Security regression</a></h3>
-<p>Tar extraction, path traversal, overlay escape, and socket auth tests. Cross-platform.
-These run inside <code>test-unit</code> via the security regression test files; no separate command needed.</p>
-<h3 id="coverage-1"><a class="header" href="#coverage-1">Coverage</a></h3>
-<pre><code class="language-bash">just coverage                # HTML report at target/llvm-cov/html/
-cargo xtask coverage-check   # gate: handler.rs function coverage &gt;= 80%
-</code></pre>
+<p><code>cargo nextest</code> on macOS reports ~506 tests — that is the cross-platform
+subset. Linux-only, feature-gated, and root-required tests add ~700 more.
+Total estimate: ~1,467.</p>
+<hr>
 <h2 id="test-helpers"><a class="header" href="#test-helpers">Test Helpers</a></h2>
 <p>All helpers live behind the <code>test-utils</code> feature flag.</p>
 <p><strong><code>minibox::testing</code></strong> — enabled with <code>--features test-utils</code>:</p>
 <ul>
-<li><code>mocks/</code> — <code>MockRegistry</code>, <code>MockFilesystem</code>, <code>MockLimiter</code>, <code>MockRuntime</code>, <code>MockNetwork</code>,
-<code>MockExecRuntime</code>, <code>MockImagePusher</code>, <code>MockContainerCommitter</code>, <code>MockImageBuilder</code></li>
-<li><code>fixtures/</code> — <code>ContainerFixture</code>, <code>ImageFixture</code>, <code>BuildContextFixture</code>,
-<code>PushTargetFixture</code>, <code>UpperDirFixture</code></li>
+<li><code>mocks/</code> — <code>MockRegistry</code>, <code>MockFilesystem</code>, <code>MockLimiter</code>,
+<code>MockRuntime</code>, <code>MockNetwork</code>, <code>MockExecRuntime</code>, <code>MockImagePusher</code>,
+<code>MockContainerCommitter</code>, <code>MockImageBuilder</code></li>
+<li><code>fixtures/</code> — <code>ContainerFixture</code>, <code>ImageFixture</code>,
+<code>BuildContextFixture</code>, <code>PushTargetFixture</code>, <code>UpperDirFixture</code></li>
 <li><code>helpers/</code> — <code>create_test_deps_with_dir</code>, GC helpers, daemon helpers</li>
 <li><code>backend/</code> — <code>BackendCapability</code>, <code>BackendDescriptor</code> (conformance)</li>
 </ul>
@@ -2130,8 +2462,9 @@ cargo xtask coverage-check   # gate: handler.rs function coverage &gt;= 80%
 <li><code>test_fixtures.rs</code> — shared fixtures</li>
 <li><code>conformance.rs</code> — conformance harness</li>
 </ul>
+<hr>
 <h2 id="ci-coverage"><a class="header" href="#ci-coverage">CI Coverage</a></h2>
-<p>Eight workflows run in GitHub Actions. Tests relevant to each:</p>
+<p>Eight workflows run in GitHub Actions:</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2140,7 +2473,8 @@ cargo xtask coverage-check   # gate: handler.rs function coverage &gt;= 80%
 <tbody>
 <tr><td><code>ci.yml</code></td><td>lint, unit, archive integration, audit/deny</td><td>all</td></tr>
 <tr><td><code>stability-gates.yml</code></td><td>doc-sync, adapter integration, no-unwrap, compile</td><td>all</td></tr>
-<tr><td><code>conformance.yml</code></td><td><code>cargo xtask test-conformance</code></td><td>next/stable</td></tr>
+<tr><td><code>conformance.yml</code></td><td><code>cargo xtask test-conformance</code></td><td>next/staging</td></tr>
+<tr><td><code>bench-regression.yml</code></td><td>criterion + 10% regression gate</td><td>next/staging</td></tr>
 <tr><td><code>protocol-drift.yml</code></td><td>variant count + handler coverage (protocol.rs changes)</td><td>all</td></tr>
 <tr><td><code>nightly.yml</code></td><td><code>cargo geiger</code> unsafe audit (informational)</td><td>daily cron</td></tr>
 <tr><td><code>release.yml</code></td><td>musl cross-compile + publish</td><td><code>v*</code> tags</td></tr>
@@ -2156,55 +2490,27 @@ cargo xtask coverage-check   # gate: handler.rs function coverage &gt;= 80%
 <li>krun conformance: <code>cargo xtask test-krun-conformance</code></li>
 <li>Coverage gate: <code>cargo xtask coverage-check</code></li>
 </ul>
-<h2 id="writing-tests"><a class="header" href="#writing-tests">Writing Tests</a></h2>
-<h3 id="platform-gating"><a class="header" href="#platform-gating">Platform gating</a></h3>
-<p>Gate Linux-only tests explicitly. macOS <code>cargo check</code> does not validate
-<code>#[cfg(target_os = "linux")]</code> paths.</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[cfg(target_os = "linux")]
-#[test]
-fn test_cgroup_limits() { ... }
-<span class="boring">}</span></code></pre>
-<h3 id="environment-mutation"><a class="header" href="#environment-mutation">Environment mutation</a></h3>
-<p><code>std::env::set_var</code> and <code>remove_var</code> are <code>unsafe</code> in Rust 2024. Serialize any test that mutates
-the environment with a shared mutex.</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>static ENV_LOCK: std::sync::Mutex&lt;()&gt; = std::sync::Mutex::new(());
-
-#[test]
-fn test_env_var() {
-    let _guard = ENV_LOCK.lock().unwrap();
-    unsafe { std::env::set_var("KEY", "val") };
-    // ...
-}
-<span class="boring">}</span></code></pre>
-<h3 id="cli-subprocess-tests"><a class="header" href="#cli-subprocess-tests">CLI subprocess tests</a></h3>
-<p>Do not use <code>Command::cargo_bin()</code>. Use the <code>find_minibox()</code> helper or set <code>MINIBOX_TEST_BIN_DIR</code>.</p>
-<h3 id="protocol-changes"><a class="header" href="#protocol-changes">Protocol changes</a></h3>
-<p>Changes to <code>crates/minibox-core/src/protocol.rs</code> must be accompanied by updates to handlers,
-CLI paths, and snapshot tests in the same commit. New request fields use <code>#[serde(default)]</code>
-for wire compatibility.</p>
-<h3 id="snapshot-tests-1"><a class="header" href="#snapshot-tests-1">Snapshot tests</a></h3>
-<p>After <code>cargo nextest</code> runs, check for <code>.snap.new</code> files. Review and accept with:</p>
-<pre><code class="language-bash">cargo insta review
+<hr>
+<h2 id="coverage-1"><a class="header" href="#coverage-1">Coverage</a></h2>
+<pre><code class="language-bash">just coverage                # HTML report at target/llvm-cov/html/
+cargo xtask coverage-check   # gate: handler.rs function coverage &gt;= 80%
 </code></pre>
 <h2 id="cleaning-test-state"><a class="header" href="#cleaning-test-state">Cleaning Test State</a></h2>
-<pre><code class="language-bash">cargo xtask nuke-test-state   # kill orphans, unmount overlays, clean cgroups, remove temp state
+<pre><code class="language-bash">cargo xtask nuke-test-state   # kill orphans, unmount overlays, clean cgroups
 just clean-test               # remove test binaries
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/minibox/src/daemon/state.rs</li>
-<li>crates/minibox-core/src/protocol.rs</li>
+<li>crates/minibox/src/daemon/state.rs
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="state-persistence-model"><a class="header" href="#state-persistence-model">State Persistence Model</a></h1>
 <p>How minibox tracks container state across daemon restarts.</p>
-<p>Last updated: 2026-05-14</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <p><code>DaemonState</code> (defined in
@@ -2272,7 +2578,7 @@ adjusts stale records:</p>
 </table>
 </div>
 <p>The PID liveness check is performed by the <code>ProcessChecker</code> port
-(see <code>crates/minibox-core/src/domain.rs:ProcessChecker</code>; default
+(see <code>crates/minibox/src/daemon/state.rs:ProcessChecker</code>; default
 adapter uses <code>kill(pid, 0)</code>). Tests inject doubles that always
 return alive or dead.</p>
 <h2 id="container-state-machine"><a class="header" href="#container-state-machine">Container State Machine</a></h2>
@@ -2325,20 +2631,28 @@ remain, but the merged view is not recreated.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/*/Cargo.toml</li>
 <li>Cargo.toml</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/minibox-macros</li>
+<li>crates/miniboxd</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/mbx</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/mcp</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox-bench</li>
+<li>crates/ail</li>
+<li>xtask
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="crate-inventory"><a class="header" href="#crate-inventory">Crate Inventory</a></h1>
-<blockquote>
-<p>Generated 2026-04-28 from automated codebase analysis.
-Updated 2026-05-05: added minibox-crux-plugin and minibox-testsuite; corrected version.
-Updated 2026-05-06: date refresh; no structural changes.
-Updated 2026-05-08: vz feature removed from miniboxd/macbox; VZ backend entry removed;
-build-vm-image/run-vm/test-vm xtask commands removed.</p>
-</blockquote>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -2346,29 +2660,34 @@ build-vm-image/run-vm/test-vm xtask commands removed.</p>
 <tr><th>Crate</th><th>Type</th><th>LOC</th><th>Source files</th><th>Test files</th><th>Features</th></tr>
 </thead>
 <tbody>
-<tr><td>minibox-core</td><td>lib</td><td>~12.6k</td><td>28</td><td>7 integration + inline</td><td>test-utils, fuzzing</td></tr>
-<tr><td>minibox</td><td>lib</td><td>~21.5k</td><td>71</td><td>36 integration + inline</td><td>test-utils, metrics, otel</td></tr>
-<tr><td>minibox-macros</td><td>proc-macro</td><td>~280</td><td>2</td><td>0</td><td>–</td></tr>
-<tr><td>miniboxd</td><td>bin+lib</td><td>~1.6k</td><td>4</td><td>7 integration + inline</td><td>metrics, otel, tailnet</td></tr>
+<tr><td>minibox-core</td><td>lib</td><td>~12.6k</td><td>28</td><td>10 integration + inline</td><td>test-utils, fuzzing</td></tr>
+<tr><td>minibox</td><td>lib</td><td>~21.5k</td><td>71</td><td>56 integration + inline</td><td>test-utils, metrics, otel</td></tr>
+<tr><td>minibox-macros</td><td>proc-macro</td><td>~175</td><td>9</td><td>1 integration</td><td>–</td></tr>
+<tr><td>miniboxd</td><td>bin+lib</td><td>~1.6k</td><td>4</td><td>13 integration + inline</td><td>metrics, otel, tailnet</td></tr>
 <tr><td>macbox</td><td>lib</td><td>~3.6k</td><td>16</td><td>4</td><td>–</td></tr>
-<tr><td>smolbox</td><td>lib</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
-<tr><td>winbox</td><td>lib</td><td>~280</td><td>5</td><td>0</td><td>–</td></tr>
-<tr><td>mbx</td><td>bin</td><td>~3.2k</td><td>18</td><td>2 integration + inline</td><td>subprocess-tests</td></tr>
-<tr><td>minibox-crux-plugin</td><td>bin</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
-<tr><td>minibox-testsuite</td><td>bin</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
-<tr><td>xtask</td><td>bin</td><td>~5k</td><td>15</td><td>0</td><td>–</td></tr>
+<tr><td>smolbox</td><td>lib</td><td>~148</td><td>4</td><td>2 integration</td><td>–</td></tr>
+<tr><td>winbox</td><td>lib</td><td>~280</td><td>5</td><td>1 integration</td><td>–</td></tr>
+<tr><td>mbx</td><td>bin</td><td>~3.2k</td><td>18</td><td>3 integration + inline</td><td>subprocess-tests</td></tr>
+<tr><td>minibox-crux-plugin</td><td>bin</td><td>~1.2k</td><td>2</td><td>1 integration</td><td>–</td></tr>
+<tr><td>minibox-mcp</td><td>lib+bin</td><td>~1.6k</td><td>11</td><td>1 integration</td><td>–</td></tr>
+<tr><td>minibox-testsuite</td><td>lib+bin</td><td>~3.7k</td><td>27</td><td>3 integration</td><td>–</td></tr>
+<tr><td>minibox-bench</td><td>lib</td><td>~1.4k</td><td>4 + 8 benches</td><td>inline fixture tests</td><td>–</td></tr>
+<tr><td>ail</td><td>bin</td><td>~4</td><td>1</td><td>0</td><td>–</td></tr>
+<tr><td>xtask</td><td>bin</td><td>~5k</td><td>35</td><td>0</td><td>–</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Estimated total:</strong> ~48k+ lines of Rust across 159+ source files. All crates at
-version 0.30.0 (xtask 0.1.0).</p>
-<!-- fact:workspace_version=0.30.0 -->
+<p><strong>Estimated total:</strong> run <code>cargo xtask info metrics</code> for the current workspace
+member count and Rust source-line total. All crates are at version 0.32.0
+(xtask 0.1.0).</p>
+<!-- fact:workspace_version=0.32.0 -->
 <hr>
 <h2 id="minibox-core"><a class="header" href="#minibox-core">minibox-core</a></h2>
 <p>Cross-platform shared types. Single source of truth for protocol, domain
 traits, error types, image management, and the Unix socket client.</p>
-<p><strong>Key modules:</strong> <code>domain.rs</code> (all trait ports), <code>protocol.rs</code> (DaemonRequest /
-DaemonResponse), <code>image/</code> (ImageStore, ImageRef, RegistryClient, layer
+<p><strong>Key modules:</strong> <code>protocol.rs</code> (DaemonRequest /
+DaemonResponse), <code>domain/</code> (domain ports, workflow/execution policy, runtime
+capabilities), <code>image/</code> (ImageStore, ImageRef, RegistryClient, layer
 extraction, GC, leases, dockerfile), <code>client/</code> (DaemonClient,
 DaemonResponseStream), <code>events.rs</code> (ContainerEvent, EventSink/Source,
 BroadcastEventBroker), <code>adapters/</code> (HostnameRegistryRouter, mocks,
@@ -2381,12 +2700,13 @@ tar, flate2, slashcrux (Priority/Urgency/ExecutionContext for RunPipeline/Run).<
 implementations + daemon server/handler/state + testing infrastructure.</p>
 <p><strong>Key modules:</strong></p>
 <ul>
+<li><code>domain.rs</code> (compatibility re-exports of <code>minibox-core</code> domain ports)</li>
 <li><code>container/</code> (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
 process.rs</li>
 <li><code>adapters/</code>: native (overlay, cgroup, namespace, bridge network), gke
 (copy FS, proot, noop limiter), colima (lima/nerdctl), smolvm, stubs
 (vf, hcs, wsl2, docker_desktop), mocks</li>
-<li><code>daemon/</code>: handler.rs (HandlerDependencies, request routing), server.rs
+<li><code>daemon/</code>: handler/ (HandlerDependencies, request routing), server.rs
 (Unix socket listener, SO_PEERCRED auth), state.rs (DaemonState),
 telemetry.rs, network_lifecycle.rs</li>
 <li><code>image/</code> (re-exported from minibox-core)</li>
@@ -2394,7 +2714,7 @@ telemetry.rs, network_lifecycle.rs</li>
 </ul>
 <p><strong>Features:</strong> <code>test-utils</code> (mocks + fixtures + conformance), <code>metrics</code>
 (Prometheus endpoint), <code>otel</code> (OTLP trace export).</p>
-<p><strong>Benchmarks:</strong> <code>trait_overhead</code>, <code>protocol_codec</code> (criterion).</p>
+<p><strong>Benchmarks:</strong> none — all criterion benches live in <code>crates/minibox-bench</code>.</p>
 <hr>
 <h2 id="minibox-macros"><a class="header" href="#minibox-macros">minibox-macros</a></h2>
 <p>Declarative macros for adapter boilerplate reduction.</p>
@@ -2405,14 +2725,15 @@ telemetry.rs, network_lifecycle.rs</li>
 builder).</p>
 <hr>
 <h2 id="miniboxd"><a class="header" href="#miniboxd">miniboxd</a></h2>
-<p>Daemon binary. Platform-dispatches: macOS -&gt; <code>macbox::start()</code>, Windows -&gt;
-<code>winbox::start()</code>, Linux -&gt; inline <code>run_daemon()</code>.</p>
+<p>Daemon binary. Platform-dispatches: Unix (Linux + macOS) -&gt; <code>run_daemon()</code>,
+Windows -&gt; <code>winbox::start()</code>.</p>
 <p><strong>Key modules:</strong> <code>adapter_registry.rs</code> (AdapterSuite enum, env-based
 selection), <code>listener.rs</code> (UnixServerListener).</p>
 <p><strong>Adapter suites:</strong> native, gke, colima, smolvm (default), krun (fallback).</p>
 <hr>
 <h2 id="macbox"><a class="header" href="#macbox">macbox</a></h2>
-<p>macOS daemon implementation.</p>
+<p>macOS daemon entry point and Colima adapter wiring. smolvm and krun adapters
+live in <code>smolbox</code> (see below).</p>
 <p><strong>Backends:</strong></p>
 <ul>
 <li><strong>Colima</strong>: <code>ColimaRegistry</code>, <code>ColimaRuntime</code>, <code>ColimaFilesystem</code>,
@@ -2439,7 +2760,8 @@ path), <code>preflight.rs</code> (detection stubs).</p>
 <p>CLI client. Connects to daemon via Unix socket, sends JSON requests, streams
 responses.</p>
 <p><strong>Subcommands:</strong> run, ps, stop, pause, resume, rm, pull, exec, logs, events,
-prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgrade.</p>
+prune, rmi, sandbox, snapshot (save/restore/list), pipeline (run/list/show),
+load, doctor, manifest, verify, diagnose, update, upgrade.</p>
 <hr>
 <h2 id="minibox-crux-plugin"><a class="header" href="#minibox-crux-plugin">minibox-crux-plugin</a></h2>
 <p>Crux plugin binary. Exposes minibox container operations (pull, run, ps, stop,
@@ -2447,24 +2769,86 @@ rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
 the crux agentic DSL runtime.</p>
 <p><strong>Depends on:</strong> minibox-core, crux-plugin (git dep).</p>
 <hr>
+<h2 id="minibox-mcp"><a class="header" href="#minibox-mcp">minibox-mcp</a></h2>
+<p>MCP stdio server for agent-controlled minibox operations. Wraps existing daemon
+protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and
+rm, with MCP-specific policy gates around mutating and higher-risk run options.</p>
+<p><strong>Binaries:</strong> <code>mcp</code>.</p>
+<p><strong>Depends on:</strong> minibox-core, rmcp, miette.</p>
+<hr>
 <h2 id="minibox-testsuite"><a class="header" href="#minibox-testsuite">minibox-testsuite</a></h2>
 <p>Conformance test harness for adapter trait contracts. Not published; used
 internally by <code>cargo xtask test-conformance</code>.</p>
 <p><strong>Binaries:</strong> <code>run-conformance</code>, <code>generate-report</code>.</p>
 <p><strong>Depends on:</strong> minibox, minibox-core.</p>
 <hr>
+<h2 id="minibox-bench"><a class="header" href="#minibox-bench">minibox-bench</a></h2>
+<p>Dedicated benchmark crate. Leaf crate owning all criterion targets and fixtures; the only
+place where the <code>test-utils</code> features of the lib crates are enabled. Run via <code>just bench</code> /
+<code>just bench-check</code> / <code>just bench-baseline</code> (<code>cargo xtask bench</code> underneath). Results land in
+<code>bench/results/</code> (gitignored); per-env baselines are tracked at
+<code>bench/baseline.{local,selfhosted,hosted}.json</code>.</p>
+<p><strong>Bench targets:</strong> <code>protocol_codec</code>, <code>daemon_dispatch</code>, <code>trait_dispatch</code>, <code>layer_extract</code>,
+<code>image_pull</code>, plus root-gated Linux benches <code>linux_rootfs</code>, <code>linux_cgroup</code>, <code>linux_spawn</code>.</p>
+<p><strong>Fixtures:</strong> <code>LayerSpec</code>/<code>build_layer_tar_gz</code> (deterministic OCI layers), <code>BenchRegistry</code>
+(wiremock-backed OCI registry).</p>
+<p><strong>Depends on:</strong> minibox, minibox-core (both with <code>test-utils</code>), criterion.</p>
+<hr>
+<h2 id="ail"><a class="header" href="#ail">ail</a></h2>
+<p>Placeholder binary for the agent-improvement loop. No implementation yet.</p>
+<hr>
 <h2 id="xtask"><a class="header" href="#xtask">xtask</a></h2>
 <p>Development tool. All CI gate commands.</p>
-<p><strong>Key commands:</strong> pre-commit, prepush, test-unit, test-conformance,
-test-krun-conformance, test-property, test-integration, test-e2e, test-e2e-suite,
-test-system-suite, test-sandbox, bench, bump, nuke-test-state, clean-artifacts,
-lint-docs, preflight, doctor, check-stale-names.</p>
+<p><strong>Key commands:</strong> pre-commit, prepush, verify, lint, fix, coverage,
+coverage-check, agentlint, build-test-image, setup-test-vm, test-in-vm,
+test-linux, bump, promote, preflight, doctor, ci-watch, daily-orchestration,
+council, bench, fuzz, borrow-fixtures, nuke-test-state, clean-artifacts,
+cas-add, cas-check.</p>
+<p><strong>Subcommand groups:</strong> <code>test &lt;suite&gt;</code> (unit, conformance, krun-conformance,
+turmoil, shuttle, property, quickcheck, integration, e2e, system-suite,
+sandbox, gke-profile, gke-adapter), <code>check &lt;target&gt;</code> (stale-names,
+protocol-drift, protocol-sites, adapter-coverage, no-unwrap, repo-clean),
+<code>docs &lt;action&gt;</code> (audit, lint, update-date), <code>info &lt;target&gt;</code> (metrics,
+context, changes).</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+sources:</p>
+<ul>
+<li>Cargo.toml</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/mcp</li>
+<li>crates/ail</li>
+<li>crates/minibox-bench</li>
+<li>xtask</li>
+<li>crates/minibox-macros</li>
+<li>crates/minibox-testsuite</li>
+<li>docs/core/STABILITY_CHECKLIST.mbx.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="crate-support-tiers"><a class="header" href="#crate-support-tiers">Crate Support Tiers</a></h1>
 <p>This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.</p>
-<p>Last updated: 2026-05-06</p>
+<p>Last updated: 2026-08-22</p>
+<p>See also: <code>docs/core/SUPPORT_TIERS.mbx.md</code> (support commitment level — Tier 1 Production /
+Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).</p>
+<blockquote>
+<p><strong>Relationship to SUPPORT_TIERS.mbx.md:</strong> This document classifies by <em>architectural role</em>
+(Core/Platform/Experimental/Internal/External). SUPPORT_TIERS classifies by <em>support
+commitment level</em>. The axes are independent: a Platform crate can be Tier 3 (Stub) support
+(e.g. <code>winbox</code>); an Experimental crate architecturally may still receive best-effort (Tier 2)
+support. When in doubt, this document answers “where does this code live?”; SUPPORT_TIERS
+answers “what guarantees does it carry?”</p>
+</blockquote>
 <hr>
 <h2 id="tier-definitions"><a class="header" href="#tier-definitions">Tier Definitions</a></h2>
 <div class="table-wrapper">
@@ -2502,7 +2886,7 @@ that breaks callers outside the workspace is a semver-major event.</p>
 <p><strong>Stability expectations for Core crates:</strong></p>
 <ul>
 <li><code>cargo xtask pre-commit</code> must pass before merging any PR that touches these crates.</li>
-<li>Handler coverage in <code>minibox/src/daemon/</code> must stay at or above the current baseline;
+<li>Handler coverage in <code>crates/minibox/src/daemon/</code> must stay at or above the current baseline;
 the target is &gt;= 80% function coverage.</li>
 <li>Protocol wire format is pinned by snapshot tests in <code>minibox-core</code>. Do not remove or
 rename existing variants without a deprecation period.</li>
@@ -2537,10 +2921,21 @@ CI gates clippy on Linux and macOS; Windows clippy is best-effort.</li>
 <h2 id="experimental-tier"><a class="header" href="#experimental-tier">Experimental Tier</a></h2>
 <p>Unstable crates. APIs may change or crates may be merged, split, or removed. Do not
 take a public dependency on these crates from outside the workspace.</p>
-<p>No crates are currently in this tier. The six former experimental crates
-(<code>minibox-agent</code>, <code>minibox-llm</code>, <code>minibox-secrets</code>, <code>mbxctl</code>, <code>dashbox</code>,
-<code>minibox-bench</code>) were removed during the consolidation in sessions 29-31
-(2026-04-21 to 2026-04-26) to reduce maintenance surface.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Path</th><th>Role</th></tr>
+</thead>
+<tbody>
+<tr><td><code>minibox-mcp</code></td><td><code>crates/mcp</code></td><td>MCP stdio server for agent-controlled minibox tools. First slice is implemented.</td></tr>
+<tr><td><code>ail</code></td><td><code>crates/ail</code></td><td>Placeholder binary for the agent-improvement loop. Minimal implementation today.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Several former experimental crates (<code>minibox-agent</code>, <code>minibox-secrets</code>, <code>mbxctl</code>)
+were removed during the consolidation in sessions 29-31 (2026-04-21 to 2026-04-26)
+to reduce maintenance surface. <code>minibox-bench</code> was re-added as a benchmarking
+crate in v0.31.0.</p>
 <p><strong>Stability expectations for Experimental crates:</strong></p>
 <ul>
 <li>No API stability guarantee. Breaking changes are acceptable without a version bump
@@ -2548,7 +2943,7 @@ while the crate remains in this tier.</li>
 <li>Must compile as part of <code>cargo check --workspace</code>. Build failures in Experimental
 crates block CI like any other crate.</li>
 <li>May be promoted to Core or Platform tier only after meeting all gates in
-<code>docs/STABILITY_CHECKLIST.md</code>.</li>
+<code>docs/core/STABILITY_CHECKLIST.mbx.md</code>.</li>
 </ul>
 <hr>
 <h2 id="internal-tier"><a class="header" href="#internal-tier">Internal Tier</a></h2>
@@ -2560,9 +2955,10 @@ in release binaries.</p>
 <tr><th>Crate</th><th>Path</th><th>Role</th></tr>
 </thead>
 <tbody>
-<tr><td><code>xtask</code></td><td><code>crates/xtask</code></td><td>Cargo xtask runner: <code>pre-commit</code>, <code>prepush</code>, <code>test-unit</code>, <code>test-conformance</code>, <code>bench</code>, <code>build-vm-image</code>, and more.</td></tr>
+<tr><td><code>xtask</code></td><td><code>xtask</code></td><td>Cargo xtask runner: <code>pre-commit</code>, <code>prepush</code>, <code>test unit</code>/<code>test conformance</code>, <code>bench</code>, <code>build-test-image</code>, and more.</td></tr>
 <tr><td><code>minibox-macros</code></td><td><code>crates/minibox-macros</code></td><td>Proc-macro crate: <code>as_any!</code> and <code>adapt!</code> derive macros used by <code>minibox</code>.</td></tr>
 <tr><td><code>minibox-testsuite</code></td><td><code>crates/minibox-testsuite</code></td><td>Conformance test harness (<code>run-conformance</code>, <code>generate-report</code>). Not published.</td></tr>
+<tr><td><code>minibox-bench</code></td><td><code>crates/minibox-bench</code></td><td>Criterion benchmark crate and benchmark fixtures. Not published.</td></tr>
 </tbody>
 </table>
 </div>
@@ -2579,15 +2975,16 @@ was removed during the v0.23.0 consolidation; only a pre-built binary artifact r
 <hr>
 <h2 id="stabilization-policy"><a class="header" href="#stabilization-policy">Stabilization Policy</a></h2>
 <h3 id="no-new-core-or-platform-crates-until-stabilization-gates-are-met"><a class="header" href="#no-new-core-or-platform-crates-until-stabilization-gates-are-met">No new Core or Platform crates until stabilization gates are met</a></h3>
-<p>The workspace currently has 11 crates across all tiers. Adding more crates before
-the core runtime is hardened increases maintenance surface without shipping value.</p>
+<p>The workspace currently has 13 product/runtime crates under <code>crates/</code>, plus the
+<code>xtask</code> workspace dev-tool member. Adding more crates before the core runtime is
+hardened increases maintenance surface without shipping value.</p>
 <p><strong>A new crate MAY be added to the Core or Platform tier only when ALL of the
-following gates in <code>docs/STABILITY_CHECKLIST.md</code> are green:</strong></p>
+following gates in <code>docs/core/STABILITY_CHECKLIST.mbx.md</code> are green:</strong></p>
 <ol>
 <li>Protocol types have a single source of truth (currently met — minibox-core #122/#128).</li>
-<li>Handler coverage &gt;= 80% function coverage in <code>minibox/src/daemon/handler.rs</code>.</li>
+<li>Handler coverage &gt;= 80% function coverage in <code>crates/minibox/src/daemon/handler/</code>.</li>
 <li>All wired adapters have at least one integration test.</li>
-<li><code>cargo xtask pre-commit</code> passes on macOS (fmt + clippy + release build).</li>
+<li><code>cargo xtask pre-commit</code> passes on macOS (staged fmt/clippy plus config/docs checks).</li>
 <li><code>cargo xtask test-unit</code> passes (~506+ tests on macOS cross-platform subset).</li>
 <li><code>cargo deny check</code> passes (license + advisory audit).</li>
 </ol>
@@ -2612,13 +3009,30 @@ Internal      ──(never)──► any other tier
 </ol>
 <h3 id="freeze-notice-issues-117-and-127"><a class="header" href="#freeze-notice-issues-117-and-127">Freeze notice (issues #117 and #127)</a></h3>
 <p>This document was created as part of a stabilization milestone declared in issues
-#117 and #127. The freeze applies to <strong>net-new Core and Platform crates</strong>. Existing
+#117 and #127. The freeze applied to <strong>net-new Core and Platform crates</strong>. Existing
 crates in all tiers continue to receive fixes and enhancements.</p>
-<p>The freeze lifts when all six stabilization gates above are verified green on the
-<code>next</code> branch.</p>
+<p><strong>Freeze lifted 2026-08-18</strong> (issue #127 closed). All six stabilization gates were
+verified green on the <code>next</code> branch. New Core and Platform crates may now be proposed
+subject to the standard PR gate process described above.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox/src/lib.rs</li>
+<li>crates/minibox-macros</li>
+<li>crates/minibox-core/src/protocol.rs</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/miniboxd/src/adapter_registry.rs</li>
+<li>crates/minibox/src/container/process.rs</li>
+<li>crates/minibox/src/container/filesystem.rs</li>
+<li>crates/minibox/src/adapters/limiter.rs</li>
+<li>crates/macbox
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="gotchas-and-non-obvious-patterns"><a class="header" href="#gotchas-and-non-obvious-patterns">Gotchas and Non-Obvious Patterns</a></h1>
-<p>Last updated: 2026-05-08</p>
+<p>Last updated: 2026-08-22</p>
 <p>Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see <code>.claude/rules/rust-patterns.md</code>.</p>
 <h2 id="testing-2"><a class="header" href="#testing-2">Testing</a></h2>
@@ -2634,6 +3048,16 @@ Add them explicitly to <code>[dev-dependencies]</code> or <code>cargo nextest</c
 <code>MINIBOX_TEST_BIN_DIR</code> env var — never <code>Command::cargo_bin()</code>, which triggers a full
 recompile. Gate with <code>#![cfg(all(unix, feature = "subprocess-tests"))]</code>; run via
 <code>just test-cli-subprocess</code>.</li>
+<li><strong><code>minibox::testing</code> import path</strong> (<code>crates/minibox/src/lib.rs:80</code>) — <code>pub mod testing;</code>
+is gated behind <code>#[cfg(feature = "test-utils")]</code>. Enable with <code>--features test-utils</code> (or
+the workspace’s default dev-profile) to import <code>minibox::testing::mocks::*</code>,
+<code>::fixtures::*</code>, <code>::helpers::*</code>, and <code>::backend::*</code> (conformance descriptors). It is
+consumed today by in-crate integration tests, <code>minibox-testsuite</code>’s conformance harness,
+and <code>minibox-bench</code>’s dispatch/state benches (<code>minibox::testing::helpers::daemon</code>
+builders). See <code>docs/core/TESTING.mbx.md</code> and <code>docs/core/TEST_INFRASTRUCTURE.mbx.md</code> for
+the full helper inventory — this entry only documents the current, as-shipped behavior
+(feature-gated, workspace-internal consumers today) and takes no position on whether it
+should be promoted to documented public API for out-of-workspace downstream consumers.</li>
 </ul>
 <h3 id="proptest"><a class="header" href="#proptest">Proptest</a></h3>
 <ul>
@@ -2667,7 +3091,7 @@ inaccessible in doctest context and will fail to compile.</li>
 <code>crates/minibox-core/src/protocol.rs</code>. <code>minibox</code> re-exports it. Wire format snapshot tests
 pin serialization; add a snapshot test when adding a field.</li>
 <li><strong><code>HandlerDependencies</code> construction sites</strong> — Adding fields requires updating all five
-adapter suites in <code>miniboxd/src/main.rs</code> (native, gke, colima, smolvm, krun). These are
+adapter suites in <code>crates/miniboxd/src/main.rs</code> (native, gke, colima, smolvm, krun). These are
 <code>#[cfg(target_os = "linux")]</code> and won’t fail on macOS <code>cargo check</code>.</li>
 <li><strong><code>handle_run</code> param chain</strong> — Adding a parameter requires updating in order:
 <code>daemon/server.rs</code> dispatch → <code>handle_run</code> → <code>handle_run_streaming</code> → <code>run_inner_capture</code> →
@@ -2684,6 +3108,43 @@ clippy. Lints like <code>clone_on_copy</code> only surface on Linux CI runners.<
 <li><strong>Linux-only cfg-gated imports</strong> — manually verify all <code>use</code> statements in Linux-only modules
 (<code>cgroup_tests.rs</code>, <code>bridge.rs</code>, etc.) — the macOS compiler won’t catch missing imports.</li>
 </ul>
+<h2 id="adapters-minibox_adapter"><a class="header" href="#adapters-minibox_adapter">Adapters (<code>MINIBOX_ADAPTER</code>)</a></h2>
+<p>Selection logic is centralized in <code>crates/miniboxd/src/adapter_registry.rs</code>; read that
+file’s module doc for the authoritative flow. Summary, grounded in the current code:</p>
+<ul>
+<li><strong>Valid values</strong> (<code>adapter_registry::VALID_ADAPTERS</code>): <code>native</code>, <code>gke</code>, <code>colima</code>, <code>smolvm</code>,
+<code>krun</code>. <code>native</code>/<code>gke</code> are compiled only on Linux (<code>cfg!(target_os = "linux")</code>); <code>colima</code>/
+<code>smolvm</code> compile on any Unix; <code>krun</code> is always available. See per-adapter descriptions in
+<code>adapter_registry::all_adapters()</code>.</li>
+<li><strong>Unset <code>MINIBOX_ADAPTER</code></strong> — <code>adapter_from_env()</code> probes for the <code>smolvm</code> binary on PATH
+(<code>smolvm --version</code>). If found, uses <code>smolvm</code> (<code>DEFAULT_ADAPTER_SUITE</code>). If absent, silently
+falls back to <code>FALLBACK_ADAPTER_SUITE</code>: <code>native</code> on Linux, <code>krun</code> on macOS/other.</li>
+<li><strong>Explicit <code>MINIBOX_ADAPTER=&lt;value&gt;</code></strong> — disables the fallback entirely. The value is parsed
+via <code>parse_adapter()</code>; there is no silent substitution once the env var is set.</li>
+<li><strong>Unrecognized value</strong> (not in <code>VALID_ADAPTERS</code>) — hard error at daemon startup:
+<code>AdapterSelectionError</code> with message <code>"unknown MINIBOX_ADAPTER value ..."</code>, listing valid
+options.</li>
+<li><strong>Known but platform-unavailable value</strong> (e.g. <code>MINIBOX_ADAPTER=native</code> on a macOS build) —
+also a hard error, message <code>"... is known but not available in this build"</code>, distinct from
+the unknown-value error text (both are asserted by name in
+<code>adapter_registry::tests::adapter_selection_error_unknown_message_format</code> and
+<code>unavailable_adapter_error_message_says_not_available</code>).</li>
+<li><strong><code>native</code> without root</strong> — not rejected by <code>parse_adapter</code>/<code>adapter_from_env</code> (it is a
+compiled, known adapter on Linux); instead <code>warn_if_native_without_root()</code> (Linux-only)
+emits a <code>tracing::warn!</code> at startup if UID != 0, since namespace/overlay/cgroup setup will
+fail later at runtime rather than at selection time.</li>
+<li>See <code>docs/core/FEATURE_MATRIX.mbx.md</code> for the full per-adapter capability matrix and
+<code>docs/core/ARCHITECTURE.mbx.md</code> for the adapter trait/composition overview.</li>
+</ul>
+<h3 id="migration-pointer-for-removed-docs"><a class="header" href="#migration-pointer-for-removed-docs">Migration pointer for removed docs</a></h3>
+<p>Several one-off design/plan documents were deleted or consolidated during doc cleanups
+(<code>8377af53</code> pruned <code>docs/superpowers/plans/*</code>, <code>1d3a3579</code> archived stale plan statuses,
+<code>109a9683</code> deleted <code>docs/notes/</code>). The flat <code>docs/*.md</code> files that used to hold canonical
+reference content (<code>docs/FEATURE_MATRIX.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/GOTCHAS.md</code>, etc.)
+were also renamed to <code>docs/core/*.mbx.md</code> — if a link or search result points at an old flat
+<code>docs/&lt;NAME&gt;.md</code> path or a <code>docs/superpowers/...</code> path that 404s, the canonical replacement is
+almost always the matching <code>docs/core/&lt;NAME&gt;.mbx.md</code> file. Start from the “Read First” list in
+<code>CLAUDE.md</code> for the current canonical doc set.</p>
 <h2 id="macbox-1"><a class="header" href="#macbox-1">macbox</a></h2>
 <ul>
 <li><strong>Stale crate name</strong> — the CLI binary crate was renamed from <code>minibox-cli</code> to <code>mbx</code>
@@ -2722,15 +3183,42 @@ to get the correct relative target; otherwise busybox applet symlinks break.</li
 inside <code>minibox-test-slice/runner-leaf</code> via <code>cargo xtask run-cgroup-tests</code>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+sources:</p>
+<ul>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/minibox/src/adapters/colima.rs</li>
+<li>crates/winbox</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>docs/core/STABILITY_CHECKLIST.mbx.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="support-tiers"><a class="header" href="#support-tiers">Support Tiers</a></h1>
 <p>Formal support-tier definitions for minibox crates and adapters.</p>
-<p>Last updated: 2026-05-14</p>
-<p>See also: <code>docs/STABILITY_CHECKLIST.mbx.md</code> (mandatory gate list), <code>docs/FEATURE_MATRIX.mbx.md</code>
-(per-adapter capability breakdown).</p>
+<p>Last updated: 2026-08-22</p>
+<p>See also: <code>docs/core/STABILITY_CHECKLIST.mbx.md</code> (mandatory gate list), <code>docs/core/FEATURE_MATRIX.mbx.md</code>
+(per-adapter capability breakdown), <code>docs/core/CRATE_TIERS.mbx.md</code> (architectural layer
+classification — Core/Platform/Experimental/Internal/External).</p>
+<blockquote>
+<p><strong>Relationship to CRATE_TIERS.mbx.md:</strong> This document classifies by <em>support commitment level</em>
+(SLA, CI coverage, breaking-change policy). CRATE_TIERS classifies by <em>architectural role</em>
+(stable API contract, adapter suite, dev tooling). The two axes are independent: a crate can
+be Platform-tier architecturally while still being Stub-tier by support level (e.g. <code>winbox</code>),
+or Experimental-tier by support level while being Platform-tier architecturally (e.g. <code>macbox</code>
+adapters). When in doubt, CRATE_TIERS answers “where does this code live?”; this document
+answers “what guarantees does it carry?”</p>
+</blockquote>
 <hr>
 <h2 id="tier-definitions-1"><a class="header" href="#tier-definitions-1">Tier Definitions</a></h2>
 <h3 id="tier-1--production"><a class="header" href="#tier-1--production">Tier 1 — Production</a></h3>
-<p>Fully supported. All 7 mandatory stability gates must pass continuously. Breaking changes require a
+<p>Fully supported. All six mandatory stability gates must pass continuously. Breaking changes require a
 deprecation cycle of at least one minor release with a compiler or runtime warning before removal.
 Security issues receive a response within 72 hours. Crates in this tier are covered by CI on every
 PR and every push to <code>next</code>.</p>
@@ -2802,15 +3290,14 @@ in any release. No security response commitment. Exists to document intent or re
 </tbody>
 </table>
 </div>
-<p>The 7 mandatory gates are defined in <code>docs/STABILITY_CHECKLIST.mbx.md</code>. Gates 1–6 are hard
+<p>The 7 mandatory gates are defined in <code>docs/core/STABILITY_CHECKLIST.mbx.md</code>. Gates 1–6 are hard
 blockers enforced by CI; Gate 7 (in-memory mock double) is advisory but required for Tier 1
 promotion via human review.</p>
 <hr>
 <h2 id="promotion-tier-2--tier-1"><a class="header" href="#promotion-tier-2--tier-1">Promotion: Tier 2 → Tier 1</a></h2>
 <p>A Tier 2 adapter or crate may be promoted to Tier 1 when all of the following are satisfied:</p>
 <ol>
-<li>All 7 mandatory stability gates pass on the <code>next</code> branch (Gates 1–6 via CI; Gate 7 via PR
-reviewer sign-off).</li>
+<li>All six mandatory stability gates pass on the <code>next</code> branch, with CI evidence and maintainer sign-off.</li>
 <li>The adapter has at least one integration test that runs in CI (Gate 3).</li>
 <li>Handler coverage for any new handler code meets the &gt;= 80% function coverage threshold (Gate 2).</li>
 <li>A PR is opened targeting <code>next</code> with a title prefixed <code>promote(&lt;adapter&gt;): Tier 2 → Tier 1</code>
@@ -2822,20 +3309,36 @@ ensures qualitative criteria (no <code>.unwrap()</code> in production paths, str
 comments on unsafe blocks) are also met.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/minibox/tests/</li>
-<li>crates/minibox-core/tests/</li>
-<li>crates/miniboxd/tests/</li>
-<li>xtask/src/gates.rs</li>
+<li>crates/minibox</li>
+<li>crates/minibox-core</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/macbox</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/minibox-macros</li>
+<li>xtask/src/main.rs</li>
+<li>.github/workflows
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="test-infrastructure-report"><a class="header" href="#test-infrastructure-report">Test Infrastructure Report</a></h1>
 <blockquote>
 <p>Generated 2026-04-27 from automated codebase analysis.
-Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).</p>
+Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).
+Updated 2026-06-14: macOS nextest count updated to 789 (789 passed, 1 skipped). minibox
+integration test file count updated to 54. minibox-testsuite and smolbox crates added to
+the crate table.
+Updated 2026-07-25: integration test file counts corrected against current
+crates/*/tests/ contents (minibox 54-&gt;56, minibox-core 7-&gt;10, miniboxd 6-&gt;13,
+mbx 2-&gt;3, smolbox 0-&gt;2, winbox 0-&gt;1). Per-crate/category test-count estimates
+not re-derived — file counts only.</p>
 </blockquote>
-<h2 id="test-counts"><a class="header" href="#test-counts">Test Counts</a></h2>
+<h2 id="test-counts-1"><a class="header" href="#test-counts-1">Test Counts</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2848,9 +3351,9 @@ Updated 2026-05-07: macOS nextest cross-platform count updated (506, was ~760).<
 </tbody>
 </table>
 </div>
-<p>Note: <code>cargo nextest</code> on macOS reports ~506 — that’s the cross-platform
+<p>Note: <code>cargo nextest</code> on macOS reports 789 (as of 2026-06-14) — that’s the cross-platform
 subset (lib tests + included integration files). Linux-only, feature-gated,
-and root-required tests add ~700 more.</p>
+and root-required tests add more on top.</p>
 <hr>
 <h2 id="tests-by-crate"><a class="header" href="#tests-by-crate">Tests by Crate</a></h2>
 <div class="table-wrapper">
@@ -2859,19 +3362,21 @@ and root-required tests add ~700 more.</p>
 <tr><th>Crate</th><th>Integration files</th><th>Integration tests</th><th>Inline tests</th></tr>
 </thead>
 <tbody>
-<tr><td>minibox</td><td>35</td><td>~479</td><td>~255</td></tr>
-<tr><td>minibox-core</td><td>7</td><td>~126</td><td>~285</td></tr>
-<tr><td>miniboxd</td><td>6</td><td>~72</td><td>~24</td></tr>
-<tr><td>mbx</td><td>2</td><td>~32</td><td>~96</td></tr>
+<tr><td>minibox</td><td>56</td><td>~479</td><td>~255</td></tr>
+<tr><td>minibox-core</td><td>10</td><td>~126</td><td>~285</td></tr>
+<tr><td>miniboxd</td><td>13</td><td>~72</td><td>~24</td></tr>
+<tr><td>mbx</td><td>3</td><td>~32</td><td>~96</td></tr>
 <tr><td>macbox</td><td>3</td><td>~30</td><td>~63</td></tr>
-<tr><td>winbox</td><td>0</td><td>0</td><td>~5</td></tr>
+<tr><td>minibox-testsuite</td><td>0</td><td>0</td><td>~24</td></tr>
+<tr><td>smolbox</td><td>2</td><td>0</td><td>~3</td></tr>
+<tr><td>winbox</td><td>1</td><td>0</td><td>~5</td></tr>
 <tr><td>minibox-macros</td><td>0</td><td>0</td><td>0</td></tr>
 <tr><td>xtask</td><td>0</td><td>0</td><td>0</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
-<h2 id="test-categories-2"><a class="header" href="#test-categories-2">Test Categories</a></h2>
+<h2 id="test-categories-1"><a class="header" href="#test-categories-1">Test Categories</a></h2>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2883,7 +3388,7 @@ and root-required tests add ~700 more.</p>
 <tr><td>minibox-core conformance</td><td>126</td><td>any</td><td>no</td><td>yes</td></tr>
 <tr><td>Adapter isolation (colima/gke/native/smolvm)</td><td>~66</td><td>varies</td><td>varies</td><td>partial</td></tr>
 <tr><td>Property tests (proptest)</td><td>~46</td><td>any</td><td>no</td><td><strong>no</strong></td></tr>
-<tr><td>Borrow-reasoning fixtures</td><td>11</td><td>any</td><td>no</td><td>local</td></tr>
+<tr><td>Borrow-reasoning fixtures</td><td>19</td><td>any</td><td>no</td><td>local</td></tr>
 <tr><td>Security regression</td><td>~19</td><td>any</td><td>no</td><td>yes</td></tr>
 <tr><td>Cgroup integration</td><td>16</td><td>Linux</td><td>yes</td><td>next/stable</td></tr>
 <tr><td>E2E daemon+CLI</td><td>15</td><td>Linux</td><td>yes</td><td>next/stable</td></tr>
@@ -2925,7 +3430,7 @@ and root-required tests add ~700 more.</p>
 </thead>
 <tbody>
 <tr><td>Property tests</td><td><code>cargo xtask test-property</code></td><td>~46 proptest tests</td></tr>
-<tr><td>Borrow fixtures</td><td><code>cargo xtask borrow-fixtures</code></td><td>11 borrow reasoning fixtures</td></tr>
+<tr><td>Borrow fixtures</td><td><code>cargo xtask borrow-fixtures</code></td><td>19 borrow reasoning fixtures</td></tr>
 <tr><td>Sandbox tests</td><td><code>cargo xtask test-sandbox</code></td><td>~17 sandbox tests</td></tr>
 <tr><td>CLI subprocess</td><td><code>just test-cli-subprocess</code></td><td>30 CLI e2e tests</td></tr>
 <tr><td>krun conformance</td><td><code>cargo xtask test-krun-conformance</code></td><td>~29 tests</td></tr>
@@ -2966,7 +3471,7 @@ inline tests (63 tests) only run on the self-hosted mac runner.</p>
 <tr><td><code>test-e2e-suite</code></td><td>daemon+CLI e2e (Linux+root)</td></tr>
 <tr><td><code>test-sandbox</code></td><td>sandbox tests (Linux+root)</td></tr>
 <tr><td><code>coverage-check</code></td><td>handler.rs fn coverage &gt;= 80% gate</td></tr>
-<tr><td><code>bench</code></td><td>criterion benchmarks (trait_overhead + protocol_codec)</td></tr>
+<tr><td><code>bench</code></td><td>criterion benchmarks in crates/minibox-bench (8 targets)</td></tr>
 <tr><td><code>check-stale-names</code></td><td>audit workspace for banned old crate/binary names</td></tr>
 <tr><td><code>nuke-test-state</code></td><td>kill orphans, unmount overlays, clean cgroups</td></tr>
 </tbody>
@@ -2990,28 +3495,22 @@ PushTargetFixture, UpperDirFixture</li>
 <li><code>test_fixtures.rs</code> — shared fixtures</li>
 <li><code>conformance.rs</code> — conformance harness</li>
 </ul>
-<hr>
-<h2 id="regression-test-convention"><a class="header" href="#regression-test-convention">Regression Test Convention</a></h2>
-<p>Every bug fix commit must include a regression test that reproduces the
-original failure. This prevents the same bug from recurring.</p>
-<h3 id="naming-1"><a class="header" href="#naming-1">Naming</a></h3>
-<pre><code class="language-text">regression_gh_NNN_short_description
-</code></pre>
-<p>Where <code>NNN</code> is the GitHub issue number. Examples:</p>
-<ul>
-<li><code>regression_gh_42_symlink_escape_in_tar</code></li>
-<li><code>regression_gh_108_overlay_cleanup_on_cgroup_error</code></li>
-</ul>
-<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
-<ul>
-<li>Never delete a regression test. If the code it covers is removed,
-mark it <code>#[ignore]</code> with a comment explaining why.</li>
-<li>Regression tests live alongside related unit/integration tests in
-the appropriate crate, not in a separate file.</li>
-<li>If the bug was found by a property test, commit the
-<code>proptest-regressions/</code> counterexample file.</li>
-</ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox-core/src/image/layer.rs</li>
+<li>crates/minibox/src/daemon/server.rs</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/minibox-core/src/domain/execution_manifest.rs</li>
+<li>crates/minibox/src/container/process.rs</li>
+<li>crates/minibox-core/src/image/registry.rs</li>
+<li>crates/minibox/src/adapters/ghcr.rs</li>
+<li>crates/minibox/tests/security_regression.rs
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="mutation-audit-checklist--security-critical-modules"><a class="header" href="#mutation-audit-checklist--security-critical-modules">Mutation Audit Checklist — Security-Critical Modules</a></h1>
 <p>Produced for issue #341. Each guard, sanitisation step, and error-return path is
 listed with a pass/fail verdict: <strong>PASS</strong> means at least one test exists that
@@ -3327,161 +3826,25 @@ without <code>..</code> components).</p>
 </li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="documentation-audit"><a class="header" href="#documentation-audit">Documentation Audit</a></h1>
-<blockquote>
-<p>Generated 2026-04-27
-Updated 2026-05-08</p>
-</blockquote>
-<h2 id="top-level-docs-status"><a class="header" href="#top-level-docs-status">Top-Level Docs Status</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>File</th><th>Severity</th><th>Key Issues</th></tr>
-</thead>
-<tbody>
-<tr><td>FEATURE_MATRIX.md</td><td><strong>current</strong></td><td>Clean</td></tr>
-<tr><td>STATE_MODEL.md</td><td><strong>current</strong></td><td>Clean (RwLock verified 2026-05-06)</td></tr>
-<tr><td>STABILITY_CHECKLIST.md</td><td><strong>current</strong></td><td>Clean</td></tr>
-<tr><td>CRATE_TIERS.md</td><td><strong>current</strong></td><td>Clean</td></tr>
-<tr><td>ROADMAP.md</td><td><strong>current</strong></td><td>Engineering P0-P3 sections present; krun moved to done 2026-05-07</td></tr>
-<tr><td>PRERELEASE_CHANGELOG.md</td><td><strong>current</strong></td><td>Minor: minibox-agent revert not explicitly noted; no target version on [Unreleased]</td></tr>
-<tr><td>minibox-agent-design.md</td><td><strong>outdated</strong></td><td>Describes removed crates (minibox-agent, minibox-llm) with no “removed” header</td></tr>
-<tr><td>parallel-layer-pulls-design.md</td><td><strong>outdated</strong></td><td>Feature shipped in v0.1.0; all crate paths stale (minibox-lib, linuxbox)</td></tr>
-<tr><td>dagu-integration.md</td><td><strong>outdated</strong></td><td>miniboxctl and minibox-dagu/ don’t exist; entire workflow is non-executable</td></tr>
-<tr><td>atif-viability-report.md</td><td><strong>stale</strong></td><td>All implementation targets reference removed crates</td></tr>
-<tr><td>notes/ClaudeUsage.md</td><td><strong>current</strong></td><td>Personal note; dead cross-ref to rootDotClaudeDotJsonSchema.json</td></tr>
-</tbody>
-</table>
-</div>
-<hr>
-<h2 id="cross-cutting-issues"><a class="header" href="#cross-cutting-issues">Cross-Cutting Issues</a></h2>
-<h3 id="1-design-archive-docs-need-rescue-headers"><a class="header" href="#1-design-archive-docs-need-rescue-headers">1. Design archive docs need rescue headers</a></h3>
-<p>Three docs describe removed infrastructure or already-shipped features with no
-status marker: <code>minibox-agent-design.md</code>, <code>parallel-layer-pulls-design.md</code>,
-<code>dagu-integration.md</code>. Readers encountering them cold will be confused.</p>
-<p><strong>Fix:</strong> Add a prominent blockquote at the top of each:</p>
-<pre><code class="language-markdown">&gt; NOTE: This document describes [removed/already-shipped] functionality.
-&gt; See [current location] for the implementation.
-</code></pre>
-<h3 id="2-test-count-inconsistency"><a class="header" href="#2-test-count-inconsistency">2. Test count inconsistency</a></h3>
-<p>CRATE_TIERS.md says “~300+ tests”. STABILITY_CHECKLIST.md and CLAUDE.md say
-~760. Both dated 2026-04-27. CRATE_TIERS.md was not updated during
-consolidation.</p>
-<h3 id="3-minibox-plugins-workspace-is-a-dead-end"><a class="header" href="#3-minibox-plugins-workspace-is-a-dead-end">3. minibox-plugins workspace is a dead end</a></h3>
-<p>PRERELEASE_CHANGELOG references <code>minibox-plugins</code> as the destination for 6
-extracted crates (dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench,
-searchbox). This workspace does not exist at the expected path. Any
-cross-reference is currently broken.</p>
-<h3 id="4-roadmapmd-is-undersized-resolved-2026-04-28"><a class="header" href="#4-roadmapmd-is-undersized-resolved-2026-04-28">4. <del>ROADMAP.md is undersized</del> RESOLVED 2026-04-28</a></h3>
-<p>Engineering P0-P3 sections added. krun daemon wiring marked done 2026-05-07.</p>
-<h3 id="5-dagu-integrationmd-is-the-most-misleading-doc"><a class="header" href="#5-dagu-integrationmd-is-the-most-misleading-doc">5. dagu-integration.md is the most misleading doc</a></h3>
-<p>Describes a concrete runnable workflow with specific binary paths and port
-numbers, but miniboxctl and minibox-dagu/ do not exist.</p>
-<hr>
-<h2 id="plans--specs-audit"><a class="header" href="#plans--specs-audit">Plans &amp; Specs Audit</a></h2>
-<h3 id="status-summary-50-plans"><a class="header" href="#status-summary-50-plans">Status Summary (50 plans)</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Status</th><th>Count</th></tr>
-</thead>
-<tbody>
-<tr><td>Completed (verified)</td><td>31</td></tr>
-<tr><td>Completed but questionable (code not found)</td><td>5</td></tr>
-<tr><td>Archived/Superseded</td><td>3</td></tr>
-<tr><td>Abandoned (no commits)</td><td>2</td></tr>
-<tr><td>Open/Unstarted</td><td>3</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="questionable-done-plans"><a class="header" href="#questionable-done-plans">Questionable “Done” Plans</a></h3>
-<p>These have <code>status: done</code> in frontmatter but the described code was not found:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Plan</th><th>Issue</th></tr>
-</thead>
-<tbody>
-<tr><td><del>otel-tracing-prometheus</del></td><td><del>No <code>telemetry/</code> dir in any crate</del> <strong>RESOLVED</strong>: <code>crates/minibox/src/daemon/telemetry/</code> exists with <code>mod.rs</code>, <code>noop.rs</code>, <code>server.rs</code>, <code>prometheus_adapter.rs</code>, <code>traces.rs</code> — confirmed done</td></tr>
-<tr><td>tailnet-integration</td><td>No <code>tailbox/</code> crate exists</td></tr>
-<tr><td>crux-minibox-integration</td><td>No <code>minibox-agent/</code> crate; minibox-agent-reland spec contradicts “done”</td></tr>
-<tr><td>searchbox</td><td>No <code>searchbox/</code> or <code>zoektbox/</code> crate</td></tr>
-<tr><td>sandboxed-ai-execution</td><td>No <code>mbx sandbox</code> subcommand or toolchain Dockerfile</td></tr>
-<tr><td>slashcrux-integration</td><td>No <code>slashcrux</code> dep in workspace Cargo.toml</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="abandoned-plans-safe-to-delete-or-archive"><a class="header" href="#abandoned-plans-safe-to-delete-or-archive">Abandoned Plans (safe to delete or archive)</a></h3>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Plan</th><th>Reason</th></tr>
-</thead>
-<tbody>
-<tr><td>2026-03-21-vps-automation-safety.md</td><td>Archived, “no commit evidence found”</td></tr>
-<tr><td>2026-03-18-parallel-layer-pulls.md</td><td>Aborted 2026-04-23, stale crate paths</td></tr>
-<tr><td>gke-docker-image.md</td><td>No frontmatter, no status, no matching code</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="orphaned-specs-19-specs-without-matching-plans"><a class="header" href="#orphaned-specs-19-specs-without-matching-plans">Orphaned Specs (19 specs without matching plans)</a></h3>
-<p>Notable ones requiring attention:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Spec</th><th>Status</th></tr>
-</thead>
-<tbody>
-<tr><td>maestro-tiered-ci-design.md</td><td><strong>Wrong repo</strong> – Maestro artifact in minibox docs</td></tr>
-<tr><td>minibox-agent-reland-design.md</td><td>Draft, contradicts crux-minibox plan’s “done” status</td></tr>
-<tr><td>winbox-wsl2-proxy-design.md</td><td>Draft, supersedes old wsl2-winboxd plan</td></tr>
-<tr><td>commit-build-push-conformance-boundary.md</td><td>Active spec, needs a plan</td></tr>
-<tr><td>minibox-agent-runtime-design.md</td><td>Approved spec, needs a plan</td></tr>
-<tr><td>cas-runtime.md</td><td>Draft, needs triage</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="stale-crate-references"><a class="header" href="#stale-crate-references">Stale Crate References</a></h3>
-<p>16 plans and 5 specs reference <code>daemonbox</code>, <code>minibox-cli</code>, <code>minibox-client</code>,
-<code>miniboxctl</code>, or <code>linuxbox</code> in file maps and code paths. These crate names are
-all stale (absorbed/renamed). The plans are historically accurate but misleading
-to future readers.</p>
-<h3 id="duplicate-spec"><a class="header" href="#duplicate-spec">Duplicate Spec</a></h3>
-<p><code>agentbox-diagrams.md</code> (undated) duplicates <code>2026-03-26-agentbox-diagrams.md</code>.
-Delete the undated copy.</p>
-<hr>
-<h2 id="recommendations-priority-order"><a class="header" href="#recommendations-priority-order">Recommendations (Priority Order)</a></h2>
-<ol>
-<li><del><strong>Add rescue headers</strong> to minibox-agent-design.md,
-parallel-layer-pulls-design.md, dagu-integration.md</del> DONE 2026-04-28</li>
-<li><del><strong>Fix test count</strong> in CRATE_TIERS.md: ~300+ -&gt; ~760+</del> DONE 2026-04-28</li>
-<li><del><strong>Audit 6 questionable “done” plans</strong> against actual codebase</del>
-DONE 2026-04-28: 3 confirmed done (otel, sandboxed-ai, slashcrux);
-3 changed to archived (tailnet, crux-minibox, searchbox)</li>
-<li><del><strong>Move maestro specs</strong> out of minibox docs</del> DONE 2026-04-28 (moved
-to <code>specs/archived/</code>)</li>
-<li><del><strong>Delete undated agentbox-diagrams.md</strong> duplicate</del> DONE 2026-04-28</li>
-<li><del><strong>Expand ROADMAP.md</strong> with engineering priorities</del> DONE 2026-04-28
-(P0-P3 sections added)</li>
-<li><del><strong>Archive 3 abandoned plans</strong> or delete them</del> DONE 2026-04-28:
-2 already had <code>status: archived</code>; added frontmatter to
-<code>gke-docker-image.md</code> and marked archived</li>
-<li><del><strong>Create plan stubs</strong> for 5 orphaned active specs</del> DONE 2026-04-28:
-created stubs for minibox-agent-reland, winbox-wsl2-proxy,
-commit-build-push-conformance, minibox-agent-runtime, cas-runtime</li>
-<li><del><strong>Resolve minibox-plugins dead end</strong></del> DONE 2026-04-28 (CRATE_TIERS.md
-updated: dockerbox/tailbox noted as extracted to minibox-plugins)</li>
-</ol>
-<p>Additionally fixed:</p>
-<ul>
-<li>Added rescue header to <code>atif-viability-report.md</code> (stale crate refs)</li>
-</ul>
+<h1 id="docs-audit"><a class="header" href="#docs-audit">Docs Audit</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+sources:</p>
+<ul>
+<li>.github/workflows</li>
+<li>xtask/src/main.rs</li>
+<li>CONTRIBUTING.md</li>
+<li>docs/core/SUPPORT_TIERS.mbx.md</li>
+<li>docs/core/CRATE_TIERS.mbx.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="stability-checklist"><a class="header" href="#stability-checklist">Stability Checklist</a></h1>
 <p>Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
-crate. See <code>docs/SUPPORT_TIERS.mbx.md</code> for the full support-tier definitions and promotion
+crate. See <code>docs/core/SUPPORT_TIERS.mbx.md</code> for the full support-tier definitions and promotion
 criteria.</p>
-<p>Last updated: 2026-05-06</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="quick-reference-gates-vs-advisory"><a class="header" href="#quick-reference-gates-vs-advisory">Quick Reference: Gates vs Advisory</a></h2>
 <p><strong>[GATE] items are hard blockers.</strong> A PR or crate promotion cannot merge until every [GATE] item
@@ -3508,23 +3871,36 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 </table>
 </div>
 <hr>
-<h2 id="gates"><a class="header" href="#gates">Gates</a></h2>
+<h2 id="mandatory-gates"><a class="header" href="#mandatory-gates">Mandatory Gates</a></h2>
+<p>These block promotion/merge. All six must be green simultaneously on the promotion path (<code>develop</code> -&gt; <code>staging</code> -&gt; <code>release</code>).</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>#</th><th>Item</th><th>Tag</th><th>Status</th><th>Evidence</th></tr>
+<tr><th>#</th><th>Item</th><th>Status</th><th>Evidence</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>Protocol types have a single source of truth</td><td>[GATE]</td><td>Met</td><td><code>minibox-core/src/protocol.rs</code> (#122/#128)</td></tr>
-<tr><td>2</td><td>Handler coverage &gt;= 80% function coverage</td><td>[GATE]</td><td>Not met</td><td>Current ~67.5% (<code>handler.rs</code>)</td></tr>
-<tr><td>3</td><td>All wired adapters have at least one integration test</td><td>[GATE]</td><td>Met</td><td>native, gke, colima, smolvm, krun all tested</td></tr>
-<tr><td>4</td><td><code>cargo xtask pre-commit</code> passes on macOS</td><td>[GATE]</td><td>Met</td><td>fmt + clippy + release build</td></tr>
-<tr><td>5</td><td><code>cargo xtask test-unit</code> passes</td><td>[GATE]</td><td>Met</td><td>~506 tests (macOS cross-platform subset)</td></tr>
-<tr><td>6</td><td><code>cargo deny check</code> passes</td><td>[GATE]</td><td>Met</td><td>License + advisory audit in CI</td></tr>
-<tr><td>7</td><td>New domain trait has an in-memory mock double in tests</td><td>[ADVISORY]</td><td>—</td><td>Required for hexagonal port compliance</td></tr>
-<tr><td>8</td><td>No <code>.unwrap()</code> in production paths of new code</td><td>[ADVISORY]</td><td>—</td><td>See rust-patterns.md rule 1</td></tr>
-<tr><td>9</td><td>Tracing events use structured fields, not message strings</td><td>[ADVISORY]</td><td>—</td><td>See rust-patterns.md tracing rules</td></tr>
-<tr><td>10</td><td>New <code>unsafe</code> blocks include a SAFETY comment</td><td>[ADVISORY]</td><td>—</td><td>See rust-patterns.md rule 6</td></tr>
+<tr><td>1</td><td>Protocol types have a single source of truth</td><td>Met</td><td><code>crates/minibox-core/src/protocol.rs</code> (#122/#128)</td></tr>
+<tr><td>2</td><td>Handler coverage &gt;= 80% function coverage</td><td>Met</td><td>92.41% (207/224 functions, 2026-08-10)</td></tr>
+<tr><td>3</td><td>All wired adapters have at least one integration test</td><td>Met</td><td>native, gke, colima, smolvm, krun all tested</td></tr>
+<tr><td>4</td><td><code>cargo xtask pre-commit</code> passes on macOS</td><td>Met</td><td>staged fmt/clippy + config/docs checks</td></tr>
+<tr><td>5</td><td><code>cargo xtask test-unit</code> passes</td><td>Met</td><td>~506 tests (macOS cross-platform subset)</td></tr>
+<tr><td>6</td><td><code>cargo deny check</code> passes</td><td>Met</td><td>License + advisory audit in CI</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="advisory-items"><a class="header" href="#advisory-items">Advisory Items</a></h2>
+<p>These are review prompts, not merge blockers. Failing one must be acknowledged in the PR
+description (see “ADVISORY acknowledged” note above), not silently ignored.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>#</th><th>Item</th><th>Evidence</th></tr>
+</thead>
+<tbody>
+<tr><td>A1</td><td>New domain trait has an in-memory mock double in tests</td><td>Required for hexagonal port compliance</td></tr>
+<tr><td>A2</td><td>No <code>.unwrap()</code> in production paths of new code</td><td>See rust-patterns.md rule 1</td></tr>
+<tr><td>A3</td><td>Tracing events use structured fields, not message strings</td><td>See rust-patterns.md tracing rules</td></tr>
+<tr><td>A4</td><td>New <code>unsafe</code> blocks include a SAFETY comment</td><td>See rust-patterns.md rule 6</td></tr>
 </tbody>
 </table>
 </div>
@@ -3535,7 +3911,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 cargo test -p minibox-core -- protocol
 
 # Gate 2: handler coverage (requires Linux + llvm-cov)
-cargo xtask prepush  # generates coverage report
+cargo xtask coverage-check
 
 # Gate 3: adapter integration tests
 just test-integration  # Linux + root
@@ -3551,42 +3927,77 @@ cargo xtask test-unit
 cargo deny check
 cargo audit
 </code></pre>
-<h3 id="advisory-items"><a class="header" href="#advisory-items">[ADVISORY] items</a></h3>
-<p>Advisory items are checked during PR review. Reviewers annotate with “ADVISORY: acknowledged —
-&lt;rationale&gt;” when a prompt does not apply or is deferred with a tracked follow-up issue.</p>
+<h3 id="advisory-items-1"><a class="header" href="#advisory-items-1">Advisory items</a></h3>
+<p>Advisory items (A1-A4) are checked during PR review, not by CI. Reviewers annotate with
+“ADVISORY: acknowledged — &lt;rationale&gt;” when a prompt does not apply or is deferred with a
+tracked follow-up issue.</p>
 <hr>
 <h2 id="freeze-status"><a class="header" href="#freeze-status">Freeze Status</a></h2>
-<p>The stabilization freeze (issues #117 and #127) applies to <strong>net-new Core and Platform crates</strong>.
-The freeze lifts when all <strong>[GATE]</strong> items above are verified green on the <code>next</code> branch.</p>
-<p>Gate 2 (handler coverage) is the primary remaining blocker. See
-<a href="https://github.com/89jobrien/minibox/issues/158">GH #158</a> for tracking.</p>
+<p><strong>Lifted 2026-08-18.</strong> The net-new surface freeze declared 2026-05-14 under issue
+#127 (<code>CONTRIBUTING.md</code> “Feature Freeze”, commit b23575db) is lifted. Lift
+evidence, per the conditions this section previously stated:</p>
+<ul>
+<li>All six mandatory gates green simultaneously on <code>develop</code>: Stability Gates,
+Conformance, and Merge workflows all passing on commits bc01b5f5 and a9940738
+(2026-08-18), including the protocol-drift gate after its lock regeneration.</li>
+<li>Handler coverage 92.41% against the 80% threshold (Gate 2).</li>
+<li>Linux integration/e2e evidence: conformance suite 123/123 on the pre-push gate
+and self-hosted Linux CI; <code>native_adapter_isolation_tests</code> plus the new
+<code>native_adapter_lifecycle_failure_tests</code> (#74) green on a Linux VM under
+root + cgroup v2 (2026-08-18).</li>
+</ul>
+<p>Normal contribution rules resume. New crates and public surface follow the
+Stabilization Policy in <code>docs/core/CRATE_TIERS.mbx.md</code> — the gate criteria are
+now a standing promotion bar, not a freeze. Chain I issues are unblocked.</p>
+<p>Issue #127 records the lift decision; the original freeze declaration is
+preserved in git history and in <code>CONTRIBUTING.md</code>.</p>
 <hr>
 <h2 id="ci-enforcement"><a class="header" href="#ci-enforcement">CI Enforcement</a></h2>
-<p>The following xtask gates are enforced in GitHub Actions (
-and ):</p>
+<p>The following jobs enforce checklist items in GitHub Actions (issue #133):</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Gate</th><th>CI Job</th><th>Workflow</th></tr>
+<tr><th>Enforces</th><th>CI Job</th><th>Command</th><th>Workflow</th></tr>
 </thead>
 <tbody>
-<tr><td>coverage-check</td><td>handler coverage gate (&gt;=80%)</td><td>stability-gates.yml</td></tr>
-<tr><td>check-protocol-drift</td><td>core contract hash check</td><td>protocol-drift.yml</td></tr>
-<tr><td>check-stale-names</td><td>stale crate/binary name audit</td><td>stability-gates.yml</td></tr>
-<tr><td>check-protocol-sites</td><td>HandlerDependencies site count</td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 1</td><td>protocol-drift (core contract hash check)</td><td><code>cargo xtask check-protocol-drift</code></td><td>protocol-drift.yml</td></tr>
+<tr><td>Gate 1</td><td>check-protocol-sites</td><td><code>cargo xtask check-protocol-sites</code></td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 2</td><td>handler-coverage (&gt;=80% function coverage)</td><td><code>cargo xtask coverage-check</code></td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 3</td><td>adapter-integration-tests (all five adapters)</td><td><code>cargo xtask check adapter-coverage</code></td><td>stability-gates.yml</td></tr>
+<tr><td>Gate 5</td><td>test-unit</td><td><code>cargo xtask test unit</code></td><td>pr.yml / merge.yml</td></tr>
+<tr><td>Gate 6</td><td>deny + audit</td><td><code>cargo deny check</code> / <code>cargo audit</code></td><td>pr.yml / merge.yml</td></tr>
+<tr><td>A2</td><td>no-unwrap-in-prod (enforced as hard job)</td><td><code>cargo xtask check-no-unwrap --strict</code></td><td>stability-gates.yml</td></tr>
+<tr><td>doc sync</td><td>doc-sync (docs audit + FEATURE_MATRIX age)</td><td><code>cargo xtask docs audit --full --strict</code></td><td>stability-gates.yml</td></tr>
+<tr><td>doc names</td><td>check-stale-names</td><td><code>cargo xtask check-stale-names</code></td><td>stability-gates.yml</td></tr>
+<tr><td>compile</td><td>stability-compile (check + clippy)</td><td><code>cargo check --workspace</code> + targeted clippy</td><td>stability-gates.yml</td></tr>
 </tbody>
 </table>
 </div>
-<p>Gates 1-6 in the table above are enforced via pre-commit () locally and
-the jobs listed here in CI. All four xtask-based gates (#133) were added in
-.</p>
+<p>Known gaps (tracked, not yet CI-enforced):</p>
+<ul>
+<li>Gate 4 (<code>cargo xtask pre-commit</code> on macOS) has no CI job — all stability jobs run on
+<code>ubuntu-latest</code>. It remains a local gate.</li>
+<li>Gates 5 and 6 run in <code>pr.yml</code>/<code>merge.yml</code>, not in the <code>stability-gates.yml</code> fan-in, so the
+six gates are not verified green as a single unit.</li>
+<li>Advisory items A1, A3, and A4 are review-time only; A2 is the only automated advisory.</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
+<li>crates/minibox-core/src/image/layer.rs</li>
+<li>crates/minibox/src/container/process.rs</li>
 <li>crates/minibox/src/daemon/server.rs</li>
-<li>crates/minibox-core/src/image/</li>
-<li>crates/minibox/src/container/</li>
+<li>crates/miniboxd/src/main.rs</li>
+<li>crates/minibox-core/src/image/registry.rs</li>
+<li>crates/minibox/src/adapters/ghcr.rs</li>
+<li>crates/minibox/src/container/mount_seccomp.rs</li>
+<li>crates/minibox-core/src/domain/execution_manifest.rs</li>
+<li>crates/minibox/src/daemon/handler/run.rs</li>
+<li>crates/minibox/tests/security_regression.rs</li>
+<li>crates/minibox/tests/daemon_security_regression.rs
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="security-invariants"><a class="header" href="#security-invariants">Security Invariants</a></h1>
@@ -3594,7 +4005,7 @@ the jobs listed here in CI. All four xtask-based gates (#133) were added in
 the regression test that pins the behaviour. If a test listed here starts failing, a
 security-critical invariant has been broken.</p>
 <p>Reference commits: <code>8ea4f73</code> (tar extraction safety), <code>2fc7036</code> (symlink rewrite + setuid strip).</p>
-<p>Last updated: 2026-05-12</p>
+<p>Last updated: 2026-08-22</p>
 <hr>
 <h2 id="1-zip-slip--path-traversal-prevention"><a class="header" href="#1-zip-slip--path-traversal-prevention">1. Zip Slip / Path Traversal Prevention</a></h2>
 <p><strong>Invariant:</strong> Tar entries whose paths contain <code>..</code> components must be rejected before any
@@ -3889,6 +4300,62 @@ pulls.</li>
 requirement; enforced by the <code>LimitedStream</code> wrapper and its own unit tests in
 the same file.)</em></p>
 <hr>
+<h2 id="13-mount-immutability-ratchet-seccomp"><a class="header" href="#13-mount-immutability-ratchet-seccomp">13. Mount Immutability Ratchet (Seccomp)</a></h2>
+<p><strong>Invariant:</strong> Once the container’s init-time mounts are in place (overlay, bind mounts,
+<code>pivot_root</code>’s <code>proc</code>/<code>sysfs</code>/<code>dev</code>), no process in the container — including the exec’d
+workload and anything it spawns — may widen a mount back to read-write via
+<code>mount(2, MS_REMOUNT)</code>. Remounting to read-only is always allowed (tightening is safe). Fresh,
+non-remount mounts created after init remain unrestricted. This mirrors the sysbox mount
+interception model described in <code>docs/ideas/sysbox-security.md</code>.</p>
+<p><strong>Code path:</strong></p>
+<ul>
+<li><code>crates/minibox/src/container/mount_seccomp.rs</code> — <code>build_mount_immutability_program()</code>
+constructs a classic (non-eBPF) seccomp BPF program; <code>install_mount_immutability_filter()</code>
+sets <code>PR_SET_NO_NEW_PRIVS</code> then installs it via <code>prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER)</code>.</li>
+<li><code>crates/minibox/src/container/process.rs</code> — <code>child_init()</code> calls
+<code>install_mount_immutability_filter()</code> immediately after <code>pivot_root_to()</code> (step 4b), before
+capability/exec setup, so the filter is in place before any workload code runs and is
+inherited across <code>fork</code>/<code>clone</code>/<code>execve</code> for the lifetime of the container process tree.</li>
+</ul>
+<p><strong>Enforcement model (scope, read before modifying):</strong></p>
+<p>The filter inspects only the raw <code>mount(2)</code> argument bits — the syscall number, target
+architecture, and the low 32 bits of the <code>mountflags</code> argument (<code>args[3]</code> in
+<code>struct seccomp_data</code>). It denies (<code>EPERM</code>) any call with <code>MS_REMOUNT</code> set and <code>MS_RDONLY</code>
+unset, and allows everything else. This is a deliberately coarse approximation of sysbox’s
+per-mount policy: it cannot distinguish “this mount was originally read-only” from “this mount
+was originally read-write” (classic BPF has no access to kernel mount-table state), so it
+denies <code>remount,rw</code> universally rather than only for mounts that started read-only. The
+practical effect matches the acceptance criteria (ro mounts can’t become rw; rw mounts can be
+tightened to ro; fresh mounts are unrestricted), at the cost of also denying a redundant
+<code>remount,rw</code> re-assertion on an already-read-write mount.</p>
+<p><strong>Deferred (not implemented):</strong> A precise per-mount policy that also allows <code>remount,rw</code> on
+mounts that started read-write would require <code>SECCOMP_RET_USER_NOTIF</code> plus a supervisor
+process resolving the target from <code>/proc/[pid]/mountinfo</code> against a per-container mount
+policy, or a BPF LSM hook on <code>security_sb_mount</code>. Both are substantially larger changes
+(new supervisor process/IPC, or a BPF LSM program) and were out of scope for this change.</p>
+<p><strong>Regression tests:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Test name</th><th>File</th></tr>
+</thead>
+<tbody>
+<tr><td><code>program_has_expected_instruction_count</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>program_ends_with_allow</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>program_denies_remount_without_rdonly</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>remount_rdonly_check_masks_match_kernel_flags</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit)</td></tr>
+<tr><td><code>interpreter_matches_documented_policy</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (unit, BPF-program interpreter covering all acceptance-criteria cases)</td></tr>
+<tr><td><code>kernel_enforces_remount_rw_denial_after_filter_install</code></td><td><code>crates/minibox/src/container/mount_seccomp.rs</code> (Linux + root integration test: real <code>fork()</code>, real <code>mount(2)</code>, asserts <code>remount,rw</code> fails EPERM, <code>remount,ro</code> succeeds, and a fresh mount succeeds)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Verification status:</strong> Type-checked and clippy-clean cross-compiled to
+<code>aarch64-unknown-linux-gnu</code> from macOS (no cross-linker available in the dev sandbox, so the
+test binary could not be linked/executed there). The <code>#[cfg(target_os = "linux")]</code>-gated
+kernel integration test has not yet been run on real Linux + root — run
+<code>cargo nextest run -p minibox mount_seccomp</code> on the VPS or self-hosted CI runner before
+relying on this invariant in production.</p>
+<hr>
 <h2 id="mutation-audit-coverage-checklist"><a class="header" href="#mutation-audit-coverage-checklist">Mutation Audit Coverage Checklist</a></h2>
 <p>Every invariant below has at least one test that passes <strong>only</strong> because the
 guard is present. Removing or weakening the guard causes the test to fail.</p>
@@ -3910,10 +4377,11 @@ guard is present. Removing or weakening the guard causes the test to fail.</p>
 <tr><td>10</td><td>Request size limit</td><td><code>minibox/.../server.rs</code> <code>MAX_REQUEST_SIZE</code> + <code>bounded_read_line</code></td><td><code>mutation_audit_request_size_limit_exists</code>, <code>test_handle_connection_oversized_request</code></td><td>minibox</td></tr>
 <tr><td>11</td><td>Image pull limits</td><td><code>minibox-core/.../registry.rs</code> <code>MAX_MANIFEST_SIZE</code>, <code>MAX_LAYER_SIZE</code>, <code>MAX_TOTAL_IMAGE_SIZE</code>, <code>LimitedStream</code></td><td><code>mutation_audit_image_pull_size_limits_exist</code>, <code>test_constants_*</code>, <code>get_manifest_errors_when_content_length_exceeds_limit</code></td><td>minibox, minibox-core</td></tr>
 <tr><td>12</td><td>Execution manifest integrity</td><td><code>minibox-core/.../execution_manifest.rs</code> <code>seal()</code>, SHA-256 env hashing; <code>minibox/.../handler/run.rs</code> <code>prepare_run()</code></td><td><code>mutation_audit_execution_manifest_env_hashing</code>, <code>env_var_value_is_never_plaintext</code>, <code>seal_sets_workload_digest</code></td><td>minibox, minibox-core</td></tr>
+<tr><td>13</td><td>Mount immutability ratchet (seccomp)</td><td><code>minibox/.../container/mount_seccomp.rs</code> <code>build_mount_immutability_program</code>, <code>install_mount_immutability_filter</code>; called from <code>minibox/.../container/process.rs</code> <code>child_init</code></td><td><code>program_denies_remount_without_rdonly</code>, <code>interpreter_matches_documented_policy</code>, <code>kernel_enforces_remount_rw_denial_after_filter_install</code></td><td>minibox</td></tr>
 </tbody>
 </table>
 </div>
-<p>Last audited: 2026-05-21 (issue #368)</p>
+<p>Last audited: 2026-08-03 (issue #449)</p>
 <hr>
 <h2 id="appendix-newtype-wrappers-for-validated-paths-consideration"><a class="header" href="#appendix-newtype-wrappers-for-validated-paths-consideration">Appendix: Newtype Wrappers for Validated Paths (Consideration)</a></h2>
 <p>The acceptance criteria for issue #157 mention considering newtype wrappers for validated
@@ -3954,12 +4422,26 @@ the manifest before returning.</li>
 <li>The manifest must be written before <code>spawn_process</code> is called.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox/src/daemon/handler</li>
+<li>crates/minibox/src/adapters/network/bridge.rs</li>
+<li>crates/minibox-core/src/domain/exec.rs</li>
+<li>crates/minibox-core/src/image/dockerfile.rs</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>Justfile</li>
+<li>xtask/src/main.rs
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="minibox-roadmap"><a class="header" href="#minibox-roadmap">Minibox Roadmap</a></h1>
-<p>Last updated: 2026-05-13</p>
+<p>Last updated: 2026-08-22</p>
 <h2 id="engineering-priorities"><a class="header" href="#engineering-priorities">Engineering Priorities</a></h2>
 <h3 id="p0--stability-gates"><a class="header" href="#p0--stability-gates">P0 – Stability Gates</a></h3>
 <ul>
-<li><strong>Handler coverage &gt;= 80%</strong>: <code>minibox/src/daemon/handler.rs</code> was at 67.5%
+<li><strong>Handler coverage &gt;= 80%</strong>: <code>crates/minibox/src/daemon/handler/</code> was at 67.5%
 function / 55% line coverage. Recent work (exhaustive small-domain tests #342,
 barrier-based race tests #344, roundtrip property tests #345, stream/transport
 trait extraction #343, handler tests split by feature #320) has substantially
@@ -3991,7 +4473,7 @@ enumeration tests (#342).</li>
 <li><strong>Stream/transport trait extraction</strong>: <code>StreamReader</code>/<code>StreamWriter</code> traits
 extracted from handler for isolated unit testing (#343).</li>
 <li><strong>Mutation audit checklist</strong>: Security module mutation coverage documented
-in <code>docs/SECURITY_INVARIANTS.md</code> (#341).</li>
+in <code>docs/core/SECURITY_INVARIANTS.mbx.md</code> (#341).</li>
 <li><strong>StateRepository persistence</strong>: <code>StateRepository</code> wired into <code>DaemonState</code>
 for durable container state across daemon restarts (#315).</li>
 <li><strong>Handler tests split by feature</strong>: <code>daemon_handler_tests</code> decomposed into
@@ -4064,10 +4546,21 @@ streaming) and gives a real CI use case.</p>
 <p><strong>Scope</strong>: bind mounts are available. Can be implemented as a script or xtask
 recipe using <code>mbx run -v ./src:/src minibox-tester -- cargo test</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
+<hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>CHANGELOG.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="changelog-pre-release-era"><a class="header" href="#changelog-pre-release-era">Changelog (pre-release era)</a></h1>
 <p>All notable changes to this project will be documented in this file.</p>
 <p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>.</p>
-<h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
+<p>This file covers the pre-1.0 iteration numbering (<code>v0.0.1</code> through <code>v0.21.0</code>) used before
+the project adopted its current versioning. For <code>v0.24.0</code> and later, see <code>CHANGELOG.md</code>
+at the repository root.</p>
+<h2 id="v0210---2026-04-26"><a class="header" href="#v0210---2026-04-26">[v0.21.0] - 2026-04-26</a></h2>
 <h3 id="added"><a class="header" href="#added">Added</a></h3>
 <p><strong>Crate consolidation (GH #153):</strong></p>
 <ul>
@@ -4136,7 +4629,7 @@ capability flags</li>
 <ul>
 <li>Plugin extraction: dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench moved to
 <code>minibox-plugins</code> workspace</li>
-<li><code>cargo xtask pre-commit</code> — fmt-check + clippy + release build (macOS-safe)</li>
+<li><code>cargo xtask pre-commit</code> — staged fmt/clippy plus config/docs checks (macOS-safe)</li>
 <li>CI <code>all-features</code> job, coverage-check gate (handler 80% threshold)</li>
 <li>Stability checklist enforcement gates, protocol-drift detection workflow</li>
 <li><code>init_tracing()</code> with <code>MINIBOX_TRACE_LEVEL</code> env var</li>

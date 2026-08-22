@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,11 +177,44 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="crate-support-tiers"><a class="header" href="#crate-support-tiers">Crate Support Tiers</a></h1>
+                        <hr>
+<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+sources:</p>
+<ul>
+<li>Cargo.toml</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/mcp</li>
+<li>crates/ail</li>
+<li>crates/minibox-bench</li>
+<li>xtask</li>
+<li>crates/minibox-macros</li>
+<li>crates/minibox-testsuite</li>
+<li>docs/core/STABILITY_CHECKLIST.mbx.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="crate-support-tiers"><a class="header" href="#crate-support-tiers">Crate Support Tiers</a></h1>
 <p>This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.</p>
-<p>Last updated: 2026-05-06</p>
+<p>Last updated: 2026-08-22</p>
+<p>See also: <code>docs/core/SUPPORT_TIERS.mbx.md</code> (support commitment level — Tier 1 Production /
+Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).</p>
+<blockquote>
+<p><strong>Relationship to SUPPORT_TIERS.mbx.md:</strong> This document classifies by <em>architectural role</em>
+(Core/Platform/Experimental/Internal/External). SUPPORT_TIERS classifies by <em>support
+commitment level</em>. The axes are independent: a Platform crate can be Tier 3 (Stub) support
+(e.g. <code>winbox</code>); an Experimental crate architecturally may still receive best-effort (Tier 2)
+support. When in doubt, this document answers “where does this code live?”; SUPPORT_TIERS
+answers “what guarantees does it carry?”</p>
+</blockquote>
 <hr>
 <h2 id="tier-definitions"><a class="header" href="#tier-definitions">Tier Definitions</a></h2>
 <div class="table-wrapper">
@@ -219,7 +252,7 @@ that breaks callers outside the workspace is a semver-major event.</p>
 <p><strong>Stability expectations for Core crates:</strong></p>
 <ul>
 <li><code>cargo xtask pre-commit</code> must pass before merging any PR that touches these crates.</li>
-<li>Handler coverage in <code>minibox/src/daemon/</code> must stay at or above the current baseline;
+<li>Handler coverage in <code>crates/minibox/src/daemon/</code> must stay at or above the current baseline;
 the target is &gt;= 80% function coverage.</li>
 <li>Protocol wire format is pinned by snapshot tests in <code>minibox-core</code>. Do not remove or
 rename existing variants without a deprecation period.</li>
@@ -254,10 +287,21 @@ CI gates clippy on Linux and macOS; Windows clippy is best-effort.</li>
 <h2 id="experimental-tier"><a class="header" href="#experimental-tier">Experimental Tier</a></h2>
 <p>Unstable crates. APIs may change or crates may be merged, split, or removed. Do not
 take a public dependency on these crates from outside the workspace.</p>
-<p>No crates are currently in this tier. The six former experimental crates
-(<code>minibox-agent</code>, <code>minibox-llm</code>, <code>minibox-secrets</code>, <code>mbxctl</code>, <code>dashbox</code>,
-<code>minibox-bench</code>) were removed during the consolidation in sessions 29-31
-(2026-04-21 to 2026-04-26) to reduce maintenance surface.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Path</th><th>Role</th></tr>
+</thead>
+<tbody>
+<tr><td><code>minibox-mcp</code></td><td><code>crates/mcp</code></td><td>MCP stdio server for agent-controlled minibox tools. First slice is implemented.</td></tr>
+<tr><td><code>ail</code></td><td><code>crates/ail</code></td><td>Placeholder binary for the agent-improvement loop. Minimal implementation today.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Several former experimental crates (<code>minibox-agent</code>, <code>minibox-secrets</code>, <code>mbxctl</code>)
+were removed during the consolidation in sessions 29-31 (2026-04-21 to 2026-04-26)
+to reduce maintenance surface. <code>minibox-bench</code> was re-added as a benchmarking
+crate in v0.31.0.</p>
 <p><strong>Stability expectations for Experimental crates:</strong></p>
 <ul>
 <li>No API stability guarantee. Breaking changes are acceptable without a version bump
@@ -265,7 +309,7 @@ while the crate remains in this tier.</li>
 <li>Must compile as part of <code>cargo check --workspace</code>. Build failures in Experimental
 crates block CI like any other crate.</li>
 <li>May be promoted to Core or Platform tier only after meeting all gates in
-<code>docs/STABILITY_CHECKLIST.md</code>.</li>
+<code>docs/core/STABILITY_CHECKLIST.mbx.md</code>.</li>
 </ul>
 <hr>
 <h2 id="internal-tier"><a class="header" href="#internal-tier">Internal Tier</a></h2>
@@ -277,9 +321,10 @@ in release binaries.</p>
 <tr><th>Crate</th><th>Path</th><th>Role</th></tr>
 </thead>
 <tbody>
-<tr><td><code>xtask</code></td><td><code>crates/xtask</code></td><td>Cargo xtask runner: <code>pre-commit</code>, <code>prepush</code>, <code>test-unit</code>, <code>test-conformance</code>, <code>bench</code>, <code>build-vm-image</code>, and more.</td></tr>
+<tr><td><code>xtask</code></td><td><code>xtask</code></td><td>Cargo xtask runner: <code>pre-commit</code>, <code>prepush</code>, <code>test unit</code>/<code>test conformance</code>, <code>bench</code>, <code>build-test-image</code>, and more.</td></tr>
 <tr><td><code>minibox-macros</code></td><td><code>crates/minibox-macros</code></td><td>Proc-macro crate: <code>as_any!</code> and <code>adapt!</code> derive macros used by <code>minibox</code>.</td></tr>
 <tr><td><code>minibox-testsuite</code></td><td><code>crates/minibox-testsuite</code></td><td>Conformance test harness (<code>run-conformance</code>, <code>generate-report</code>). Not published.</td></tr>
+<tr><td><code>minibox-bench</code></td><td><code>crates/minibox-bench</code></td><td>Criterion benchmark crate and benchmark fixtures. Not published.</td></tr>
 </tbody>
 </table>
 </div>
@@ -296,15 +341,16 @@ was removed during the v0.23.0 consolidation; only a pre-built binary artifact r
 <hr>
 <h2 id="stabilization-policy"><a class="header" href="#stabilization-policy">Stabilization Policy</a></h2>
 <h3 id="no-new-core-or-platform-crates-until-stabilization-gates-are-met"><a class="header" href="#no-new-core-or-platform-crates-until-stabilization-gates-are-met">No new Core or Platform crates until stabilization gates are met</a></h3>
-<p>The workspace currently has 11 crates across all tiers. Adding more crates before
-the core runtime is hardened increases maintenance surface without shipping value.</p>
+<p>The workspace currently has 13 product/runtime crates under <code>crates/</code>, plus the
+<code>xtask</code> workspace dev-tool member. Adding more crates before the core runtime is
+hardened increases maintenance surface without shipping value.</p>
 <p><strong>A new crate MAY be added to the Core or Platform tier only when ALL of the
-following gates in <code>docs/STABILITY_CHECKLIST.md</code> are green:</strong></p>
+following gates in <code>docs/core/STABILITY_CHECKLIST.mbx.md</code> are green:</strong></p>
 <ol>
 <li>Protocol types have a single source of truth (currently met — minibox-core #122/#128).</li>
-<li>Handler coverage &gt;= 80% function coverage in <code>minibox/src/daemon/handler.rs</code>.</li>
+<li>Handler coverage &gt;= 80% function coverage in <code>crates/minibox/src/daemon/handler/</code>.</li>
 <li>All wired adapters have at least one integration test.</li>
-<li><code>cargo xtask pre-commit</code> passes on macOS (fmt + clippy + release build).</li>
+<li><code>cargo xtask pre-commit</code> passes on macOS (staged fmt/clippy plus config/docs checks).</li>
 <li><code>cargo xtask test-unit</code> passes (~506+ tests on macOS cross-platform subset).</li>
 <li><code>cargo deny check</code> passes (license + advisory audit).</li>
 </ol>
@@ -329,10 +375,11 @@ Internal      ──(never)──► any other tier
 </ol>
 <h3 id="freeze-notice-issues-117-and-127"><a class="header" href="#freeze-notice-issues-117-and-127">Freeze notice (issues #117 and #127)</a></h3>
 <p>This document was created as part of a stabilization milestone declared in issues
-#117 and #127. The freeze applies to <strong>net-new Core and Platform crates</strong>. Existing
+#117 and #127. The freeze applied to <strong>net-new Core and Platform crates</strong>. Existing
 crates in all tiers continue to receive fixes and enhancements.</p>
-<p>The freeze lifts when all six stabilization gates above are verified green on the
-<code>next</code> branch.</p>
+<p><strong>Freeze lifted 2026-08-18</strong> (issue #127 closed). All six stabilization gates were
+verified green on the <code>next</code> branch. New Core and Platform crates may now be proposed
+subject to the standard PR gate process described above.</p>
 
                     </main>
 

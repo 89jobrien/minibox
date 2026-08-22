@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,10 +177,21 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="changelog"><a class="header" href="#changelog">Changelog</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>CHANGELOG.md
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="changelog-pre-release-era"><a class="header" href="#changelog-pre-release-era">Changelog (pre-release era)</a></h1>
 <p>All notable changes to this project will be documented in this file.</p>
 <p>The format is based on <a href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a>.</p>
-<h2 id="unreleased"><a class="header" href="#unreleased">[Unreleased]</a></h2>
+<p>This file covers the pre-1.0 iteration numbering (<code>v0.0.1</code> through <code>v0.21.0</code>) used before
+the project adopted its current versioning. For <code>v0.24.0</code> and later, see <code>CHANGELOG.md</code>
+at the repository root.</p>
+<h2 id="v0210---2026-04-26"><a class="header" href="#v0210---2026-04-26">[v0.21.0] - 2026-04-26</a></h2>
 <h3 id="added"><a class="header" href="#added">Added</a></h3>
 <p><strong>Crate consolidation (GH #153):</strong></p>
 <ul>
@@ -249,7 +260,7 @@ capability flags</li>
 <ul>
 <li>Plugin extraction: dashbox, dockerbox, minibox-secrets, tailbox, minibox-bench moved to
 <code>minibox-plugins</code> workspace</li>
-<li><code>cargo xtask pre-commit</code> — fmt-check + clippy + release build (macOS-safe)</li>
+<li><code>cargo xtask pre-commit</code> — staged fmt/clippy plus config/docs checks (macOS-safe)</li>
 <li>CI <code>all-features</code> job, coverage-check gate (handler 80% threshold)</li>
 <li>Stability checklist enforcement gates, protocol-drift detection workflow</li>
 <li><code>init_tracing()</code> with <code>MINIBOX_TRACE_LEVEL</code> env var</li>

@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,12 +177,26 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="minibox-roadmap"><a class="header" href="#minibox-roadmap">Minibox Roadmap</a></h1>
-<p>Last updated: 2026-05-13</p>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox/src/daemon/handler</li>
+<li>crates/minibox/src/adapters/network/bridge.rs</li>
+<li>crates/minibox-core/src/domain/exec.rs</li>
+<li>crates/minibox-core/src/image/dockerfile.rs</li>
+<li>crates/minibox/src/adapters/docker_desktop.rs</li>
+<li>Justfile</li>
+<li>xtask/src/main.rs
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="minibox-roadmap"><a class="header" href="#minibox-roadmap">Minibox Roadmap</a></h1>
+<p>Last updated: 2026-08-22</p>
 <h2 id="engineering-priorities"><a class="header" href="#engineering-priorities">Engineering Priorities</a></h2>
 <h3 id="p0--stability-gates"><a class="header" href="#p0--stability-gates">P0 – Stability Gates</a></h3>
 <ul>
-<li><strong>Handler coverage &gt;= 80%</strong>: <code>minibox/src/daemon/handler.rs</code> was at 67.5%
+<li><strong>Handler coverage &gt;= 80%</strong>: <code>crates/minibox/src/daemon/handler/</code> was at 67.5%
 function / 55% line coverage. Recent work (exhaustive small-domain tests #342,
 barrier-based race tests #344, roundtrip property tests #345, stream/transport
 trait extraction #343, handler tests split by feature #320) has substantially
@@ -214,7 +228,7 @@ enumeration tests (#342).</li>
 <li><strong>Stream/transport trait extraction</strong>: <code>StreamReader</code>/<code>StreamWriter</code> traits
 extracted from handler for isolated unit testing (#343).</li>
 <li><strong>Mutation audit checklist</strong>: Security module mutation coverage documented
-in <code>docs/SECURITY_INVARIANTS.md</code> (#341).</li>
+in <code>docs/core/SECURITY_INVARIANTS.mbx.md</code> (#341).</li>
 <li><strong>StateRepository persistence</strong>: <code>StateRepository</code> wired into <code>DaemonState</code>
 for durable container state across daemon restarts (#315).</li>
 <li><strong>Handler tests split by feature</strong>: <code>daemon_handler_tests</code> decomposed into

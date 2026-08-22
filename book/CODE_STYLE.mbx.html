@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-d8edc199.js"></script>
@@ -177,7 +177,18 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="code-style-and-conventions"><a class="header" href="#code-style-and-conventions">Code Style and Conventions</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/minibox-macros
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="code-style-and-conventions"><a class="header" href="#code-style-and-conventions">Code Style and Conventions</a></h1>
 <p>Minibox is a Rust 2024 container runtime. This document records the patterns observed throughout
 the codebase — follow them when adding or modifying code.</p>
 <hr>
@@ -278,8 +289,8 @@ pub enum ImageError {
 <li>Use named fields (<code>{ path: String }</code>) not tuple variants for anything beyond a bare wrapper.</li>
 <li>Always include <code>#[source]</code> on the field that is a wrapped lower-level error.</li>
 <li>Include <code>Other(String)</code> as a catch-all last variant for un-enumerated cases.</li>
-<li>Cross-platform error types live in <code>minibox-core/src/error.rs</code>. Linux-specific errors
-(anything depending on <code>nix</code>) live in <code>minibox/src/error.rs</code>.</li>
+<li>Cross-platform error types live in <code>crates/minibox-core/src/error.rs</code>. Linux-specific errors
+(anything depending on <code>nix</code>) live in <code>crates/minibox/src/error.rs</code>.</li>
 </ul>
 <h3 id="anyhow-for-propagation"><a class="header" href="#anyhow-for-propagation"><code>anyhow</code> for propagation</a></h3>
 <p>Production functions return <code>anyhow::Result&lt;T&gt;</code>. Always attach context to every <code>?</code>:</p>
@@ -356,7 +367,7 @@ tracing::info!("Container {} started with PID {}", id, pid);</code></pre>
 <hr>
 <h2 id="5-architecture"><a class="header" href="#5-architecture">5. Architecture</a></h2>
 <p>Minibox follows the <strong>hexagonal (ports and adapters)</strong> pattern:</p>
-<pre><code class="language-text">Domain Layer (minibox-core/src/domain.rs)
+<pre><code class="language-text">Domain Layer (minibox-core/src/domain/)
   → Defines trait "ports": ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime
   → Zero infrastructure imports
 
@@ -370,12 +381,12 @@ Composition Root (miniboxd/src/main.rs)
 </code></pre>
 <p>Rules:</p>
 <ul>
-<li>Domain traits live exclusively in <code>minibox-core/src/domain.rs</code>. Never add a trait there that
+<li>Domain traits live under <code>crates/minibox-core/src/domain/</code>. Never add a trait there that
 imports from <code>nix</code>, <code>libc</code>, or any platform crate.</li>
-<li>New adapter suites are added to <code>minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
+<li>New adapter suites are added to <code>crates/minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
 (smolvm/krun macOS VM adapters) and exported from the module root.</li>
 <li><code>HandlerDependencies</code> is the single struct injected into all request handlers. Adding a field
-requires updating all adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</li>
+requires updating all adapter suite construction sites in <code>crates/miniboxd/src/main.rs</code>.</li>
 <li><code>Dyn</code> type aliases (<code>DynImageRegistry</code>, etc.) are defined alongside each trait and used in
 <code>HandlerDependencies</code> to avoid naming concrete types in handler code.</li>
 </ul>
@@ -391,7 +402,7 @@ on the slice it actually uses (Interface Segregation Principle):</p>
 }</code></pre>
 <p>When adding a new handler, declare it to accept the narrowest sub-struct it needs — not the full
 <code>HandlerDependencies</code>. When adding a field to <code>HandlerDependencies</code> or a sub-struct, update all
-adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
+adapter suite construction sites in <code>crates/miniboxd/src/main.rs</code>.</p>
 <h3 id="channel-send-failures"><a class="header" href="#channel-send-failures">Channel-send failures</a></h3>
 <p>Never discard handler channel-send failures with <code>let _ = tx.send(...)</code>. Use or follow the
 <code>send_error</code> helper pattern so dropped client connections appear in logs:</p>
@@ -413,8 +424,8 @@ adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
 <tr><th>Location</th><th>Scope</th><th>Contents</th></tr>
 </thead>
 <tbody>
-<tr><td><code>minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
-<tr><td><code>minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
+<tr><td><code>crates/minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
+<tr><td><code>crates/minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -716,8 +727,8 @@ protocol types:</p>
 <ol>
 <li><strong>Add/modify the type</strong> in <code>protocol.rs</code>.</li>
 <li><strong>Add <code>#[serde(default)]</code></strong> on any new optional field for wire compatibility.</li>
-<li><strong>Update handlers</strong> in <code>minibox/src/daemon/handler.rs</code> that pattern-match on the changed variant.</li>
-<li><strong>Update CLI</strong> <code>mbx/src/commands/</code> for the corresponding subcommand.</li>
+<li><strong>Update handlers</strong> in <code>crates/minibox/src/daemon/handler/</code> that pattern-match on the changed variant.</li>
+<li><strong>Update CLI</strong> <code>crates/mbx/src/commands/</code> for the corresponding subcommand.</li>
 <li><strong>Update snapshot tests</strong> — protocol evolution tests live in
 <code>crates/minibox-core/tests/protocol_evolution.rs</code>.</li>
 <li><strong>Run <code>cargo xtask verify</code></strong> to confirm fmt, clippy, and borrow fixtures pass.</li>
