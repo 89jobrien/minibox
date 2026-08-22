@@ -96,7 +96,11 @@ pub fn fix(sh: &Shell) -> Result<()> {
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
         // Re-stage any files rustfmt modified so the commit includes the formatted versions.
         // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
-        cmd!(sh, "git add -u -- . :!.worktrees")
+        // `cargo fmt` only ever touches `.rs` files — restrict the re-stage
+        // pathspec accordingly so this doesn't sweep in unrelated files that
+        // happened to already be dirty in the working tree (docs, HANDOFF
+        // state, checkpoint files, etc.) into the commit being made.
+        cmd!(sh, "git add -u -- *.rs :!.worktrees")
             .run()
             .context("git add -u after fmt failed")?;
         auto_bump(sh)?;
@@ -125,7 +129,11 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 
     if rust_staged {
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
-        cmd!(sh, "git add -u -- . :!.worktrees")
+        // `cargo fmt` only ever touches `.rs` files — restrict the re-stage
+        // pathspec accordingly so this doesn't sweep in unrelated files that
+        // happened to already be dirty in the working tree (docs, HANDOFF
+        // state, checkpoint files, etc.) into the commit being made.
+        cmd!(sh, "git add -u -- *.rs :!.worktrees")
             .run()
             .context("git add -u after fmt failed")?;
         cmd!(
