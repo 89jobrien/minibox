@@ -1,8 +1,9 @@
 project: minibox
 id: minibox
-updated: 2026-08-20
+updated: 2026-08-22
 items:
 - id: uncommitted-work
+  doob_uuid: null
   name: uncommitted-work
   priority: P1
   status: open
@@ -60,17 +61,9 @@ items:
   - crates/minibox/src/daemon/state.rs
   - crates/minibox/src/lib.rs
   - kani.crux
+  completed: null
+  extra: []
 log:
 - date: '20260820.232101'
   summary: done=163 running=0 pending=2 blocked=0
-  commits:
-  - a96ce554f0276d0c994d7d78b5c633c27cc5aeae
-  - f708089844f598582384d17ffd12a8d0b9a09cf2
-  - d0a23a2e5b8f067b71467d716b659975b88dbfc1
-  - f8796ce57761963ee2010610bb31f7c7eb42a0fb
-  - fbe4e01cf039b1047d95e97ef8ad6056f809c570
-  - 4515618870fb2f57eec7bec4ab1febf611f31792
-  - 4add60894f29527483dd1200aae362faad78f589
-  - f1366813cabadef756d8d8249bcc75eb8cf8cee9
-  - b949f8c92b8f3e2f2fa7250312185060d623e925
-  - d0f6556adfbdbed5054bdce9b0052875b528b834
+  commits: []

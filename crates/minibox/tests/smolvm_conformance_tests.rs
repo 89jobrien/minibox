@@ -146,6 +146,26 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
         .await
         .expect("load image into smolvm");
 
+    // The loader script's own content (docker load / docker tag) is written
+    // to a file in the mounted directory and referenced by path, not passed
+    // inline as an exec argument — smolvm's `machine run -- <args>` transport
+    // re-splits embedded newlines in a single argv element, corrupting an
+    // inline `sh -c <script>` string, so the script survives as a file
+    // instead (see `DOCKER_LOAD_AND_TAG_SCRIPT` doc comment in smolvm.rs).
+    let script_path = tarball
+        .parent()
+        .expect("tarball has parent dir")
+        .join("docker-load-and-tag.sh");
+    let script_contents = std::fs::read_to_string(&script_path).expect("read loader script");
+    assert!(
+        script_contents.contains("docker load"),
+        "smolvm load script must run docker load inside the VM, got: {script_contents}"
+    );
+    assert!(
+        script_contents.contains("docker tag"),
+        "smolvm load script must tag the loaded image for mbx run, got: {script_contents}"
+    );
+
     let calls = calls.lock().expect("calls lock");
     let flattened = calls
         .iter()
@@ -154,12 +174,8 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
         .collect::<Vec<_>>()
         .join(" ");
     assert!(
-        flattened.contains("docker load"),
-        "smolvm load must run docker load inside the VM, got: {flattened}"
-    );
-    assert!(
-        flattened.contains("docker tag"),
-        "smolvm load must tag the loaded image for mbx run, got: {flattened}"
+        flattened.contains("docker-load-and-tag.sh"),
+        "smolvm load must exec the loader script by path, got: {flattened}"
     );
     // The `library/` namespace prefix is stripped so the tag matches what
     // `has_image`/`pull_image` look for later (issue #457 regression coverage).

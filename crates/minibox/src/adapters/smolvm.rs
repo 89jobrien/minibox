@@ -24,7 +24,6 @@ use std::process::Command;
 use std::sync::Arc;
 
 use crate::adapters::DockerHubRegistry;
-use crate::adapters::docker_archive::build_docker_load_tarball;
 
 /// Default smolvm image used for container operations.
 const DEFAULT_IMAGE: &str = "ubuntu:24.04";
@@ -183,13 +182,11 @@ async fn run_vm_exec(
 /// `SmolVM` implementation of [`ImageRegistry`].
 ///
 /// Pulls images on the host via [`DockerHubRegistry`] (real OCI registry
-/// client, no VM/network round-trip through the guest), then packages the
-/// result into a `docker load` tarball and imports it into the VM's
-/// docker-local image cache — see [`crate::adapters::docker_archive`]. This
-/// avoids depending on the ephemeral guest VM having working outbound
-/// network access and a running docker daemon just to pull; the guest still
-/// needs a running docker daemon for `load_image`/`has_image` and to run
-/// containers, but no longer for the pull itself.
+/// client, no VM/network round-trip through the guest) to populate the
+/// shared [`ImageStore`] for `has_image`/`mbx images`/size-limit checks. The
+/// actual container run boots the requested image directly via smolvm's own
+/// native OCI pull (see [`SmolVmRuntime::spawn_process`]) — no docker
+/// dependency anywhere in this path.
 pub struct SmolVmRegistry {
     /// Image to use for the VM (default: ubuntu:24.04).
     image: String,
@@ -197,9 +194,6 @@ pub struct SmolVmRegistry {
     executor: Option<SmolVmExecutor>,
     /// Host-side OCI registry client backing the actual pull.
     inner: DockerHubRegistry,
-    /// Shared host-side image store `inner` pulls into; also read back when
-    /// building the docker-load tarball for VM import.
-    store: Arc<ImageStore>,
 }
 
 impl SmolVmRegistry {
@@ -212,12 +206,11 @@ impl SmolVmRegistry {
     /// Returns an error if the underlying OCI registry HTTP client cannot be
     /// initialised (e.g. TLS initialisation failure).
     pub fn new(store: Arc<ImageStore>) -> Result<Self> {
-        let inner = DockerHubRegistry::new(store.clone())?;
+        let inner = DockerHubRegistry::new(store)?;
         Ok(Self {
             image: DEFAULT_IMAGE.to_string(),
             executor: None,
             inner,
-            store,
         })
     }
 
@@ -288,32 +281,21 @@ impl ImageRegistry for SmolVmRegistry {
         self.inner.has_image(name, tag).await
     }
 
-    /// Pull an image on the host via [`DockerHubRegistry`], then package and
-    /// import it into the smolvm VM's docker-local image cache.
+    /// Pull an image on the host via [`DockerHubRegistry`] to populate the
+    /// shared [`ImageStore`] (used by `has_image`, `mbx images`, and
+    /// size-limit enforcement).
     ///
-    /// See the [`SmolVmRegistry`] doc comment for why the pull itself no
-    /// longer round-trips through the guest VM.
+    /// Unlike the previous design, this no longer packages the pulled layers
+    /// into a docker-load tarball or imports them into a VM-local docker
+    /// cache: `SmolVmRuntime::spawn_process` passes the requested image ref
+    /// straight to `smolvm machine run --image`, which pulls and boots the
+    /// OCI image natively via smolvm's own registry client — no docker
+    /// binary needed on the host or inside the guest.
     async fn pull_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
     ) -> Result<ImageMetadata> {
-        let metadata = self.inner.pull_image(image_ref).await?;
-
-        let cache_name = image_ref.cache_name();
-        let tag = image_ref.tag.clone();
-        let store = self.store.clone();
-        let export_name = cache_name.clone();
-        let export_tag = tag.clone();
-        let export_dir = std::env::temp_dir().join("minibox-smolvm-export");
-        let tarball = tokio::task::spawn_blocking(move || {
-            build_docker_load_tarball(&store, &export_name, &export_tag, &export_dir)
-        })
-        .await
-        .map_err(|e| anyhow!("docker-archive export: join error: {e}"))??;
-
-        self.load_image(&tarball, &cache_name, &tag).await?;
-
-        Ok(metadata)
+        self.inner.pull_image(image_ref).await
     }
 
     /// Layer paths live inside the VM's image cache. Return a stable VM-local
@@ -490,7 +472,16 @@ impl ContainerRuntime for SmolVmRuntime {
             (self.vm_exec(&command).await?, 0)
         } else {
             const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
-            let image = self.image.clone();
+            // Boot the actual requested container image (e.g. "alpine",
+            // "python:3.12-alpine") directly via smolvm's native OCI pull,
+            // not the fixed VM base image — `config.image_ref` is set by
+            // `handle_run` for every request. Falls back to `self.image`
+            // only for callers that don't set it (there should be none in
+            // the smolvm suite; kept defensive rather than panicking).
+            let image = config
+                .image_ref
+                .clone()
+                .unwrap_or_else(|| self.image.clone());
             let command_owned: Vec<String> = command.iter().map(|s| (*s).to_owned()).collect();
             let volumes_owned = volumes.clone();
             let env_pairs_owned = env_pairs.clone();

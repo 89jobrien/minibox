@@ -762,8 +762,13 @@ async fn prepare_run(
 
     let skip_net_ns = net_mode == NetworkMode::Host;
 
-    // Build ContainerRecord in Created state.
-    let image_label = format!("{image}:{tag}");
+    // Build ContainerRecord in Created state. Use `full_image` (the parsed,
+    // canonical name from `image_ref`), not the raw `image` param — when the
+    // caller passes a combined "name:tag" string as `image` with no separate
+    // `tag`, `image` still holds the untouched "name:tag" text, so
+    // `format!("{image}:{tag}")` would double up the tag (e.g.
+    // "python:3.12-alpine:3.12-alpine").
+    let image_label = format!("{full_image}:{tag}");
     let record = build_container_record(ContainerRecordBuildParams {
         id: &id,
         name: &name,
