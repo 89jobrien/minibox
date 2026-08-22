@@ -51,7 +51,9 @@ structured tracing, property testing.
 Requires Linux, root, kernel 5.0+, cgroups v2, overlay FS.
 
 First-time contributors: run `just install-hooks` and `cargo xtask doctor` to verify your
-toolchain and environment before building — see [`DEVELOPMENT.md`](DEVELOPMENT.md).
+toolchain and environment before building — see
+[`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md). For per-environment usage
+workflows (systemd, GKE, WSL2, Colima) see [`docs/core/USAGE.mbx.md`](docs/core/USAGE.mbx.md).
 
 ```bash
 # Build
@@ -234,7 +236,9 @@ just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```
 
 The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md).
+macOS without root. See [`docs/core/TESTING.mbx.md`](docs/core/TESTING.mbx.md) for the full test
+strategy and [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md) for how
+the harness is built.
 
 ---
 
@@ -247,7 +251,7 @@ just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 ```
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
+See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the full workflow.
 
 ---
 

@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
+            window.path_to_searchindex_js = "searchindex-c1193201.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d8edc199.js"></script>
+        <script src="toc-b1eea390.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -1027,19 +1027,6 @@ thread for GCD completion-handler callbacks. <a href="#fr-5-1">↩</a></p>
 </li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div>
-<hr>
-<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
-sources:</p>
-<ul>
-<li>crates/mbx</li>
-<li>crates/miniboxd</li>
-<li>ops/install-systemd.sh</li>
-<li>crates/minibox/src/adapters/docker_desktop.rs</li>
-<li>xtask/src/main.rs</li>
-<li>crates/minibox-bench
-generated: 2026-08-22</li>
-</ul>
-<hr>
 <h1 id="usage"><a class="header" href="#usage">Usage</a></h1>
 <p>This document provides practical usage workflows for <code>minibox</code> across local Linux, systemd ops, macOS/Colima dogfooding, and experimental controller-driven flows.</p>
 <p><strong>Quick Start (Linux)</strong></p>
@@ -1256,20 +1243,9 @@ canonical numbers.</p>
   end
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
-<hr>
-<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
-sources:</p>
-<ul>
-<li>xtask/src/main.rs</li>
-<li>Justfile</li>
-<li>scripts</li>
-<li>crates/miniboxd/src/adapter_registry.rs
-generated: 2026-08-22</li>
-</ul>
-<hr>
 <h1 id="development-guide"><a class="header" href="#development-guide">Development Guide</a></h1>
 <p>Canonical developer workflow for minibox. See <code>CLAUDE.md</code> for architecture
-details, <code>docs/core/TESTING.mbx.md</code> for the full test strategy, and <code>docs/core/SUPPORT_TIERS.mbx.md</code> for crate and
+details, <code>TESTING.md</code> for the full test strategy, and <code>docs/core/SUPPORT_TIERS.mbx.md</code> for crate and
 adapter support-tier definitions.</p>
 <h2 id="quick-start-for-new-contributors"><a class="header" href="#quick-start-for-new-contributors">Quick Start for New Contributors</a></h2>
 <p>Three commands cover 95% of daily development:</p>
@@ -2205,20 +2181,6 @@ New adapter? Update composition   → miniboxd/src/main.rs (all suites)
 New HandlerDependencies field?    → update all construction sites
 </code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
-<hr>
-<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
-sources:</p>
-<ul>
-<li>xtask/src/main.rs</li>
-<li>Justfile</li>
-<li>fuzz</li>
-<li>crates/minibox-testsuite</li>
-<li>crates/minibox/src/testing</li>
-<li>crates/minibox-core/src/adapters</li>
-<li>.github/workflows
-generated: 2026-08-22</li>
-</ul>
-<hr>
 <h1 id="testing-guide"><a class="header" href="#testing-guide">Testing Guide</a></h1>
 <p>Full test strategy for minibox. Tests follow a six-dimension progression —
 each dimension unlocks confidence at a different stage. Applying the wrong
@@ -2812,7 +2774,7 @@ protocol-drift, protocol-sites, adapter-coverage, no-unwrap, repo-clean),
 context, changes).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+<p>source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
 sources:</p>
 <ul>
 <li>Cargo.toml</li>
@@ -2829,8 +2791,7 @@ sources:</p>
 <li>crates/minibox-bench</li>
 <li>xtask</li>
 <li>crates/minibox-macros</li>
-<li>crates/minibox-testsuite</li>
-<li>docs/core/STABILITY_CHECKLIST.mbx.md
+<li>crates/minibox-testsuite
 generated: 2026-08-22</li>
 </ul>
 <hr>
@@ -3184,7 +3145,7 @@ inside <code>minibox-test-slice/runner-leaf</code> via <code>cargo xtask run-cgr
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+<p>source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
 sources:</p>
 <ul>
 <li>crates/minibox-core</li>
@@ -3195,8 +3156,7 @@ sources:</p>
 <li>crates/smolbox</li>
 <li>crates/minibox/src/adapters/colima.rs</li>
 <li>crates/winbox</li>
-<li>crates/minibox/src/adapters/docker_desktop.rs</li>
-<li>docs/core/STABILITY_CHECKLIST.mbx.md
+<li>crates/minibox/src/adapters/docker_desktop.rs
 generated: 2026-08-22</li>
 </ul>
 <hr>
@@ -3829,14 +3789,12 @@ without <code>..</code> components).</p>
 <h1 id="docs-audit"><a class="header" href="#docs-audit">Docs Audit</a></h1>
 <div style="break-before: page; page-break-before: always;"></div>
 <hr>
-<p>source_sha: c69c09ac33a9896a652361c50c988f426efc41be
+<p>source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
 sources:</p>
 <ul>
 <li>.github/workflows</li>
 <li>xtask/src/main.rs</li>
-<li>CONTRIBUTING.md</li>
-<li>docs/core/SUPPORT_TIERS.mbx.md</li>
-<li>docs/core/CRATE_TIERS.mbx.md
+<li>CONTRIBUTING.md
 generated: 2026-08-22</li>
 </ul>
 <hr>
@@ -4963,22 +4921,6 @@ platform-adapter-selection, container-lifecycle.</li>
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

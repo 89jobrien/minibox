@@ -1,14 +1,15 @@
 <!DOCTYPE HTML>
-<html lang="en" class="light sidebar-visible" dir="ltr">
+<html lang="en" class="rust sidebar-visible" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Usage - minibox</title>
+        <title>minibox</title>
+        <meta name="robots" content="noindex">
 
 
         <!-- Custom HTML head -->
 
-        <meta name="description" content="Agentic container runtime.">
+        <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
@@ -33,12 +34,12 @@
         <!-- Provide site root and default themes to javascript -->
         <script>
             const path_to_root = "";
-            const default_light_theme = "light";
-            const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
+            const default_light_theme = "rust";
+            const default_dark_theme = "ayu";
+            window.path_to_searchindex_js = "searchindex-614a4aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d8edc199.js"></script>
+        <script src="toc-675d490a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -76,7 +77,7 @@
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
-            html.classList.remove('light')
+            html.classList.remove('rust')
             html.classList.add(theme);
             html.classList.add("js");
         </script>
@@ -143,7 +144,7 @@
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
-                        <a href="https://github.com/89jobrien/minibox" title="Git repository" aria-label="Git repository">
+                        <a href="https://www.github.com/89jobrien/minibox" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
@@ -177,246 +178,91 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <hr>
-<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
-sources:</p>
-<ul>
-<li>crates/mbx</li>
-<li>crates/miniboxd</li>
-<li>ops/install-systemd.sh</li>
-<li>crates/minibox/src/adapters/docker_desktop.rs</li>
-<li>xtask/src/main.rs</li>
-<li>crates/minibox-bench
-generated: 2026-08-22</li>
-</ul>
-<hr>
-<h1 id="usage"><a class="header" href="#usage">Usage</a></h1>
-<p>This document provides practical usage workflows for <code>minibox</code> across local Linux, systemd ops, macOS/Colima dogfooding, and experimental controller-driven flows.</p>
-<p><strong>Quick Start (Linux)</strong></p>
-<pre><code class="language-bash"># Build
-cargo build --release
-
-# Optional host sanity check
-just doctor
-
-# Start daemon (requires root)
-sudo ./target/release/miniboxd
-
-# Pull and run
-sudo ./target/release/mbx pull alpine
-sudo ./target/release/mbx run alpine -- /bin/echo "Hello from minibox!"
+                        <h1 id="minibox"><a class="header" href="#minibox">minibox</a></h1>
+<p>Welcome to the minibox documentation.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h1>
+<!-- Describe workspace structure and crate relationships -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="minibox-core"><a class="header" href="#minibox-core">minibox-core</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="minibox-macros"><a class="header" href="#minibox-macros">minibox-macros</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="minibox-1"><a class="header" href="#minibox-1">minibox</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="macbox"><a class="header" href="#macbox">macbox</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="miniboxd"><a class="header" href="#miniboxd">miniboxd</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="winbox"><a class="header" href="#winbox">winbox</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="smolbox"><a class="header" href="#smolbox">smolbox</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="mbx"><a class="header" href="#mbx">mbx</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="minibox-crux-plugin"><a class="header" href="#minibox-crux-plugin">minibox-crux-plugin</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="minibox-testsuite"><a class="header" href="#minibox-testsuite">minibox-testsuite</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="xtask"><a class="header" href="#xtask">xtask</a></h1>
+<!-- Crate documentation -->
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
+<h2 id="taskittoml"><a class="header" href="#taskittoml">taskit.toml</a></h2>
+<p>All configuration lives in <code>taskit.toml</code> at the workspace root.</p>
+<h3 id="sections"><a class="header" href="#sections">Sections</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Section</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>[workspace]</code></td><td>Crate list, propagation rules, offline skip</td></tr>
+<tr><td><code>[protocol]</code></td><td>Contract surface drift detection</td></tr>
+<tr><td><code>[coverage]</code></td><td>Coverage enforcement</td></tr>
+<tr><td><code>[ci]</code></td><td>Pipeline steps</td></tr>
+<tr><td><code>[flow]</code></td><td>Git branching workflow</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ci-pipeline"><a class="header" href="#ci-pipeline">CI Pipeline</a></h1>
+<p>Run the full pipeline:</p>
+<pre><code class="language-sh">cargo xtask ci
 </code></pre>
-<p><strong>Local Ops (systemd)</strong></p>
-<pre><code class="language-bash"># Build
-cargo build --release
-
-# Install binary + systemd unit + minibox.slice
-sudo ./ops/install-systemd.sh
-
-# Enable and start
-sudo systemctl enable --now miniboxd
-
-# Verify
-sudo systemctl status miniboxd --no-pager
-sudo /usr/local/bin/mbx ps
-</code></pre>
-<p><strong>Common CLI Workflows</strong></p>
-<pre><code class="language-bash"># List containers
-sudo /usr/local/bin/mbx ps
-
-# Pull image
-sudo /usr/local/bin/mbx pull alpine
-
-# Run container
-sudo /usr/local/bin/mbx run alpine -- /bin/echo "Hello from minibox!"
-
-# Name it for later exec/logs/stop calls
-sudo /usr/local/bin/mbx run --name demo alpine -- /bin/sh
-
-# Exec into an existing container
-sudo /usr/local/bin/mbx exec demo -- /bin/sh
-
-# Pause / resume
-sudo /usr/local/bin/mbx pause demo
-sudo /usr/local/bin/mbx resume demo
-
-# Inspect logs and lifecycle events
-sudo /usr/local/bin/mbx logs demo
-sudo /usr/local/bin/mbx logs --follow demo
-sudo /usr/local/bin/mbx events
-
-# Load a local OCI tarball and run it
-sudo /usr/local/bin/mbx load ./mbx-tester.tar --name mbx-tester
-sudo /usr/local/bin/mbx run mbx-tester -- /run-tests.sh
-
-# Clean up images
-sudo /usr/local/bin/mbx prune
-sudo /usr/local/bin/mbx rmi alpine:latest
-</code></pre>
-<p><strong>Environment-Specific Usage</strong></p>
-<p><strong>GKE (Unprivileged Pods)</strong></p>
-<pre><code class="language-bash"># Select GKE adapter at daemon startup
-MINIBOX_ADAPTER=gke sudo ./target/release/miniboxd
-
-# Or specify proot binary location
-MINIBOX_PROOT_PATH=/usr/local/bin/proot MINIBOX_ADAPTER=gke sudo ./target/release/miniboxd
-</code></pre>
-<p><strong>Windows (WSL2)</strong></p>
-<pre><code class="language-bash"># Build and run inside WSL2
-cargo build --release
-sudo ./target/release/miniboxd
-sudo ./target/release/mbx ps
-</code></pre>
-<p><strong>macOS (Colima)</strong></p>
-<pre><code class="language-bash"># Requires Colima running on the host
-colima start
-MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
-</code></pre>
-<p>Colima is the current macOS dogfood path. The Docker Desktop adapter exists in
-<code>crates/minibox/src/adapters/docker_desktop.rs</code> but is not yet wired into <code>miniboxd</code>.</p>
-<p><strong>macOS Dogfood Flow</strong></p>
-<pre><code class="language-bash"># Build the Linux test image tarball
-cargo xtask build-test-image
-
-# Start the daemon against Colima
-MINIBOX_ADAPTER=colima sudo ./target/release/miniboxd
-
-# Run the end-to-end Linux suite inside minibox
-cargo xtask test-linux
-</code></pre>
-<p><strong>macOS (VZ.framework)</strong></p>
-<p><code>MINIBOX_ADAPTER=vz</code> was removed in 2026-05-08. The vz adapter code has been dropped from the
-workspace. Use Colima or smolvm as the macOS path.</p>
-<p><strong>Experimental Controller (<code>mbxctl</code>) — REMOVED</strong></p>
-<blockquote>
-<p>NOTE: The <code>mbxctl</code> crate no longer exists in the workspace. It was extracted to the
-<code>minibox-plugins</code> workspace. The HTTP/SSE controller surface is not currently available
-from this workspace.</p>
-</blockquote>
-<p><strong>Integration Notes</strong>
-The CLI communicates with the daemon over a Unix socket at <code>/run/minibox/miniboxd.sock</code> on Linux. If <code>minibox ps</code> fails with “No such file or directory,” the daemon is not running or the socket has not been created yet. Ensure the daemon is started and healthy (<code>systemctl status miniboxd</code> or <code>journalctl -u miniboxd -f</code>).</p>
-<p>On macOS the default socket path is <code>/tmp/minibox/miniboxd.sock</code>.</p>
-<h2 id="forward-direction"><a class="header" href="#forward-direction">Forward Direction</a></h2>
-<p>Near-term work is concentrated in a few areas:</p>
-<ul>
-<li>dogfood minibox for agent control via an MCP server surface</li>
-<li>run AI-generated scripts and tests inside disposable minibox containers</li>
-<li>push commit/build/push parity further across <code>linux-native</code> and <code>colima</code></li>
-<li>let CI agents create and tear down their own minibox-managed test environments</li>
-</ul>
-<p>See <code>docs/core/ROADMAP.mbx.md</code> for the active roadmap.</p>
-<h2 id="vm-image-cas-overlay"><a class="header" href="#vm-image-cas-overlay">VM Image CAS Overlay</a></h2>
-<p>The VM image build supports a content-addressed overlay at <code>~/.mbx/vm/overlay/</code>. Files placed here
-are copied into the rootfs at build time. CAS (content-addressed storage) tracking lets you detect
-drift between what was installed and what is running.</p>
-<p><strong>Layout</strong></p>
-<pre><code>~/.mbx/vm/overlay/
-  cas/&lt;sha256&gt;   ← file content, named by sha256 of content
-  refs/&lt;name&gt;    ← text file containing a sha256, maps a name to a CAS object
-</code></pre>
-<p><strong>Adding a file to the CAS store</strong></p>
-<pre><code class="language-bash"># Add a file; optionally create a named ref
-cargo xtask cas-add /path/to/myconfig --ref myconfig
-# Output:
-#   cas: &lt;sha256&gt;  /path/to/myconfig
-#   ref: myconfig -&gt; &lt;sha256&gt;
-</code></pre>
-<p><strong>Checking for drift</strong></p>
-<pre><code class="language-bash">cargo xtask cas-check
-# Output per ref:
-#   OK  myconfig
-#   DRIFT  other  expected=&lt;hash&gt;  got=&lt;actual&gt;
-</code></pre>
-<p>Exits non-zero if any drift is found.</p>
-<p><strong>In-VM drift check</strong></p>
-<p>After <code>cargo xtask build-test-image</code>, <code>/etc/minibox-cas-refs</code> is written into the rootfs (one line
-per ref, tab-separated: <code>&lt;name&gt;\t&lt;sha256&gt;</code>). Run <code>/sbin/check-drift.sh</code> inside the VM to verify
-installed files match their expected hashes.</p>
-<pre><code class="language-bash"># Inside the Alpine VM shell
-/sbin/check-drift.sh
-</code></pre>
-<h2 id="benchmark"><a class="header" href="#benchmark">Benchmark</a></h2>
-<p>All criterion benchmarks live in <code>crates/minibox-bench</code>.</p>
-<pre><code class="language-bash">just bench                               # run benches, save to bench/results/
-just bench-check                         # compare against the per-env baseline
-just bench-baseline                      # save results as the new per-env baseline
-cargo xtask bench                        # underlying command (--check / --save-baseline / --env)
-</code></pre>
-<blockquote>
-<p>Results are written to <code>bench/results/</code> (gitignored). Tracked per-env baselines live at
-<code>bench/baseline.{local,selfhosted,hosted}.json</code>; the nightly CI bench job produces the
-canonical numbers.</p>
-</blockquote>
-<pre><code class="language-mmd">graph TD
-  subgraph BUGS ["Bugs"]
-      B60["#60 bug·p1\nfork() in Tokio runtime"]
-      B61["#61 bug·vz·blocked\nVZErrorInternal macOS 26"]
-  end
-
-  subgraph COLIMA ["Colima path"]
-      C90["#90 feat·colima·p1\nWire macbox Colima adapters"]
-      C89["#89 feat·colima·e2e·p2\nDogfood create→commit→push"]
-      C80["#80 testing·p2\nRegression tests rootfs metadata"]
-      C90 --&gt; C89
-      C90 --&gt; C80
-  end
-
-  subgraph VZ ["VZ / Virtualization.framework (all blocked on #61)"]
-      V84["#84 feat·vz·blocked\nProvision Linux VM via VF"]
-      V88["#88 feat·vz·blocked\nminibox-agent in-VM daemon"]
-      V93["#93 feat·vz·blocked\nvsock I/O bridge"]
-      V75["#75 feat·vz·blocked\nvirtiofs host-path mounts"]
-      V85["#85 feat·vz·p2\nEncode VZ commit/build/push behavior"]
-      B61 --&gt; V84
-      V84 --&gt; V88
-      V88 --&gt; V93
-      V84 --&gt; V75
-  end
-
-  subgraph CONFORMANCE ["Conformance suite"]
-      CF82["#82 ✓ closed\nConformance boundary spec"]
-      CF92["#92 ✓ closed\nFixture helpers"]
-      CF67["#67 ✓ closed\nCommit conformance tests"]
-      CF71["#71 testing·conformance\nBuild conformance tests"]
-      CF62["#62 testing·conformance\nPush conformance tests"]
-      CF79["#79 testing·conformance\nValidate on Colima + Linux CI"]
-      CF77["#77 feat·conformance\nMarkdown/JSON reports"]
-      CF82 --&gt; CF67
-      CF82 --&gt; CF71
-      CF82 --&gt; CF62
-      CF92 --&gt; CF67
-      CF92 --&gt; CF71
-      CF92 --&gt; CF62
-      CF67 --&gt; CF79
-      CF71 --&gt; CF79
-      CF62 --&gt; CF79
-      C90 --&gt; CF79
-  end
-
-  subgraph NET ["Networking"]
-      N94["#94 feat·networking·p2\nveth/bridge"]
-  end
-
-  subgraph PTY ["Interactive I/O"]
-      P83["#83 feat·p2\nPTY/stdio piping"]
-  end
-
-  subgraph DAGU ["Dagu"]
-      D86["#86 fix·dagu·p2\nTier 2 mbx-dagu fixes"]
-  end
-</code></pre>
+<h2 id="steps"><a class="header" href="#steps">Steps</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Step</th><th>Command</th><th>Gate</th></tr>
+</thead>
+<tbody>
+<tr><td>Self-check</td><td><code>taskit self-check</code></td><td>Yes</td></tr>
+<tr><td>Format</td><td><code>taskit fmt --check</code></td><td>No</td></tr>
+<tr><td>Lint</td><td><code>taskit lint</code></td><td>No</td></tr>
+<tr><td>Compile tests</td><td><code>taskit compile-tests</code></td><td>No</td></tr>
+<tr><td>Test</td><td><code>taskit test</code></td><td>No</td></tr>
+<tr><td>Deps</td><td><code>taskit check-deps</code></td><td>No</td></tr>
+<tr><td>Drift</td><td><code>taskit check-protocol-drift</code></td><td>No</td></tr>
+</tbody>
+</table>
+</div>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="FEATURE_MATRIX.mbx.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
-                            </a>
 
-                            <a rel="next prefetch" href="DEVELOPMENT.mbx.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -424,13 +270,7 @@ canonical numbers.</p>
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="FEATURE_MATRIX.mbx.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
-                    </a>
 
-                    <a rel="next prefetch" href="DEVELOPMENT.mbx.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
-                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
-                    </a>
             </nav>
 
         </div>
@@ -474,6 +314,11 @@ canonical numbers.</p>
 
         <!-- Custom JS scripts -->
 
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
 
 
     </div>

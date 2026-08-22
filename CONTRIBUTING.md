@@ -24,8 +24,8 @@ What replaces the freeze:
 
 ## Development Workflow
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the canonical developer workflow, command
-reference, and CI gate descriptions.
+See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the canonical developer
+workflow, command reference, and CI gate descriptions.
 
 ### Quick gates
 

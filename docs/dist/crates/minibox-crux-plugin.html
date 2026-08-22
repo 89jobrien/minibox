@@ -1,44 +1,44 @@
 <!DOCTYPE HTML>
-<html lang="en" class="light sidebar-visible" dir="ltr">
+<html lang="en" class="rust sidebar-visible" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Testing - minibox</title>
+        <title>minibox-crux-plugin - minibox</title>
 
 
         <!-- Custom HTML head -->
 
-        <meta name="description" content="Agentic container runtime.">
+        <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-0392ca55.css">
-        <link rel="stylesheet" href="css/chrome-fc474251.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-0392ca55.css">
+        <link rel="stylesheet" href="../css/chrome-fc474251.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
-            const default_light_theme = "light";
-            const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5b9f0a8.js";
+            const path_to_root = "../";
+            const default_light_theme = "rust";
+            const default_dark_theme = "ayu";
+            window.path_to_searchindex_js = "../searchindex-614a4aa9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d8edc199.js"></script>
+        <script src="../toc-675d490a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -76,7 +76,7 @@
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             const html = document.documentElement;
-            html.classList.remove('light')
+            html.classList.remove('rust')
             html.classList.add(theme);
             html.classList.add("js");
         </script>
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,10 +140,10 @@
                     <h1 class="menu-title">minibox</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
-                        <a href="https://github.com/89jobrien/minibox" title="Git repository" aria-label="Git repository">
+                        <a href="https://www.github.com/89jobrien/minibox" title="Git repository" aria-label="Git repository">
                             <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
@@ -177,310 +177,18 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <hr>
-<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
-sources:</p>
-<ul>
-<li>xtask/src/main.rs</li>
-<li>Justfile</li>
-<li>fuzz</li>
-<li>crates/minibox-testsuite</li>
-<li>crates/minibox/src/testing</li>
-<li>crates/minibox-core/src/adapters</li>
-<li>.github/workflows
-generated: 2026-08-22</li>
-</ul>
-<hr>
-<h1 id="testing-guide"><a class="header" href="#testing-guide">Testing Guide</a></h1>
-<p>Full test strategy for minibox. Tests follow a six-dimension progression —
-each dimension unlocks confidence at a different stage. Applying the wrong
-dimension at the wrong stage wastes effort; skipping one leaves a gap.</p>
-<h2 id="the-six-dimensions"><a class="header" href="#the-six-dimensions">The Six Dimensions</a></h2>
-<pre><code>Idea -&gt; Unit -&gt; Property -&gt; Fuzz -&gt; Conformance -&gt; Integration -&gt; Regression
-         |          |        |           |              |              |
-      always   non-trivial  |        new impl        wiring        bug fixed
-               input space  |        complete
-                         unsafe/parser/
-                         protocol boundary
-</code></pre>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Dimension</th><th>When to apply</th><th>Question it answers</th></tr>
-</thead>
-<tbody>
-<tr><td>Unit</td><td>Function exists</td><td>Does this function do what I think it does?</td></tr>
-<tr><td>Property</td><td>Input space is non-trivial</td><td>Does this invariant hold for all valid inputs?</td></tr>
-<tr><td>Fuzz</td><td>Unsafe, parser, or protocol boundary</td><td>Does this code survive malformed or adversarial input?</td></tr>
-<tr><td>Conformance</td><td>Trait contract defined, impl complete</td><td>Does this impl satisfy the contract the trait promises?</td></tr>
-<tr><td>Integration</td><td>Components wired together</td><td>Do these parts work correctly when connected?</td></tr>
-<tr><td>Regression</td><td>Bug reproduced and fixed</td><td>Will this specific failure mode ever recur?</td></tr>
-</tbody>
-</table>
-</div>
-<hr>
-<h2 id="dimension-1-unit--always-first"><a class="header" href="#dimension-1-unit--always-first">Dimension 1: Unit — always, first</a></h2>
-<p>Write unit tests the moment a function exists. A function without a unit
-test has no verified behaviour.</p>
-<ul>
-<li>Scope: one function, pure logic</li>
-<li>Fakes over mocks — pass a <code>Vec</code>, not a <code>MockRepository</code></li>
-<li>Live in <code>#[cfg(test)]</code> in the same file</li>
-<li>Name: <code>fn &lt;thing&gt;_&lt;scenario&gt;_&lt;expected&gt;()</code></li>
-<li>Use <code>expect("reason")</code>, never bare <code>.unwrap()</code></li>
-</ul>
-<h3 id="platform-gating"><a class="header" href="#platform-gating">Platform gating</a></h3>
-<p>Gate Linux-only tests explicitly. macOS <code>cargo check</code> does not validate
-<code>#[cfg(target_os = "linux")]</code> paths.</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[cfg(target_os = "linux")]
-#[test]
-fn test_cgroup_limits() { ... }
-<span class="boring">}</span></code></pre>
-<h3 id="environment-mutation"><a class="header" href="#environment-mutation">Environment mutation</a></h3>
-<p><code>std::env::set_var</code> and <code>remove_var</code> are <code>unsafe</code> in Rust 2024. Serialize
-any test that mutates the environment with a shared mutex.</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>static ENV_LOCK: std::sync::Mutex&lt;()&gt; = std::sync::Mutex::new(());
-
-#[test]
-fn test_env_var() {
-    let _guard = ENV_LOCK.lock().unwrap();
-    unsafe { std::env::set_var("KEY", "val") };
-    // ...
-}
-<span class="boring">}</span></code></pre>
-<h3 id="commands"><a class="header" href="#commands">Commands</a></h3>
-<pre><code class="language-bash">cargo xtask test-unit          # lib + select integration + conformance
-just test-unit                 # equivalent shorthand
-</code></pre>
-<hr>
-<h2 id="dimension-2-property--when-the-input-space-is-non-trivial"><a class="header" href="#dimension-2-property--when-the-input-space-is-non-trivial">Dimension 2: Property — when the input space is non-trivial</a></h2>
-<p>If a function accepts strings, integers, collections, or any type with many
-possible values, a unit test only proves it works for the inputs you thought
-of. Property tests prove invariants hold for inputs you didn’t think of.</p>
-<ul>
-<li>Use <code>proptest</code>; strategies via <code>prop_compose!</code> for domain types</li>
-<li>Test invariants, not specific values: “output is always sorted”,
-“round-trip is lossless”</li>
-<li>Commit <code>proptest-regressions/</code> — these are found counterexamples, never
-delete them</li>
-<li>Good candidates: parsers, graph operations, serialisation, arithmetic</li>
-</ul>
-<h3 id="commands-1"><a class="header" href="#commands-1">Commands</a></h3>
-<pre><code class="language-bash">cargo xtask test-property      # ~46 proptest tests
-</code></pre>
-<p>Not in CI — run manually before pushing to <code>next</code>.</p>
-<hr>
-<h2 id="dimension-3-fuzz--for-unsafe-parsers-and-protocol-boundaries"><a class="header" href="#dimension-3-fuzz--for-unsafe-parsers-and-protocol-boundaries">Dimension 3: Fuzz — for unsafe, parsers, and protocol boundaries</a></h2>
-<p>If a function touches raw bytes, parses external input, handles untrusted
-data, or contains <code>unsafe</code>, fuzz it. Property tests generate structured
-inputs; fuzz tests generate arbitrary byte sequences.</p>
-<ul>
-<li>Use <code>cargo-fuzz</code> (libFuzzer); targets in <code>fuzz/fuzz_targets/</code></li>
-<li>Seed corpus in <code>fuzz/corpus/&lt;target&gt;/</code> — commit representative inputs</li>
-<li>Run locally: <code>cargo xtask fuzz</code> or
-<code>cargo fuzz run &lt;target&gt; -- -max_total_time=60</code></li>
-<li>Good candidates: tar extraction, OCI manifest parsing, socket framing,
-path validation, any function that calls <code>unsafe</code></li>
-<li>Fuzz seeds, corpus, and artifacts are gitignored</li>
-</ul>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// fuzz/fuzz_targets/fuzz_parse_manifest.rs
-#![no_main]
-use libfuzzer_sys::fuzz_target;
-
-fuzz_target!(|data: &amp;[u8]| {
-    if let Ok(s) = std::str::from_utf8(data) {
-        let _ = minibox_core::image::parse_manifest(s);
-    }
-});
-<span class="boring">}</span></code></pre>
-<hr>
-<h2 id="dimension-4-conformance--for-every-new-impl-trait"><a class="header" href="#dimension-4-conformance--for-every-new-impl-trait">Dimension 4: Conformance — for every new <code>impl Trait</code></a></h2>
-<p>A trait defines a contract. An impl that compiles is not necessarily correct.
-Conformance tests verify the impl satisfies the semantic invariants the trait
-promises — one suite per trait, reusable across all impls.</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>fn assert_port_contract&lt;T: MyPort&gt;(impl_under_test: T) {
-    // assert every invariant the trait doc promises
-}
-
-#[test]
-fn my_adapter_satisfies_port_contract() {
-    assert_port_contract(MyAdapter::new());
-}
-<span class="boring">}</span></code></pre>
-<h3 id="commands-2"><a class="header" href="#commands-2">Commands</a></h3>
-<pre><code class="language-bash">cargo xtask test-conformance          # run + report (Markdown/JSON)
-cargo xtask test-krun-conformance     # krun-specific variant
-</code></pre>
-<h3 id="borrow-reasoning-fixtures"><a class="header" href="#borrow-reasoning-fixtures">Borrow-reasoning fixtures</a></h3>
-<p>Standalone must-pass/must-fail Rust snippets that verify borrow-checker
-expectations. Not runtime tests — they validate that certain patterns
-compile (or correctly fail to compile).</p>
-<pre><code class="language-bash">cargo xtask borrow-fixtures           # 19 fixtures
-</code></pre>
-<hr>
-<h2 id="dimension-5-integration--when-wiring-is-complete"><a class="header" href="#dimension-5-integration--when-wiring-is-complete">Dimension 5: Integration — when wiring is complete</a></h2>
-<p>Integration tests verify that components work correctly when connected.
-They are slower and more expensive than unit tests — write them after the
-components are individually verified, not before.</p>
-<ul>
-<li>Live in <code>tests/</code> (separate compilation unit)</li>
-<li>Use real I/O boundaries where the test is specifically about that boundary</li>
-<li>Do not duplicate unit test coverage — test the wiring, not the logic</li>
-</ul>
-<h3 id="cli-subprocess-tests"><a class="header" href="#cli-subprocess-tests">CLI subprocess tests</a></h3>
-<p>Do not use <code>Command::cargo_bin()</code>. Use the existing <code>find_minibox()</code> helper
-or set <code>MINIBOX_TEST_BIN_DIR</code>.</p>
-<h3 id="protocol-changes"><a class="header" href="#protocol-changes">Protocol changes</a></h3>
-<p>Changes to <code>crates/minibox-core/src/protocol.rs</code> must be accompanied by
-updates to handlers, CLI paths, and snapshot tests in the same commit. New
-request fields use <code>#[serde(default)]</code> for wire compatibility.</p>
-<h3 id="snapshot-tests"><a class="header" href="#snapshot-tests">Snapshot tests</a></h3>
-<p>After <code>cargo nextest</code> runs, check for <code>.snap.new</code> files:</p>
-<pre><code class="language-bash">cargo insta review
-</code></pre>
-<h3 id="commands-3"><a class="header" href="#commands-3">Commands</a></h3>
-<pre><code class="language-bash"># Cgroup integration — Linux + root
-just test-integration
-
-# E2E daemon+CLI — Linux + root
-just test-e2e               # single lifecycle scenario
-just test-e2e-suite         # full suite (15 scenarios)
-just test-e2e-vps           # run suite on VPS via SSH
-
-# Adapter swap tests — cross-platform
-just test-adapters
-just test-cli-subprocess    # 30 CLI subprocess tests
-
-# Sandbox — Linux + root
-cargo xtask test-sandbox
-</code></pre>
-<hr>
-<h2 id="dimension-6-regression--after-every-bug-fix"><a class="header" href="#dimension-6-regression--after-every-bug-fix">Dimension 6: Regression — after every bug fix</a></h2>
-<p>Every bug that reaches production or a failing test represents a gap in the
-test suite. Close that gap permanently.</p>
-<ol>
-<li>Reproduce the bug with a minimal failing test</li>
-<li>Fix the bug</li>
-<li>Verify the test now passes</li>
-<li>If found by a property test, commit the <code>proptest-regressions/</code> file</li>
-</ol>
-<p>Never fix a bug without a regression test.</p>
-<h3 id="naming"><a class="header" href="#naming">Naming</a></h3>
-<pre><code class="language-text">regression_gh_NNN_short_description
-</code></pre>
-<p>Where <code>NNN</code> is the GitHub issue number. Examples:</p>
-<ul>
-<li><code>regression_gh_42_symlink_escape_in_tar</code></li>
-<li><code>regression_gh_108_overlay_cleanup_on_cgroup_error</code></li>
-</ul>
-<h3 id="rules"><a class="header" href="#rules">Rules</a></h3>
-<ul>
-<li>Never delete a regression test. If the code it covers is removed, mark it
-<code>#[ignore]</code> with a comment explaining why.</li>
-<li>Regression tests live alongside related unit/integration tests in the
-appropriate crate, not in a separate file.</li>
-<li>If the bug was found by a property test, commit the counterexample file.</li>
-</ul>
-<hr>
-<h2 id="test-counts"><a class="header" href="#test-counts">Test Counts</a></h2>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Category</th><th>Count (est.)</th><th>Platform</th><th>Root?</th><th>CI?</th></tr>
-</thead>
-<tbody>
-<tr><td>Unit (inline lib)</td><td>~728</td><td>any</td><td>no</td><td>yes</td></tr>
-<tr><td>Handler + conformance</td><td>~209</td><td>any</td><td>no</td><td>partial</td></tr>
-<tr><td>minibox-core conform.</td><td>126</td><td>any</td><td>no</td><td>yes</td></tr>
-<tr><td>Adapter isolation</td><td>~66</td><td>varies</td><td>varies</td><td>partial</td></tr>
-<tr><td>Property (proptest)</td><td>~46</td><td>any</td><td>no</td><td>no</td></tr>
-<tr><td>Security regression</td><td>~19</td><td>any</td><td>no</td><td>yes</td></tr>
-<tr><td>CLI subprocess</td><td>30</td><td>any</td><td>no</td><td>no</td></tr>
-<tr><td>krun conformance</td><td>~29</td><td>macOS/Linux</td><td>no</td><td>no</td></tr>
-<tr><td>Sandbox</td><td>~17</td><td>Linux</td><td>yes</td><td>no</td></tr>
-<tr><td>E2E daemon+CLI</td><td>15</td><td>Linux</td><td>yes</td><td>next/staging</td></tr>
-<tr><td>Cgroup integration</td><td>16</td><td>Linux</td><td>yes</td><td>next/staging</td></tr>
-<tr><td>Protocol evolution</td><td>11</td><td>any</td><td>no</td><td>yes</td></tr>
-</tbody>
-</table>
-</div>
-<p><code>cargo nextest</code> on macOS reports ~506 tests — that is the cross-platform
-subset. Linux-only, feature-gated, and root-required tests add ~700 more.
-Total estimate: ~1,467.</p>
-<hr>
-<h2 id="test-helpers"><a class="header" href="#test-helpers">Test Helpers</a></h2>
-<p>All helpers live behind the <code>test-utils</code> feature flag.</p>
-<p><strong><code>minibox::testing</code></strong> — enabled with <code>--features test-utils</code>:</p>
-<ul>
-<li><code>mocks/</code> — <code>MockRegistry</code>, <code>MockFilesystem</code>, <code>MockLimiter</code>,
-<code>MockRuntime</code>, <code>MockNetwork</code>, <code>MockExecRuntime</code>, <code>MockImagePusher</code>,
-<code>MockContainerCommitter</code>, <code>MockImageBuilder</code></li>
-<li><code>fixtures/</code> — <code>ContainerFixture</code>, <code>ImageFixture</code>,
-<code>BuildContextFixture</code>, <code>PushTargetFixture</code>, <code>UpperDirFixture</code></li>
-<li><code>helpers/</code> — <code>create_test_deps_with_dir</code>, GC helpers, daemon helpers</li>
-<li><code>backend/</code> — <code>BackendCapability</code>, <code>BackendDescriptor</code> (conformance)</li>
-</ul>
-<p><strong><code>minibox-core::adapters</code></strong> — enabled with <code>--features test-utils</code>:</p>
-<ul>
-<li><code>mocks.rs</code> — cross-platform mock adapters</li>
-<li><code>test_fixtures.rs</code> — shared fixtures</li>
-<li><code>conformance.rs</code> — conformance harness</li>
-</ul>
-<hr>
-<h2 id="ci-coverage"><a class="header" href="#ci-coverage">CI Coverage</a></h2>
-<p>Eight workflows run in GitHub Actions:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Workflow</th><th>Tests run</th><th>Branches</th></tr>
-</thead>
-<tbody>
-<tr><td><code>ci.yml</code></td><td>lint, unit, archive integration, audit/deny</td><td>all</td></tr>
-<tr><td><code>stability-gates.yml</code></td><td>doc-sync, adapter integration, no-unwrap, compile</td><td>all</td></tr>
-<tr><td><code>conformance.yml</code></td><td><code>cargo xtask test-conformance</code></td><td>next/staging</td></tr>
-<tr><td><code>bench-regression.yml</code></td><td>criterion + 10% regression gate</td><td>next/staging</td></tr>
-<tr><td><code>protocol-drift.yml</code></td><td>variant count + handler coverage (protocol.rs changes)</td><td>all</td></tr>
-<tr><td><code>nightly.yml</code></td><td><code>cargo geiger</code> unsafe audit (informational)</td><td>daily cron</td></tr>
-<tr><td><code>release.yml</code></td><td>musl cross-compile + publish</td><td><code>v*</code> tags</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="ci-gaps-not-covered-by-any-workflow"><a class="header" href="#ci-gaps-not-covered-by-any-workflow">CI gaps (not covered by any workflow)</a></h3>
-<p>The following require manual runs before merging to <code>next</code>:</p>
-<ul>
-<li>Property tests: <code>cargo xtask test-property</code></li>
-<li>Sandbox tests: <code>cargo xtask test-sandbox</code></li>
-<li>CLI subprocess: <code>just test-cli-subprocess</code></li>
-<li>krun conformance: <code>cargo xtask test-krun-conformance</code></li>
-<li>Coverage gate: <code>cargo xtask coverage-check</code></li>
-</ul>
-<hr>
-<h2 id="coverage"><a class="header" href="#coverage">Coverage</a></h2>
-<pre><code class="language-bash">just coverage                # HTML report at target/llvm-cov/html/
-cargo xtask coverage-check   # gate: handler.rs function coverage &gt;= 80%
-</code></pre>
-<h2 id="cleaning-test-state"><a class="header" href="#cleaning-test-state">Cleaning Test State</a></h2>
-<pre><code class="language-bash">cargo xtask nuke-test-state   # kill orphans, unmount overlays, clean cgroups
-just clean-test               # remove test binaries
-</code></pre>
+                        <h1 id="minibox-crux-plugin"><a class="header" href="#minibox-crux-plugin">minibox-crux-plugin</a></h1>
+<!-- Crate documentation -->
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="CODE_STYLE.mbx.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../crates/mbx.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="STATE_MODEL.mbx.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../crates/minibox-testsuite.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -490,11 +198,11 @@ just clean-test               # remove test binaries
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="CODE_STYLE.mbx.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../crates/mbx.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="STATE_MODEL.mbx.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../crates/minibox-testsuite.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -530,13 +238,13 @@ just clean-test               # remove test binaries
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-09f2665d.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-09f2665d.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-c22b7243.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-c22b7243.js"></script>
 
         <!-- Custom JS scripts -->
 
