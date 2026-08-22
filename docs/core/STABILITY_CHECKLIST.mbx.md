@@ -1,5 +1,5 @@
 ---
-source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
+source_sha: 7effd0d08a746ea597507440850849ba7b92d2d5
 sources:
   - .github/workflows
   - xtask/src/main.rs
