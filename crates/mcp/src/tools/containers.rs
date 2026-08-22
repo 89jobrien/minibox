@@ -72,10 +72,7 @@ pub async fn logs(
         })
         .collect();
 
-    Ok(LogsOutput {
-        lines,
-        daemon_responses: result.raw_responses,
-    })
+    Ok(LogsOutput { lines })
 }
 
 /// Retrieve an execution manifest.
@@ -127,11 +124,7 @@ pub async fn run(
     let result = client
         .call_limited(request, policy.max_output_bytes)
         .await?;
-    normalize_run_output(
-        result.responses,
-        result.raw_responses,
-        policy.max_output_bytes,
-    )
+    normalize_run_output(result.responses, policy.max_output_bytes)
 }
 
 /// Stop a container.
@@ -241,7 +234,6 @@ fn validate_absolute_clean_path(path: &Path, field: &'static str) -> Result<()> 
 
 fn normalize_run_output(
     responses: Vec<DaemonResponse>,
-    raw_responses: Vec<serde_json::Value>,
     max_output_bytes: usize,
 ) -> Result<RunContainerOutput> {
     let mut container_id = None;
@@ -293,7 +285,6 @@ fn normalize_run_output(
         stderr,
         exit_code,
         truncated,
-        daemon_responses: raw_responses,
     })
 }
 
@@ -338,10 +329,7 @@ async fn simple_id_request(
             response: format!("{:?}", result.raw_responses),
         })?;
 
-    Ok(SimpleOutput {
-        message,
-        daemon_responses: result.raw_responses,
-    })
+    Ok(SimpleOutput { message })
 }
 
 const fn stream_name(stream: &OutputStreamKind) -> &'static str {
@@ -418,7 +406,6 @@ mod tests {
                 },
                 DaemonResponse::ContainerStopped { exit_code: 0 },
             ],
-            Vec::new(),
             1024,
         )
         .expect("normalize output");

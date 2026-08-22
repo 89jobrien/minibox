@@ -8,8 +8,7 @@
 An agent-controllable container runtime written in Rust. Daemon/CLI split, OCI image pulling,
 Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal
 architecture keeps adapter suites swappable at startup with no recompile. A built-in MCP stdio
-server exposes policy-gated daemon operations directly to MCP clients — inspection tools by
-default, controlled run/pull/stop/rm behind agent policy — so agents can drive container
+server exposes policy-gated daemon operations directly to MCP clients so agents can drive container
 lifecycle without shelling out to the CLI.
 
 **Status:** Active development — `v0.32.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`

@@ -68,10 +68,7 @@ pub async fn pull_image(
             response: format!("{:?}", result.raw_responses),
         })?;
 
-    Ok(PullImageOutput {
-        message,
-        daemon_responses: result.raw_responses,
-    })
+    Ok(PullImageOutput { message })
 }
 
 #[cfg(test)]

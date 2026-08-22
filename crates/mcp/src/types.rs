@@ -121,8 +121,6 @@ pub struct RunContainerOutput {
     pub exit_code: Option<i32>,
     /// Whether decoded output was truncated.
     pub truncated: bool,
-    /// Raw daemon responses.
-    pub daemon_responses: Vec<Value>,
 }
 
 /// Local schema-facing mirror of `ContainerInfo`.
@@ -183,8 +181,6 @@ pub struct PullImageInput {
 pub struct PullImageOutput {
     /// Daemon success message.
     pub message: String,
-    /// Raw daemon responses.
-    pub daemon_responses: Vec<Value>,
 }
 
 /// Input for container logs.
@@ -208,8 +204,6 @@ pub struct LogEntry {
 pub struct LogsOutput {
     /// Log lines in daemon order.
     pub lines: Vec<LogEntry>,
-    /// Raw daemon responses.
-    pub daemon_responses: Vec<Value>,
 }
 
 /// Input for a single container ID operation.
@@ -240,6 +234,4 @@ pub struct ManifestOutput {
 pub struct SimpleOutput {
     /// Human-readable daemon message.
     pub message: String,
-    /// Raw daemon responses.
-    pub daemon_responses: Vec<Value>,
 }

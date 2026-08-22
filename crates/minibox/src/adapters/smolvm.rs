@@ -112,8 +112,20 @@ struct SmolVmOutput {
 
 /// Run a command via the real `smolvm` binary with volume mounts and env vars.
 ///
-/// Returns both stdout and exit code. Does NOT treat non-zero exit as an error
-/// — the caller (handler) decides how to handle the exit code.
+/// Returns the command's stdout and exit code. Does NOT treat non-zero exit
+/// as an error — the caller (handler) decides how to handle the exit code.
+///
+/// `smolvm` itself already keeps its own operational output (VM boot
+/// messages, image-pull progress) on its stderr, separate from the exec'd
+/// command's real stdout on its stdout — verified directly: `smolvm machine
+/// run --net --image alpine -- sh -c 'echo real-stdout'` reports exactly
+/// "real-stdout\n" on stdout, with all boot/pull noise on stderr. Previously
+/// this function concatenated both into one "stdout" blob, which meant every
+/// container run's reported output was polluted with VM boot chatter. Now
+/// only `output.stdout` (the command's real output) is returned to the
+/// caller; `output.stderr` (smolvm's own diagnostics, and any real stderr
+/// from the exec'd command mixed in — smolvm doesn't expose them separately)
+/// is logged server-side at debug level instead of surfacing to clients.
 fn smolvm_exec_full(
     image: &str,
     args: &[&str],
@@ -139,13 +151,16 @@ fn smolvm_exec_full(
         .output()
         .map_err(|e| anyhow!("failed to execute smolvm: {e}"))?;
 
-    let mut combined = String::from_utf8_lossy(&output.stdout).to_string();
     if !output.stderr.is_empty() {
-        combined.push_str(&String::from_utf8_lossy(&output.stderr));
+        tracing::debug!(
+            image,
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "smolvm: VM boot/pull diagnostics (not surfaced to client)"
+        );
     }
 
     Ok(SmolVmOutput {
-        stdout: combined,
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
         exit_code: output.status.code().unwrap_or(1),
     })
 }
