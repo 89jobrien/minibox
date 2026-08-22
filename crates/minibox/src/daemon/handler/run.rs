@@ -503,6 +503,7 @@ fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord 
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: merged_dir.clone().into_inner(),
         cgroup_path: cgroup_dir.to_path_buf(),
         post_exit_hooks: vec![],
@@ -767,8 +768,14 @@ async fn prepare_run(
     // caller passes a combined "name:tag" string as `image` with no separate
     // `tag`, `image` still holds the untouched "name:tag" text, so
     // `format!("{image}:{tag}")` would double up the tag (e.g.
-    // "python:3.12-alpine:3.12-alpine").
-    let image_label = format!("{full_image}:{tag}");
+    // "python:3.12-alpine:3.12-alpine"). `full_image` is `cache_name()`,
+    // which deliberately keeps the `library/` namespace prefix for its own
+    // purpose (a stable docker.io cache key) — strip it for the
+    // user-facing label so `mbx run nginx` displays as "nginx:alpine", not
+    // "library/nginx:alpine" (matches `SmolVmRegistry::target_ref`'s same
+    // stripping for the same reason).
+    let display_image = full_image.strip_prefix("library/").unwrap_or(&full_image);
+    let image_label = format!("{display_image}:{tag}");
     let record = build_container_record(ContainerRecordBuildParams {
         id: &id,
         name: &name,
@@ -952,6 +959,9 @@ async fn run_inner_capture(
         );
     }
     state.set_container_pid(&prepared.id, pid).await;
+    state
+        .set_container_runtime_id(&prepared.id, runtime_id.clone())
+        .await;
 
     Ok((prepared.id, pid, output_reader, runtime_id))
 }
@@ -1080,13 +1090,16 @@ async fn run_inner(
     }
 
     state.set_container_pid(&id, pid).await;
+    let runtime_id = spawn_result.runtime_id.clone();
+    state
+        .set_container_runtime_id(&id, runtime_id.clone())
+        .await;
 
     // Hand off wait-for-exit to a background task.
     let state_wait = Arc::clone(&state);
     let id_wait = id.clone();
     let event_sink_wait = Arc::clone(&deps.events.event_sink);
     let runtime_wait = Arc::clone(&deps.lifecycle.runtime);
-    let runtime_id = spawn_result.runtime_id.clone();
     tokio::spawn(async move {
         daemon_wait_for_exit(WaitParams {
             pid,

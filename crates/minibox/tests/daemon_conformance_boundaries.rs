@@ -71,6 +71,7 @@ fn make_container_record(id: &str, name: Option<&str>, state: &str) -> Container
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: PathBuf::from("/tmp/rootfs"),
         cgroup_path: PathBuf::from("/tmp/cgroup"),
         post_exit_hooks: vec![],

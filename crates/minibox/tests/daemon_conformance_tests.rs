@@ -2007,6 +2007,7 @@ mod pause_resume_conformance {
                 pid: Some(12345),
             },
             pid: Some(12345),
+            runtime_id: None,
             rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
             cgroup_path: cgroup_dir.to_path_buf(),
             post_exit_hooks: vec![],

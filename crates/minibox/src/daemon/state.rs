@@ -213,6 +213,11 @@ pub struct ContainerRecord {
     /// Host-namespace PID, or `None` if the process has not started yet
     /// or has exited.
     pub pid: Option<u32>,
+    /// Adapter-managed handle for containers whose lifecycle isn't a plain
+    /// host PID (e.g. a persistent smolvm/krun VM name). `None` for native
+    /// containers and for ephemeral VM-backed runs that already completed.
+    #[serde(default)]
+    pub runtime_id: Option<String>,
     /// Path to the merged overlay directory used as the container rootfs.
     pub rootfs_path: PathBuf,
     /// Path to the container's cgroup directory.
@@ -660,6 +665,21 @@ impl DaemonState {
         drop(map);
         self.save_to_disk().await;
     }
+
+    /// Record the adapter-managed runtime handle for a container (e.g. a
+    /// persistent smolvm machine name), so later `Exec`/`Stop`/`Remove`
+    /// requests can look it back up. No-op if the container isn't tracked.
+    pub async fn set_container_runtime_id(&self, id: &str, runtime_id: Option<String>) {
+        if runtime_id.is_none() {
+            return;
+        }
+        let mut map = self.containers.write().await;
+        if let Some(record) = map.get_mut(id) {
+            record.runtime_id = runtime_id;
+        }
+        drop(map);
+        self.save_to_disk().await;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -831,6 +851,7 @@ mod tests {
                 pid: None,
             },
             pid: None,
+            runtime_id: None,
             rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
             cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
             post_exit_hooks: vec![],

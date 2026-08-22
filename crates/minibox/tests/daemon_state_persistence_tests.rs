@@ -95,6 +95,7 @@ fn make_record(id: &str, state: &str, pid: Option<u32>) -> ContainerRecord {
             pid,
         },
         pid,
+        runtime_id: None,
         rootfs_path: PathBuf::from("/mock/rootfs"),
         cgroup_path: PathBuf::from("/mock/cgroup"),
         post_exit_hooks: vec![],

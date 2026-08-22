@@ -82,6 +82,7 @@ fn make_record_with_state(id: &str, state_str: &str) -> ContainerRecord {
             pid: Some(99999),
         },
         pid: Some(99999),
+        runtime_id: None,
         rootfs_path: PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path: PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],

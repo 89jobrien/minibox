@@ -136,6 +136,7 @@ fn arb_container_record() -> impl Strategy<Value = ContainerRecord> {
     (
         arb_container_info(),
         option::of(any::<u32>()),
+        option::of(any::<String>()),
         arb_path(),
         arb_path(),
         option::of(any::<String>()),
@@ -147,6 +148,7 @@ fn arb_container_record() -> impl Strategy<Value = ContainerRecord> {
             |(
                 info,
                 pid,
+                runtime_id,
                 rootfs_path,
                 cgroup_path,
                 source_image_ref,
@@ -161,6 +163,7 @@ fn arb_container_record() -> impl Strategy<Value = ContainerRecord> {
                 ContainerRecord {
                     info,
                     pid,
+                    runtime_id,
                     rootfs_path,
                     cgroup_path,
                     post_exit_hooks: vec![],
@@ -208,13 +211,15 @@ proptest! {
         );
     }
 
-    /// Optional fields (pid, source_image_ref, creation_params, workload_digest)
-    /// set to None must round-trip to None — not to a default value.
+    /// Optional fields (pid, runtime_id, source_image_ref, creation_params,
+    /// workload_digest) set to None must round-trip to None — not to a
+    /// default value.
     #[test]
     fn container_record_none_fields_stay_none(info in arb_container_info()) {
         let record = ContainerRecord {
             info,
             pid: None,
+            runtime_id: None,
             rootfs_path: PathBuf::from("/tmp/rootfs"),
             cgroup_path: PathBuf::from("/tmp/cgroup"),
             post_exit_hooks: vec![],

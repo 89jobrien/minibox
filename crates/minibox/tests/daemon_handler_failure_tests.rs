@@ -868,6 +868,7 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
                     pid: Some(999_997), // stale PID — process does not exist
                 },
                 pid: Some(999_997),
+                runtime_id: None,
                 rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
                 cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
                 post_exit_hooks: vec![],
