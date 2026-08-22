@@ -127,6 +127,7 @@ Thumbs.db
 
 # Documentation build
 /target/doc/
+/docs/dist/
 
 # Backup files
 *.bak
