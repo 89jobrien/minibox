@@ -1,3 +1,20 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox
+  - crates/minibox-core
+  - crates/miniboxd
+  - crates/mbx
+  - crates/macbox
+  - crates/minibox-testsuite
+  - crates/smolbox
+  - crates/winbox
+  - crates/minibox-macros
+  - xtask/src/main.rs
+  - .github/workflows
+generated: 2026-08-22
+---
+
 # Test Infrastructure Report
 
 > Generated 2026-04-27 from automated codebase analysis.

@@ -1,3 +1,18 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox/src/lib.rs
+  - crates/minibox-macros
+  - crates/minibox-core/src/protocol.rs
+  - crates/miniboxd/src/main.rs
+  - crates/miniboxd/src/adapter_registry.rs
+  - crates/minibox/src/container/process.rs
+  - crates/minibox/src/container/filesystem.rs
+  - crates/minibox/src/adapters/limiter.rs
+  - crates/macbox
+generated: 2026-08-22
+---
+
 # Gotchas and Non-Obvious Patterns
 
 Last updated: 2026-08-22

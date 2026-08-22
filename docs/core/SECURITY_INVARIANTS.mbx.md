@@ -1,3 +1,20 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox-core/src/image/layer.rs
+  - crates/minibox/src/container/process.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/miniboxd/src/main.rs
+  - crates/minibox-core/src/image/registry.rs
+  - crates/minibox/src/adapters/ghcr.rs
+  - crates/minibox/src/container/mount_seccomp.rs
+  - crates/minibox-core/src/domain/execution_manifest.rs
+  - crates/minibox/src/daemon/handler/run.rs
+  - crates/minibox/tests/security_regression.rs
+  - crates/minibox/tests/daemon_security_regression.rs
+generated: 2026-08-22
+---
+
 # Security Invariants
 
 This document maps each critical security invariant to the code path that enforces it and

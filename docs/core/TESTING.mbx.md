@@ -1,3 +1,16 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - xtask/src/main.rs
+  - Justfile
+  - fuzz
+  - crates/minibox-testsuite
+  - crates/minibox/src/testing
+  - crates/minibox-core/src/adapters
+  - .github/workflows
+generated: 2026-08-22
+---
+
 # Testing Guide
 
 Full test strategy for minibox. Tests follow a six-dimension progression —

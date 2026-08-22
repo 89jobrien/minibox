@@ -1,3 +1,14 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - .github/workflows
+  - xtask/src/main.rs
+  - CONTRIBUTING.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/core/CRATE_TIERS.mbx.md
+generated: 2026-08-22
+---
+
 # Stability Checklist
 
 Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental

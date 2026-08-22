@@ -1,8 +1,21 @@
 # Active context
 
-**Current focus (2026-08-08):**
+**Current focus (2026-08-22):**
 
-`develop` branch. Most recent work (newest first, per `git log --oneline`):
+`develop` branch. Most recent work (newest first):
+
+0. **Docs frontmatter backfill + freeze closure** (uncommitted as of this note) — all 19
+   `docs/core/*.mbx.md` files stamped with `source_sha`/`sources`/`generated` frontmatter
+   per the `docs` skill convention (verified via `nu .claude/skills/docs/scripts/doc-audit.nu`:
+   21/37 docs now stamped, no stale docs). Also closed GitHub issue #127 ("Freeze net-new
+   surface area until fundamentals stabilize") — 5 of 6 acceptance sub-issues were already
+   closed (#122 protocol, #114 state, #120 docs, #123 security, #117 support tiers, #133 CI
+   enforcement) and 1,300+ commits had landed since filing without the freeze being enforced
+   in practice; #116 (handler.rs coverage) remains open as the residual item. Also committed
+   `runtime_id` tracking on `ContainerRecord`/daemon state (2c75b559) and an image-label fix
+   stripping the `library/` cache-key prefix from user-facing `mbx run` output. Three known
+   doc-home collisions remain unresolved: `USAGE`, `TESTING`, `DEVELOPMENT` each exist both
+   at top level and under `docs/core/` — not yet reconciled.
 
 1. **Protocol drift expectation fix** (fe9bae3e) — `xtask::protocol_drift`'s expected surface
    list still had the pre-split single `domain-ports` entry after a prior session split it into
@@ -93,7 +106,8 @@
 - All Python removed — scripts use Rust (rust-script) or Nushell
 - VZ.framework adapter removed (2026-05-08, Apple ARM64 bug)
 - smolvm is default macOS adapter, krun is fallback
-- Stabilization freeze active
+- Stabilization freeze (#127) closed 2026-08-22 as substantially satisfied; #116
+  (handler.rs coverage) remains open as the residual work item
 - smolbox crate houses smolvm + krun adapter implementations
 - `cargo xtask doctor` is now the single canonical preflight command (absorbed
   `scripts/preflight.nu`'s checks); the script is a lightweight SessionStart hook only

@@ -1,3 +1,10 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox/src/daemon/state.rs
+generated: 2026-08-22
+---
+
 # State Persistence Model
 
 How minibox tracks container state across daemon restarts.

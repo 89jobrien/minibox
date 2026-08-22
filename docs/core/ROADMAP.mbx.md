@@ -1,3 +1,16 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox/src/daemon/handler
+  - crates/minibox/src/adapters/network/bridge.rs
+  - crates/minibox-core/src/domain/exec.rs
+  - crates/minibox-core/src/image/dockerfile.rs
+  - crates/minibox/src/adapters/docker_desktop.rs
+  - Justfile
+  - xtask/src/main.rs
+generated: 2026-08-22
+---
+
 # Minibox Roadmap
 
 Last updated: 2026-08-22

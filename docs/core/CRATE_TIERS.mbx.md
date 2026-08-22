@@ -1,3 +1,25 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - Cargo.toml
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/minibox-crux-plugin
+  - crates/macbox
+  - crates/smolbox
+  - crates/winbox
+  - crates/mcp
+  - crates/ail
+  - crates/minibox-bench
+  - xtask
+  - crates/minibox-macros
+  - crates/minibox-testsuite
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+generated: 2026-08-22
+---
+
 # Crate Support Tiers
 
 This document classifies every crate in the minibox workspace by support tier,

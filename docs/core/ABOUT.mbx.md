@@ -1,3 +1,23 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - Cargo.toml
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/macbox
+  - crates/smolbox
+  - crates/winbox
+  - crates/minibox-crux-plugin
+  - crates/mcp
+  - crates/minibox-testsuite
+  - crates/minibox-bench
+  - crates/ail
+  - xtask
+generated: 2026-08-22
+---
+
 # About minibox
 
 A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace

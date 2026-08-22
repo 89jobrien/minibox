@@ -1,3 +1,13 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - xtask/src/main.rs
+  - Justfile
+  - scripts
+  - crates/miniboxd/src/adapter_registry.rs
+generated: 2026-08-22
+---
+
 # Development Guide
 
 Canonical developer workflow for minibox. See `CLAUDE.md` for architecture

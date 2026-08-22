@@ -14,4 +14,3 @@
 - **Constraints**:
   - Linux: root, kernel 5.0+, cgroups v2, overlayfs
   - macOS: requires smolvm or krun (VM-backed); exec/logs not supported
-  - Stabilization freeze active — no new features without approval

@@ -1,3 +1,15 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/mbx
+  - crates/miniboxd
+  - ops/install-systemd.sh
+  - crates/minibox/src/adapters/docker_desktop.rs
+  - xtask/src/main.rs
+  - crates/minibox-bench
+generated: 2026-08-22
+---
+
 # Usage
 
 This document provides practical usage workflows for `minibox` across local Linux, systemd ops, macOS/Colima dogfooding, and experimental controller-driven flows.

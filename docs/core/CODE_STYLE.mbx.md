@@ -1,3 +1,13 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/minibox-macros
+generated: 2026-08-22
+---
+
 # Code Style and Conventions
 
 Minibox is a Rust 2024 container runtime. This document records the patterns observed throughout

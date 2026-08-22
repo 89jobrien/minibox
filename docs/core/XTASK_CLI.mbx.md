@@ -1,3 +1,11 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - xtask/src/main.rs
+  - xtask/schema/cli.schema.json
+generated: 2026-08-22
+---
+
 # xtask CLI Reference
 
 Last updated: 2026-08-22

@@ -1,3 +1,26 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - Cargo.toml
+  - crates/minibox-macros
+  - crates/minibox-core
+  - crates/minibox
+  - crates/macbox
+  - crates/smolbox
+  - crates/winbox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/minibox-crux-plugin
+  - crates/mcp
+  - crates/minibox-testsuite
+  - crates/minibox-bench
+  - crates/minibox-cni
+  - crates/minibox-tui
+  - crates/ail
+  - xtask
+generated: 2026-08-22
+---
+
 # Minibox Architecture Reference
 
 > Generated 2026-04-27 from automated codebase analysis.

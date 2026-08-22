@@ -1,3 +1,19 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/macbox
+  - crates/smolbox
+  - crates/minibox/src/adapters/colima.rs
+  - crates/winbox
+  - crates/minibox/src/adapters/docker_desktop.rs
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+generated: 2026-08-22
+---
+
 # Support Tiers
 
 Formal support-tier definitions for minibox crates and adapters.

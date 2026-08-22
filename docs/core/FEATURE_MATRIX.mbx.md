@@ -1,3 +1,33 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - crates/minibox/src/daemon/handler
+  - crates/minibox/src/adapters/limiter.rs
+  - crates/minibox-core/src/domain/exec.rs
+  - crates/minibox-core/src/events.rs
+  - crates/minibox-core/src/image/registry.rs
+  - crates/minibox/src/adapters/ghcr.rs
+  - crates/minibox-core/src/image/gc.rs
+  - crates/minibox-core/src/domain/image.rs
+  - crates/minibox/src/container/namespace.rs
+  - crates/minibox/src/adapters/filesystem.rs
+  - crates/minibox/src/adapters/network/bridge.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/minibox-core/src/image/layer.rs
+  - crates/minibox-core/src/domain/execution_manifest.rs
+  - crates/minibox-core/src/domain/execution_policy.rs
+  - crates/minibox/src/daemon/state.rs
+  - crates/miniboxd/src/main.rs
+  - crates/minibox/src/adapters/gke.rs
+  - crates/minibox/src/adapters/colima.rs
+  - crates/minibox/src/adapters/smolvm.rs
+  - crates/macbox/src/krun
+  - crates/macbox/src/vz
+  - crates/minibox/src/adapters/docker_desktop.rs
+  - crates/mcp
+generated: 2026-08-22
+---
+
 # Feature Matrix
 
 Per-platform capability breakdown for minibox adapters.
