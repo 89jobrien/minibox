@@ -188,7 +188,27 @@ path-construction helpers (`validate_cgroup_parent`, `with_root`,
 `delegation_paths`), never `create()`. Mutation reverted via `git checkout
 --`; working tree confirmed clean.
 
-**Verdict**: **CANNOT CONFIRM — coverage gap, not a test-quality gap**. This
+**Update (follow-up fix applied)**: extracted the bounds check into a new
+cross-platform, filesystem-independent function
+`minibox::resource_limits::validate_resource_limits()`
+(`crates/minibox/src/resource_limits.rs`), called from
+`CgroupManager::create()` before any filesystem work. The `container`
+module (including `cgroups.rs`) is gated `#[cfg(target_os = "linux")]` at
+`crates/minibox/src/lib.rs:57` — the extraction had to live in a new,
+ungated top-level module (`pub mod resource_limits;`), not inside
+`container::cgroups` itself, or it would still fail to compile on macOS.
+Re-ran the identical mutation (disabling the memory-minimum check) against
+the new location: `cargo test -p minibox --lib resource_limits::` now
+**fails 1 of 7 tests** (`rejects_memory_below_minimum`) on this macOS
+machine, where previously the equivalent check produced zero test signal
+anywhere in the toolchain. `cargo check --workspace`, `cargo clippy -p
+minibox --all-targets -- -D warnings`, and `cargo fmt --all --check` all
+pass; full `cargo test -p minibox --lib` run is green (281 passed, 1
+ignored). Mutation reverted before this note was written; working tree
+verified clean of it.
+
+**Original verdict** (superseded by the fix above, kept for record):
+**CANNOT CONFIRM — coverage gap, not a test-quality gap**. This
 isn't the same finding as the path-validation case: the _test itself_
 (`test_cgroup_rejects_invalid_memory_limit`) looks correctly written (single
 call, `assert!(result.is_err())` on a config just below the boundary) — the
@@ -265,14 +285,16 @@ security check fully disabled.
 **Top 3 follow-ups** (not fixed here — this review is read-only against
 production code):
 
-1. **(Highest priority) Cross-platform unit coverage for cgroup bounds
-   validation.** Extract the `MIN_MEMORY_BYTES`/`MAX_CPU_WEIGHT` range
-   checks in `CgroupManager::create()`
-   (`crates/minibox/src/container/cgroups.rs:137-156`) into a pure function
-   that validates a `CgroupConfig` without touching the filesystem, and unit
-   test that function without a `target_os = "linux"` gate. This closes the
-   only mutation target in this review that produced zero test signal
-   anywhere in the toolchain a macOS developer runs locally.
+1. **DONE — Cross-platform unit coverage for cgroup bounds validation.**
+   Extracted the `MIN_MEMORY_BYTES`/`MAX_CPU_WEIGHT` range checks out of
+   `CgroupManager::create()` into `minibox::resource_limits::validate_resource_limits()`
+   (`crates/minibox/src/resource_limits.rs`, new ungated top-level module —
+   not inside `container::cgroups`, since the whole `container` module is
+   gated `#[cfg(target_os = "linux")]`), with 7 unit tests that now run on
+   every platform. Re-running the original mutation against the new
+   location confirmed it's now caught (1/7 tests fail) where it previously
+   produced zero signal. See the updated "Mutation: cgroup limits" section
+   above for the full before/after.
 2. **Retire or relabel the source-text "mutation audit" test in
    `security_regression.rs`.** Either replace
    `mutation_audit_peercred_guard_called_in_handler` with a real behavioral
