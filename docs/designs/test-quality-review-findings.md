@@ -24,9 +24,9 @@ Spot-checked `fs_util.rs::nonexistent_source_returns_error` — `is_err()` is
 the right assertion there (only the error variant matters, path doesn't
 exist by construction). Spot-checked
 `adapters/network/none.rs::noop_network_setup_returns_empty_string` — the
-test name claims the return value is checked ("returns_empty_string") but
+test name claims the return value is checked ("returns*empty_string") but
 the body only asserts `.is_ok()`, never asserts the returned string actually
-_is_ empty. That's a real gap: a regression that made `NoopNetwork::setup`
+\_is* empty. That's a real gap: a regression that made `NoopNetwork::setup`
 return a non-empty garbage string would pass this test. This is likely
 representative of a chunk of the 67 `is_ok()`-only hits — the assertion is
 weaker than the test name promises. Not filed as a blocking finding on its
@@ -133,16 +133,161 @@ mutation checks are designed to answer.
 
 ## Mutation: path validation
 
-(pending)
+**Target**: `has_parent_dir_component()` in
+`crates/minibox-core/src/image/layer.rs:65`, the pre-check used by
+`validate_tar_entry_path()` (the Zip Slip / path-traversal guard for OCI
+layer extraction).
+
+**Mutation applied**: replaced the body with `false` unconditionally —
+i.e. simulated the `..`-detection check being silently disabled while
+leaving everything else (absolute-path rejection, canonicalize-and-prefix
+check) intact.
+
+**Run**: `cargo test -p minibox-core --lib image::layer::`
+
+**Result**: 5 of 37 tests in the module **failed** —
+`exhaustive_has_parent_dir_component_true_cases`, `dotdot_in_middle_rejected`,
+`exhaustive_validate_tar_entry_path_table`,
+`absolute_symlink_with_parent_traversal_rejected`, and the property test
+`proptest_tests::dotdot_paths_always_rejected` (which found a minimal
+failing case, `"a/../../a"`, and would have shrunk further on a real bug).
+Mutation reverted via `git checkout --` immediately after the run; working
+tree confirmed clean.
+
+**Verdict**: **CONFIRMED GOOD** — this is exactly what a healthy test suite
+looks like for a security-critical function. Multiple independent test
+styles (direct unit tests, a table-driven exhaustive test, and a property
+test) all caught the same regression, including the property test deriving
+a novel failing input rather than replaying a fixed fixture. No follow-up
+needed here; this module is a positive example, not a gap.
 
 ## Mutation: cgroup limits
 
-(pending)
+**Target**: the memory-minimum bounds check in `CgroupManager::create()`,
+`crates/minibox/src/container/cgroups.rs:140` (`if mem < MIN_MEMORY_BYTES`),
+guarding against a caller-supplied memory limit below the kernel's ~4KB
+floor.
+
+**Mutation applied**: `if mem < MIN_MEMORY_BYTES` → `if false && mem <
+MIN_MEMORY_BYTES` (permanently disabled the check while leaving the rest of
+`create()` untouched).
+
+**Run**: `cargo test -p miniboxd --test cgroup_tests` (targeting
+`test_cgroup_rejects_invalid_memory_limit`, the test that directly exercises
+this bound per the sweep).
+
+**Result**: the entire `cgroup_tests.rs` file is gated
+`#![cfg(target_os = "linux")]` — on this macOS dev machine it compiles to
+**0 tests run**, mutated or not. Confirmed via a baseline run before
+mutating (`running 0 tests`) and again after (`cargo build -p miniboxd
+--tests` exits 0, meaning the mutated, security-check-disabled code
+compiles and links cleanly). No test anywhere in the workspace outside this
+Linux-gated file exercises `CgroupManager::create()`'s bounds checks — the
+in-module `#[cfg(test)] mod tests` block in `cgroups.rs` itself only tests
+path-construction helpers (`validate_cgroup_parent`, `with_root`,
+`delegation_paths`), never `create()`. Mutation reverted via `git checkout
+--`; working tree confirmed clean.
+
+**Verdict**: **CANNOT CONFIRM — coverage gap, not a test-quality gap**. This
+isn't the same finding as the path-validation case: the _test itself_
+(`test_cgroup_rejects_invalid_memory_limit`) looks correctly written (single
+call, `assert!(result.is_err())` on a config just below the boundary) — the
+problem is it structurally cannot run in this environment, and per
+`TEST_INFRASTRUCTURE.mbx.md` cgroup integration tests only run in `next`/
+`stable` CI (self-hosted Linux runner), not on every PR. A developer on
+macOS (the primary dev machine per `.claude.local.md`) who breaks this
+security check locally gets zero signal — `cargo check`/`clippy`/`cargo
+test` all pass clean. The only way this bug would be caught is a push that
+happens to trigger the `next`/`stable` gate, which per the CI docs is not
+every merge. Recommend as a follow-up (not fixed in this review): a
+`#[cfg(not(target_os = "linux"))]` unit test using a mockable/injectable
+write path (or extracting the bounds-validation logic into a pure function
+independent of the real cgroupfs write) so the security-critical bounds
+checks get cross-platform coverage instead of being bundled with the
+filesystem-writing integration test.
 
 ## Mutation: protocol terminal-response classification
 
-(pending)
+**Target**: `DaemonResponse::is_terminal()` in
+`crates/minibox-core/src/protocol.rs:753`, the `matches!` arm list deciding
+which response variants end a request/response exchange.
+
+**Mutation applied**: removed `Self::ContainerPaused { .. }` from the
+terminal-variant list — a genuinely-terminal variant silently reclassified
+as non-terminal (a real regression class per `progress.mbx.md`'s note that
+"most other response variants end request streaming" and per the daemon's
+handler contract).
+
+**Run**: `cargo test -p minibox-core --lib protocol::`
+
+**Result**: 1 of 70 tests **failed** —
+`protocol::tests::is_terminal_matches_canonical_table` — with a precise
+diagnostic: `unexpected terminal status for variant: ContainerPaused { id:
+"abc" }, left: false, right: true`. Mutation reverted via `git checkout
+--`; working tree confirmed clean.
+
+**Verdict**: **CONFIRMED GOOD**. This test is explicitly designed for
+exactly this failure mode — its own doc comment states it's "the canonical
+terminal-variant table formerly hand-rolled in
+`minibox::daemon::server::is_terminal_response`" and that the `match` guard
+is written so it "won't compile until both this test and `is_terminal` are
+updated" when a new variant is added. It caught the mutation on the first
+run with a variant-level error message, not just a generic assertion
+failure. Best-designed test found across all three mutation targets in this
+review — a good model for the cgroup coverage gap identified above (an
+exhaustive table test that stays in sync with the enum by construction).
 
 ## Overall verdict
 
-(pending)
+**Sweep phase**: clean on every mechanical anti-pattern checked (no no-op
+assertions, no over-mocked call-count-only tests, no swallowed failures in
+test code, no stale snapshots). Two real but non-blocking observations
+surfaced: a "test name promises more than the assertion checks" gap in
+`adapters/network/none.rs`, and a source-text "mutation audit" test pattern
+in `security_regression.rs` (`mutation_audit_peercred_guard_called_in_handler`)
+that verifies string occurrences in a file rather than runtime behavior —
+neither was in `.ctx/memory-bank/mistakes.md` before this review.
+
+**Mutation phase — the real signal**: 2 of 3 targets had the mutation
+**caught immediately** by well-designed tests (path validation: 5
+independent failures including a property test deriving a novel input;
+protocol terminal classification: caught by an exhaustive canonical-table
+test built to fail-to-compile on drift). The third target — **cgroup
+resource-limit bounds (memory minimum, CPU weight range)** — is the one
+place a security-relevant regression would ship silently on this team's
+primary dev platform: the test that exists for it is well-written, but it
+lives in a file gated `#![cfg(target_os = "linux")]` that produces zero
+compiled tests on macOS, and per `TEST_INFRASTRUCTURE.mbx.md` cgroup
+integration tests only run in `next`/`stable` CI, not on every PR/push to
+`develop`. `cargo check`, `clippy`, and `cargo test` all pass clean with the
+security check fully disabled.
+
+**Top 3 follow-ups** (not fixed here — this review is read-only against
+production code):
+
+1. **(Highest priority) Cross-platform unit coverage for cgroup bounds
+   validation.** Extract the `MIN_MEMORY_BYTES`/`MAX_CPU_WEIGHT` range
+   checks in `CgroupManager::create()`
+   (`crates/minibox/src/container/cgroups.rs:137-156`) into a pure function
+   that validates a `CgroupConfig` without touching the filesystem, and unit
+   test that function without a `target_os = "linux"` gate. This closes the
+   only mutation target in this review that produced zero test signal
+   anywhere in the toolchain a macOS developer runs locally.
+2. **Retire or relabel the source-text "mutation audit" test in
+   `security_regression.rs`.** Either replace
+   `mutation_audit_peercred_guard_called_in_handler` with a real behavioral
+   test that opens a socket with a mismatched peer UID and asserts the
+   connection is rejected, or rename/re-document it clearly as a
+   "call-site-exists" smoke check so it isn't mistaken for behavioral
+   coverage of Security Invariant 7.
+3. **Spot-audit the `is_ok()`/`is_err()`-only assertion population (138
+   hits total) for the "test name promises a value check" pattern** found
+   in `none.rs::noop_network_setup_returns_empty_string`. Not urgent (low
+   blast radius on the sampled case) but likely has more instances given
+   the count; a grep for test names containing `_returns_` or `_returns_a_`
+   cross-referenced against assertion bodies would narrow the candidate
+   list quickly.
+
+Both mutation-phase working-tree diffs were confirmed empty via `git status
+--porcelain` after each `git checkout --` — no mutation was left in place
+or committed.
