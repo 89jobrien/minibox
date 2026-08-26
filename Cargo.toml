@@ -91,7 +91,7 @@ minibox-cni = { path = "crates/minibox-cni" }
 macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
-minibox-tui = { path = "crates/minibox-tui" }
+minibox-tui = { path = "crates/minibox-tui", version = "0.32.1" }
 slashcrux = "0.1"
 dirs = "6"
 secrecy = "0.10"
