@@ -3,20 +3,31 @@
 /// Configuration for booting the minibox Linux VM.
 #[derive(Debug, Clone)]
 pub struct VzVmConfig {
+    /// Directory containing VM boot assets and the writable root filesystem.
     pub vm_dir: std::path::PathBuf,
+    /// Host directory shared with the guest for cached images.
     pub images_dir: std::path::PathBuf,
+    /// Host directory shared with the guest for container state.
     pub containers_dir: std::path::PathBuf,
+    /// Guest memory allocation in bytes.
     pub memory_bytes: u64,
+    /// Number of virtual CPUs exposed to the guest.
     pub cpu_count: usize,
 }
 
 impl VzVmConfig {
+    /// Return the configured guest kernel path.
+    #[must_use]
     pub fn kernel_path(&self) -> std::path::PathBuf {
         self.vm_dir.join("boot").join("vmlinuz-virt")
     }
+    /// Return the configured guest initramfs path.
+    #[must_use]
     pub fn initramfs_path(&self) -> std::path::PathBuf {
         self.vm_dir.join("boot").join("initramfs-virt")
     }
+    /// Return the writable guest root filesystem path.
+    #[must_use]
     pub fn rootfs_path(&self) -> std::path::PathBuf {
         self.vm_dir.join("rootfs")
     }
