@@ -1,4 +1,4 @@
-name: Publish mbx
+name: Publish minibox CLI
 
 on:
   workflow_dispatch:
@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 jobs:
-  publish-mbx:
-    name: Publish mbx to crates.io
+  publish-minibox-cli:
+    name: Publish minibox CLI to crates.io
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -20,7 +20,7 @@ jobs:
         id: crates_io_auth
         uses: rust-lang/crates-io-auth-action@v1
 
-      - name: Publish mbx
+      - name: Publish minibox CLI
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates_io_auth.outputs.token }}
-        run: cargo publish --locked -p mbx
+        run: cargo publish --locked -p minibox-cli
