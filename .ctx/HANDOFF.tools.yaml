@@ -78,7 +78,7 @@ top_unhandled:
     example: "cargo check --workspace 2>&1 | tail -30"
   - base_command: cargo clippy
     count: 48
-    example: "cargo clippy -p minibox -p miniboxd -p mbx --release 2>&1 | tail -30"
+    example: "cargo clippy -p minibox -p miniboxd -p minibox-cli --release 2>&1 | tail -30"
   - base_command: cargo xtask
     count: 44
     example: "cargo xtask verify 2>&1 | tail -20"

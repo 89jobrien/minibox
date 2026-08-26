@@ -276,7 +276,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: build daemon and CLI
-        run: cargo build --release -p miniboxd -p mbx
+        run: cargo build --release -p miniboxd -p minibox-cli
       - name: run protocol e2e tests
         run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1
 
@@ -299,7 +299,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: build daemon and CLI
-        run: cargo build --release -p miniboxd -p mbx
+        run: cargo build --release -p miniboxd -p minibox-cli
       - name: run CLI e2e tests
         env:
           MINIBOX_ADAPTER: smolvm

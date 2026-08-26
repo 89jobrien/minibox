@@ -25,7 +25,7 @@ dependents = ["macbox", "miniboxd", "winbox", "smolbox", "minibox-testsuite"]
 
 [[workspace.propagation]]
 source = "minibox-core"
-dependents = ["minibox", "macbox", "miniboxd", "winbox", "mbx", "minibox-crux-plugin", "minibox-testsuite"]
+dependents = ["minibox", "macbox", "miniboxd", "winbox", "minibox-cli", "minibox-crux-plugin", "minibox-testsuite"]
 
 [[workspace.propagation]]
 source = "minibox-macros"

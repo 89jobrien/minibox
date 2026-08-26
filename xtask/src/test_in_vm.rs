@@ -454,7 +454,7 @@ fn cross_compile_with_cross(cross_bin: &Path, workspace_root: &Path, target: &st
     // cli_e2e_tests spawns the `mbx` CLI binary against a real daemon.
     println!("  compiling mbx binary (cross) ...");
     let status = Command::new(cross_bin)
-        .args(["build", "-p", "mbx", "--target", target])
+        .args(["build", "-p", "minibox-cli", "--target", target])
         .current_dir(workspace_root)
         .status()
         .context("spawning cross build mbx")?;
@@ -499,7 +499,7 @@ fn cross_compile_with_musl_gcc(workspace_root: &Path, target: &str, cc: &str) ->
     // cli_e2e_tests spawns the `mbx` CLI binary against a real daemon.
     println!("  compiling mbx binary ...");
     let status = Command::new("cargo")
-        .args(["build", "-p", "mbx", "--target", target])
+        .args(["build", "-p", "minibox-cli", "--target", target])
         .env(&cc_env, cc)
         .env(&linker_env, cc)
         .current_dir(workspace_root)

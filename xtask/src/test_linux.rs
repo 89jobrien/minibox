@@ -42,7 +42,7 @@ pub trait VmRunner {
 /// `CC_<target>` / `CARGO_TARGET_<target>_LINKER` env vars pointing at
 /// `aarch64-linux-musl-gcc` (or the `x86_64` equivalent).
 pub struct ZigbuildCompiler {
-    /// Crate packages to build as binaries (e.g. `["miniboxd", "mbx"]`).
+    /// Crate packages to build as binaries (e.g. `["miniboxd", "minibox-cli"]`).
     pub bin_packages: Vec<String>,
     /// Test packages to compile with `--tests` (e.g. `["miniboxd"]`).
     pub test_packages: Vec<String>,

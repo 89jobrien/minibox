@@ -129,7 +129,7 @@ fn main() -> Result<()> {
             let kernel = vm_dir.join("boot").join("vmlinuz-virt");
 
             let compiler = test_linux::ZigbuildCompiler::new(
-                vec!["miniboxd".to_string(), "mbx".to_string()],
+                vec!["miniboxd".to_string(), "minibox-cli".to_string()],
                 vec!["miniboxd".to_string()],
             );
             let initramfs_builder = test_linux::CpioInitramfsBuilder;

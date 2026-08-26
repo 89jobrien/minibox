@@ -81,7 +81,7 @@ jobs:
 
       - name: Build binaries
         run: |
-          cross build --release --target ${{ matrix.target }} -p miniboxd -p mbx
+          cross build --release --target ${{ matrix.target }} -p miniboxd -p minibox-cli
 
       - name: Package
         run: |

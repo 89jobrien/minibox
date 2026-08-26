@@ -71,6 +71,6 @@ newline-delimited `DaemonResponse` JSON object.
 ## Building
 
 ```bash
-cargo build -p mbx --release
+cargo build -p minibox-cli --release
 # output: target/release/mbx
 ```

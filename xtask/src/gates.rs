@@ -37,7 +37,7 @@ pub fn lint(sh: &Shell) -> Result<()> {
             .context("cargo fmt --check failed")?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
         )
         .run()
         .context("cargo clippy failed")?;
@@ -70,7 +70,7 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
         eprintln!("--- verify: clippy ---");
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
         )
         .run()
         .context("cargo clippy failed")?;
@@ -112,7 +112,7 @@ pub fn fix(sh: &Shell) -> Result<()> {
         auto_bump(sh)?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail --fix --allow-dirty --allow-staged"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail --fix --allow-dirty --allow-staged"
         )
         .run()
         .context("clippy --fix failed")?;
@@ -144,7 +144,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
             .context("git add -u after fmt failed")?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
         )
         .run()
         .context("clippy failed")?;
@@ -202,14 +202,14 @@ pub fn prepush(sh: &Shell) -> Result<()> {
         musl_check(&sh)?;
         cmd!(
             sh,
-            "cargo build --release -p minibox -p minibox-macros -p mbx -p minibox-core -p miniboxd"
+            "cargo build --release -p minibox -p minibox-macros -p minibox-cli -p minibox-core -p miniboxd"
         )
         .run()
         .context("release build failed")?;
         let fail_fast = fail_fast_flag();
         cmd!(
             sh,
-            "cargo nextest run --release -p minibox -p minibox-macros -p mbx -p minibox-core --lib {fail_fast...}"
+            "cargo nextest run --release -p minibox -p minibox-macros -p minibox-cli -p minibox-core --lib {fail_fast...}"
         )
         .run()
         .context("nextest failed")?;
@@ -239,7 +239,7 @@ fn phase_2_skipped() -> bool {
 /// Musl cross-check gate: a release cross-build for `x86_64-unknown-linux-musl`
 /// of the two crates the release workflow actually cross-compiles (`miniboxd`,
 /// `mbx`; see `.github/workflows/release.yml`'s `build` job, which uses `cross build
-/// --release --target x86_64-unknown-linux-musl -p miniboxd -p mbx`).
+/// --release --target x86_64-unknown-linux-musl -p miniboxd -p minibox-cli`).
 ///
 /// Catches `#[cfg(target_os = "linux")]` compile failures *and* link-time musl
 /// failures locally, before push — macOS `cargo check` alone doesn't validate
@@ -298,12 +298,12 @@ pub fn musl_check(sh: &Shell) -> Result<()> {
         &["build"]
     };
     eprintln!(
-        "--- musl-check: cargo {} --release --target {TARGET} -p miniboxd -p mbx ---",
+        "--- musl-check: cargo {} --release --target {TARGET} -p miniboxd -p minibox-cli ---",
         build.join(" ")
     );
     cmd!(
         sh,
-        "cargo {build...} --release --target {TARGET} -p miniboxd -p mbx"
+        "cargo {build...} --release --target {TARGET} -p miniboxd -p minibox-cli"
     )
     .run()
     .context("musl cross-check failed (release cross-build for x86_64-unknown-linux-musl)")?;
@@ -551,7 +551,7 @@ pub fn test_quickcheck(sh: &Shell) -> Result<()> {
 /// so the tests have the kernel privileges they need (cgroups v2, namespaces).
 /// `MINIBOX_TEST_BIN_DIR` is forwarded so helpers can locate `miniboxd`/`mbx`.
 pub fn test_integration(sh: &Shell) -> Result<()> {
-    cmd!(sh, "cargo build --release -p miniboxd -p mbx")
+    cmd!(sh, "cargo build --release -p miniboxd -p minibox-cli")
         .run()
         .context("release build failed")?;
 
@@ -613,7 +613,7 @@ pub fn test_integration(sh: &Shell) -> Result<()> {
 /// Uses `--release` to match CI behavior and catch optimisation-sensitive bugs.
 pub fn test_e2e(sh: &Shell) -> Result<()> {
     // Build daemon + CLI in release mode so find_binary() can locate them.
-    cmd!(sh, "cargo build --release -p miniboxd -p mbx")
+    cmd!(sh, "cargo build --release -p miniboxd -p minibox-cli")
         .run()
         .context("failed to build miniboxd/mbx for protocol e2e tests")?;
     cmd!(

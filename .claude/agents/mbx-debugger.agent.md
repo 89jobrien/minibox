@@ -67,7 +67,7 @@ ls -la /var/lib/minibox/containers/{id}/
 
 ```bash
 # Run failing test with verbose output
-cargo test -p mbx <test_name> -- --nocapture
+cargo test -p minibox-cli <test_name> -- --nocapture
 
 # Run integration tests (Linux, root required)
 just test-integration
@@ -280,7 +280,7 @@ fn spawn_child(write_fd: OwnedFd) -> Result<Pid> {
 - [ ] `just test-integration` passes (requires Linux+root)
 - [ ] `just test-e2e` passes (requires Linux+root)
 - [ ] `cargo fmt --all --check` clean
-- [ ] `cargo clippy -p mbx ... -- -D warnings` clean
+- [ ] `cargo clippy -p minibox-cli ... -- -D warnings` clean
 - [ ] `just doctor` shows all capabilities satisfied
 - [ ] `cargo xtask nuke-test-state` cleans up any orphaned state
 

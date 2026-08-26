@@ -20,8 +20,8 @@ Systematic release workflow for minibox: pre-release quality gates, version bump
 ```bash
 cargo fmt --all --check
 # TODO: daemonbox and minibox-llm are stale crate names — remove them (not in workspace)
-# TODO: minibox-cli was renamed to mbx — verify -p mbx covers it
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+# TODO: minibox-cli was renamed to mbx — verify -p minibox-cli covers it
+cargo clippy -p minibox-cli -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -71,6 +71,7 @@ Semantic versioning — MAJOR.MINOR.PATCH:
 - **PATCH**: Bug fixes, security patches, performance improvements
 
 Examples:
+
 - New `exec` command → MINOR bump, v0.4.0 → v0.5.0
 - Security fix in tar extraction → PATCH bump, v0.4.0 → v0.4.1
 - Protocol-breaking change → MAJOR bump, v0.4.0 → v1.0.0
@@ -90,18 +91,22 @@ Add a section to `CHANGELOG.md`:
 ## [0.5.0] - 2026-03-21
 
 ### Added
+
 - `exec` command: run commands in existing containers
 - `winbox` adapter suite for Windows HCS
 
 ### Fixed
+
 - Absolute symlink rewrite in layer.rs for busybox applet links
 - cgroup.procs PID 0 validation
 
 ### Security
+
 - Stricter path validation in overlay filesystem setup
 - SO_PEERCRED check rejects non-root UIDs before any deserialization
 
 ### Changed
+
 - Benchmark results saved to `bench/results/bench.jsonl` as append-only history
 ```
 
@@ -116,7 +121,7 @@ cargo build --release
 # Re-run quality gates after the bump
 cargo fmt --all --check
 # TODO: daemonbox and minibox-llm are stale crate names — remove them
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+cargo clippy -p minibox-cli -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
 cargo xtask test-unit
 ```
 
@@ -231,7 +236,7 @@ Run the exact command locally to reproduce:
 
 ```bash
 # TODO: daemonbox and minibox-llm are stale crate names — remove them
-cargo clippy -p mbx -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
+cargo clippy -p minibox-cli -p minibox-macros -p minibox-cli -p daemonbox -p macbox -p miniboxd -p minibox-llm -- -D warnings
 ```
 
 Fix all warnings, then re-tag.

@@ -13,7 +13,7 @@ use crate::sarif::{self, Diagnostic, Level};
 const CLIPPY_PACKAGES: &[&str] = &[
     "minibox",
     "minibox-macros",
-    "mbx",
+    "minibox-cli",
     "minibox-core",
     "macbox",
     "miniboxd",
