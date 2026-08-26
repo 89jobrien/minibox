@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-c1193201.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d8edc199.js"></script>
+        <script src="toc-b1eea390.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -177,7 +177,18 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="code-style-and-conventions"><a class="header" href="#code-style-and-conventions">Code Style and Conventions</a></h1>
+                        <hr>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/miniboxd</li>
+<li>crates/minibox-macros
+generated: 2026-08-22</li>
+</ul>
+<hr>
+<h1 id="code-style-and-conventions"><a class="header" href="#code-style-and-conventions">Code Style and Conventions</a></h1>
 <p>Minibox is a Rust 2024 container runtime. This document records the patterns observed throughout
 the codebase — follow them when adding or modifying code.</p>
 <hr>
@@ -278,8 +289,8 @@ pub enum ImageError {
 <li>Use named fields (<code>{ path: String }</code>) not tuple variants for anything beyond a bare wrapper.</li>
 <li>Always include <code>#[source]</code> on the field that is a wrapped lower-level error.</li>
 <li>Include <code>Other(String)</code> as a catch-all last variant for un-enumerated cases.</li>
-<li>Cross-platform error types live in <code>minibox-core/src/error.rs</code>. Linux-specific errors
-(anything depending on <code>nix</code>) live in <code>minibox/src/error.rs</code>.</li>
+<li>Cross-platform error types live in <code>crates/minibox-core/src/error.rs</code>. Linux-specific errors
+(anything depending on <code>nix</code>) live in <code>crates/minibox/src/error.rs</code>.</li>
 </ul>
 <h3 id="anyhow-for-propagation"><a class="header" href="#anyhow-for-propagation"><code>anyhow</code> for propagation</a></h3>
 <p>Production functions return <code>anyhow::Result&lt;T&gt;</code>. Always attach context to every <code>?</code>:</p>
@@ -356,7 +367,7 @@ tracing::info!("Container {} started with PID {}", id, pid);</code></pre>
 <hr>
 <h2 id="5-architecture"><a class="header" href="#5-architecture">5. Architecture</a></h2>
 <p>Minibox follows the <strong>hexagonal (ports and adapters)</strong> pattern:</p>
-<pre><code class="language-text">Domain Layer (minibox-core/src/domain.rs)
+<pre><code class="language-text">Domain Layer (minibox-core/src/domain/)
   → Defines trait "ports": ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime
   → Zero infrastructure imports
 
@@ -370,12 +381,12 @@ Composition Root (miniboxd/src/main.rs)
 </code></pre>
 <p>Rules:</p>
 <ul>
-<li>Domain traits live exclusively in <code>minibox-core/src/domain.rs</code>. Never add a trait there that
+<li>Domain traits live under <code>crates/minibox-core/src/domain/</code>. Never add a trait there that
 imports from <code>nix</code>, <code>libc</code>, or any platform crate.</li>
-<li>New adapter suites are added to <code>minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
+<li>New adapter suites are added to <code>crates/minibox/src/adapters/</code> (Linux/cross-platform) or <code>smolbox/</code>
 (smolvm/krun macOS VM adapters) and exported from the module root.</li>
 <li><code>HandlerDependencies</code> is the single struct injected into all request handlers. Adding a field
-requires updating all adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</li>
+requires updating all adapter suite construction sites in <code>crates/miniboxd/src/main.rs</code>.</li>
 <li><code>Dyn</code> type aliases (<code>DynImageRegistry</code>, etc.) are defined alongside each trait and used in
 <code>HandlerDependencies</code> to avoid naming concrete types in handler code.</li>
 </ul>
@@ -391,7 +402,7 @@ on the slice it actually uses (Interface Segregation Principle):</p>
 }</code></pre>
 <p>When adding a new handler, declare it to accept the narrowest sub-struct it needs — not the full
 <code>HandlerDependencies</code>. When adding a field to <code>HandlerDependencies</code> or a sub-struct, update all
-adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
+adapter suite construction sites in <code>crates/miniboxd/src/main.rs</code>.</p>
 <h3 id="channel-send-failures"><a class="header" href="#channel-send-failures">Channel-send failures</a></h3>
 <p>Never discard handler channel-send failures with <code>let _ = tx.send(...)</code>. Use or follow the
 <code>send_error</code> helper pattern so dropped client connections appear in logs:</p>
@@ -413,8 +424,8 @@ adapter suite construction sites in <code>miniboxd/src/main.rs</code>.</p>
 <tr><th>Location</th><th>Scope</th><th>Contents</th></tr>
 </thead>
 <tbody>
-<tr><td><code>minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
-<tr><td><code>minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
+<tr><td><code>crates/minibox-core/src/adapters/mocks.rs</code></td><td>cross-platform</td><td><code>MockRegistry</code>, <code>MockRuntime</code>, <code>MockFilesystem</code>, <code>MockLimiter</code></td></tr>
+<tr><td><code>crates/minibox/src/testing/</code></td><td>minibox crate only</td><td><code>mocks/</code>, <code>fixtures/</code>, <code>helpers/</code>, <code>backend/</code>, <code>capability.rs</code></td></tr>
 </tbody>
 </table>
 </div>
@@ -716,8 +727,8 @@ protocol types:</p>
 <ol>
 <li><strong>Add/modify the type</strong> in <code>protocol.rs</code>.</li>
 <li><strong>Add <code>#[serde(default)]</code></strong> on any new optional field for wire compatibility.</li>
-<li><strong>Update handlers</strong> in <code>minibox/src/daemon/handler.rs</code> that pattern-match on the changed variant.</li>
-<li><strong>Update CLI</strong> <code>mbx/src/commands/</code> for the corresponding subcommand.</li>
+<li><strong>Update handlers</strong> in <code>crates/minibox/src/daemon/handler/</code> that pattern-match on the changed variant.</li>
+<li><strong>Update CLI</strong> <code>crates/mbx/src/commands/</code> for the corresponding subcommand.</li>
 <li><strong>Update snapshot tests</strong> — protocol evolution tests live in
 <code>crates/minibox-core/tests/protocol_evolution.rs</code>.</li>
 <li><strong>Run <code>cargo xtask verify</code></strong> to confirm fmt, clippy, and borrow fixtures pass.</li>
@@ -745,11 +756,11 @@ New HandlerDependencies field?    → update all construction sites
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="DEVELOPMENT.mbx.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../../DEVELOPMENT.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="TESTING.mbx.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../../TESTING.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -759,11 +770,11 @@ New HandlerDependencies field?    → update all construction sites
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="DEVELOPMENT.mbx.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../../DEVELOPMENT.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="TESTING.mbx.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../../TESTING.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -776,22 +787,6 @@ New HandlerDependencies field?    → update all construction sites
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

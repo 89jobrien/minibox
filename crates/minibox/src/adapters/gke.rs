@@ -53,6 +53,7 @@ pub struct NoopLimiter;
 #[allow(dead_code)]
 impl NoopLimiter {
     #[must_use]
+    /// Creates a no-op resource limiter.
     pub const fn new() -> Self {
         Self
     }
@@ -90,6 +91,7 @@ pub struct CopyFilesystem;
 #[allow(dead_code)]
 impl CopyFilesystem {
     #[must_use]
+    /// Creates a copy-based filesystem provider.
     pub const fn new() -> Self {
         Self
     }

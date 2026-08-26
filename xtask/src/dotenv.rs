@@ -1,3 +1,5 @@
+//! 1Password and dotenvx helpers for secret-injected task commands.
+
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};

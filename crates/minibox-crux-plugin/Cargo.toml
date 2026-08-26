@@ -20,7 +20,7 @@ serde_json = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-crux-plugin = { git = "https://github.com/89jobrien/crux", rev = "6cfb95eb5614d4938aacb6de48d0db92619db59d" }
+serde = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }

@@ -5,7 +5,7 @@ Conformance test harness for minibox adapter trait contracts.
 ## Purpose
 
 This crate verifies that each adapter (registry, runtime, limiter, state) correctly implements
-its domain port contract as defined in `minibox-core/src/domain.rs`. Tests use mock adapters
+its domain port contract as defined in `minibox-domain/src/`. Tests use mock adapters
 from `minibox::testing::mocks` — no kernel interaction, network calls, or daemon process required.
 
 ## Running the suite
@@ -28,12 +28,12 @@ Both binaries exit `0` on success and `1` on any test failure.
 
 28 conformance tests across four adapter modules:
 
-| Adapter    | Tests | Notes                                           |
-| ---------- | ----- | ----------------------------------------------- |
-| `limiter`  | 7     | `ResourceLimiter` — cgroup lifecycle contract   |
-| `registry` | 6     | `ImageRegistry` — pull count and has_image      |
-| `runtime`  | 8     | `ContainerRuntime` — spawn, PIDs, sync/async    |
-| `state`    | 7     | `DaemonState` — add/remove/list/persist/name    |
+| Adapter    | Tests | Notes                                         |
+| ---------- | ----- | --------------------------------------------- |
+| `limiter`  | 7     | `ResourceLimiter` — cgroup lifecycle contract |
+| `registry` | 6     | `ImageRegistry` — pull count and has_image    |
+| `runtime`  | 8     | `ContainerRuntime` — spawn, PIDs, sync/async  |
+| `state`    | 7     | `DaemonState` — add/remove/list/persist/name  |
 
 Categories used in the harness:
 
@@ -78,11 +78,11 @@ impl ConformanceTest for MyNewTest {
 
 ## Relation to other test categories
 
-| Category          | Command                                        | Requires root/Linux |
-| ----------------- | ---------------------------------------------- | ------------------- |
-| Conformance       | `cargo run -p minibox-testsuite --bin run-conformance`   | No      |
-| Unit              | `cargo xtask test-unit`                        | No                  |
-| Integration       | `just test-integration`                        | Yes (cgroups)       |
-| E2E               | `just test-e2e`                                | Yes (daemon)        |
+| Category    | Command                                                | Requires root/Linux |
+| ----------- | ------------------------------------------------------ | ------------------- |
+| Conformance | `cargo run -p minibox-testsuite --bin run-conformance` | No                  |
+| Unit        | `cargo xtask test-unit`                                | No                  |
+| Integration | `just test-integration`                                | Yes (cgroups)       |
+| E2E         | `just test-e2e`                                        | Yes (daemon)        |
 
 Conformance tests are the fastest gate and safe to run on any platform.

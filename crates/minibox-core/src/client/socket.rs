@@ -1,21 +1,26 @@
+//! Unix socket client and streaming daemon response reader.
+
 use super::error::{ClientError, Result};
 use crate::protocol::{DaemonRequest, DaemonResponse, decode_response};
 use std::path::Path;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 
+/// Client for request-response communication with the minibox daemon.
 pub struct DaemonClient {
     socket_path: std::path::PathBuf,
 }
 
 impl DaemonClient {
     #[must_use]
+    /// Creates a client using the default daemon socket path.
     pub fn new() -> Self {
         Self {
             socket_path: super::default_socket_path(),
         }
     }
 
+    /// Creates a client using an explicit daemon socket path.
     pub fn with_socket(path: impl AsRef<Path>) -> Self {
         Self {
             socket_path: path.as_ref().to_path_buf(),
@@ -47,6 +52,7 @@ impl DaemonClient {
     }
 }
 
+/// Streaming reader for newline-delimited daemon responses.
 pub struct DaemonResponseStream {
     stream: BufReader<UnixStream>,
 }
@@ -84,6 +90,7 @@ pub struct DaemonWriter {
 }
 
 impl DaemonWriter {
+    /// Creates a write-only client using an explicit daemon socket path.
     pub fn with_socket(path: impl AsRef<Path>) -> Self {
         Self {
             socket_path: path.as_ref().to_path_buf(),

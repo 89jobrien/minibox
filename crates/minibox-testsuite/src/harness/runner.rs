@@ -36,11 +36,16 @@ use super::traits::{ConformanceTest, TestCategory, TestResult};
 pub struct TestRunResult {
     /// Fully-qualified `"adapter::name"` id.
     pub id: String,
+    /// Short test name.
     pub name: String,
+    /// Adapter category exercised by the test.
     pub adapter: String,
+    /// Broad test category.
     pub category: TestCategory,
+    /// Test outcome.
     #[serde(flatten)]
     pub result: TestResult,
+    /// Execution duration in milliseconds.
     pub duration_ms: u64,
     /// Failure reasons (empty on pass/skip).
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -50,16 +55,23 @@ pub struct TestRunResult {
 /// Aggregate summary of a runner execution.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct TestSummary {
+    /// Total number of executed and skipped tests.
     pub total: usize,
+    /// Number of passing tests.
     pub passed: usize,
+    /// Number of failing tests.
     pub failed: usize,
+    /// Number of skipped tests.
     pub skipped: usize,
+    /// Total runner duration in milliseconds.
     pub duration_ms: u64,
+    /// Individual test results in execution order.
     pub results: Vec<TestRunResult>,
 }
 
 impl TestSummary {
     #[must_use]
+    /// Returns whether the run completed without failures.
     pub const fn is_success(&self) -> bool {
         self.failed == 0
     }
@@ -101,6 +113,7 @@ impl Default for TestRunner {
 
 impl TestRunner {
     #[must_use]
+    /// Creates an empty test runner with no filters.
     pub fn new() -> Self {
         Self {
             tests: Vec::new(),

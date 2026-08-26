@@ -1,3 +1,17 @@
+---
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+sources:
+  - crates/minibox-core/src/image/layer.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/miniboxd/src/main.rs
+  - crates/minibox-domain/src/execution_manifest.rs
+  - crates/minibox/src/container/process.rs
+  - crates/minibox-core/src/image/registry.rs
+  - crates/minibox/src/adapters/ghcr.rs
+  - crates/minibox/tests/security_regression.rs
+generated: 2026-08-26
+---
+
 # Mutation Audit Checklist — Security-Critical Modules
 
 Produced for issue #341. Each guard, sanitisation step, and error-return path is
@@ -97,7 +111,7 @@ otherwise noted.
 
 ---
 
-## 4. `crates/minibox-core/src/domain/execution_manifest.rs`
+## 4. `crates/minibox-domain/src/execution_manifest.rs`
 
 ### `seal()` and `compute_workload_digest`
 

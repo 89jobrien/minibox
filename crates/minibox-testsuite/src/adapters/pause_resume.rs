@@ -41,6 +41,7 @@ fn make_record(id: &str, state_str: &str, cgroup_path: PathBuf) -> ContainerReco
             pid: Some(1234),
         },
         pid: Some(1234),
+        runtime_id: None,
         rootfs_path: PathBuf::from("/mock/rootfs"),
         cgroup_path,
         post_exit_hooks: vec![],

@@ -1,10 +1,19 @@
+---
+source_sha: 7effd0d08a746ea597507440850849ba7b92d2d5
+sources:
+  - .github/workflows
+  - xtask/src/main.rs
+  - CONTRIBUTING.md
+generated: 2026-08-22
+---
+
 # Stability Checklist
 
 Gates and review prompts for adding new Core or Platform crates, or promoting an Experimental
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-22
 
 ---
 
@@ -35,7 +44,7 @@ or linking a follow-up issue. Silently ignoring advisory items is not acceptable
 
 ## Mandatory Gates
 
-These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `next` -> `staging`).
+These block promotion/merge. All six must be green simultaneously on the promotion path (`develop` -> `staging` -> `release`).
 
 | #   | Item                                                        | Status  | Evidence                                               |
 | --- | ------------------------------------------------------------ | ------- | ------------------------------------------------------- |
@@ -96,32 +105,49 @@ tracked follow-up issue.
 
 ## Freeze Status
 
-A narrow Core/Platform freeze applies until every mandatory gate is verified green
-on the promotion path. It freezes new public `minibox-core` protocol/domain API,
-native-platform capability expansion, and newly wired adapters.
+**Lifted 2026-08-18.** The net-new surface freeze declared 2026-05-14 under issue
+#127 (`CONTRIBUTING.md` "Feature Freeze", commit b23575db) is lifted. Lift
+evidence, per the conditions this section previously stated:
 
-Bug and security fixes, coverage work, documentation, compatibility-safe refactors,
-and isolated Tier 2/3 experiments remain permitted. An exception requires explicit
-maintainer approval and a tracking issue; it must state why the work cannot remain
-isolated from frozen Tier 1 contracts.
+- All six mandatory gates green simultaneously on `develop`: Stability Gates,
+  Conformance, and Merge workflows all passing on commits bc01b5f5 and a9940738
+  (2026-08-18), including the protocol-drift gate after its lock regeneration.
+- Handler coverage 92.41% against the 80% threshold (Gate 2).
+- Linux integration/e2e evidence: conformance suite 123/123 on the pre-push gate
+  and self-hosted Linux CI; `native_adapter_isolation_tests` plus the new
+  `native_adapter_lifecycle_failure_tests` (#74) green on a Linux VM under
+  root + cgroup v2 (2026-08-18).
 
-The freeze lifts only after the 80% handler-coverage gate, promotion-path CI, Linux
-integration/e2e evidence, and supporting documentation are simultaneously current.
-Issue #127 records the final lift decision.
+Normal contribution rules resume. New crates and public surface follow the
+Stabilization Policy in `docs/core/CRATE_TIERS.mbx.md` — the gate criteria are
+now a standing promotion bar, not a freeze. Chain I issues are unblocked.
+
+Issue #127 records the lift decision; the original freeze declaration is
+preserved in git history and in `CONTRIBUTING.md`.
 
 ---
 
 ## CI Enforcement
 
-The following xtask gates are enforced in GitHub Actions (`stability-gates.yml` and
-`protocol-drift.yml`):
+The following jobs enforce checklist items in GitHub Actions (issue #133):
 
-| Gate                       | CI Job                        | Workflow                |
-| -------------------------- | ----------------------------- | ----------------------- |
-| coverage-check             | handler coverage gate (>=80%) | stability-gates.yml     |
-| check-protocol-drift       | core contract hash check      | protocol-drift.yml      |
-| check-stale-names          | stale crate/binary name audit | stability-gates.yml     |
-| check-protocol-sites       | HandlerDependencies site count| stability-gates.yml     |
+| Enforces  | CI Job                                        | Command                                        | Workflow            |
+| --------- | --------------------------------------------- | ---------------------------------------------- | ------------------- |
+| Gate 1    | protocol-drift (core contract hash check)     | `cargo xtask check-protocol-drift`             | protocol-drift.yml  |
+| Gate 1    | check-protocol-sites                          | `cargo xtask check-protocol-sites`             | stability-gates.yml |
+| Gate 2    | handler-coverage (>=80% function coverage)    | `cargo xtask coverage-check`                   | stability-gates.yml |
+| Gate 3    | adapter-integration-tests (all five adapters) | `cargo xtask check adapter-coverage`           | stability-gates.yml |
+| Gate 5    | test-unit                                     | `cargo xtask test unit`                        | pr.yml / merge.yml  |
+| Gate 6    | deny + audit                                  | `cargo deny check` / `cargo audit`             | pr.yml / merge.yml  |
+| A2        | no-unwrap-in-prod (enforced as hard job)      | `cargo xtask check-no-unwrap --strict`         | stability-gates.yml |
+| doc sync  | doc-sync (docs audit + FEATURE_MATRIX age)    | `cargo xtask docs audit --full --strict`       | stability-gates.yml |
+| doc names | check-stale-names                             | `cargo xtask check-stale-names`                | stability-gates.yml |
+| compile   | stability-compile (check + clippy)            | `cargo check --workspace` + targeted clippy    | stability-gates.yml |
 
-Gates 1-6 in the table above are enforced via `cargo xtask pre-commit` locally and the jobs
-listed here in CI. All four xtask-based gates were added under issue #133.
+Known gaps (tracked, not yet CI-enforced):
+
+- Gate 4 (`cargo xtask pre-commit` on macOS) has no CI job — all stability jobs run on
+  `ubuntu-latest`. It remains a local gate.
+- Gates 5 and 6 run in `pr.yml`/`merge.yml`, not in the `stability-gates.yml` fan-in, so the
+  six gates are not verified green as a single unit.
+- Advisory items A1, A3, and A4 are review-time only; A2 is the only automated advisory.

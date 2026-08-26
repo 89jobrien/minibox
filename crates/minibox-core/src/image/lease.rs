@@ -18,8 +18,11 @@ use uuid::Uuid;
 /// A lease protecting one or more image refs from garbage collection.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaseRecord {
+    /// Unique lease identifier.
     pub id: String,
+    /// Time the lease was created.
     pub created_at: SystemTime,
+    /// Time after which the lease no longer protects images.
     pub expire_at: SystemTime,
     /// Image `"name:tag"` strings protected by this lease.
     pub image_refs: HashSet<String>,

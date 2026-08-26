@@ -16,10 +16,15 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 
 /// Bundled user-supplied parameters for a pipeline run request.
 pub struct PipelineParams {
+    /// Host path to the crux pipeline definition.
     pub pipeline_path: String,
+    /// Optional JSON input supplied to the pipeline.
     pub input: Option<serde_json::Value>,
+    /// Optional container image override.
     pub image: Option<String>,
+    /// Optional crux budget configuration.
     pub budget: Option<serde_json::Value>,
+    /// Environment variables passed to the pipeline container.
     pub env: Vec<(String, String)>,
 }
 
@@ -82,6 +87,7 @@ fn build_pipeline_mount(host_pipeline: std::path::PathBuf) -> BindMount {
     }
 }
 
+/// Validates and launches a pipeline container, then reports its trace.
 pub async fn handle_pipeline(
     params: PipelineParams,
     state: Arc<DaemonState>,

@@ -43,6 +43,7 @@
 //! that fails to roundtrip cleanly would corrupt daemon state across restarts.
 
 use minibox::daemon::state::{ContainerRecord, RunCreationParams};
+use minibox_core::domain::BackendRootfsMetadata;
 use minibox_core::protocol::ContainerInfo;
 use proptest::option;
 use proptest::prelude::*;
@@ -77,6 +78,13 @@ fn arb_container_info() -> impl Strategy<Value = ContainerInfo> {
 
 fn arb_path() -> impl Strategy<Value = PathBuf> {
     "[a-z]{1,8}(/[a-z]{1,8}){0,4}".prop_map(PathBuf::from)
+}
+
+fn arb_rootfs_metadata() -> impl Strategy<Value = Option<BackendRootfsMetadata>> {
+    option::of(arb_path().prop_map(|upper| BackendRootfsMetadata::Overlay {
+        upper_dir: upper.into(),
+        metadata: std::collections::HashMap::new(),
+    }))
 }
 
 fn arb_creation_params() -> impl Strategy<Value = RunCreationParams> {
@@ -128,32 +136,41 @@ fn arb_container_record() -> impl Strategy<Value = ContainerRecord> {
     (
         arb_container_info(),
         option::of(any::<u32>()),
+        option::of(any::<String>()),
         arb_path(),
         arb_path(),
         option::of(any::<String>()),
         option::of(arb_creation_params()),
         option::of(any::<String>()),
+        arb_rootfs_metadata(),
     )
         .prop_map(
             |(
                 info,
                 pid,
+                runtime_id,
                 rootfs_path,
                 cgroup_path,
                 source_image_ref,
                 creation_params,
                 workload_digest,
+                rootfs_metadata,
             )| {
+                let upper_dir = rootfs_metadata
+                    .as_ref()
+                    .map(|m| m.overlay_upper_dir().clone().into_inner());
+                let merged_dir = Some(rootfs_path.clone());
                 ContainerRecord {
                     info,
                     pid,
+                    runtime_id,
                     rootfs_path,
                     cgroup_path,
                     post_exit_hooks: vec![],
-                    rootfs_metadata: None,
+                    rootfs_metadata,
                     source_image_ref,
-                    upper_dir: None,
-                    merged_dir: None,
+                    upper_dir,
+                    merged_dir,
                     step_state: None,
                     priority: None,
                     urgency: None,
@@ -194,13 +211,15 @@ proptest! {
         );
     }
 
-    /// Optional fields (pid, source_image_ref, creation_params, workload_digest)
-    /// set to None must round-trip to None — not to a default value.
+    /// Optional fields (pid, runtime_id, source_image_ref, creation_params,
+    /// workload_digest) set to None must round-trip to None — not to a
+    /// default value.
     #[test]
     fn container_record_none_fields_stay_none(info in arb_container_info()) {
         let record = ContainerRecord {
             info,
             pid: None,
+            runtime_id: None,
             rootfs_path: PathBuf::from("/tmp/rootfs"),
             cgroup_path: PathBuf::from("/tmp/cgroup"),
             post_exit_hooks: vec![],
@@ -222,5 +241,18 @@ proptest! {
         prop_assert!(decoded.source_image_ref.is_none(), "source_image_ref round-tripped to Some");
         prop_assert!(decoded.creation_params.is_none(), "creation_params round-tripped to Some");
         prop_assert!(decoded.workload_digest.is_none(), "workload_digest round-tripped to Some");
+    }
+
+    /// A populated upper_dir/merged_dir/rootfs_metadata must survive the
+    /// state.json roundtrip intact — regression guard for the field wiring
+    /// added in 1ae7528e, which `mbx commit` depends on after a daemon restart.
+    #[test]
+    fn container_record_rootfs_metadata_survives_roundtrip(record in arb_container_record()) {
+        let json = serde_json::to_string(&record).expect("serialize ContainerRecord");
+        let decoded: ContainerRecord =
+            serde_json::from_str(&json).expect("deserialize ContainerRecord");
+        prop_assert_eq!(decoded.upper_dir, record.upper_dir);
+        prop_assert_eq!(decoded.merged_dir, record.merged_dir);
+        prop_assert_eq!(decoded.rootfs_metadata, record.rootfs_metadata);
     }
 }

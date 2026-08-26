@@ -50,7 +50,7 @@
 //!
 //! | Module | Purpose |
 //! |--------|---------|
-//! | [`container`] | Linux-only container primitives: namespace setup (`clone(2)`), cgroups v2 manipulation, overlay filesystem mounting, `pivot_root`, and the container init process. Gated on `target_os = "linux"`. |
+//! | `container` | Linux-only container primitives: namespace setup (`clone(2)`), cgroups v2 manipulation, overlay filesystem mounting, `pivot_root`, and the container init process. Gated on `target_os = "linux"`. |
 //! | [`adapters`] | Concrete Linux/platform adapter implementations of domain traits (overlay FS, cgroups v2, Colima/macOS, GKE, etc.). |
 
 pub mod adapters;
@@ -60,6 +60,7 @@ pub mod container_state;
 pub mod daemon;
 pub mod fs_util;
 pub mod nesting;
+pub mod resource_limits;
 
 // The `as_any!` and `adapt!` macros from minibox-macros expand to
 // `crate::domain::AsAny` at the call site. Re-export the domain module here

@@ -67,7 +67,7 @@ fn find_minibox() -> std::path::PathBuf {
         }
     }
     panic!(
-        "Could not find mbx binary. Run `cargo build -p mbx` first, \
+        "Could not find mbx binary. Run `cargo build -p minibox-cli` first, \
          or set MINIBOX_TEST_BIN_DIR."
     );
 }

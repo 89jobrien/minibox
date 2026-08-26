@@ -45,6 +45,15 @@ If changing container code, protocol types, adapters, or tests, read the relevan
 - `cargo fmt --all --check` (run by pre-commit) formats ALL workspace files
   including untracked ones. Run `cargo fmt --all` before committing if untracked
   `.rs` files exist.
+- `tar::Builder::append_dir_all` follows symlinks by default. Container
+  rootfs layers often contain symlinks that only resolve inside a live
+  mount namespace (e.g. Alpine's `etc/mtab -> ../proc/mounts`) — call
+  `.follow_symlinks(false)` before tarring an extracted layer/rootfs dir,
+  or it fails with ENOENT on the host. See docker_archive.rs, commit.rs,
+  push.rs, colima_push.rs.
+- `cargo xtask demo`/showcase binary resolution prefers `target/release`
+  over `target/debug`. After fixing a bug, rebuild release too or the
+  demo silently runs the stale binary.
 
 ## Core Commands
 
@@ -81,7 +90,8 @@ No Python scripts are expected in the project; use Rust scripts or Nushell helpe
 
 ## Architecture Guardrails
 
-- Domain ports live under `crates/minibox-core/src/domain/` and are re-exported by `crates/minibox/src/domain.rs` for adapter compatibility.
+- Domain ports live under `crates/minibox-domain/src/`; `minibox_core::domain`
+  and `minibox::domain` are compatibility re-exports of those same types.
 - `minibox` re-exports `minibox-core`; do not remove re-exports needed by `as_any!`/`adapt!` macro expansion.
 - `DaemonRequest`/`DaemonResponse` are canonical in `crates/minibox-core/src/protocol.rs`.
 - `DaemonResponse::ContainerOutput` is non-terminal; most other response variants end request streaming. Update terminal-response logic when adding variants.
@@ -99,11 +109,11 @@ No Python scripts are expected in the project; use Rust scripts or Nushell helpe
 
 Branches follow the stability pipeline:
 
-`develop` -> `next` -> `staging` -> `main` -> `v*` tag
+`develop` -> `staging` -> `release` -> `main` -> `v*` tag
 
 - Target feature, hotfix, and chore work at `develop`.
-- Do not promote `next` to `staging` without confirming `next` CI is green.
-- Do not promote `staging` to `main` without confirming `staging` CI is green.
+- Do not promote `staging` to `release` without confirming `staging` CI is green.
+- Do not promote `release` to `main` without confirming `release` CI is green.
 - Do not commit unless explicitly asked.
 - `.ctx/HANDOFF.*.*.yaml` is gitignored by default; use `git add -f` only when intentionally tracking it.
 
@@ -111,11 +121,17 @@ Branches follow the stability pipeline:
 
 - `main` is protected via GitHub rulesets. All changes land via PR
   with required status checks. Branch must be up-to-date before merge.
-- `next` and `staging` block force pushes and deletions; require
+- `staging` and `release` block force pushes and deletions; require
   `CI passed` status check.
-- `staging` -> `main` promotion creates a PR automatically via CI.
+- `release` -> `main` promotion creates a PR automatically via CI.
 - Required status checks on `main`: `CI passed`, stability gates,
   `actionlint`.
+- Version bumps must also update `<!-- fact:workspace_version=X.Y.Z -->`
+  markers in docs/core/{ARCHITECTURE,CRATE_INVENTORY}.mbx.md, or
+  `cargo xtask verify`'s docs-audit reports a mismatch.
+- If a file listed in taskit.toml's `[[protocol.surfaces]]` is deleted or
+  renamed, update the list and run `taskit check-protocol-drift --update`
+  to regenerate taskit-protocol.lock, or the check breaks.
 
 ## Hook Notes
 

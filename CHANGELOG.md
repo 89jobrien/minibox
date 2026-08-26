@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [v0.32.0] - 2026-08-15
+
 ### Security
 
 - CNI plugin lookup now rejects plugin types that are not a single normal path component,
@@ -28,6 +30,31 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Stability checklist consolidated from 7 to 6 mandatory gates (former advisory-adjacent
   gate 7 folded into the advisory list); `STABILITY_CHECKLIST.mbx.md`, `SUPPORT_TIERS.mbx.md`,
   and `CONTRIBUTING.md` updated to reflect gate 2 (handler coverage) now passing at 92.41%.
+- `SmolVmRegistry::vm_exec` and `SmolVmRuntime::vm_exec` deduplicated into a shared
+  `run_vm_exec` free function in `crates/minibox/src/adapters/smolvm.rs`.
+
+### Fixed
+
+- `crates/macbox/src/vz/adapter.rs`'s trait-bound compile check for `FilesystemProvider`
+  was missing its import, silently disabling clippy's `--all-targets` pass on `macbox`;
+  fixing it surfaced 28 previously-masked clippy violations across `vz/agent_init.rs`,
+  `vz/proxy.rs`, and `vz/vm.rs`, now resolved.
+- `stability-gates.yml`'s `doc-sync` staleness check pointed at the pre-rename path
+  `docs/FEATURE_MATRIX.md`; the doc's actual path (`docs/core/FEATURE_MATRIX.mbx.md`) was
+  never checked, so the gate was drifting toward permanently stale regardless of how
+  recently the doc was actually updated.
+- `minibox-bench`'s `BenchRegistry` fixture mounted a config blob digest in the served
+  manifest but never served a blob endpoint for it; `RegistryClient::pull_image` now
+  fetches and caches the config blob, so `pull_image_through_bench_registry_succeeds`
+  was failing with HTTP 404 on every run, in CI and locally.
+
+### Removed
+
+- `crates/minibox/src/domain.rs` (984 lines) deleted: an orphaned, never-`mod`-declared
+  duplicate of `minibox-core`'s domain capability types, shadowed at compile time by
+  `lib.rs`'s `pub use minibox_core::domain;` and already stale relative to it (missing
+  `ContainerState::Paused`, `DomainError::ContainerNotStopped`, and several
+  `ContainerSpawnConfig` fields).
 
 ---
 

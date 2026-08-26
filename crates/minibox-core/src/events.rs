@@ -4,62 +4,9 @@
 //! `EventSource` is the read port — consumers (CLI, dashboards) subscribe.
 //! `BroadcastEventBroker` is the single adapter implementing both ports.
 
-use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use tokio::sync::broadcast;
 
-/// A structured event emitted by the minibox daemon during container lifecycle.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContainerEvent {
-    Created {
-        id: String,
-        image: String,
-        timestamp: SystemTime,
-    },
-    Started {
-        id: String,
-        pid: u32,
-        timestamp: SystemTime,
-    },
-    Stopped {
-        id: String,
-        exit_code: i32,
-        timestamp: SystemTime,
-    },
-    Paused {
-        id: String,
-        timestamp: SystemTime,
-    },
-    Resumed {
-        id: String,
-        timestamp: SystemTime,
-    },
-    OomKilled {
-        id: String,
-        timestamp: SystemTime,
-    },
-    ImagePulled {
-        image: String,
-        size_bytes: u64,
-        timestamp: SystemTime,
-    },
-    ImageRemoved {
-        image: String,
-        timestamp: SystemTime,
-    },
-    ImagePruned {
-        count: usize,
-        freed_bytes: u64,
-        timestamp: SystemTime,
-    },
-}
-
-/// Port: write-only event emission. Handlers depend on this.
-pub trait EventSink: Send + Sync {
-    /// Emit an event. Fire-and-forget — never blocks.
-    fn emit(&self, event: ContainerEvent);
-}
+pub use minibox_domain::events::{ContainerEvent, EventSink};
 
 /// Port: subscribe to the event stream. Dashbox and CLI depend on this.
 pub trait EventSource: Send + Sync {
@@ -78,6 +25,7 @@ pub struct BroadcastEventBroker {
 }
 
 impl BroadcastEventBroker {
+    /// Creates a broker with capacity for 1,024 pending events.
     #[must_use]
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1024);
@@ -114,6 +62,7 @@ impl EventSink for NoopEventSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::SystemTime;
 
     #[tokio::test]
     async fn test_emit_and_receive() {

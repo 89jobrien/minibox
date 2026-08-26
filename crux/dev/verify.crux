@@ -1,0 +1,6 @@
+pipeline: verify
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo xtask verify"

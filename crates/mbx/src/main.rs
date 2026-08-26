@@ -369,6 +369,7 @@ enum Commands {
     Doctor,
 
     /// Open a read-only terminal dashboard: live container table + event log.
+    #[cfg(feature = "tui")]
     Tui,
 
     /// Show the execution manifest for a container.
@@ -621,6 +622,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
 
         Commands::Doctor => into_cli(commands::doctor::execute()),
 
+        #[cfg(feature = "tui")]
         Commands::Tui => into_cli(commands::tui::execute().await),
 
         Commands::Manifest { id } => into_cli(commands::manifest::execute(id, socket_path).await),

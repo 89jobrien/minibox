@@ -17,8 +17,8 @@ description = "Git activity standup report"
 run = "cargo xtask run standup"
 
 [tasks.promote]
-description = "Cascade-merge: develop -> next -> staging -> main"
-run = "cargo xtask run promote"
+description = "Cascade-merge: develop -> staging -> release -> main"
+run = "cargo xtask promote"
 
 [tasks.dashboard]
 description = "Agent run history and bench results"

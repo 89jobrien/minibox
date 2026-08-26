@@ -179,28 +179,43 @@ const STATE_FILENAME: &str = "state.json";
 /// original creation request (e.g. for container restart support).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunCreationParams {
+    /// Source image name or reference.
     pub image: String,
+    /// Optional image tag.
     pub tag: Option<String>,
+    /// Command and arguments used at creation.
     pub command: Vec<String>,
+    /// Optional memory limit in bytes.
     pub memory_limit_bytes: Option<u64>,
+    /// Optional relative CPU scheduling weight.
     pub cpu_weight: Option<u64>,
+    /// Requested network mode.
     pub network: Option<NetworkMode>,
+    /// Environment variables in `KEY=VALUE` form.
     #[serde(default)]
     pub env: Vec<String>,
+    /// Requested host bind mounts.
     #[serde(default)]
     pub mounts: Vec<BindMount>,
+    /// Whether privileged execution was requested.
     #[serde(default)]
     pub privileged: bool,
+    /// Optional human-readable container name.
     #[serde(default)]
     pub name: Option<String>,
+    /// Whether a pseudo-terminal was requested.
     #[serde(default)]
     pub tty: bool,
+    /// Optional entrypoint override.
     #[serde(default)]
     pub entrypoint: Option<String>,
+    /// Optional container user override.
     #[serde(default)]
     pub user: Option<String>,
+    /// Optional image platform override.
     #[serde(default)]
     pub platform: Option<String>,
+    /// Optional parent cgroup path.
     #[serde(default)]
     pub cgroup_parent: Option<String>,
 }
@@ -213,6 +228,11 @@ pub struct ContainerRecord {
     /// Host-namespace PID, or `None` if the process has not started yet
     /// or has exited.
     pub pid: Option<u32>,
+    /// Adapter-managed handle for containers whose lifecycle isn't a plain
+    /// host PID (e.g. a persistent smolvm/krun VM name). `None` for native
+    /// containers and for ephemeral VM-backed runs that already completed.
+    #[serde(default)]
+    pub runtime_id: Option<String>,
     /// Path to the merged overlay directory used as the container rootfs.
     pub rootfs_path: PathBuf,
     /// Path to the container's cgroup directory.
@@ -229,7 +249,7 @@ pub struct ContainerRecord {
     pub source_image_ref: Option<String>,
     /// Host-visible writable-layer (overlay upper) directory for this
     /// container's rootfs, when the backend exposes one. Mirrors
-    /// [`BackendRootfsMetadata::overlay_upper_dir`] but is kept as a
+    /// [`minibox_core::domain::BackendRootfsMetadata::overlay_upper_dir`] but is kept as a
     /// top-level field so callers don't need to match on `rootfs_metadata`
     /// to locate the writable layer. `None` for adapters without an
     /// overlay filesystem (GKE, VZ) or when not yet populated.
@@ -412,7 +432,7 @@ impl DaemonState {
     /// For each container still marked `"Paused"`, verify the PID is alive and
     /// `cgroup.freeze` contains `1`.  If either check fails, mark `"Orphaned"`.
     ///
-    /// Call this **after** [`load_from_disk`] on daemon startup.
+    /// Call this **after** [`Self::load_from_disk`] on daemon startup.
     pub async fn reconcile_on_startup(
         &self,
         checker: &dyn ProcessChecker,
@@ -496,7 +516,7 @@ impl DaemonState {
     /// Register a new container record and persist state to disk.
     ///
     /// The caller is expected to create the record in `"Created"` state before
-    /// the container process is forked. Use [`set_container_pid`] to transition
+    /// the container process is forked. Use [`Self::set_container_pid`] to transition
     /// the record to `"Running"` once the PID is known.
     pub async fn add_container(&self, record: ContainerRecord) {
         debug!("adding container {}", record.info.id);
@@ -656,6 +676,21 @@ impl DaemonState {
             record.pid = Some(pid);
             record.info.pid = Some(pid);
             record.info.state = "Running".to_string();
+        }
+        drop(map);
+        self.save_to_disk().await;
+    }
+
+    /// Record the adapter-managed runtime handle for a container (e.g. a
+    /// persistent smolvm machine name), so later `Exec`/`Stop`/`Remove`
+    /// requests can look it back up. No-op if the container isn't tracked.
+    pub async fn set_container_runtime_id(&self, id: &str, runtime_id: Option<String>) {
+        if runtime_id.is_none() {
+            return;
+        }
+        let mut map = self.containers.write().await;
+        if let Some(record) = map.get_mut(id) {
+            record.runtime_id = runtime_id;
         }
         drop(map);
         self.save_to_disk().await;
@@ -831,6 +866,7 @@ mod tests {
                 pid: None,
             },
             pid: None,
+            runtime_id: None,
             rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
             cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
             post_exit_hooks: vec![],
@@ -851,6 +887,47 @@ mod tests {
     fn make_state_in(tmp: &TempDir) -> DaemonState {
         let image_store = ImageStore::new(tmp.path().join("images")).expect("ImageStore::new");
         DaemonState::new(image_store, tmp.path())
+    }
+
+    fn record_with_overlay(id: &str, upper: &str) -> ContainerRecord {
+        let mut record = make_record_with_name(id, None);
+        record.rootfs_metadata = Some(minibox_core::domain::BackendRootfsMetadata::Overlay {
+            upper_dir: std::path::PathBuf::from(upper).into(),
+            metadata: std::collections::HashMap::new(),
+        });
+        record.upper_dir = Some(std::path::PathBuf::from(upper));
+        record
+    }
+
+    /// `get_overlay_upper` derives from `rootfs_metadata`; the persisted
+    /// `upper_dir` field is written from the same source in
+    /// `build_container_record`, so the two must agree (issue #80).
+    #[tokio::test]
+    async fn get_overlay_upper_agrees_with_record_upper_dir() {
+        use crate::container_state::ContainerStateAccess as _;
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        let record = record_with_overlay("abc123", "/var/lib/minibox/containers/abc123/upper");
+        let expected = record.upper_dir.clone().expect("record has upper_dir");
+        state.add_container(record).await;
+        assert_eq!(
+            state
+                .get_overlay_upper("abc123")
+                .await
+                .expect("overlay upper resolves"),
+            expected
+        );
+    }
+
+    #[tokio::test]
+    async fn get_overlay_upper_errors_when_metadata_absent() {
+        use crate::container_state::ContainerStateAccess as _;
+        let tmp = TempDir::new().unwrap();
+        let state = make_state_in(&tmp);
+        state
+            .add_container(make_record_with_name("abc123", None))
+            .await;
+        assert!(state.get_overlay_upper("abc123").await.is_err());
     }
 
     #[tokio::test]

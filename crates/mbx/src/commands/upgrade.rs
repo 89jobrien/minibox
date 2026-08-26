@@ -15,8 +15,10 @@
     )
 )]
 
-use anyhow::{Context as _, Result, bail};
+use anyhow::{Context as _, Result};
 use std::env;
+
+use super::RequestError;
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 
@@ -57,7 +59,11 @@ pub fn target_triple() -> Result<String> {
         ("linux", "aarch64") => Ok("aarch64-unknown-linux-musl".into()),
         ("macos", "aarch64") => Ok("aarch64-apple-darwin".into()),
         ("macos", "x86_64") => Ok("x86_64-apple-darwin".into()),
-        other => bail!("unsupported platform: {}/{}", other.0, other.1),
+        other => Err(RequestError::UnsupportedPlatform {
+            os: other.0.to_string(),
+            arch: other.1.to_string(),
+        }
+        .into()),
     }
 }
 
@@ -78,7 +84,9 @@ where
     let release = provider
         .fetch_release(version.as_deref(), &triple)
         .await
-        .context("fetch release info")?;
+        .map_err(|e| RequestError::ReleaseFetchFailed {
+            reason: e.to_string(),
+        })?;
 
     // Normalise: strip leading 'v' for comparison
     let current = current_version.trim_start_matches('v');
@@ -114,7 +122,9 @@ where
         extract_binary(&bytes, &triple).context("extract binary from tarball")?;
 
     let current_exe = env::current_exe().context("locate current executable")?;
-    replace_binary(&current_exe, &bin_path).context("replace binary")?;
+    replace_binary(&current_exe, &bin_path).map_err(|e| RequestError::BinaryReplaceFailed {
+        reason: e.to_string(),
+    })?;
 
     eprintln!("upgrade complete: {} -> {}", current_version, release.tag);
     Ok(())
@@ -158,7 +168,7 @@ fn extract_binary(bytes: &[u8], _triple: &str) -> Result<(std::path::PathBuf, te
             return Ok((dest, tmp_dir));
         }
     }
-    bail!("mbx binary not found in release tarball")
+    Err(RequestError::BinaryNotInTarball.into())
 }
 
 /// Atomically replace `current_exe` with the new binary at `new_bin`.
@@ -348,15 +358,15 @@ mod tests {
     }
 
     impl ReleaseProvider for MockProvider {
-        async fn fetch_release(
+        fn fetch_release(
             &self,
             _version: Option<&str>,
             _triple: &str,
-        ) -> Result<ReleaseInfo> {
-            Ok(ReleaseInfo {
+        ) -> impl std::future::Future<Output = Result<ReleaseInfo>> + Send {
+            std::future::ready(Ok(ReleaseInfo {
                 tag: self.tag.clone(),
                 asset_url: self.asset_url.clone(),
-            })
+            }))
         }
     }
 
@@ -365,8 +375,11 @@ mod tests {
     }
 
     impl AssetDownloader for MockDownloader {
-        async fn download(&self, _url: &str) -> Result<Vec<u8>> {
-            Ok(self.bytes.clone())
+        fn download(
+            &self,
+            _url: &str,
+        ) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send {
+            std::future::ready(Ok(self.bytes.clone()))
         }
     }
 
@@ -390,9 +403,12 @@ mod tests {
 
         struct TrackingDownloader;
         impl AssetDownloader for TrackingDownloader {
-            async fn download(&self, _url: &str) -> Result<Vec<u8>> {
+            fn download(
+                &self,
+                _url: &str,
+            ) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send {
                 *DOWNLOADED.lock().unwrap() = true;
-                Ok(vec![])
+                std::future::ready(Ok(vec![]))
             }
         }
 

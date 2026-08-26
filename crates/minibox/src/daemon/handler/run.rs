@@ -33,20 +33,35 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 /// in the run pipeline without changing observable behaviour.
 #[derive(Default)]
 pub struct RunParams {
+    /// Source image name or reference.
     pub image: String,
+    /// Optional image tag.
     pub tag: Option<String>,
+    /// Command and arguments to execute.
     pub command: Vec<String>,
+    /// Optional memory limit in bytes.
     pub memory_limit_bytes: Option<u64>,
+    /// Optional relative CPU scheduling weight.
     pub cpu_weight: Option<u64>,
+    /// Whether the container is removed after it exits.
     pub ephemeral: bool,
+    /// Requested network mode.
     pub network: Option<NetworkMode>,
+    /// Host bind mounts requested for the container.
     pub mounts: Vec<BindMount>,
+    /// Whether privileged execution is requested.
     pub privileged: bool,
+    /// Environment variables in `KEY=VALUE` form.
     pub env: Vec<String>,
+    /// Optional human-readable container name.
     pub name: Option<String>,
+    /// Optional image platform override.
     pub platform: Option<String>,
+    /// Optional parent cgroup path.
     pub cgroup_parent: Option<String>,
+    /// Optional scheduling priority.
     pub priority: Option<slashcrux::Priority>,
+    /// Scoped policy overrides for trusted internal callers.
     pub policy_override: Option<PolicyOverride>,
 }
 
@@ -503,6 +518,7 @@ fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord 
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: merged_dir.clone().into_inner(),
         cgroup_path: cgroup_dir.to_path_buf(),
         post_exit_hooks: vec![],
@@ -762,8 +778,19 @@ async fn prepare_run(
 
     let skip_net_ns = net_mode == NetworkMode::Host;
 
-    // Build ContainerRecord in Created state.
-    let image_label = format!("{image}:{tag}");
+    // Build ContainerRecord in Created state. Use `full_image` (the parsed,
+    // canonical name from `image_ref`), not the raw `image` param — when the
+    // caller passes a combined "name:tag" string as `image` with no separate
+    // `tag`, `image` still holds the untouched "name:tag" text, so
+    // `format!("{image}:{tag}")` would double up the tag (e.g.
+    // "python:3.12-alpine:3.12-alpine"). `full_image` is `cache_name()`,
+    // which deliberately keeps the `library/` namespace prefix for its own
+    // purpose (a stable docker.io cache key) — strip it for the
+    // user-facing label so `mbx run nginx` displays as "nginx:alpine", not
+    // "library/nginx:alpine" (matches `SmolVmRegistry::target_ref`'s same
+    // stripping for the same reason).
+    let display_image = full_image.strip_prefix("library/").unwrap_or(&full_image);
+    let image_label = format!("{display_image}:{tag}");
     let record = build_container_record(ContainerRecordBuildParams {
         id: &id,
         name: &name,
@@ -947,6 +974,9 @@ async fn run_inner_capture(
         );
     }
     state.set_container_pid(&prepared.id, pid).await;
+    state
+        .set_container_runtime_id(&prepared.id, runtime_id.clone())
+        .await;
 
     Ok((prepared.id, pid, output_reader, runtime_id))
 }
@@ -1075,13 +1105,16 @@ async fn run_inner(
     }
 
     state.set_container_pid(&id, pid).await;
+    let runtime_id = spawn_result.runtime_id.clone();
+    state
+        .set_container_runtime_id(&id, runtime_id.clone())
+        .await;
 
     // Hand off wait-for-exit to a background task.
     let state_wait = Arc::clone(&state);
     let id_wait = id.clone();
     let event_sink_wait = Arc::clone(&deps.events.event_sink);
     let runtime_wait = Arc::clone(&deps.lifecycle.runtime);
-    let runtime_id = spawn_result.runtime_id.clone();
     tokio::spawn(async move {
         daemon_wait_for_exit(WaitParams {
             pid,
@@ -1295,6 +1328,123 @@ mod run_inner_tests {
             ids.len(),
             256,
             "collision detected among 256 generated container IDs"
+        );
+    }
+}
+
+// ── build_container_record rootfs-metadata projection (issue #80) ────────────
+
+#[cfg(all(test, unix))]
+mod build_container_record_tests {
+    use super::*;
+    use minibox_core::domain::{BackendRootfsMetadata, RootfsLayout};
+    use minibox_core::path::InternalPath;
+    use std::collections::HashMap;
+
+    fn layout_with_upper(upper: &str) -> RootfsLayout {
+        RootfsLayout {
+            merged_dir: PathBuf::from("/var/lib/minibox/containers/abc/merged").into(),
+            rootfs_metadata: Some(BackendRootfsMetadata::Overlay {
+                upper_dir: PathBuf::from(upper).into(),
+                metadata: HashMap::new(),
+            }),
+            source_image_ref: None,
+        }
+    }
+
+    fn layout_without_metadata() -> RootfsLayout {
+        RootfsLayout {
+            merged_dir: PathBuf::from("/var/lib/minibox/containers/abc/merged").into(),
+            rootfs_metadata: None,
+            source_image_ref: None,
+        }
+    }
+
+    fn record_from(layout: &RootfsLayout) -> ContainerRecord {
+        let merged: InternalPath = PathBuf::from("/var/lib/minibox/containers/abc/merged").into();
+        let cgroup = std::path::Path::new("/sys/fs/cgroup/minibox/abc");
+        let command = vec!["/bin/sh".to_string()];
+        let name: Option<String> = None;
+        let platform: Option<String> = None;
+        let cgroup_parent: Option<String> = None;
+        build_container_record(ContainerRecordBuildParams {
+            id: "abc123",
+            name: &name,
+            image_label: "alpine:latest",
+            command: &command,
+            merged_dir: &merged,
+            cgroup_dir: cgroup,
+            rootfs_layout: layout,
+            image: "alpine",
+            tag: "latest",
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            network: None,
+            env: &[],
+            mounts: &[],
+            privileged: false,
+            platform: &platform,
+            cgroup_parent: &cgroup_parent,
+        })
+    }
+
+    #[test]
+    fn populates_upper_dir_from_overlay_metadata() {
+        let layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        let record = record_from(&layout);
+        assert_eq!(
+            record.upper_dir,
+            Some(PathBuf::from("/var/lib/minibox/containers/abc/upper")),
+            "upper_dir must be projected from RootfsLayout::rootfs_metadata"
+        );
+    }
+
+    #[test]
+    fn leaves_upper_dir_none_without_metadata() {
+        let record = record_from(&layout_without_metadata());
+        assert_eq!(
+            record.upper_dir, None,
+            "copy-based backends expose no overlay upper dir"
+        );
+    }
+
+    #[test]
+    fn merged_dir_matches_rootfs_path() {
+        let layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        let record = record_from(&layout);
+        assert_eq!(
+            record.merged_dir.as_deref(),
+            Some(record.rootfs_path.as_path()),
+            "merged_dir and rootfs_path derive from the same InternalPath"
+        );
+    }
+
+    #[test]
+    fn preserves_rootfs_metadata_verbatim() {
+        let layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        let record = record_from(&layout);
+        assert_eq!(record.rootfs_metadata, layout.rootfs_metadata);
+    }
+
+    #[test]
+    fn prefers_layout_source_image_ref_over_image_label() {
+        let mut layout = layout_with_upper("/var/lib/minibox/containers/abc/upper");
+        layout.source_image_ref = Some("docker.io/library/alpine@sha256:dead".to_string());
+        let record = record_from(&layout);
+        assert_eq!(
+            record.source_image_ref.as_deref(),
+            Some("docker.io/library/alpine@sha256:dead"),
+            "layout ref wins over the image_label fallback"
+        );
+    }
+
+    #[test]
+    fn falls_back_to_image_label_when_layout_ref_absent() {
+        let record = record_from(&layout_without_metadata());
+        assert_eq!(
+            record.source_image_ref.as_deref(),
+            Some("alpine:latest"),
+            "image_label is the fallback source_image_ref"
         );
     }
 }

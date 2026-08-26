@@ -43,7 +43,9 @@
     clippy::let_unit_value,
     clippy::ignored_unit_patterns
 )]
-use criterion::{Criterion, criterion_group, criterion_main};
+
+//! Benchmarks for daemon protocol request and response codecs.
+use criterion::{Criterion, criterion_main};
 use minibox_core::protocol::{
     ContainerInfo, DaemonRequest, DaemonResponse, decode_request, decode_response, encode_request,
     encode_response,
@@ -304,7 +306,8 @@ fn bench_responses(c: &mut Criterion) {
     bench_decode_response(c, "container_list_large", &large_list);
 }
 
-criterion_group!(
+minibox_bench::documented_criterion_group!(
+    "Runs daemon protocol codec benchmarks.",
     protocol_codec,
     bench_requests,
     bench_responses,

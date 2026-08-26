@@ -1,0 +1,8 @@
+project: minibox
+base: minibox
+branch: develop
+build: clean
+tests: passed — cargo check clean, no compilation errors
+updated: '20260816'
+notes: 'Completed taskit flow cycle: develop→staging→release→main→develop. Branch pipeline roles renamed to align with taskit convention. All commits on develop, CI ready.'
+touched_files: []

@@ -2,8 +2,8 @@ name: Nightly
 
 on:
   schedule:
-    - cron: "0 2 * * *"       # daily — geiger, tag, extended tests
-    - cron: "0 3 * * 0"       # weekly (Sunday) — mutants
+    - cron: "0 2 * * *" # daily — geiger, tag, extended tests
+    - cron: "0 3 * * 0" # weekly (Sunday) — mutants
   workflow_dispatch:
 
 env:
@@ -30,6 +30,7 @@ jobs:
             crates/minibox/Cargo.toml \
             crates/minibox-macros/Cargo.toml \
             crates/mbx/Cargo.toml \
+            crates/minibox-domain/Cargo.toml \
             crates/minibox-core/Cargo.toml \
             crates/macbox/Cargo.toml \
             crates/winbox/Cargo.toml \
@@ -75,7 +76,7 @@ jobs:
           cargo mutants -- \
             --file crates/minibox-core/src/image/layer.rs \
             --file crates/minibox/src/daemon/server.rs \
-            --file crates/minibox-core/src/domain/execution_manifest.rs \
+            --file crates/minibox-domain/src/execution_manifest.rs \
             --file crates/minibox/src/container/process.rs \
             --file crates/minibox-core/src/image/registry.rs \
             --file crates/minibox/src/adapters/ghcr.rs

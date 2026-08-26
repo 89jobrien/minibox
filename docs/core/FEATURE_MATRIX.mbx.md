@@ -1,8 +1,38 @@
+---
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+sources:
+  - crates/minibox/src/daemon/handler
+  - crates/minibox/src/adapters/limiter.rs
+  - crates/minibox-domain/src/exec.rs
+  - crates/minibox-core/src/events.rs
+  - crates/minibox-core/src/image/registry.rs
+  - crates/minibox/src/adapters/ghcr.rs
+  - crates/minibox-core/src/image/gc.rs
+  - crates/minibox-domain/src/image.rs
+  - crates/minibox/src/container/namespace.rs
+  - crates/minibox/src/adapters/filesystem.rs
+  - crates/minibox/src/adapters/network/bridge.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/minibox-core/src/image/layer.rs
+  - crates/minibox-domain/src/execution_manifest.rs
+  - crates/minibox-domain/src/execution_policy.rs
+  - crates/minibox/src/daemon/state.rs
+  - crates/miniboxd/src/main.rs
+  - crates/minibox/src/adapters/gke.rs
+  - crates/minibox/src/adapters/colima.rs
+  - crates/minibox/src/adapters/smolvm.rs
+  - crates/macbox/src/krun
+  - crates/macbox/src/vz
+  - crates/minibox/src/adapters/docker_desktop.rs
+  - crates/mcp
+generated: 2026-08-26
+---
+
 # Feature Matrix
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-26
 
 ---
 
@@ -15,6 +45,7 @@ Last updated: 2026-08-15
 | `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
 | `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
 | `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
+| `vz`     | macOS only, `vz` feature [^5]   | Non-functional | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
 | `winbox` | Windows                         | Stub         | winbox  | --                                |
 
 [^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
@@ -25,65 +56,76 @@ Last updated: 2026-08-15
       Requires the `smolvm` binary on PATH at runtime.
 [^4]: `krun` fallback platform-splits: `native` on Linux, `krun` on macOS, when
       `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
+[^5]: `vz` requires macOS + the `vz` Cargo feature (off by default). Removed
+      2026-05-07 (commit `00ee4427`, issue #305) after a Tahoe-beta VZ.framework
+      regression (`VZErrorInternal(1)`); code restored 2026-08-15, but the
+      adapter is **currently non-functional** — a follow-up minimal repro
+      showed `VZLinuxBootLoader` still fails with `VZErrorDomain code=1` on
+      macOS 26.4, confirmed against two independent kernel images. See the
+      status update at the top of
+      `docs/designs/2026-08-15-vz-adapter-revival-design.md`. Bypasses the
+      shared `run_daemon()`/`AdapterSuite` dispatch entirely — selected in
+      `main()` before the tokio runtime starts, because VM boot needs the OS main
+      thread for GCD completion-handler callbacks.
 
 ---
 
 ## Capability Matrix
 
-| Feature                 | native | gke  | colima  | smolvm | krun | winbox |
-| ----------------------- | ------ | ---- | ------- | ------ | ---- | ------ |
-| **Container lifecycle** |        |      |         |        |      |        |
-| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| pause/resume            | Yes    | No   | No      | No     | No   | No     |
-| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| exec (-it)              | Yes    | No   | Limited | No     | No   | No     |
-| logs                    | Yes    | No   | Limited | No     | No   | No     |
-| events                  | Yes    | Yes  | No      | No     | No   | No     |
-| **Image management**    |        |      |         |        |      |        |
-| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| prune / rmi             | Yes    | No   | No      | No     | No   | No     |
-| push (exp)              | Yes    | Yes  | Yes     | No     | No   | No     |
-| commit (exp)            | Yes    | No   | Yes     | No     | No   | No     |
-| build (exp)             | Yes    | No   | Yes     | Yes    | No   | No     |
-| **Isolation**           |        |      |         |        |      |        |
-| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
-| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | No     |
-| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | No     |
-| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
-| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | No     |
-| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | No     |
-| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | No     |
-| **Networking**          |        |      |         |        |      |        |
-| Bridge (exp)            | Yes    | No   | No      | No     | No   | No     |
-| Port forwarding         | No     | No   | No      | No     | No   | No     |
-| DNS                     | No     | No   | No      | No     | No   | No     |
-| **Mounts & Privileges** |        |      |         |        |      |        |
-| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No     |
-| Privileged mode         | Yes    | No   | No      | No     | No   | No     |
-| **Security**            |        |      |         |        |      |        |
-| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
-| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
-| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes    |
-| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| **Execution integrity** |        |      |         |        |      |        |
-| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| **State persistence**   |        |      |         |        |      |        |
-| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| PID reconciliation      | Yes    | No   | No      | No     | No   | No     |
-| **Observability**       |        |      |         |        |      |        |
-| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
-| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | No     |
+| Feature                 | native | gke  | colima  | smolvm | krun | vz  | winbox |
+| ----------------------- | ------ | ---- | ------- | ------ | ---- | --- | ------ |
+| **Container lifecycle** |        |      |         |        |      |     |        |
+| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| pause/resume            | Yes    | No   | No      | No     | No   | No  | No     |
+| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| exec (-it)              | Yes    | No   | Limited | No     | No   | No  | No     |
+| logs                    | Yes    | No   | Limited | No     | No   | No  | No     |
+| events                  | Yes    | Yes  | No      | No     | No   | No  | No     |
+| **Image management**    |        |      |         |        |      |     |        |
+| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| prune / rmi             | Yes    | No   | No      | No     | No   | No  | No     |
+| push (exp)              | Yes    | Yes  | Yes     | No     | No   | No  | No     |
+| commit (exp)            | Yes    | No   | Yes     | No     | No   | No  | No     |
+| build (exp)             | Yes    | No   | Yes     | Yes    | No   | No  | No     |
+| **Isolation**           |        |      |         |        |      |     |        |
+| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
+| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
+| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
+| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
+| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
+| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Yes | No     |
+| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Yes | No     |
+| **Networking**          |        |      |         |        |      |     |        |
+| Bridge (exp)            | Yes    | No   | No      | No     | No   | No  | No     |
+| Port forwarding         | No     | No   | No      | No     | No   | No  | No     |
+| DNS                     | No     | No   | No      | No     | No   | No  | No     |
+| **Mounts & Privileges** |        |      |         |        |      |     |        |
+| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No  | No     |
+| Privileged mode         | Yes    | No   | No      | No     | No   | No  | No     |
+| **Security**            |        |      |         |        |      |     |        |
+| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
+| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
+| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
+| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| **Execution integrity** |        |      |         |        |      |     |        |
+| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| **State persistence**   |        |      |         |        |      |     |        |
+| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| PID reconciliation      | Yes    | No   | No      | No     | No   | No  | No     |
+| **Observability**       |        |      |         |        |      |     |        |
+| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
 
 ---
 
@@ -95,15 +137,15 @@ Key implementation sites backing the "Yes" entries above:
 | --- | --- |
 | Container lifecycle (run/stop/rm/ps/restart) | `crates/minibox/src/daemon/handler/lifecycle.rs`, `handler/run.rs`, `handler/stop.rs` |
 | pause/resume (native, cgroup.freeze) | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
-| exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-core/src/domain/exec.rs:ExecRuntime` |
+| exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-domain/src/exec.rs:ExecRuntime` |
 | logs | `crates/minibox/src/daemon/handler/logs.rs` |
 | events | `crates/minibox-core/src/events.rs:EventSink`/`EventSource` |
 | Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image` |
 | Image pull (ghcr.io) | `crates/minibox/src/adapters/ghcr.rs` |
 | prune/rmi | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector` |
-| push | `crates/minibox-core/src/domain/image.rs:ImagePusher` |
-| commit | `crates/minibox-core/src/domain/image.rs:ContainerCommitter` |
-| build | `crates/minibox-core/src/domain/image.rs:ImageBuilder` |
+| push | `crates/minibox-domain/src/image.rs:ImagePusher` |
+| commit | `crates/minibox-domain/src/image.rs:ContainerCommitter` |
+| build | `crates/minibox-domain/src/image.rs:ImageBuilder` |
 | PID/Mount/Net/UTS/IPC namespaces (native) | `crates/minibox/src/container/namespace.rs` |
 | cgroups v2 | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
 | Overlay FS | `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem` |
@@ -115,8 +157,8 @@ Key implementation sites backing the "Yes" entries above:
 | Device node rejection | `crates/minibox-core/src/image/layer.rs` (Block/Char check) |
 | Layer digest verify | `crates/minibox-core/src/image/registry.rs` |
 | Request frame limits | `crates/minibox/src/daemon/server.rs:MAX_REQUEST_SIZE` |
-| Execution manifest + verify | `crates/minibox-core/src/domain/execution_manifest.rs` |
-| Admission policy gate | `crates/minibox-core/src/domain/execution_policy.rs` |
+| Execution manifest + verify | `crates/minibox-domain/src/execution_manifest.rs` |
+| Admission policy gate | `crates/minibox-domain/src/execution_policy.rs` |
 | State persistence + PID reconciliation | `crates/minibox/src/daemon/state.rs:DaemonState` |
 | Structured tracing | `crates/miniboxd/src/main.rs` (tracing subscriber init) |
 | OTLP export | `crates/miniboxd/src/main.rs` (otel feature gate) |
@@ -172,6 +214,28 @@ Key implementation sites backing the "Yes" entries above:
   (see `crates/miniboxd/src/main.rs:build_krun_handler_dependencies`)
   and pass 31 conformance tests. Acts as the fallback when
   `smolvm` is unavailable.
+- **`vz` adapter** uses Apple's Virtualization.framework directly
+  (see `crates/macbox/src/vz/`), communicating with the in-VM
+  `minibox-agent` over vsock
+  (`crates/macbox/src/vz/vsock.rs`, `proxy.rs`). Opt-in only via
+  `MINIBOX_ADAPTER=vz` and the `vz` Cargo feature — not wired into
+  `AdapterSuite`'s `build_handler_deps` dispatch like the other
+  adapters, because `VZVirtualMachine` construction and its
+  completion-handler callbacks must run on the GCD main queue, which
+  requires bypassing `#[tokio::main]` entirely
+  (see `vz_main()`/`start_vz()` in `crates/miniboxd/src/main.rs` and
+  `crates/macbox/src/lib.rs`). Removed 2026-05-07 (issue #305) after
+  a macOS 26 Tahoe-beta regression (`VZErrorInternal(1)`); code
+  restored 2026-08-15, but **currently non-functional** — a follow-up
+  minimal repro (isolated from all minibox configuration, tested
+  against two independent kernel images) showed `VZLinuxBootLoader`
+  still fails with `VZErrorDomain code=1` on macOS 26.4. The earlier
+  belief that the regression was fixed was based on a Lima repro that
+  used `VZEFIBootLoader` — a different boot mechanism than this
+  adapter needs. See the status update in
+  `docs/designs/2026-08-15-vz-adapter-revival-design.md`.
+  `exec`/`logs`/`push`/`commit`/`build` are unimplemented, same gaps
+  as `krun`.
 - **`docker_desktop` adapter**
   (`DockerDesktopRuntime`/`Filesystem`/`Limiter`) exists in
   `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
@@ -186,10 +250,10 @@ Key implementation sites backing the "Yes" entries above:
   and `crates/minibox/src/daemon/handler/manifest.rs`). All
   adapters that support `run` inherit manifest persist,
   `mbx manifest`, `mbx verify`, and admission-policy gating
-  (see `crates/minibox-core/src/domain/execution_policy.rs:ExecutionPolicy`).
+  (see `crates/minibox-domain/src/execution_policy.rs:ExecutionPolicy`).
   Environment variable values are stored as SHA-256 digests --
   never plaintext -- in `execution-manifest.json`
-  (see `crates/minibox-core/src/domain/execution_manifest.rs:ExecutionManifest::seal`).
+  (see `crates/minibox-domain/src/execution_manifest.rs:ExecutionManifest::seal`).
 - **Observability env vars** (daemon startup,
   see `crates/miniboxd/src/main.rs`):
     - `MINIBOX_OTLP_ENDPOINT` -- OTLP trace export endpoint

@@ -1,0 +1,6 @@
+pipeline: test_cli_subprocess
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo build -p mbx && MINIBOX_TEST_BIN_DIR=$(pwd)/target/debug cargo test -p mbx --features subprocess-tests --test cli_subprocess"

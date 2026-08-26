@@ -64,16 +64,22 @@ fn copy_symlink(src: &Path, dst: &Path) -> anyhow::Result<()> {
 /// A device node to create via mknod inside the container's /dev.
 #[derive(Debug, Clone)]
 pub struct DeviceNode {
+    /// Device filename under `/dev`.
     pub name: &'static str,
+    /// Linux major device number.
     pub major: u32,
+    /// Linux minor device number.
     pub minor: u32,
+    /// Unix permission bits.
     pub mode: u32,
 }
 
 /// A symlink to create inside the container's /dev.
 #[derive(Debug, Clone)]
 pub struct DevSymlink {
+    /// Symlink filename under `/dev`.
     pub name: &'static str,
+    /// Symlink target.
     pub target: &'static str,
 }
 

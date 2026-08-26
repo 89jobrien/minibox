@@ -85,6 +85,7 @@ async fn json_file_repository_round_trips() {
                 pid: None,
             },
             pid: None,
+            runtime_id: None,
             rootfs_path: PathBuf::from("/tmp/rootfs"),
             cgroup_path: PathBuf::from("/tmp/cgroup"),
             post_exit_hooks: vec![],

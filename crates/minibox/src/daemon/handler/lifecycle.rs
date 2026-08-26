@@ -44,22 +44,22 @@ async fn freeze_path_for(
     state: &DaemonState,
     expected_state: ContainerState,
     verb: &str,
-) -> Result<std::path::PathBuf, DaemonResponse> {
+) -> Result<std::path::PathBuf, Box<DaemonResponse>> {
     let record = match state.get_container(id).await {
         Some(r) => r,
         None => {
-            return Err(DaemonResponse::Error {
+            return Err(Box::new(DaemonResponse::Error {
                 message: format!("container {id} not found"),
-            });
+            }));
         }
     };
     if record.info.state != expected_state.as_str() {
-        return Err(DaemonResponse::Error {
+        return Err(Box::new(DaemonResponse::Error {
             message: format!(
                 "container {id} is not {verb} (state: {})",
                 record.info.state
             ),
-        });
+        }));
     }
     Ok(record.cgroup_path.join("cgroup.freeze"))
 }
@@ -98,7 +98,7 @@ async fn toggle_freeze(params: FreezeParams) -> DaemonResponse {
         };
     let freeze_path = match freeze_path_for(&id, &state, expected_state, expected_verb).await {
         Ok(p) => p,
-        Err(resp) => return resp,
+        Err(resp) => return *resp,
     };
     if let Err(e) = tokio::fs::write(&freeze_path, freeze_value).await {
         return DaemonResponse::Error {

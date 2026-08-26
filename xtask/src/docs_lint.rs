@@ -1,3 +1,5 @@
+//! Markdown frontmatter linting and SARIF diagnostic generation.
+
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 

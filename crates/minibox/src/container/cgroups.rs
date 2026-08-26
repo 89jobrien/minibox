@@ -116,6 +116,11 @@ impl CgroupManager {
     ///
     /// Idempotent: if the directory already exists the limits are (re-)written.
     pub fn create(&self) -> anyhow::Result<()> {
+        crate::resource_limits::validate_resource_limits(
+            self.config.memory_limit_bytes,
+            self.config.cpu_weight,
+        )?;
+
         debug!(cgroup_path = %self.cgroup_path.display(), "cgroup: creating directory");
 
         fs::create_dir_all(&self.cgroup_path).map_err(|source| CgroupError::CreateFailed {
@@ -133,24 +138,14 @@ impl CgroupManager {
             .unwrap_or_else(|| std::path::Path::new("/sys/fs/cgroup"));
         enable_subtree_controllers(parent)?;
 
-        // Memory limit
-        const MIN_MEMORY_BYTES: u64 = 4096;
+        // Memory limit (bounds already validated by validate_resource_limits above)
         if let Some(mem) = self.config.memory_limit_bytes {
-            // SECURITY: Validate minimum memory (kernel minimum is typically 4KB)
-            if mem < MIN_MEMORY_BYTES {
-                anyhow::bail!("memory limit must be >= {MIN_MEMORY_BYTES} bytes, got {mem}");
-            }
             self.write_file("memory.max", &mem.to_string())?;
             debug!(memory_max = mem, "cgroup: set memory.max");
         }
 
-        // CPU weight
-        const MAX_CPU_WEIGHT: u64 = 10000;
+        // CPU weight (bounds already validated by validate_resource_limits above)
         if let Some(cpu) = self.config.cpu_weight {
-            // SECURITY: Validate range (kernel range is 1-10000)
-            if !(1..=MAX_CPU_WEIGHT).contains(&cpu) {
-                anyhow::bail!("cpu_weight must be 1-{MAX_CPU_WEIGHT}, got {cpu}");
-            }
             self.write_file("cpu.weight", &cpu.to_string())?;
             debug!(cpu_weight = cpu, "cgroup: set cpu.weight");
         }

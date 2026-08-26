@@ -622,11 +622,11 @@ fn mutation_audit_image_pull_size_limits_exist() {
 /// plaintext in the manifest file. Removing seal() would break workload
 /// digest computation.
 ///
-/// Guard location: `crates/minibox-core/src/domain/execution_manifest.rs`.
+/// Guard location: `crates/minibox-domain/src/execution_manifest.rs`.
 // Invariant: 12 — Execution Manifest Integrity
 #[test]
 fn mutation_audit_execution_manifest_env_hashing() {
-    let source = include_str!("../../minibox-core/src/domain/execution_manifest.rs");
+    let source = include_str!("../../minibox-domain/src/execution_manifest.rs");
 
     // Env values must be hashed with SHA-256, never stored as plaintext.
     assert!(

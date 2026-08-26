@@ -163,8 +163,16 @@ struct TokenResponse {
 /// `Debug` is manually implemented to redact secrets.
 #[derive(Clone, PartialEq, Eq)]
 pub enum PushAuth {
+    /// Send no authentication credentials.
     None,
-    Basic { username: String, password: String },
+    /// Authenticate with a username and password.
+    Basic {
+        /// Registry account username.
+        username: String,
+        /// Registry account password.
+        password: String,
+    },
+    /// Authenticate with a bearer token.
     Bearer(String),
 }
 
@@ -890,6 +898,24 @@ impl RegistryClient {
             store
                 .store_manifest(name, tag, &manifest)
                 .with_context(|| format!("store manifest for {name}:{tag}"))?;
+        }
+
+        // 5. Fetch and cache the raw image config blob, unless already cached
+        //    from a previous pull. Adapters that run containers via an in-VM
+        //    docker daemon (e.g. smolvm) need this to rebuild a
+        //    docker-load-compatible tarball from the host-side pull without a
+        //    second registry round-trip.
+        if !store.has_config_blob(name, tag) {
+            let span = tracing::debug_span!("store_config_blob");
+            let config_bytes = self
+                .pull_layer(name, &manifest.config.digest, &token)
+                .instrument(span.clone())
+                .await
+                .with_context(|| format!("fetch config blob for {name}:{tag}"))?;
+            let _entered = span.entered();
+            store
+                .store_config_blob(name, tag, &config_bytes)
+                .with_context(|| format!("store config blob for {name}:{tag}"))?;
         }
 
         info!(
@@ -1913,7 +1939,8 @@ mod tests {
                 .await;
 
             // Blob endpoint — use path_regex since reqwest may percent-encode ':'
-            // in "sha256:..." as "sha256%3A..." in the path segment.
+            // in "sha256:..." as "sha256%3A..." in the path segment. Matches both
+            // the layer blob and the config blob (pull_image now fetches both).
             Mock::given(method("GET"))
                 .and(path_regex(r"/blobs/sha256"))
                 .respond_with(
@@ -1921,7 +1948,7 @@ mod tests {
                         .insert_header("content-type", "application/octet-stream")
                         .set_body_bytes(layer_bytes),
                 )
-                .expect(1)
+                .expect(2)
                 .mount(&server)
                 .await;
 
@@ -2710,7 +2737,9 @@ mod tests {
                 .mount(&server)
                 .await;
 
-            // Blob endpoint — expect exactly ONE call across both pull_image invocations.
+            // Blob endpoint — the layer AND config blob are each fetched once
+            // on the first pull; the second pull must hit the cache for both
+            // and issue no further blob requests.
             Mock::given(method("GET"))
                 .and(path_regex(r"/blobs/sha256"))
                 .respond_with(
@@ -2718,7 +2747,7 @@ mod tests {
                         .insert_header("content-type", "application/octet-stream")
                         .set_body_bytes(layer_bytes),
                 )
-                .expect(1) // second pull must hit the cache, not the network
+                .expect(2)
                 .mount(&server)
                 .await;
 
@@ -2827,8 +2856,9 @@ mod tests {
         // §2.1 — empty layer list succeeds immediately
         // ------------------------------------------------------------------
 
-        /// A manifest with no layers should succeed without issuing any blob
-        /// requests.  The manifest is still stored so `has_image` returns true.
+        /// A manifest with no layers should succeed without issuing any
+        /// *layer* blob requests (the config blob is still fetched). The
+        /// manifest is still stored so `has_image` returns true.
         #[tokio::test]
         async fn pull_image_empty_layer_list_succeeds() {
             let server = MockServer::start().await;
@@ -2857,6 +2887,18 @@ mod tests {
                             "layers": []
                         })),
                 )
+                .mount(&server)
+                .await;
+
+            // Config blob endpoint — still fetched even with zero layers.
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(b"{}".to_vec()),
+                )
+                .expect(1)
                 .mount(&server)
                 .await;
 
@@ -3107,6 +3149,17 @@ mod tests {
                     ResponseTemplate::new(200)
                         .insert_header("content-type", "application/octet-stream")
                         .set_body_bytes(layer2_bytes),
+                )
+                .mount(&server)
+                .await;
+
+            // Config blob endpoint (digest "sha256:cfg2" from the manifest above).
+            Mock::given(method("GET"))
+                .and(path_regex(r"/blobs/sha256(%3A|:)cfg2"))
+                .respond_with(
+                    ResponseTemplate::new(200)
+                        .insert_header("content-type", "application/octet-stream")
+                        .set_body_bytes(b"{}".to_vec()),
                 )
                 .mount(&server)
                 .await;

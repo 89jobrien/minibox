@@ -10,16 +10,22 @@ use std::path::{Path, PathBuf};
 /// Top-level daemon configuration.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct DaemonConfig {
+    /// Optional adapter suite name.
     #[serde(default)]
     pub adapter: Option<String>,
+    /// Optional tracing filter level.
     #[serde(default)]
     pub log_level: Option<String>,
+    /// Optional daemon socket path override.
     #[serde(default)]
     pub socket_path: Option<PathBuf>,
+    /// Optional persistent state directory override.
     #[serde(default)]
     pub state_dir: Option<PathBuf>,
+    /// Optional image storage directory override.
     #[serde(default)]
     pub images_dir: Option<PathBuf>,
+    /// Security and resource policy settings.
     #[serde(default)]
     pub policy: PolicyConfig,
 }
@@ -27,10 +33,13 @@ pub struct DaemonConfig {
 /// Security and resource policy knobs.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct PolicyConfig {
+    /// Whether privileged containers may be requested.
     #[serde(default)]
     pub allow_privileged: Option<bool>,
+    /// Whether host bind mounts may be requested.
     #[serde(default)]
     pub allow_bind_mounts: Option<bool>,
+    /// Optional maximum image size in mebibytes.
     #[serde(default)]
     pub max_image_size_mb: Option<u64>,
 }

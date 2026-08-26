@@ -7,6 +7,9 @@ rust-version.workspace = true
 repository.workspace = true
 publish = false
 
+[lints]
+workspace = true
+
 [lib]
 # The lib holds fixtures only; criterion flags like --noplot must not reach
 # the default libtest bench harness.

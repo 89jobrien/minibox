@@ -450,6 +450,62 @@ impl ImageStore {
         Ok(self.image_dir(name, tag)?.join("layers"))
     }
 
+    /// Return the path to the raw OCI image config JSON blob for `name:tag`.
+    fn config_blob_path(&self, name: &str, tag: &str) -> anyhow::Result<PathBuf> {
+        Ok(self.image_dir(name, tag)?.join("config.json"))
+    }
+
+    /// Returns `true` if the raw OCI image config JSON blob for `name:tag`
+    /// has already been fetched and cached. Callers use this to skip a
+    /// redundant blob fetch on repeat pulls of an already-cached image, the
+    /// same way [`Self::has_image`] guards layer/manifest fetches.
+    pub(crate) fn has_config_blob(&self, name: &str, tag: &str) -> bool {
+        self.config_blob_path(name, tag).is_ok_and(|p| p.exists())
+    }
+
+    /// Persist the raw OCI image config JSON blob for `name:tag`.
+    ///
+    /// Adapters that need to rebuild a `docker load`-compatible tarball from
+    /// a locally pulled image (e.g. the smolvm adapter) read this back via
+    /// [`Self::load_config_blob_pub`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the image directory cannot be created or the file
+    /// cannot be written.
+    pub fn store_config_blob(&self, name: &str, tag: &str, data: &[u8]) -> anyhow::Result<()> {
+        let path = self.config_blob_path(name, tag)?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| ImageError::StoreWrite {
+                path: parent.display().to_string(),
+                source,
+            })?;
+        }
+        std::fs::write(&path, data).map_err(|source| ImageError::StoreWrite {
+            path: path.display().to_string(),
+            source,
+        })?;
+        info!(
+            "stored config blob for {}:{} at {}",
+            name,
+            tag,
+            path.display()
+        );
+        Ok(())
+    }
+
+    /// Read the raw OCI image config JSON blob for `name:tag`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the config blob has not been stored (image not
+    /// yet pulled, or pulled before config-blob caching was added).
+    pub fn load_config_blob_pub(&self, name: &str, tag: &str) -> anyhow::Result<Vec<u8>> {
+        let path = self.config_blob_path(name, tag)?;
+        std::fs::read(&path)
+            .with_context(|| format!("reading config blob for {name}:{tag} at {}", path.display()))
+    }
+
     /// Read and deserialize the stored manifest for `name:tag`.
     ///
     /// Returns [`ImageError::NotFound`] if the manifest file does not exist.

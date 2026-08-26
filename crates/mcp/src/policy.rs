@@ -1,9 +1,12 @@
 //! Agent safety policy for minibox MCP tools.
 
 use crate::error::{McpServerError, Result};
-use crate::types::RunContainerInput;
+use crate::types::{RunContainerInput, parse_network_mode, require_non_empty};
+use minibox_core::domain::NetworkMode;
 
-const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+/// Default cap on collected daemon response bytes, shared with the client's
+/// unconfigured [`crate::client::MiniboxDaemonClient::call`] path.
+pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
 /// Runtime policy applied before MCP tools call the daemon.
 #[derive(Clone, Debug)]
@@ -48,14 +51,15 @@ impl AgentPolicy {
             "MINIBOX_MCP_ALLOW_HOST_NETWORK",
             AgentPermission::HostNetwork,
         );
-        // TODO(review): parse failure here is silently swallowed — an operator's typo'd
-        // or malformed MINIBOX_MCP_MAX_OUTPUT_BYTES falls back to the 1 MiB default with
-        // no log line anywhere in this crate. Add tracing::warn!(value, ...) on parse
-        // failure, or make from_env() fallible and fail loudly at startup.
-        if let Ok(value) = std::env::var("MINIBOX_MCP_MAX_OUTPUT_BYTES")
-            && let Ok(parsed) = value.parse::<usize>()
-        {
-            policy.max_output_bytes = parsed;
+        if let Ok(value) = std::env::var("MINIBOX_MCP_MAX_OUTPUT_BYTES") {
+            match value.parse::<usize>() {
+                Ok(parsed) => policy.max_output_bytes = parsed,
+                Err(error) => tracing::warn!(
+                    value = %value,
+                    error = %error,
+                    "policy: malformed MINIBOX_MCP_MAX_OUTPUT_BYTES; using default"
+                ),
+            }
         }
         policy
     }
@@ -78,21 +82,16 @@ impl AgentPolicy {
                 reason: "bind mounts require MINIBOX_MCP_ALLOW_BIND_MOUNTS=true".to_string(),
             });
         }
-        // TODO(review): compares the raw input string rather than a parsed NetworkMode;
-        // validation of the network string happens later in containers::parse_network_mode,
-        // after this decision is made. Parse before gating so an invalid/aliased value
-        // can't slip past the host-network check.
-        if input.network.as_deref() == Some("host") && !self.allows(AgentPermission::HostNetwork) {
+        // Parse before gating so an invalid or aliased network value cannot
+        // slip past the host-network check.
+        let network_mode = parse_network_mode(input.network.as_deref())?;
+        if network_mode == NetworkMode::Host && !self.allows(AgentPermission::HostNetwork) {
             return Err(McpServerError::PolicyDenied {
                 tool: "minibox_run",
                 reason: "host networking requires MINIBOX_MCP_ALLOW_HOST_NETWORK=true".to_string(),
             });
         }
-        if input.image.trim().is_empty() {
-            return Err(McpServerError::InvalidInput(
-                "image must not be empty".to_string(),
-            ));
-        }
+        require_non_empty(&input.image, "image")?;
         Ok(())
     }
 
@@ -137,15 +136,35 @@ fn env_bool(name: &str) -> bool {
 }
 
 #[cfg(test)]
-// TODO(review): all tests below exercise safe_default() (deny path) only. from_env() —
-// the real binary's boot path — has zero coverage: a typo in an env var name or a
-// regressed match arm in env_bool would silently misconfigure agent permissions with no
-// test catching it. Add tests that set MINIBOX_MCP_ALLOW_* (guarded by a static
-// Mutex<()> per this repo's env-mutation convention, since set_var is unsafe in edition
-// 2024) and assert from_env() actually flips validate_run/validate_mutation to Ok.
 mod tests {
     use super::*;
     use crate::types::{MountInput, RunContainerInput};
+    use std::sync::Mutex;
+
+    /// Serializes env-mutating tests; `set_var`/`remove_var` are unsafe in
+    /// edition 2024 and race with concurrent reads across parallel tests.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct EnvVarGuard {
+        name: &'static str,
+    }
+
+    impl EnvVarGuard {
+        fn set(name: &'static str, value: &str) -> Self {
+            // SAFETY: all mutation of these process-wide env vars happens
+            // under ENV_LOCK, so no other thread reads or writes them
+            // concurrently for the guard's lifetime.
+            unsafe { std::env::set_var(name, value) };
+            Self { name }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            // SAFETY: still under the ENV_LOCK held by the owning test.
+            unsafe { std::env::remove_var(self.name) };
+        }
+    }
 
     fn run_input() -> RunContainerInput {
         RunContainerInput {
@@ -191,5 +210,74 @@ mod tests {
         let policy = AgentPolicy::safe_default();
 
         assert!(policy.validate_mutation("minibox_rm").is_err());
+    }
+
+    #[test]
+    fn validate_run_rejects_unknown_network_mode() {
+        let policy = AgentPolicy::safe_default();
+        let input = RunContainerInput {
+            network: Some("hostt".to_string()),
+            ..run_input()
+        };
+
+        assert!(matches!(
+            policy.validate_run(&input),
+            Err(McpServerError::InvalidInput(_))
+        ));
+    }
+
+    #[test]
+    fn from_env_defaults_deny_all_permissions() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let policy = AgentPolicy::from_env();
+
+        assert!(policy.validate_mutation("minibox_rm").is_err());
+        let input = RunContainerInput {
+            privileged: Some(true),
+            ..run_input()
+        };
+        assert!(policy.validate_run(&input).is_err());
+    }
+
+    #[test]
+    fn from_env_enables_mutation_permission() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _guard = EnvVarGuard::set("MINIBOX_MCP_ALLOW_MUTATION", "true");
+        let policy = AgentPolicy::from_env();
+
+        assert!(policy.validate_mutation("minibox_rm").is_ok());
+    }
+
+    #[test]
+    fn from_env_enables_privileged_and_host_network() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _privileged = EnvVarGuard::set("MINIBOX_MCP_ALLOW_PRIVILEGED", "1");
+        let _host = EnvVarGuard::set("MINIBOX_MCP_ALLOW_HOST_NETWORK", "on");
+        let policy = AgentPolicy::from_env();
+        let input = RunContainerInput {
+            privileged: Some(true),
+            network: Some("host".to_string()),
+            ..run_input()
+        };
+
+        assert!(policy.validate_run(&input).is_ok());
+    }
+
+    #[test]
+    fn from_env_reads_max_output_bytes() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _guard = EnvVarGuard::set("MINIBOX_MCP_MAX_OUTPUT_BYTES", "2048");
+        let policy = AgentPolicy::from_env();
+
+        assert_eq!(policy.max_output_bytes, 2048);
+    }
+
+    #[test]
+    fn from_env_keeps_default_on_malformed_max_output_bytes() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _guard = EnvVarGuard::set("MINIBOX_MCP_MAX_OUTPUT_BYTES", "not-a-number");
+        let policy = AgentPolicy::from_env();
+
+        assert_eq!(policy.max_output_bytes, DEFAULT_MAX_OUTPUT_BYTES);
     }
 }

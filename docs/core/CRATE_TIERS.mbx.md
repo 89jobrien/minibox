@@ -1,10 +1,42 @@
+---
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+sources:
+  - Cargo.toml
+  - crates/minibox-domain
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/minibox-crux-plugin
+  - crates/macbox
+  - crates/smolbox
+  - crates/winbox
+  - crates/mcp
+  - crates/ail
+  - crates/minibox-bench
+  - xtask
+  - crates/minibox-macros
+  - crates/minibox-testsuite
+generated: 2026-08-26
+---
+
 # Crate Support Tiers
 
 This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-26
+
+See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
+Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
+
+> **Relationship to SUPPORT_TIERS.mbx.md:** This document classifies by *architectural role*
+> (Core/Platform/Experimental/Internal/External). SUPPORT_TIERS classifies by *support
+> commitment level*. The axes are independent: a Platform crate can be Tier 3 (Stub) support
+> (e.g. `winbox`); an Experimental crate architecturally may still receive best-effort (Tier 2)
+> support. When in doubt, this document answers "where does this code live?"; SUPPORT_TIERS
+> answers "what guarantees does it carry?"
 
 ---
 
@@ -20,6 +52,44 @@ Last updated: 2026-08-15
 
 ---
 
+## crates.io Publishing Policy (library-first)
+
+This workspace uses a **library-first** crates.io model.
+
+### Public crates intended for crates.io
+
+These crates are intended to resolve fully from crates.io and are treated as public packages:
+
+| Crate            | Publish intent | Why it is public                                                                 |
+| ---------------- | -------------- | --------------------------------------------------------------------------------- |
+| `minibox-macros` | Yes            | Reusable proc-macros consumed by public/shared runtime crates.                    |
+| `minibox-core`   | Yes            | Stable shared domain/protocol library for clients and integrations.               |
+| `minibox-mcp`    | Yes            | MCP integration surface for agent/tooling workflows (experimental but published). |
+
+### Internal / non-publish crates
+
+All other workspace crates are internal and **not** part of the crates.io distribution
+contract today. Most are explicitly `publish = false`; the remainder are treated as
+non-publish by policy until explicitly promoted.
+
+Rationale:
+
+- Runtime/operator binaries (`mbx`, `miniboxd`, adapter crates, test/tooling crates) are
+  released through repository workflows and release artifacts, not crates.io.
+- Keeping these crates internal avoids accidental API/distribution commitments while the
+  runtime surface continues stabilization.
+
+### Current distribution model
+
+- crates.io: shared library surfaces (`minibox-core`, `minibox-macros`) plus MCP integration
+  crate (`minibox-mcp`).
+- Not yet crates.io: first-party runtime/operator binaries (`mbx`, `miniboxd`, `minibox-tui`,
+  `minibox-crux-plugin`) and platform adapter stacks.
+
+Any change to this policy must update this document and release automation in the same PR.
+
+---
+
 ## Core Tier
 
 These crates define the stable runtime contract. Any API change in a Core crate
@@ -27,7 +97,8 @@ that breaks callers outside the workspace is a semver-major event.
 
 | Crate                 | Path                         | Role                                                                                                                                                                                                        |
 | --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `minibox-core`        | `crates/minibox-core`        | Cross-platform shared types: protocol, domain traits, error types, OCI image types, `ImageStore`, `RegistryClient`, `DaemonClient`, preflight. Single source of truth for `DaemonRequest`/`DaemonResponse`. |
+| `minibox-domain`      | `crates/minibox-domain`      | Pure inner ring: domain values, lifecycle events, policies, and ports. Contains no production async-runtime, HTTP, process, socket, or filesystem adapter dependencies.                                  |
+| `minibox-core`        | `crates/minibox-core`        | Cross-platform shared infrastructure: protocol, client transport, OCI image storage/registry, preflight, tracing, and compatibility re-exports from `minibox-domain`.                                  |
 | `minibox`             | `crates/minibox`             | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.                                             |
 | `miniboxd`            | `crates/miniboxd`            | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                                                  |
 | `mbx`                 | `crates/mbx`                 | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                                                             |
@@ -46,7 +117,7 @@ that breaks callers outside the workspace is a semver-major event.
 ## Platform Tier
 
 Adapter suites for specific host environments. Each `{platform}box` crate implements
-the domain traits from `minibox-core` for its target platform.
+the ports from `minibox-domain` through the compatibility paths in `minibox-core`.
 
 | Crate    | Path            | Role                                                                                                                                                        |
 | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -164,8 +235,9 @@ Promotion requires:
 ### Freeze notice (issues #117 and #127)
 
 This document was created as part of a stabilization milestone declared in issues
-#117 and #127. The freeze applies to **net-new Core and Platform crates**. Existing
+#117 and #127. The freeze applied to **net-new Core and Platform crates**. Existing
 crates in all tiers continue to receive fixes and enhancements.
 
-The freeze lifts when all six stabilization gates above are verified green on the
-`next` branch.
+**Freeze lifted 2026-08-18** (issue #127 closed). All six stabilization gates were
+verified green on the `next` branch. New Core and Platform crates may now be proposed
+subject to the standard PR gate process described above.

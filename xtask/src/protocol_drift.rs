@@ -1,3 +1,5 @@
+//! Hash-based drift detection for wire protocol and domain contract surfaces.
+
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,76 +14,96 @@ const ALGORITHM: &str = "sha256-normalized-core-contract-v1";
 
 const SURFACES: &[Surface] = &[
     Surface {
+        name: "domain-root",
+        path: "crates/minibox-domain/src/lib.rs",
+    },
+    Surface {
+        name: "domain-compatibility-facade",
+        path: "crates/minibox-core/src/domain/mod.rs",
+    },
+    Surface {
         name: "wire-protocol",
         path: "crates/minibox-core/src/protocol.rs",
     },
     Surface {
         name: "domain-capability",
-        path: "crates/minibox-core/src/domain/capability.rs",
+        path: "crates/minibox-domain/src/capability.rs",
     },
     Surface {
         name: "domain-checkpoint",
-        path: "crates/minibox-core/src/domain/checkpoint.rs",
+        path: "crates/minibox-domain/src/checkpoint.rs",
     },
     Surface {
         name: "domain-error",
-        path: "crates/minibox-core/src/domain/error.rs",
+        path: "crates/minibox-domain/src/error.rs",
     },
     Surface {
         name: "domain-exec",
-        path: "crates/minibox-core/src/domain/exec.rs",
+        path: "crates/minibox-domain/src/exec.rs",
     },
     Surface {
         name: "domain-filesystem",
-        path: "crates/minibox-core/src/domain/filesystem.rs",
+        path: "crates/minibox-domain/src/filesystem.rs",
     },
     Surface {
         name: "domain-ids",
-        path: "crates/minibox-core/src/domain/ids.rs",
+        path: "crates/minibox-domain/src/ids.rs",
     },
     Surface {
         name: "domain-image",
-        path: "crates/minibox-core/src/domain/image.rs",
+        path: "crates/minibox-domain/src/image.rs",
     },
     Surface {
         name: "domain-metrics",
-        path: "crates/minibox-core/src/domain/metrics.rs",
+        path: "crates/minibox-domain/src/metrics.rs",
     },
     Surface {
         name: "domain-pty",
-        path: "crates/minibox-core/src/domain/pty.rs",
+        path: "crates/minibox-domain/src/pty.rs",
     },
     Surface {
         name: "domain-runtime",
-        path: "crates/minibox-core/src/domain/runtime.rs",
+        path: "crates/minibox-domain/src/runtime.rs",
     },
     Surface {
         name: "domain-state",
-        path: "crates/minibox-core/src/domain/state.rs",
+        path: "crates/minibox-domain/src/state.rs",
     },
     Surface {
         name: "domain-workflow",
-        path: "crates/minibox-core/src/domain/workflow.rs",
+        path: "crates/minibox-domain/src/workflow.rs",
     },
     Surface {
         name: "domain-networking",
-        path: "crates/minibox-core/src/domain/networking.rs",
+        path: "crates/minibox-domain/src/networking.rs",
     },
     Surface {
         name: "domain-extensions",
-        path: "crates/minibox-core/src/domain/extensions.rs",
+        path: "crates/minibox-domain/src/extensions.rs",
     },
     Surface {
         name: "lifecycle-events",
-        path: "crates/minibox-core/src/events.rs",
+        path: "crates/minibox-domain/src/events.rs",
     },
     Surface {
         name: "execution-manifest",
-        path: "crates/minibox-core/src/domain/execution_manifest.rs",
+        path: "crates/minibox-domain/src/execution_manifest.rs",
     },
     Surface {
         name: "execution-policy",
-        path: "crates/minibox-core/src/domain/execution_policy.rs",
+        path: "crates/minibox-domain/src/execution_policy.rs",
+    },
+    Surface {
+        name: "domain-progress",
+        path: "crates/minibox-domain/src/progress.rs",
+    },
+    Surface {
+        name: "domain-image-reference",
+        path: "crates/minibox-domain/src/image_reference.rs",
+    },
+    Surface {
+        name: "domain-path",
+        path: "crates/minibox-domain/src/path.rs",
     },
     Surface {
         name: "error-types",
@@ -519,6 +541,8 @@ mod tests {
     #[test]
     fn all_expected_surfaces_are_tracked() {
         let expected = [
+            "domain-root",
+            "domain-compatibility-facade",
             "wire-protocol",
             "domain-capability",
             "domain-checkpoint",
@@ -537,6 +561,9 @@ mod tests {
             "lifecycle-events",
             "execution-manifest",
             "execution-policy",
+            "domain-progress",
+            "domain-image-reference",
+            "domain-path",
             "error-types",
             "client-api",
             "typestate",
@@ -565,11 +592,11 @@ mod tests {
         ));
         assert!(is_tracked_surface_path(
             root,
-            Path::new("crates/minibox-core/src/domain/networking.rs")
+            Path::new("crates/minibox-domain/src/networking.rs")
         ));
         assert!(is_tracked_surface_path(
             root,
-            Path::new("/repo/crates/minibox-core/src/domain/execution_manifest.rs")
+            Path::new("/repo/crates/minibox-domain/src/execution_manifest.rs")
         ));
         assert!(is_tracked_surface_path(
             root,

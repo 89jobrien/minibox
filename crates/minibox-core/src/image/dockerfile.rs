@@ -10,50 +10,83 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// A command expressed in shell form or JSON exec form.
 pub enum ShellOrExec {
+    /// Shell-form command executed through the default shell.
     Shell(String),
+    /// Exec-form command represented as an argument vector.
     Exec(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Source accepted by an `ADD` instruction.
 pub enum AddSource {
+    /// File or directory from the local build context.
     Local(PathBuf),
+    /// Remote URL parsed from the instruction for downstream handling.
     Url(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Parsed Dockerfile instruction recognized by the parser.
 pub enum Instruction {
+    /// Select a base image and optional stage alias.
     From {
+        /// Base image name.
         image: String,
+        /// Base image tag.
         tag: String,
+        /// Optional build-stage alias.
         alias: Option<String>,
     },
+    /// Execute a command while building the image.
     Run(ShellOrExec),
+    /// Copy local context paths into the image.
     Copy {
+        /// Source paths relative to the build context.
         srcs: Vec<PathBuf>,
+        /// Destination path in the image.
         dest: PathBuf,
     },
+    /// Add local paths or URLs into the image.
     Add {
+        /// Local or remote sources.
         srcs: Vec<AddSource>,
+        /// Destination path in the image.
         dest: PathBuf,
     },
+    /// Set image environment variables.
     Env(Vec<(String, String)>),
+    /// Declare a build argument and optional default value.
     Arg {
+        /// Build argument name.
         name: String,
+        /// Optional default value.
         default: Option<String>,
     },
+    /// Set the working directory for subsequent instructions.
     Workdir(PathBuf),
+    /// Set the image's default command.
     Cmd(ShellOrExec),
+    /// Set the image's entrypoint.
     Entrypoint(ShellOrExec),
+    /// Document a port exposed by the image.
     Expose {
+        /// Port number.
         port: u16,
+        /// Transport protocol, usually `tcp` or `udp`.
         proto: String,
     },
+    /// Set image labels.
     Label(Vec<(String, String)>),
+    /// Set the user and optional group for subsequent commands.
     User {
+        /// User name or numeric identifier.
         name: String,
+        /// Optional group name or numeric identifier.
         group: Option<String>,
     },
+    /// Preserve a source comment.
     Comment(String),
 }
 

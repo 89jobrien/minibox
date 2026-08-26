@@ -37,6 +37,47 @@ pub enum RequestError {
         help("check that miniboxd is running: systemctl status miniboxd")
     )]
     NoResponse,
+
+    /// The current host OS/architecture has no pre-built release asset.
+    #[error("unsupported platform: {os}/{arch}")]
+    #[diagnostic(
+        code(mbx::upgrade::unsupported_platform),
+        help(
+            "mbx upgrade supports linux/x86_64, linux/aarch64, macos/aarch64, and macos/x86_64; \
+             build from source for other platforms"
+        )
+    )]
+    UnsupportedPlatform { os: String, arch: String },
+
+    /// The GitHub Releases API call failed or returned unexpected JSON.
+    #[error("failed to fetch release information: {reason}")]
+    #[diagnostic(
+        code(mbx::upgrade::release_fetch_failed),
+        help(
+            "check your internet connection; to pin a specific version use: mbx upgrade --version \
+             <tag>"
+        )
+    )]
+    ReleaseFetchFailed { reason: String },
+
+    /// The downloaded tarball did not contain an `mbx` binary.
+    #[error("mbx binary not found in release tarball")]
+    #[diagnostic(
+        code(mbx::upgrade::binary_not_in_tarball),
+        help("the release tarball did not contain an 'mbx' binary — try a different version")
+    )]
+    BinaryNotInTarball,
+
+    /// The binary could not be written to the install location.
+    #[error("failed to replace binary: {reason}")]
+    #[diagnostic(
+        code(mbx::upgrade::binary_replace_failed),
+        help(
+            "ensure you have write permission to the directory containing the mbx binary, or \
+             re-run with sudo"
+        )
+    )]
+    BinaryReplaceFailed { reason: String },
 }
 
 /// Send a single request to the daemon and handle the standard
@@ -98,6 +139,7 @@ pub mod run;
 pub mod sandbox;
 pub mod snapshot;
 pub mod stop;
+#[cfg(feature = "tui")]
 pub mod tui;
 pub mod update;
 pub mod upgrade;

@@ -37,8 +37,11 @@ use super::reporter::Reporter;
 /// assertions read identically to the existing e2e test idiom.
 #[derive(Debug, Clone)]
 pub struct CmdOutput {
+    /// Whether the command exited successfully.
     pub success: bool,
+    /// Captured standard output.
     pub stdout: String,
+    /// Captured standard error.
     pub stderr: String,
 }
 

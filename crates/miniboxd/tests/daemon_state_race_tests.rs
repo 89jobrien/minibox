@@ -62,6 +62,7 @@ fn test_record(id: &str) -> ContainerRecord {
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: PathBuf::from("/tmp/fake"),
         cgroup_path: PathBuf::from("/tmp/fake-cg"),
         post_exit_hooks: vec![],

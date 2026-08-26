@@ -15,9 +15,13 @@ use super::{HandlerDependencies, send_error};
 
 /// Bundled user-supplied parameters for an image update request.
 pub struct UpdateParams {
+    /// Explicit image references to update.
     pub images: Vec<String>,
+    /// Whether to update every cached image.
     pub all: bool,
+    /// Whether to update images referenced by containers.
     pub containers: bool,
+    /// Whether affected containers should be restarted.
     pub restart: bool,
 }
 
@@ -61,7 +65,7 @@ async fn resolve_update_targets(
 ///
 /// # Image resolution order
 ///
-/// 1. If `all` is `true`: every image returned by [`ImageStore::list_all_images`].
+/// 1. If `all` is `true`: every image returned by [`minibox_core::image::ImageStore::list_all_images`].
 /// 2. If `containers` is `true`: deduplicated `source_image_ref` values from all
 ///    container records held in `state`.
 /// 3. Otherwise: the explicit `images` list.

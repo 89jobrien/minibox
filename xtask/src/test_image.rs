@@ -183,7 +183,11 @@ fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, Path
     let cli_bin = target_base.join(target).join("debug").join("mbx");
     if force || !cli_bin.exists() {
         println!("  cargo build mbx ...");
-        run_cross(&["build", "--target", target, "-p", "mbx"], cc, target)?;
+        run_cross(
+            &["build", "--target", target, "-p", "minibox-cli"],
+            cc,
+            target,
+        )?;
     } else {
         println!("  cached  mbx");
     }

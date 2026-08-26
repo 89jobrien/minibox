@@ -862,7 +862,11 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, Arc::new(tx))
+            .build_image(
+                &context,
+                &config,
+                minibox_core::progress::TokioProgressSink::shared(tx),
+            )
             .await
             .expect("build must succeed");
 
@@ -900,7 +904,11 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, Arc::new(tx))
+            .build_image(
+                &context,
+                &config,
+                minibox_core::progress::TokioProgressSink::shared(tx),
+            )
             .await
             .expect("build must succeed");
 
@@ -2007,6 +2015,7 @@ mod pause_resume_conformance {
                 pid: Some(12345),
             },
             pid: Some(12345),
+            runtime_id: None,
             rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
             cgroup_path: cgroup_dir.to_path_buf(),
             post_exit_hooks: vec![],

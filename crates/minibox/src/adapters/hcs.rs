@@ -68,7 +68,7 @@ impl ContainerRuntime for HcsRuntime {
 
 // ── HcsFilesystem ────────────────────────────────────────────────────────────
 
-/// Windows HCS implementation of [`FilesystemProvider`] (Phase 2 stub).
+/// Windows HCS implementation of [`crate::domain::FilesystemProvider`] (Phase 2 stub).
 ///
 /// Will provide rootfs setup via WCOW layer stacking or `VirtioFS` when implemented.
 pub struct HcsFilesystem;

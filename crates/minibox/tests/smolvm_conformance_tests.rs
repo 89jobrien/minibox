@@ -52,7 +52,17 @@ use minibox::adapters::SmolVmRegistry;
 use minibox::domain::{ContainerRuntime, ImageLoader, ImageRegistry};
 use minibox_core::adapters::conformance::BackendDescriptor;
 use minibox_core::domain::BackendCapability;
+use minibox_core::image::ImageStore;
 use std::sync::Arc;
+
+/// Build a registry backed by a throwaway temp-dir image store, for tests
+/// that don't care about the specific store location.
+fn test_registry() -> SmolVmRegistry {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let store = Arc::new(ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"));
+    std::mem::forget(tmp); // keep tempdir alive for the registry's lifetime
+    SmolVmRegistry::new(store).expect("SmolVmRegistry::new")
+}
 
 // ---------------------------------------------------------------------------
 // Helper: smolvm backend descriptor
@@ -92,45 +102,26 @@ fn smolvm_backend_declares_expected_capabilities() {
     );
 }
 
-/// SmolVmRegistry.has_image returns true when the injected executor succeeds
-/// (simulating `docker images` finding the image in the VM).
+/// SmolVmRegistry.has_image now checks the host-side image store (which
+/// persists across ephemeral VM instances) rather than asking the guest via
+/// an injected executor — see the doc comment on `SmolVmRegistry` for why
+/// the pull path moved off the VM.
 #[tokio::test]
-async fn smolvm_registry_has_image_delegates_to_docker() {
-    let registry = SmolVmRegistry::new().with_executor(Arc::new(|_args: &[&str]| {
-        Ok("sha256:abc123def456\n".to_string())
-    }));
+async fn smolvm_registry_has_image_checks_host_store() {
+    let registry = test_registry();
 
     assert!(
-        registry.has_image("alpine", "latest").await,
-        "has_image must return true when executor returns non-empty output"
+        !registry.has_image("alpine", "latest").await,
+        "has_image must return false for an image never pulled into the host store"
     );
 }
 
-/// SmolVmRegistry.pull_image propagates executor errors.
-#[tokio::test]
-async fn smolvm_registry_pull_failure_propagates() {
-    let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-        if args.iter().any(|a| a.contains("pull")) {
-            Err(anyhow::anyhow!("connection refused"))
-        } else {
-            Ok(String::new())
-        }
-    }));
-
-    let result = registry
-        .pull_image(&minibox::image::reference::ImageRef::parse("alpine:3.18").expect("parse"))
-        .await;
-
-    assert!(
-        result.is_err(),
-        "pull_image must return Err when executor fails"
-    );
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("connection"),
-        "error message should indicate the underlying cause, got: {err_msg}"
-    );
-}
+// Note: pull_image's happy/error paths now depend on the real host-side
+// DockerHubRegistry (network I/O), which has no executor injection point —
+// unlike the old VM-delegated implementation, its failure modes aren't
+// unit-testable here. Coverage for the host pull itself lives with
+// DockerHubRegistry's own tests; this suite still covers load_image below,
+// which is what remains VM-executor-driven.
 
 /// SmolVmRegistry.load_image imports the host tarball into the VM-local Docker
 /// image cache and tags it with the requested `name:tag`.
@@ -142,7 +133,7 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
 
     let calls = Arc::new(std::sync::Mutex::new(Vec::<Vec<String>>::new()));
     let captured = Arc::clone(&calls);
-    let registry = SmolVmRegistry::new().with_executor(Arc::new(move |args: &[&str]| {
+    let registry = test_registry().with_executor(Arc::new(move |args: &[&str]| {
         captured
             .lock()
             .expect("calls lock")
@@ -155,6 +146,26 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
         .await
         .expect("load image into smolvm");
 
+    // The loader script's own content (docker load / docker tag) is written
+    // to a file in the mounted directory and referenced by path, not passed
+    // inline as an exec argument — smolvm's `machine run -- <args>` transport
+    // re-splits embedded newlines in a single argv element, corrupting an
+    // inline `sh -c <script>` string, so the script survives as a file
+    // instead (see `DOCKER_LOAD_AND_TAG_SCRIPT` doc comment in smolvm.rs).
+    let script_path = tarball
+        .parent()
+        .expect("tarball has parent dir")
+        .join("docker-load-and-tag.sh");
+    let script_contents = std::fs::read_to_string(&script_path).expect("read loader script");
+    assert!(
+        script_contents.contains("docker load"),
+        "smolvm load script must run docker load inside the VM, got: {script_contents}"
+    );
+    assert!(
+        script_contents.contains("docker tag"),
+        "smolvm load script must tag the loaded image for mbx run, got: {script_contents}"
+    );
+
     let calls = calls.lock().expect("calls lock");
     let flattened = calls
         .iter()
@@ -163,12 +174,8 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
         .collect::<Vec<_>>()
         .join(" ");
     assert!(
-        flattened.contains("docker load"),
-        "smolvm load must run docker load inside the VM, got: {flattened}"
-    );
-    assert!(
-        flattened.contains("docker tag"),
-        "smolvm load must tag the loaded image for mbx run, got: {flattened}"
+        flattened.contains("docker-load-and-tag.sh"),
+        "smolvm load must exec the loader script by path, got: {flattened}"
     );
     // The `library/` namespace prefix is stripped so the tag matches what
     // `has_image`/`pull_image` look for later (issue #457 regression coverage).
@@ -183,7 +190,7 @@ async fn smolvm_registry_load_image_imports_tarball_into_vm_cache() {
 async fn smolvm_registry_load_image_rejects_missing_tarball() {
     let called = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let called_by_exec = Arc::clone(&called);
-    let registry = SmolVmRegistry::new().with_executor(Arc::new(move |_args: &[&str]| {
+    let registry = test_registry().with_executor(Arc::new(move |_args: &[&str]| {
         called_by_exec.store(true, std::sync::atomic::Ordering::Relaxed);
         Ok(String::new())
     }));
@@ -275,21 +282,8 @@ fn smolvm_limiter_create_returns_id() {
     assert_eq!(id, "smolvm-test-001");
 }
 
-/// SmolVmRegistry.has_image strips "library/" prefix for official images.
-#[tokio::test]
-async fn smolvm_registry_strips_library_prefix() {
-    let registry = SmolVmRegistry::new().with_executor(Arc::new(|args: &[&str]| {
-        // Verify the filter arg does NOT contain "library/"
-        for arg in args {
-            if arg.starts_with("reference=") {
-                assert!(
-                    !arg.contains("library/"),
-                    "library/ prefix should be stripped, got: {arg}"
-                );
-            }
-        }
-        Ok("sha256:abc\n".to_string())
-    }));
-
-    assert!(registry.has_image("library/alpine", "latest").await);
-}
+// Note: the "library/" prefix stripping guarantee for locally-loaded images
+// is covered by `target_ref_strips_library_prefix` (unit test in smolvm.rs)
+// and by `smolvm_registry_load_image_imports_tarball_into_vm_cache` above —
+// has_image itself no longer talks to the VM, so there's nothing
+// docker-argument-shaped left to assert on here.

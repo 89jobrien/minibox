@@ -3,7 +3,7 @@
 use crate::client::MiniboxDaemonClient;
 use crate::error::{McpServerError, Result};
 use crate::policy::AgentPolicy;
-use crate::types::{ImagesOutput, PullImageInput, PullImageOutput};
+use crate::types::{ImagesOutput, PullImageInput, PullImageOutput, require_non_empty};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 
 /// List cached images.
@@ -41,14 +41,10 @@ pub async fn pull_image(
     policy: &AgentPolicy,
     input: PullImageInput,
 ) -> Result<PullImageOutput> {
-    // TODO(review): pull mutates daemon state (network fetch + disk write) but calls no
-    // policy check at all, unlike stop/rm which require MINIBOX_MCP_ALLOW_MUTATION. Gate
-    // this behind validate_mutation("minibox_pull") or an explicit pull permission tier.
-    if input.image.trim().is_empty() {
-        return Err(McpServerError::InvalidInput(
-            "image must not be empty".to_string(),
-        ));
-    }
+    // Pull mutates daemon state (network fetch + disk write), so it sits
+    // behind the same mutation gate as stop/rm.
+    policy.validate_mutation("minibox_pull")?;
+    require_non_empty(&input.image, "image")?;
 
     let result = client
         .call_limited(
@@ -72,8 +68,32 @@ pub async fn pull_image(
             response: format!("{:?}", result.raw_responses),
         })?;
 
-    Ok(PullImageOutput {
-        message,
-        daemon_responses: result.raw_responses,
-    })
+    Ok(PullImageOutput { message })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::PullImageInput;
+    use std::path::PathBuf;
+
+    #[tokio::test]
+    async fn pull_is_denied_by_default_before_any_daemon_contact() {
+        let client = MiniboxDaemonClient::new(PathBuf::from("/nonexistent/minibox.sock"));
+        let policy = AgentPolicy::safe_default();
+        let input = PullImageInput {
+            image: "alpine".to_string(),
+            ..PullImageInput::default()
+        };
+
+        // A PolicyDenied error (not DaemonConnection) proves the gate fires
+        // before the unreachable socket is ever touched.
+        assert!(matches!(
+            pull_image(&client, &policy, input).await,
+            Err(McpServerError::PolicyDenied {
+                tool: "minibox_pull",
+                ..
+            })
+        ));
+    }
 }

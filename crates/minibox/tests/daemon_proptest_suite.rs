@@ -178,6 +178,7 @@ fn make_record(id: &str) -> ContainerRecord {
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: std::path::PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path: std::path::PathBuf::from("/tmp/fake-cgroup"),
         post_exit_hooks: vec![],

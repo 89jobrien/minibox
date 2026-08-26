@@ -50,12 +50,16 @@
 
 use flate2::{Compression, write::GzEncoder};
 use sha2::{Digest, Sha256};
+use std::fmt::Write as _;
 
 /// Shape of a synthetic OCI layer for extraction/pull benches.
 #[derive(Debug, Clone, Copy)]
 pub struct LayerSpec {
+    /// Number of regular files to include in the layer.
     pub file_count: usize,
+    /// Uncompressed payload size of each generated file.
     pub file_size_bytes: usize,
+    /// Number of nested directory components before each file.
     pub dir_depth: usize,
 }
 
@@ -69,7 +73,10 @@ pub fn build_layer_tar_gz(spec: &LayerSpec) -> Vec<u8> {
     let mut builder = tar::Builder::new(GzEncoder::new(Vec::new(), Compression::fast()));
     let payload = vec![0xA5u8; spec.file_size_bytes];
     for i in 0..spec.file_count {
-        let dir: String = (0..spec.dir_depth).map(|d| format!("d{d}/")).collect();
+        let dir = (0..spec.dir_depth).fold(String::new(), |mut dir, depth| {
+            write!(dir, "d{depth}/").expect("writing to String cannot fail");
+            dir
+        });
         let path = format!("{dir}file-{i:06}.bin");
         let mut header = tar::Header::new_gnu();
         header.set_size(spec.file_size_bytes as u64);

@@ -1,54 +1,31 @@
 # Contributing to Minibox
 
-## Feature Freeze
+## Feature Freeze (lifted 2026-08-18)
 
-**A net-new surface freeze is currently in effect.**
+The net-new surface freeze declared here on 2026-05-14 (issue #127) was **lifted on
+2026-08-18**: all six mandatory [GATE] items in
+[`docs/core/STABILITY_CHECKLIST.mbx.md`](docs/core/STABILITY_CHECKLIST.mbx.md) were
+verified green simultaneously on the promotion path, including Linux
+integration/e2e evidence. The lift record and evidence live in that document's
+"Freeze Status" section; issue #127 records the decision.
 
-No new public API surface, features, or adapters may be merged until all mandatory stability
-gates pass on CI. This freeze is formal and operational — not advisory.
+What replaces the freeze:
 
-### What "passing" means
-
-All six mandatory [GATE] items in [`docs/core/STABILITY_CHECKLIST.mbx.md`](docs/core/STABILITY_CHECKLIST.mbx.md)
-must be green on the `develop` branch in CI simultaneously. The current blocking gate is:
-
-- Gate 2: Handler coverage >= 80% (currently 92.41%, 207/224 functions)
-
-### Unlock condition
-
-All six mandatory gates green on the `develop` -> `next` -> `staging` promotion path, including Linux integration/e2e evidence. A maintainer will tag the freeze as lifted
-in the tracking issue and update this file.
-
-### What IS allowed during the freeze
-
-- Bug fixes to existing behaviour
-- Tests that increase coverage toward Gate 2
-- Documentation updates
-- Refactors that do not change public API surface
-- Dependency updates (security patches, version bumps)
-- Isolated Tier 2/3 experiments that do not alter frozen Tier 1 contracts
-- CI and tooling improvements
-
-### What is NOT allowed during the freeze
-
-- New public API variants (new `DaemonRequest`/`DaemonResponse` variants, new domain traits)
-- New features visible to users via the CLI or protocol
-- New adapter implementations
-- New crates added to the workspace
-- Any change that widens the public surface of `minibox-core`
-
-### Chain I issues are explicitly gated
-
-Issues in the Chain I stabilization track (#94, #20, #83, and related) are blocked by this
-freeze. They will not be merged until the unlock condition is satisfied, regardless of
-implementation readiness. Do not open PRs for Chain I work during the freeze period.
+- New crates and new public surface follow the standing **Stabilization Policy**
+  in [`docs/core/CRATE_TIERS.mbx.md`](docs/core/CRATE_TIERS.mbx.md) — the gate
+  criteria did not go away, they are now the promotion bar rather than a blanket
+  block.
+- Chain I stabilization-track issues (#94, #20, #83, and related) are unblocked.
+- The mandatory gates remain enforced in CI (`stability-gates.yml`,
+  `protocol-drift.yml`, `pr.yml`/`merge.yml`) — a regression in any gate is a
+  merge blocker exactly as during the freeze.
 
 ---
 
 ## Development Workflow
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the canonical developer workflow, command
-reference, and CI gate descriptions.
+See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the canonical developer
+workflow, command reference, and CI gate descriptions.
 
 ### Quick gates
 
@@ -89,6 +66,6 @@ Before opening a PR, confirm:
 - [ ] `cargo xtask pre-commit` passes locally
 - [ ] `cargo xtask test unit` passes locally
 - [ ] No new `.unwrap()` in production paths
-- [ ] No new public API surface (during freeze)
+- [ ] New public API surface follows the Stabilization Policy in `docs/core/CRATE_TIERS.mbx.md`
 - [ ] PR description references the issue being addressed
 - [ ] Any unmet [ADVISORY] items are acknowledged with rationale in the PR description

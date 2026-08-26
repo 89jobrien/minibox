@@ -8,6 +8,7 @@ use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Tab
 
 use crate::app::App;
 
+/// Renders the complete dashboard into the current terminal frame.
 pub fn draw(frame: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)

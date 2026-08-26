@@ -5,11 +5,13 @@
 > **Status**: Stabilization freeze active — see [CONTRIBUTING.md](CONTRIBUTING.md) and
 > [docs/core/STABILITY_CHECKLIST.mbx.md](docs/core/STABILITY_CHECKLIST.mbx.md).
 
-A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
-isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
-keeps adapter suites swappable at startup with no recompile.
+An agent-controllable container runtime written in Rust. Daemon/CLI split, OCI image pulling,
+Linux namespace isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal
+architecture keeps adapter suites swappable at startup with no recompile. A built-in MCP stdio
+server exposes policy-gated daemon operations directly to MCP clients so agents can drive container
+lifecycle without shelling out to the CLI.
 
-**Status:** Active development — `v0.31.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.32.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -49,7 +51,9 @@ structured tracing, property testing.
 Requires Linux, root, kernel 5.0+, cgroups v2, overlay FS.
 
 First-time contributors: run `just install-hooks` and `cargo xtask doctor` to verify your
-toolchain and environment before building — see [`DEVELOPMENT.md`](DEVELOPMENT.md).
+toolchain and environment before building — see
+[`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md). For per-environment usage
+workflows (systemd, GKE, WSL2, Colima) see [`docs/core/USAGE.mbx.md`](docs/core/USAGE.mbx.md).
 
 ```bash
 # Build
@@ -92,7 +96,7 @@ breakdown.
 
 ## Architecture
 
-14 crates plus `xtask` (15 workspace members), Rust 2024 edition:
+15 crates plus `xtask` (16 workspace members), Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
@@ -106,6 +110,7 @@ macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
 miniboxd                daemon entry point, adapter dependency injection
 
 mbx                     CLI client — connects via Unix socket
+minibox-tui             read-only TUI dashboard (ratatui) — live container table + event log
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
 minibox-mcp             MCP stdio server for agent-controlled minibox tools
 minibox-testsuite       conformance test harness for adapter trait contracts
@@ -114,6 +119,20 @@ minibox-cni             CNI plugin exec protocol and chain orchestration
 ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
+
+**Agentic tooling.** Three surfaces exist specifically for agent-driven operation, layered on
+top of the same daemon protocol the CLI uses:
+
+- `minibox-mcp` (`mcp` binary) — local MCP stdio server. Read-only inspection tools are exposed
+  by default; run/pull/stop/rm are gated behind explicit agent policy.
+- `minibox-crux-plugin` — bridges minibox into [crux](https://github.com/89jobrien/crux) agent
+  pipelines over JSON-RPC stdio.
+- `minibox-tui` (`mbx tui`) — read-only live dashboard (container table + streaming lifecycle
+  events) for watching what an agent is doing to the daemon in real time.
+
+[`agentbox`](agentbox/) (a separate Go module in this repo) is the multi-role review/task-decomposition
+agent runtime used to develop minibox itself — not a minibox subcommand, but worth knowing about
+if you're exploring the repo.
 
 **Hexagonal ports.** Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`,
 `ContainerRuntime`, `NetworkProvider`, …) live in `minibox-core`. Adapters implement them.
@@ -217,7 +236,9 @@ just test-e2e                # daemon + CLI end-to-end (Linux + root)
 ```
 
 The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md).
+macOS without root. See [`docs/core/TESTING.mbx.md`](docs/core/TESTING.mbx.md) for the full test
+strategy and [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md) for how
+the harness is built.
 
 ---
 
@@ -230,7 +251,7 @@ just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 ```
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
+See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the full workflow.
 
 ---
 
@@ -239,7 +260,8 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 Issues and PRs are welcome. A few things to know before contributing:
 
 - Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
-- New adapters implement the domain traits under `crates/minibox-core/src/domain/`.
+- New adapters implement ports from `crates/minibox-domain/src/`; the
+  `minibox_core::domain` facade preserves compatibility paths.
 - Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`

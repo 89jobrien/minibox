@@ -1,3 +1,5 @@
+//! Guard for keeping daemon dependency construction sites synchronized.
+
 use anyhow::{Result, bail};
 use std::{fs, path::Path};
 

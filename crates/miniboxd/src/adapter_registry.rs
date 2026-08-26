@@ -45,6 +45,12 @@ pub enum AdapterSuite {
     SmolVm,
     /// krun: libkrun-based micro-VM (Linux via KVM, macOS via HVF).
     Krun,
+    /// macOS via Apple Virtualization.framework. Bypasses this registry's
+    /// `build_handler_deps` dispatch entirely — selected earlier, in
+    /// `main()`, because its VM boot needs the OS main thread for GCD
+    /// callbacks. Listed here only so `--adapter vz` / `MINIBOX_ADAPTER=vz`
+    /// validate and `--list-adapters` shows it.
+    Vz,
 }
 
 impl fmt::Display for AdapterSuite {
@@ -63,6 +69,7 @@ impl AdapterSuite {
             Self::Colima => "colima",
             Self::SmolVm => "smolvm",
             Self::Krun => "krun",
+            Self::Vz => "vz",
         }
     }
 }
@@ -72,7 +79,7 @@ impl AdapterSuite {
 /// This slice contains every adapter name regardless of platform availability.
 /// Use [`available_adapter_names`] to filter to adapters compiled into the
 /// current build, or [`all_adapters`] for full metadata (including `available`).
-pub const VALID_ADAPTERS: &[&str] = &["native", "gke", "colima", "smolvm", "krun"];
+pub const VALID_ADAPTERS: &[&str] = &["native", "gke", "colima", "smolvm", "krun", "vz"];
 
 /// Default adapter suite when `MINIBOX_ADAPTER` is unset.
 pub const DEFAULT_ADAPTER_SUITE: &str = "smolvm";
@@ -114,6 +121,12 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
             description: "libkrun micro-VM via KVM/HVF (recommended fallback, cross-platform)",
             available: true,
             platform: "any",
+        },
+        AdapterInfo {
+            name: "vz",
+            description: "Apple Virtualization.framework micro-VM (macOS, opt-in, feature-gated)",
+            available: cfg!(all(target_os = "macos", feature = "vz")),
+            platform: "macos",
         },
     ]
 }
@@ -176,6 +189,7 @@ pub fn parse_adapter(name: &str) -> Result<AdapterSuite, AdapterSelectionError> 
         "colima" => AdapterSuite::Colima,
         "smolvm" => AdapterSuite::SmolVm,
         "krun" => AdapterSuite::Krun,
+        "vz" => AdapterSuite::Vz,
         _ => {
             return Err(AdapterSelectionError {
                 requested: name.to_string(),
@@ -443,6 +457,7 @@ mod tests {
             AdapterSuite::Colima,
             AdapterSuite::SmolVm,
             AdapterSuite::Krun,
+            AdapterSuite::Vz,
         ] {
             let name = suite.to_string();
             if available.contains(&name.as_str()) {
@@ -528,6 +543,64 @@ mod tests {
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
         }
+    }
+
+    /// Explicit `MINIBOX_ADAPTER` disables fallback: even when the smolvm
+    /// probe fails, the requested adapter must be selected, not the fallback
+    /// (issue #80 regression guard for the documented contract).
+    #[test]
+    fn explicit_adapter_does_not_fall_back_when_smolvm_probe_fails() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "smolvm");
+        }
+        let result = adapter_from_env_with_smolvm_available(false);
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = result.expect("explicit smolvm must parse regardless of probe");
+        assert_eq!(
+            suite,
+            AdapterSuite::SmolVm,
+            "explicit MINIBOX_ADAPTER must disable fallback"
+        );
+    }
+
+    /// An explicitly requested adapter that is unavailable on this platform
+    /// must be a hard error — never a silent fallback.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn explicit_unavailable_adapter_errors_instead_of_falling_back() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "native");
+        }
+        let result = adapter_from_env_with_smolvm_available(false);
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let err = result.expect_err("native is unavailable on macOS — must be a hard error");
+        assert_eq!(err.requested, "native");
+    }
+
+    /// Pin the macOS fallback: when smolvm is absent and no adapter is
+    /// requested, selection must land on krun, not error or pick native.
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn macos_fallback_is_krun() {
+        assert_eq!(FALLBACK_ADAPTER_SUITE, "krun");
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = adapter_from_env_with_smolvm_available(false)
+            .expect("krun fallback must parse on macOS");
+        assert_eq!(suite, AdapterSuite::Krun);
     }
 
     #[test]
@@ -711,6 +784,7 @@ mod tests {
             AdapterSuite::Colima,
             AdapterSuite::SmolVm,
             AdapterSuite::Krun,
+            AdapterSuite::Vz,
         ] {
             let s = suite.as_str();
             assert!(
@@ -771,6 +845,23 @@ mod tests {
         assert_eq!(cloned, info);
         let debug_str = format!("{info:?}");
         assert!(debug_str.contains("test"));
+    }
+
+    #[test]
+    #[cfg(all(target_os = "macos", feature = "vz"))]
+    fn parse_vz_succeeds_when_feature_enabled() {
+        assert_eq!(
+            parse_adapter("vz").expect("should parse vz on macOS with vz feature"),
+            AdapterSuite::Vz
+        );
+    }
+
+    #[test]
+    fn valid_adapters_contains_vz() {
+        assert!(
+            VALID_ADAPTERS.contains(&"vz"),
+            "VALID_ADAPTERS must include 'vz' regardless of platform availability, same as native/gke"
+        );
     }
 
     #[test]

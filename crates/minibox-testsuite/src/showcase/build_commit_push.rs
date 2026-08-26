@@ -154,7 +154,11 @@ impl BuildCommitPush {
 
         let (tx, _rx) = mpsc::channel(64);
         builder
-            .build_image(&build_context, &build_config, Arc::new(tx))
+            .build_image(
+                &build_context,
+                &build_config,
+                crate::progress::tokio_progress_sink(tx),
+            )
             .await
             .map_err(|e| anyhow::anyhow!("build_image: {e}"))
     }

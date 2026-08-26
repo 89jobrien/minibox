@@ -1,32 +1,63 @@
 {
   "version": 2,
-  "quality_score": 0.9008208955223882,
-  "iosp_score": 1.0,
-  "violations": 0,
-  "total": 1876,
+  "quality_score": 0.9145407529305801,
+  "iosp_score": 0.995398773006135,
+  "violations": 6,
+  "total": 2207,
   "complexity_warnings": 0,
-  "magic_number_warnings": 4,
+  "magic_number_warnings": 11,
   "nesting_depth_warnings": 0,
   "function_length_warnings": 0,
-  "unsafe_warnings": 22,
-  "error_handling_warnings": 3,
-  "duplicate_groups": 8,
+  "unsafe_warnings": 29,
+  "error_handling_warnings": 7,
+  "duplicate_groups": 9,
   "dead_code_warnings": 0,
-  "fragment_groups": 22,
-  "boilerplate_warnings": 32,
-  "srp_struct_warnings": 6,
-  "srp_module_warnings": 11,
+  "fragment_groups": 12,
+  "boilerplate_warnings": 37,
+  "srp_struct_warnings": 7,
+  "srp_module_warnings": 17,
   "wildcard_import_warnings": 0,
   "sdp_violations": 0,
   "coupling_warnings": 0,
   "coupling_cycles": 0,
-  "tq_no_assertion_warnings": 5,
-  "tq_no_sut_warnings": 54,
-  "tq_untested_warnings": 2,
+  "tq_no_assertion_warnings": 1,
+  "tq_no_sut_warnings": 6,
+  "tq_untested_warnings": 9,
   "tq_uncovered_warnings": 0,
   "tq_untested_logic_warnings": 0,
   "structural_srp_warnings": 9,
-  "structural_coupling_warnings": 0,
-  "total_findings": 195,
-  "violation_details": []
+  "structural_coupling_warnings": 1,
+  "total_findings": 177,
+  "violation_details": [
+    {
+      "name": "AgentPolicy::from_env",
+      "file": "crates/mcp/src/policy.rs",
+      "line": 45
+    },
+    {
+      "name": "main",
+      "file": "crates/mbx/src/main.rs",
+      "line": 679
+    },
+    {
+      "name": "VzRegistry::pull_image",
+      "file": "crates/macbox/src/vz/adapter.rs",
+      "line": 96
+    },
+    {
+      "name": "connect_to_agent",
+      "file": "crates/macbox/src/vz/vsock.rs",
+      "line": 59
+    },
+    {
+      "name": "SmolVmRegistry::load_image",
+      "file": "crates/minibox/src/adapters/smolvm.rs",
+      "line": 331
+    },
+    {
+      "name": "handle_pipeline",
+      "file": "crates/minibox/src/daemon/handler/pipeline.rs",
+      "line": 91
+    }
+  ]
 }

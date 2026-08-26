@@ -2,13 +2,13 @@ name: Protocol Sites
 
 on:
   push:
-    branches: [main, next, staging, "feature/*", "hotfix/*"]
+    branches: [main, staging, release, "feature/*", "hotfix/*"]
     paths:
       - "crates/miniboxd/src/main.rs"
       - "xtask/src/protocol_sites.rs"
       - "xtask/src/main.rs"
   pull_request:
-    branches: [main, next]
+    branches: [main, staging]
     paths:
       - "crates/miniboxd/src/main.rs"
       - "xtask/src/protocol_sites.rs"

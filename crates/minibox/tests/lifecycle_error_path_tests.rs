@@ -160,6 +160,7 @@ fn make_record_with_state(id: &str, state: &str, cgroup_path: PathBuf) -> Contai
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: PathBuf::from("/tmp/fake-rootfs"),
         cgroup_path,
         post_exit_hooks: vec![],

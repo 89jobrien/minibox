@@ -46,7 +46,7 @@
 //!
 //! **Running:**
 //! ```bash
-//! cargo build --release -p miniboxd -p mbx
+//! cargo build --release -p miniboxd -p minibox-cli
 //! MINIBOX_E2E_PULL=1 cargo test -p miniboxd --test cli_e2e_tests
 //! ```
 //!

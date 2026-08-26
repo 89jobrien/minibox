@@ -1,3 +1,10 @@
+---
+source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:
+  - CHANGELOG.md
+generated: 2026-08-22
+---
+
 # Changelog (pre-release era)
 
 All notable changes to this project will be documented in this file.

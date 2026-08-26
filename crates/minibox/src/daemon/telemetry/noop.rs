@@ -9,6 +9,7 @@ pub struct NoOpMetricsRecorder;
 
 impl NoOpMetricsRecorder {
     #[must_use]
+    /// Creates a recorder that discards every metric.
     pub const fn new() -> Self {
         Self
     }

@@ -1,0 +1,6 @@
+pipeline: build_release
+steps:
+  - step: run
+    handler: shell::capture
+    args:
+      cmd: "cargo build --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd"

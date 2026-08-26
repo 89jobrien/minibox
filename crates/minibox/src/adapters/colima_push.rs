@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use uuid::Uuid;
 
+/// Pushes locally stored images through nerdctl inside the Colima VM.
 pub struct ColimaImagePusher {
     image_store: Arc<ImageStore>,
     image_loader: DynImageLoader,
@@ -30,6 +31,7 @@ pub struct ColimaImagePusher {
 }
 
 impl ColimaImagePusher {
+    /// Creates a Colima image pusher from its store, loader, and Lima dependencies.
     pub fn new(
         image_store: Arc<ImageStore>,
         image_loader: DynImageLoader,
@@ -329,6 +331,7 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+/// Constructs a dynamic Colima image push adapter.
 pub fn colima_image_pusher(
     image_store: Arc<ImageStore>,
     image_loader: DynImageLoader,

@@ -1,3 +1,5 @@
+//! Test macros for serialized mutation of process environment variables.
+
 /// Set an environment variable in test code (Rust 2024 requires `unsafe`).
 ///
 /// Wraps `std::env::set_var` in an `unsafe` block with a standardised

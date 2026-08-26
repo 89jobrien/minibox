@@ -1,3 +1,5 @@
+//! Global tracing subscriber initialization for minibox processes.
+
 /// Initialise the global tracing subscriber.
 ///
 /// Reads `MINIBOX_TRACE_LEVEL` to build a [`tracing_subscriber::EnvFilter`].

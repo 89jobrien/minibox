@@ -452,7 +452,7 @@ impl ImageLoader for ColimaRegistry {
 // Colima Filesystem Adapter
 // ============================================================================
 
-/// Colima implementation of [`FilesystemProvider`].
+/// Colima implementation of [`crate::domain::FilesystemProvider`].
 ///
 /// Sets up and tears down overlay mounts inside the Lima VM by running
 /// `mount`/`umount` commands via `limactl shell`. The container directory
@@ -788,6 +788,7 @@ impl ColimaRuntime {
         self
     }
 
+    /// Injects a custom Lima process spawner for testing.
     pub fn with_spawner(mut self, spawner: LimaSpawner) -> Self {
         self.spawner = Some(spawner);
         self

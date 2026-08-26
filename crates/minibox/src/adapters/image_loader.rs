@@ -8,12 +8,14 @@ use minibox_core::image::manifest::OciManifest;
 use std::path::Path;
 use std::sync::Arc;
 
+/// Loads local OCI layout archives into an [`ImageStore`].
 pub struct NativeImageLoader {
     store: Arc<ImageStore>,
 }
 
 impl NativeImageLoader {
     #[must_use]
+    /// Creates a native image loader backed by `store`.
     pub const fn new(store: Arc<ImageStore>) -> Self {
         Self { store }
     }

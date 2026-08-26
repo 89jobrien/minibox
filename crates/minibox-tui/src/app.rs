@@ -8,14 +8,20 @@ const MAX_EVENT_LOG: usize = 200;
 
 /// Top-level application state, updated by [`crate::event`] and rendered by [`crate::ui`].
 pub struct App {
+    /// Containers currently reported by the daemon.
     pub containers: Vec<ContainerInfo>,
+    /// Selected container row index.
     pub selected: usize,
+    /// Formatted lifecycle event history.
     pub events: Vec<String>,
+    /// Whether the main loop should exit.
     pub should_quit: bool,
+    /// Most recent daemon or polling error.
     pub last_error: Option<String>,
 }
 
 impl App {
+    /// Creates empty application state.
     pub const fn new() -> Self {
         Self {
             containers: Vec::new(),
@@ -26,6 +32,7 @@ impl App {
         }
     }
 
+    /// Replaces the container list and clamps the selected row.
     pub fn set_containers(&mut self, containers: Vec<ContainerInfo>) {
         self.containers = containers;
         if self.selected >= self.containers.len() {
@@ -33,6 +40,7 @@ impl App {
         }
     }
 
+    /// Appends a formatted lifecycle event to the bounded history.
     pub fn push_event(&mut self, event: &ContainerEvent) {
         self.events.push(format_event(event));
         if self.events.len() > MAX_EVENT_LOG {
@@ -40,12 +48,14 @@ impl App {
         }
     }
 
+    /// Selects the next container row, wrapping at the end.
     pub fn select_next(&mut self) {
         if !self.containers.is_empty() {
             self.selected = (self.selected + 1) % self.containers.len();
         }
     }
 
+    /// Selects the previous container row, wrapping at the beginning.
     pub fn select_prev(&mut self) {
         if !self.containers.is_empty() {
             self.selected = (self.selected + self.containers.len() - 1) % self.containers.len();

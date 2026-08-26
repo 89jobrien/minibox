@@ -21,6 +21,7 @@ pub enum TestCategory {
 
 impl TestCategory {
     #[must_use]
+    /// Returns the stable report label for this category.
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Unit => "unit",
@@ -34,21 +35,33 @@ impl TestCategory {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum TestResult {
+    /// Test completed successfully.
     Pass,
-    Fail { reason: String },
-    Skipped { reason: String },
+    /// Test failed an assertion or operation.
+    Fail {
+        /// Human-readable failure reason.
+        reason: String,
+    },
+    /// Test could not run in the current environment.
+    Skipped {
+        /// Human-readable skip reason.
+        reason: String,
+    },
 }
 
 impl TestResult {
     #[must_use]
+    /// Returns whether this is a passing result.
     pub const fn is_pass(&self) -> bool {
         matches!(self, Self::Pass)
     }
     #[must_use]
+    /// Returns whether this is a failing result.
     pub const fn is_fail(&self) -> bool {
         matches!(self, Self::Fail { .. })
     }
     #[must_use]
+    /// Returns whether this is a skipped result.
     pub const fn is_skipped(&self) -> bool {
         matches!(self, Self::Skipped { .. })
     }
@@ -104,6 +117,7 @@ pub trait ConformanceTest: Send + Sync {
         None
     }
 
+    /// Executes the test synchronously using the supplied context.
     fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult;
 
     /// Fully-qualified test id: `"<adapter>::<name>"`.

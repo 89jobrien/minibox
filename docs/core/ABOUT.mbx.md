@@ -1,3 +1,24 @@
+---
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+sources:
+  - Cargo.toml
+  - crates/minibox-domain
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/macbox
+  - crates/smolbox
+  - crates/winbox
+  - crates/minibox-crux-plugin
+  - crates/mcp
+  - crates/minibox-testsuite
+  - crates/minibox-bench
+  - crates/ail
+  - xtask
+generated: 2026-08-26
+---
+
 # About minibox
 
 A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux namespace
@@ -104,7 +125,7 @@ xtask                   CI gates, test runners, bench, VM image build
 ```
 
 **Hexagonal ports.** Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`,
-`ContainerRuntime`, `NetworkProvider`, …) live under `crates/minibox-core/src/domain/`. Adapters implement them.
+`ContainerRuntime`, `NetworkProvider`, …) live under `crates/minibox-domain/src/`. Adapters implement them.
 Tests use mock adapters — no real HTTP or filesystem required.
 
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
@@ -198,7 +219,7 @@ See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 Issues and PRs are welcome. A few things to know before contributing:
 
 - Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
-- New adapters implement the domain traits under `crates/minibox-core/src/domain/`.
+- New adapters implement the domain traits under `crates/minibox-domain/src/`.
 - Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`

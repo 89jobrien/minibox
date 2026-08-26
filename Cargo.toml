@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/minibox-domain",
     "crates/minibox-core",
     "crates/minibox",
     "crates/miniboxd",
@@ -23,7 +24,7 @@ members = [
 name = "minibox"
 
 [workspace.package]
-version = "0.32.0"
+version = "0.33.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.85"
@@ -83,15 +84,16 @@ crossterm = "0.28"
 criterion = { version = "0.7", features = ["async_tokio"] }
 
 # Internal crates (version = path for local dev; version required for crates.io publish)
-minibox-core = { path = "crates/minibox-core", version = "0.32.0" }
+minibox-domain = { path = "crates/minibox-domain", version = "0.33.0" }
+minibox-core = { path = "crates/minibox-core", version = "0.33.0" }
 minibox = { path = "crates/minibox" }
 minibox-testsuite = { path = "crates/minibox-testsuite" }
-minibox-macros = { path = "crates/minibox-macros", version = "0.32.0" }
+minibox-macros = { path = "crates/minibox-macros", version = "0.33.0" }
 minibox-cni = { path = "crates/minibox-cni" }
 macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
-minibox-tui = { path = "crates/minibox-tui" }
+minibox-tui = { path = "crates/minibox-tui", version = "0.33.0" }
 slashcrux = "0.1"
 dirs = "6"
 secrecy = "0.10"
@@ -107,6 +109,7 @@ inventory = "0.3"
 paste = "1"
 
 [workspace.lints.rust]
+missing_docs = "deny"
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
 
 [workspace.lints.clippy]

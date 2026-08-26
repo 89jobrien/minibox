@@ -16,13 +16,13 @@ Systematic performance analysis for minibox, focusing on **container init latenc
 
 ## Minibox Performance Targets
 
-| Metric | Target | Verification | Failure Threshold |
-|--------|--------|--------------|-------------------|
-| Protocol encode/decode | nanosecond scale | `minibox-bench --suite codec` | regression >10% vs latest.json |
-| Adapter trait overhead | nanosecond scale | `minibox-bench --suite adapter` | regression >10% vs latest.json |
-| Container init latency | <500 ms | `hyperfine 'minibox run alpine -- /bin/true'` | >1 s is a blocker |
-| Daemon idle memory | <50 MB RSS | `/usr/bin/time -v miniboxd` | >100 MB warrants investigation |
-| Image pull latency | network-bound | manual timing | measure, don't gate |
+| Metric                 | Target           | Verification                                  | Failure Threshold              |
+| ---------------------- | ---------------- | --------------------------------------------- | ------------------------------ |
+| Protocol encode/decode | nanosecond scale | `minibox-bench --suite codec`                 | regression >10% vs latest.json |
+| Adapter trait overhead | nanosecond scale | `minibox-bench --suite adapter`               | regression >10% vs latest.json |
+| Container init latency | <500 ms          | `hyperfine 'minibox run alpine -- /bin/true'` | >1 s is a blocker              |
+| Daemon idle memory     | <50 MB RSS       | `/usr/bin/time -v miniboxd`                   | >100 MB warrants investigation |
+| Image pull latency     | network-bound    | manual timing                                 | measure, don't gate            |
 
 ## Benchmark Workflow
 
@@ -38,7 +38,7 @@ cargo xtask bench
 cp bench/results/latest.json /tmp/baseline.json
 
 # Also run criterion benches for HTML reports
-cargo bench -p mbx
+cargo bench -p minibox-cli
 ```
 
 ### 2. Make Changes
@@ -95,6 +95,7 @@ grep VmRSS /proc/$(pgrep miniboxd)/status
 **Symptom**: `hyperfine` shows init time increased by >100 ms
 
 **Detection**:
+
 ```bash
 # Profile with flamegraph
 sudo cargo flamegraph -- ./target/release/minibox run alpine -- /bin/true
@@ -108,28 +109,31 @@ open flamegraph.svg
 
 **Common causes**:
 
-| Cause | Symptom in flamegraph | Fix |
-|-------|----------------------|-----|
-| Image cache miss on every run | `tar::unpack` wide bar | Fix cache key in `image/reference.rs` |
-| Cgroup hierarchy not pre-created | `create_dir_all` in hot path | Create `minibox.slice` at daemon start |
-| Overlay workdir not on same FS | VFS copy instead of reflink | Ensure upper/work on same filesystem as lower |
-| Blocking I/O in async handler | `spawn_blocking` absent | Add `tokio::task::spawn_blocking` |
+| Cause                            | Symptom in flamegraph        | Fix                                           |
+| -------------------------------- | ---------------------------- | --------------------------------------------- |
+| Image cache miss on every run    | `tar::unpack` wide bar       | Fix cache key in `image/reference.rs`         |
+| Cgroup hierarchy not pre-created | `create_dir_all` in hot path | Create `minibox.slice` at daemon start        |
+| Overlay workdir not on same FS   | VFS copy instead of reflink  | Ensure upper/work on same filesystem as lower |
+| Blocking I/O in async handler    | `spawn_blocking` absent      | Add `tokio::task::spawn_blocking`             |
 
 ### Issue: Codec Regression
 
 **Symptom**: `minibox-bench --suite codec` shows regression vs `latest.json`
 
 **Detection**:
+
 ```bash
 ./target/release/minibox-bench --suite codec 2>&1 | grep -E "ns|regression"
 ```
 
 **Common causes**:
+
 - New serde `Deserialize` derive on a hot type with unexpected allocations
 - `#[serde(rename_all)]` causing string copies where zero-copy was possible
 - New protocol variant added to a large enum — match dispatch overhead
 
 **Fix pattern**:
+
 ```rust
 // For hot protocol types, prefer borrowed deserialization where possible
 #[derive(Serialize, Deserialize)]
@@ -169,6 +173,7 @@ done
 ```
 
 **Common causes**:
+
 - Container state not removed from `DaemonState` HashMap after stop
 - Image manifest cached without eviction
 - `Vec<u8>` output buffers held in `ContainerRecord` after container exits
@@ -198,16 +203,16 @@ Never edit `bench.jsonl` manually — it is the canonical history.
 
 ## Profiling Tools Reference
 
-| Tool | Purpose | Command |
-|------|---------|---------|
-| **minibox-bench** | Microbenchmarks — codec and adapter | `./target/release/minibox-bench --suite codec` |
-| **cargo bench** | Criterion benches with HTML | `cargo bench -p mbx` |
-| **hyperfine** | Container init wall-clock | `hyperfine 'minibox run alpine -- /bin/true'` |
-| **flamegraph** | CPU hotspot profiling | `sudo cargo flamegraph -- minibox run ...` |
-| **/proc/PID/status** | Daemon RSS | `grep VmRSS /proc/$(pgrep miniboxd)/status` |
-| **/usr/bin/time -v** | Peak RSS | `/usr/bin/time -v sudo miniboxd` |
-| **strace -c** | Syscall frequency | `sudo strace -c minibox run alpine -- /bin/true` |
-| **perf stat** | CPU instruction counts | `sudo perf stat minibox run alpine -- /bin/true` |
+| Tool                 | Purpose                             | Command                                          |
+| -------------------- | ----------------------------------- | ------------------------------------------------ |
+| **minibox-bench**    | Microbenchmarks — codec and adapter | `./target/release/minibox-bench --suite codec`   |
+| **cargo bench**      | Criterion benches with HTML         | `cargo bench -p minibox-cli`                     |
+| **hyperfine**        | Container init wall-clock           | `hyperfine 'minibox run alpine -- /bin/true'`    |
+| **flamegraph**       | CPU hotspot profiling               | `sudo cargo flamegraph -- minibox run ...`       |
+| **/proc/PID/status** | Daemon RSS                          | `grep VmRSS /proc/$(pgrep miniboxd)/status`      |
+| **/usr/bin/time -v** | Peak RSS                            | `/usr/bin/time -v sudo miniboxd`                 |
+| **strace -c**        | Syscall frequency                   | `sudo strace -c minibox run alpine -- /bin/true` |
+| **perf stat**        | CPU instruction counts              | `sudo perf stat minibox run alpine -- /bin/true` |
 
 Install:
 

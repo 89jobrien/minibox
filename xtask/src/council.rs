@@ -1,3 +1,5 @@
+//! Agentbox council runner with dotenvx-injected model credentials.
+
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::process::Command;

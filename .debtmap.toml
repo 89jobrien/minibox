@@ -14,7 +14,8 @@ patterns = [
     "target/**",
     "venv/**",
     "node_modules/**",
-    "*.min.js"
+    "*.min.js",
+    ".ctx/**"
 ]
 
 [output]

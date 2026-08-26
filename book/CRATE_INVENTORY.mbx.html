@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-c1193201.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d8edc199.js"></script>
+        <script src="toc-b1eea390.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,20 +178,28 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <hr>
-<p>watches:</p>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
 <ul>
-<li>crates/*/Cargo.toml</li>
 <li>Cargo.toml</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/minibox-macros</li>
+<li>crates/miniboxd</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/mbx</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/mcp</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox-bench</li>
+<li>crates/ail</li>
+<li>xtask
+generated: 2026-08-22</li>
 </ul>
 <hr>
 <h1 id="crate-inventory"><a class="header" href="#crate-inventory">Crate Inventory</a></h1>
-<blockquote>
-<p>Generated 2026-04-28 from automated codebase analysis.
-Updated 2026-05-05: added minibox-crux-plugin and minibox-testsuite; corrected version.
-Updated 2026-05-06: date refresh; no structural changes.
-Updated 2026-05-08: vz feature removed from miniboxd/macbox; VZ backend entry removed;
-build-vm-image/run-vm/test-vm xtask commands removed.</p>
-</blockquote>
 <h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
 <div class="table-wrapper">
 <table>
@@ -199,29 +207,34 @@ build-vm-image/run-vm/test-vm xtask commands removed.</p>
 <tr><th>Crate</th><th>Type</th><th>LOC</th><th>Source files</th><th>Test files</th><th>Features</th></tr>
 </thead>
 <tbody>
-<tr><td>minibox-core</td><td>lib</td><td>~12.6k</td><td>28</td><td>7 integration + inline</td><td>test-utils, fuzzing</td></tr>
-<tr><td>minibox</td><td>lib</td><td>~21.5k</td><td>71</td><td>36 integration + inline</td><td>test-utils, metrics, otel</td></tr>
-<tr><td>minibox-macros</td><td>proc-macro</td><td>~280</td><td>2</td><td>0</td><td>–</td></tr>
-<tr><td>miniboxd</td><td>bin+lib</td><td>~1.6k</td><td>4</td><td>7 integration + inline</td><td>metrics, otel, tailnet</td></tr>
+<tr><td>minibox-core</td><td>lib</td><td>~12.6k</td><td>28</td><td>10 integration + inline</td><td>test-utils, fuzzing</td></tr>
+<tr><td>minibox</td><td>lib</td><td>~21.5k</td><td>71</td><td>56 integration + inline</td><td>test-utils, metrics, otel</td></tr>
+<tr><td>minibox-macros</td><td>proc-macro</td><td>~175</td><td>9</td><td>1 integration</td><td>–</td></tr>
+<tr><td>miniboxd</td><td>bin+lib</td><td>~1.6k</td><td>4</td><td>13 integration + inline</td><td>metrics, otel, tailnet</td></tr>
 <tr><td>macbox</td><td>lib</td><td>~3.6k</td><td>16</td><td>4</td><td>–</td></tr>
-<tr><td>smolbox</td><td>lib</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
-<tr><td>winbox</td><td>lib</td><td>~280</td><td>5</td><td>0</td><td>–</td></tr>
-<tr><td>mbx</td><td>bin</td><td>~3.2k</td><td>18</td><td>2 integration + inline</td><td>subprocess-tests</td></tr>
-<tr><td>minibox-crux-plugin</td><td>bin</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
-<tr><td>minibox-testsuite</td><td>bin</td><td>–</td><td>–</td><td>–</td><td>–</td></tr>
-<tr><td>xtask</td><td>bin</td><td>~5k</td><td>15</td><td>0</td><td>–</td></tr>
+<tr><td>smolbox</td><td>lib</td><td>~148</td><td>4</td><td>2 integration</td><td>–</td></tr>
+<tr><td>winbox</td><td>lib</td><td>~280</td><td>5</td><td>1 integration</td><td>–</td></tr>
+<tr><td>mbx</td><td>bin</td><td>~3.2k</td><td>18</td><td>3 integration + inline</td><td>subprocess-tests</td></tr>
+<tr><td>minibox-crux-plugin</td><td>bin</td><td>~1.2k</td><td>2</td><td>1 integration</td><td>–</td></tr>
+<tr><td>minibox-mcp</td><td>lib+bin</td><td>~1.6k</td><td>11</td><td>1 integration</td><td>–</td></tr>
+<tr><td>minibox-testsuite</td><td>lib+bin</td><td>~3.7k</td><td>27</td><td>3 integration</td><td>–</td></tr>
+<tr><td>minibox-bench</td><td>lib</td><td>~1.4k</td><td>4 + 8 benches</td><td>inline fixture tests</td><td>–</td></tr>
+<tr><td>ail</td><td>bin</td><td>~4</td><td>1</td><td>0</td><td>–</td></tr>
+<tr><td>xtask</td><td>bin</td><td>~5k</td><td>35</td><td>0</td><td>–</td></tr>
 </tbody>
 </table>
 </div>
-<p><strong>Estimated total:</strong> ~48k+ lines of Rust across 159+ source files. All crates at
-version 0.30.0 (xtask 0.1.0).</p>
-<!-- fact:workspace_version=0.30.0 -->
+<p><strong>Estimated total:</strong> run <code>cargo xtask info metrics</code> for the current workspace
+member count and Rust source-line total. All crates are at version 0.32.0
+(xtask 0.1.0).</p>
+<!-- fact:workspace_version=0.32.0 -->
 <hr>
 <h2 id="minibox-core"><a class="header" href="#minibox-core">minibox-core</a></h2>
 <p>Cross-platform shared types. Single source of truth for protocol, domain
 traits, error types, image management, and the Unix socket client.</p>
-<p><strong>Key modules:</strong> <code>domain.rs</code> (all trait ports), <code>protocol.rs</code> (DaemonRequest /
-DaemonResponse), <code>image/</code> (ImageStore, ImageRef, RegistryClient, layer
+<p><strong>Key modules:</strong> <code>protocol.rs</code> (DaemonRequest /
+DaemonResponse), <code>domain/</code> (domain ports, workflow/execution policy, runtime
+capabilities), <code>image/</code> (ImageStore, ImageRef, RegistryClient, layer
 extraction, GC, leases, dockerfile), <code>client/</code> (DaemonClient,
 DaemonResponseStream), <code>events.rs</code> (ContainerEvent, EventSink/Source,
 BroadcastEventBroker), <code>adapters/</code> (HostnameRegistryRouter, mocks,
@@ -234,12 +247,13 @@ tar, flate2, slashcrux (Priority/Urgency/ExecutionContext for RunPipeline/Run).<
 implementations + daemon server/handler/state + testing infrastructure.</p>
 <p><strong>Key modules:</strong></p>
 <ul>
+<li><code>domain.rs</code> (compatibility re-exports of <code>minibox-core</code> domain ports)</li>
 <li><code>container/</code> (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
 process.rs</li>
 <li><code>adapters/</code>: native (overlay, cgroup, namespace, bridge network), gke
 (copy FS, proot, noop limiter), colima (lima/nerdctl), smolvm, stubs
 (vf, hcs, wsl2, docker_desktop), mocks</li>
-<li><code>daemon/</code>: handler.rs (HandlerDependencies, request routing), server.rs
+<li><code>daemon/</code>: handler/ (HandlerDependencies, request routing), server.rs
 (Unix socket listener, SO_PEERCRED auth), state.rs (DaemonState),
 telemetry.rs, network_lifecycle.rs</li>
 <li><code>image/</code> (re-exported from minibox-core)</li>
@@ -247,7 +261,7 @@ telemetry.rs, network_lifecycle.rs</li>
 </ul>
 <p><strong>Features:</strong> <code>test-utils</code> (mocks + fixtures + conformance), <code>metrics</code>
 (Prometheus endpoint), <code>otel</code> (OTLP trace export).</p>
-<p><strong>Benchmarks:</strong> <code>trait_overhead</code>, <code>protocol_codec</code> (criterion).</p>
+<p><strong>Benchmarks:</strong> none — all criterion benches live in <code>crates/minibox-bench</code>.</p>
 <hr>
 <h2 id="minibox-macros"><a class="header" href="#minibox-macros">minibox-macros</a></h2>
 <p>Declarative macros for adapter boilerplate reduction.</p>
@@ -258,14 +272,15 @@ telemetry.rs, network_lifecycle.rs</li>
 builder).</p>
 <hr>
 <h2 id="miniboxd"><a class="header" href="#miniboxd">miniboxd</a></h2>
-<p>Daemon binary. Platform-dispatches: macOS -&gt; <code>macbox::start()</code>, Windows -&gt;
-<code>winbox::start()</code>, Linux -&gt; inline <code>run_daemon()</code>.</p>
+<p>Daemon binary. Platform-dispatches: Unix (Linux + macOS) -&gt; <code>run_daemon()</code>,
+Windows -&gt; <code>winbox::start()</code>.</p>
 <p><strong>Key modules:</strong> <code>adapter_registry.rs</code> (AdapterSuite enum, env-based
 selection), <code>listener.rs</code> (UnixServerListener).</p>
 <p><strong>Adapter suites:</strong> native, gke, colima, smolvm (default), krun (fallback).</p>
 <hr>
 <h2 id="macbox"><a class="header" href="#macbox">macbox</a></h2>
-<p>macOS daemon implementation.</p>
+<p>macOS daemon entry point and Colima adapter wiring. smolvm and krun adapters
+live in <code>smolbox</code> (see below).</p>
 <p><strong>Backends:</strong></p>
 <ul>
 <li><strong>Colima</strong>: <code>ColimaRegistry</code>, <code>ColimaRuntime</code>, <code>ColimaFilesystem</code>,
@@ -292,7 +307,8 @@ path), <code>preflight.rs</code> (detection stubs).</p>
 <p>CLI client. Connects to daemon via Unix socket, sends JSON requests, streams
 responses.</p>
 <p><strong>Subcommands:</strong> run, ps, stop, pause, resume, rm, pull, exec, logs, events,
-prune, rmi, sandbox, snapshot (save/restore/list), load, diagnose, update, upgrade.</p>
+prune, rmi, sandbox, snapshot (save/restore/list), pipeline (run/list/show),
+load, doctor, manifest, verify, diagnose, update, upgrade.</p>
 <hr>
 <h2 id="minibox-crux-plugin"><a class="header" href="#minibox-crux-plugin">minibox-crux-plugin</a></h2>
 <p>Crux plugin binary. Exposes minibox container operations (pull, run, ps, stop,
@@ -300,18 +316,47 @@ rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
 the crux agentic DSL runtime.</p>
 <p><strong>Depends on:</strong> minibox-core, crux-plugin (git dep).</p>
 <hr>
+<h2 id="minibox-mcp"><a class="header" href="#minibox-mcp">minibox-mcp</a></h2>
+<p>MCP stdio server for agent-controlled minibox operations. Wraps existing daemon
+protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and
+rm, with MCP-specific policy gates around mutating and higher-risk run options.</p>
+<p><strong>Binaries:</strong> <code>mcp</code>.</p>
+<p><strong>Depends on:</strong> minibox-core, rmcp, miette.</p>
+<hr>
 <h2 id="minibox-testsuite"><a class="header" href="#minibox-testsuite">minibox-testsuite</a></h2>
 <p>Conformance test harness for adapter trait contracts. Not published; used
 internally by <code>cargo xtask test-conformance</code>.</p>
 <p><strong>Binaries:</strong> <code>run-conformance</code>, <code>generate-report</code>.</p>
 <p><strong>Depends on:</strong> minibox, minibox-core.</p>
 <hr>
+<h2 id="minibox-bench"><a class="header" href="#minibox-bench">minibox-bench</a></h2>
+<p>Dedicated benchmark crate. Leaf crate owning all criterion targets and fixtures; the only
+place where the <code>test-utils</code> features of the lib crates are enabled. Run via <code>just bench</code> /
+<code>just bench-check</code> / <code>just bench-baseline</code> (<code>cargo xtask bench</code> underneath). Results land in
+<code>bench/results/</code> (gitignored); per-env baselines are tracked at
+<code>bench/baseline.{local,selfhosted,hosted}.json</code>.</p>
+<p><strong>Bench targets:</strong> <code>protocol_codec</code>, <code>daemon_dispatch</code>, <code>trait_dispatch</code>, <code>layer_extract</code>,
+<code>image_pull</code>, plus root-gated Linux benches <code>linux_rootfs</code>, <code>linux_cgroup</code>, <code>linux_spawn</code>.</p>
+<p><strong>Fixtures:</strong> <code>LayerSpec</code>/<code>build_layer_tar_gz</code> (deterministic OCI layers), <code>BenchRegistry</code>
+(wiremock-backed OCI registry).</p>
+<p><strong>Depends on:</strong> minibox, minibox-core (both with <code>test-utils</code>), criterion.</p>
+<hr>
+<h2 id="ail"><a class="header" href="#ail">ail</a></h2>
+<p>Placeholder binary for the agent-improvement loop. No implementation yet.</p>
+<hr>
 <h2 id="xtask"><a class="header" href="#xtask">xtask</a></h2>
 <p>Development tool. All CI gate commands.</p>
-<p><strong>Key commands:</strong> pre-commit, prepush, test-unit, test-conformance,
-test-krun-conformance, test-property, test-integration, test-e2e, test-e2e-suite,
-test-system-suite, test-sandbox, bench, bump, nuke-test-state, clean-artifacts,
-lint-docs, preflight, doctor, check-stale-names.</p>
+<p><strong>Key commands:</strong> pre-commit, prepush, verify, lint, fix, coverage,
+coverage-check, agentlint, build-test-image, setup-test-vm, test-in-vm,
+test-linux, bump, promote, preflight, doctor, ci-watch, daily-orchestration,
+council, bench, fuzz, borrow-fixtures, nuke-test-state, clean-artifacts,
+cas-add, cas-check.</p>
+<p><strong>Subcommand groups:</strong> <code>test &lt;suite&gt;</code> (unit, conformance, krun-conformance,
+turmoil, shuttle, property, quickcheck, integration, e2e, system-suite,
+sandbox, gke-profile, gke-adapter), <code>check &lt;target&gt;</code> (stale-names,
+protocol-drift, protocol-sites, adapter-coverage, no-unwrap, repo-clean),
+<code>docs &lt;action&gt;</code> (audit, lint, update-date), <code>info &lt;target&gt;</code> (metrics,
+context, changes).</p>
 
                     </main>
 
@@ -348,22 +393,6 @@ lint-docs, preflight, doctor, check-stale-names.</p>
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

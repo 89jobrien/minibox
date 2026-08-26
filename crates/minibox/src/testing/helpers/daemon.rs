@@ -121,6 +121,7 @@ pub fn make_stub_record(id: impl Into<String>) -> crate::daemon::state::Containe
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         // Use ID-namespaced paths under /tmp to avoid collisions in parallel test runs.
         rootfs_path: std::path::PathBuf::from(format!("/tmp/minibox-test-{id}-rootfs")),
         cgroup_path: std::path::PathBuf::from(format!("/tmp/minibox-test-{id}-cgroup")),

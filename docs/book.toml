@@ -2,13 +2,12 @@
 title = "minibox"
 authors = []
 language = "en"
-multilingual = false
 src = "src"
 
 [build]
 build-dir = "dist"
 
 [output.html]
-git-repository-url = ""
+git-repository-url = "https://www.github.com/89jobrien/minibox"
 default-theme = "rust"
 preferred-dark-theme = "ayu"

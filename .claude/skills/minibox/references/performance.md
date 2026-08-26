@@ -38,7 +38,7 @@ cargo xtask bench
 cp bench/results/latest.json /tmp/baseline.json
 
 # Also run criterion benches for HTML reports
-cargo bench -p mbx
+cargo bench -p minibox-cli
 ```
 
 ### 2. Make Changes
@@ -206,7 +206,7 @@ Never edit `bench.jsonl` manually — it is the canonical history.
 | Tool                 | Purpose                             | Command                                          |
 | -------------------- | ----------------------------------- | ------------------------------------------------ |
 | **minibox-bench**    | Microbenchmarks — codec and adapter | `./target/release/minibox-bench --suite codec`   |
-| **cargo bench**      | Criterion benches with HTML         | `cargo bench -p mbx`                             |
+| **cargo bench**      | Criterion benches with HTML         | `cargo bench -p minibox-cli`                     |
 | **hyperfine**        | Container init wall-clock           | `hyperfine 'minibox run alpine -- /bin/true'`    |
 | **flamegraph**       | CPU hotspot profiling               | `sudo cargo flamegraph -- minibox run ...`       |
 | **/proc/PID/status** | Daemon RSS                          | `grep VmRSS /proc/$(pgrep miniboxd)/status`      |

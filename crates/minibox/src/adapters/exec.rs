@@ -6,21 +6,21 @@
 
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
-use base64::Engine as _;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    ContainerId, DynExecRuntime, DynProgressSink, ExecHandle, ExecRuntime, ExecSpec, ProgressSink,
+    ContainerId, DynExecRuntime, DynProgressSink, ExecHandle, ExecOutput, ExecRuntime, ExecSession,
+    ExecSpec, ProgressSink,
 };
-use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
+use minibox_core::progress::{TokioExecOutputStream, TokioProgressSink};
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-/// Send a [`DaemonResponse`] from a blocking context using the current Tokio handle.
+/// Send an [`ExecOutput`] from a blocking context using the current Tokio handle.
 /// Logs a warning if the receiver has been dropped.
-fn send_blocking(tx: &dyn ProgressSink<DaemonResponse>, msg: DaemonResponse) {
+fn send_blocking(tx: &dyn ProgressSink<ExecOutput>, msg: ExecOutput) {
     let rt = tokio::runtime::Handle::current();
     if rt.block_on(tx.send(msg)).is_err() {
         warn!("exec: client disconnected before response could be sent");
@@ -35,6 +35,7 @@ use crate::container_state::StateHandle;
 /// Channels are infrastructure concerns — the pure domain spec is [`ExecSpec`].
 #[derive(Debug)]
 pub struct ExecConfig {
+    /// Domain-level command, environment, working directory, and TTY settings.
     pub spec: ExecSpec,
     /// Stdin bytes channel (handler → exec adapter). `None` = no stdin relay.
     pub stdin_tx: Option<mpsc::Sender<Vec<u8>>>,
@@ -42,11 +43,13 @@ pub struct ExecConfig {
     pub resize_rx: Option<mpsc::Receiver<(u16, u16)>>,
 }
 
+/// Linux implementation that executes commands inside container namespaces.
 pub struct NativeExecRuntime {
     state: StateHandle,
 }
 
 impl NativeExecRuntime {
+    /// Creates an exec runtime backed by the shared container state.
     pub fn new(state: StateHandle) -> Self {
         Self { state }
     }
@@ -60,8 +63,7 @@ impl ExecRuntime for NativeExecRuntime {
         &self,
         container_id: &ContainerId,
         spec: ExecSpec,
-        tx: DynProgressSink<DaemonResponse>,
-    ) -> Result<ExecHandle> {
+    ) -> Result<ExecSession> {
         validate_exec_spec(&spec)?;
         let id = container_id.as_str().to_string();
         let pid = self
@@ -83,6 +85,9 @@ impl ExecRuntime for NativeExecRuntime {
         };
         let exec_id_for_task = exec_id.clone();
         let exec_id_for_warn = exec_id.clone();
+        const EXEC_OUTPUT_CAPACITY: usize = 64;
+        let (output_tx, output_rx) = mpsc::channel(EXEC_OUTPUT_CAPACITY);
+        let output_sink = TokioProgressSink::shared(output_tx);
 
         info!(
             container_id = %id,
@@ -92,7 +97,7 @@ impl ExecRuntime for NativeExecRuntime {
         );
 
         let handle = tokio::task::spawn_blocking(move || {
-            run_exec_blocking(pid, &exec_id_for_task, config, tx);
+            run_exec_blocking(pid, &exec_id_for_task, config, output_sink);
         });
         tokio::spawn(async move {
             if let Err(e) = handle.await {
@@ -100,7 +105,10 @@ impl ExecRuntime for NativeExecRuntime {
             }
         });
 
-        Ok(ExecHandle { id: exec_id })
+        Ok(ExecSession {
+            handle: ExecHandle { id: exec_id },
+            output: Box::new(TokioExecOutputStream::new(output_rx)),
+        })
     }
 }
 
@@ -109,7 +117,7 @@ fn run_exec_blocking(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
-    tx: DynProgressSink<DaemonResponse>,
+    tx: DynProgressSink<ExecOutput>,
 ) {
     if config.spec.tty {
         run_pty_exec(container_pid, exec_id, config, tx);
@@ -207,7 +215,7 @@ fn run_pipe_exec_command(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
-    tx: DynProgressSink<DaemonResponse>,
+    tx: DynProgressSink<ExecOutput>,
 ) {
     let mut child = match build_nsenter_command(
         container_pid,
@@ -223,9 +231,7 @@ fn run_pipe_exec_command(
         Err(e) => {
             send_blocking(
                 &tx,
-                DaemonResponse::Error {
-                    message: format!("exec: nsenter spawn failed: {e}"),
-                },
+                ExecOutput::Error(format!("exec: nsenter spawn failed: {e}")),
             );
             return;
         }
@@ -234,10 +240,10 @@ fn run_pipe_exec_command(
     // Stream stdout and stderr pipes to the channel.
     use std::os::fd::IntoRawFd;
     if let Some(stdout) = child.stdout.take() {
-        stream_fd_to_channel(stdout.into_raw_fd(), OutputStreamKind::Stdout, &tx);
+        stream_fd_to_channel(stdout.into_raw_fd(), ExecStream::Stdout, &tx);
     }
     if let Some(stderr) = child.stderr.take() {
-        stream_fd_to_channel(stderr.into_raw_fd(), OutputStreamKind::Stderr, &tx);
+        stream_fd_to_channel(stderr.into_raw_fd(), ExecStream::Stderr, &tx);
     }
 
     let exit_code = match child.wait() {
@@ -248,7 +254,7 @@ fn run_pipe_exec_command(
         }
     };
 
-    send_blocking(&tx, DaemonResponse::ContainerStopped { exit_code });
+    send_blocking(&tx, ExecOutput::Exit(exit_code));
     info!(exec_id = %exec_id, exit_code = exit_code, "exec: process exited");
 }
 
@@ -266,7 +272,7 @@ fn run_pty_exec(
     container_pid: u32,
     exec_id: &str,
     config: ExecConfig,
-    tx: DynProgressSink<DaemonResponse>,
+    tx: DynProgressSink<ExecOutput>,
 ) {
     use std::os::fd::IntoRawFd as _;
 
@@ -275,12 +281,7 @@ fn run_pty_exec(
     let pty = match nix::pty::openpty(None, None) {
         Ok(p) => p,
         Err(e) => {
-            send_blocking(
-                &tx,
-                DaemonResponse::Error {
-                    message: format!("exec: openpty failed: {e}"),
-                },
-            );
+            send_blocking(&tx, ExecOutput::Error(format!("exec: openpty failed: {e}")));
             return;
         }
     };
@@ -324,9 +325,7 @@ fn run_pty_exec(
             unsafe { libc::close(master_fd) };
             send_blocking(
                 &tx,
-                DaemonResponse::Error {
-                    message: format!("exec: nsenter pty spawn failed: {e}"),
-                },
+                ExecOutput::Error(format!("exec: nsenter pty spawn failed: {e}")),
             );
             return;
         }
@@ -351,7 +350,7 @@ fn run_pty_exec(
     }
 
     // Stream master → ContainerOutput (PTY merges stdout+stderr into master).
-    stream_fd_to_channel(master_fd, OutputStreamKind::Stdout, &tx);
+    stream_fd_to_channel(master_fd, ExecStream::Stdout, &tx);
 
     let exit_code = match child.wait() {
         Ok(status) => status.code().unwrap_or(-1),
@@ -361,11 +360,17 @@ fn run_pty_exec(
         }
     };
 
-    send_blocking(&tx, DaemonResponse::ContainerStopped { exit_code });
+    send_blocking(&tx, ExecOutput::Exit(exit_code));
     info!(exec_id = %exec_id, exit_code, "exec: pty process exited");
 }
 
-fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &dyn ProgressSink<DaemonResponse>) {
+#[derive(Clone, Copy)]
+enum ExecStream {
+    Stdout,
+    Stderr,
+}
+
+fn stream_fd_to_channel(fd: i32, stream: ExecStream, tx: &dyn ProgressSink<ExecOutput>) {
     use std::io::{ErrorKind, Read};
     use std::os::fd::FromRawFd;
     // SAFETY: fd is the read end of a pipe or PTY master created above; caller transfers ownership.
@@ -376,14 +381,12 @@ fn stream_fd_to_channel(fd: i32, stream: OutputStreamKind, tx: &dyn ProgressSink
         match file.read(&mut buf) {
             Ok(0) => break,
             Ok(n) => {
-                let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
-                send_blocking(
-                    tx,
-                    DaemonResponse::ContainerOutput {
-                        stream: stream.clone(),
-                        data,
-                    },
-                );
+                let data = buf[..n].to_vec();
+                let output = match stream {
+                    ExecStream::Stdout => ExecOutput::Stdout(data),
+                    ExecStream::Stderr => ExecOutput::Stderr(data),
+                };
+                send_blocking(tx, output);
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => {
@@ -543,8 +546,8 @@ mod tests {
         use tokio::sync::mpsc;
 
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let (tx, mut rx) = mpsc::channel::<DaemonResponse>(32);
-        let tx: minibox_core::domain::DynProgressSink<DaemonResponse> = std::sync::Arc::new(tx);
+        let (tx, mut rx) = mpsc::channel::<ExecOutput>(32);
+        let tx = minibox_core::progress::TokioProgressSink::shared(tx);
         let (_resize_tx, resize_rx) = tokio::sync::mpsc::channel::<(u16, u16)>(8);
         let config = ExecConfig {
             spec: ExecSpec {
@@ -571,14 +574,14 @@ mod tests {
             });
         });
 
-        let responses: Vec<DaemonResponse> = {
+        let responses: Vec<ExecOutput> = {
             let rt2 = tokio::runtime::Runtime::new().unwrap();
             rt2.block_on(async {
                 let mut out = vec![];
                 loop {
                     match tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv()).await {
                         Ok(Some(r)) => {
-                            let done = matches!(r, DaemonResponse::ContainerStopped { .. });
+                            let done = matches!(r, ExecOutput::Exit(_));
                             out.push(r);
                             if done {
                                 break;
@@ -592,21 +595,16 @@ mod tests {
         };
 
         let has_output = responses.iter().any(|r| {
-            if let DaemonResponse::ContainerOutput { data, .. } = r {
-                let bytes = base64::engine::general_purpose::STANDARD
-                    .decode(data)
-                    .unwrap();
-                String::from_utf8_lossy(&bytes).contains("pty-ok")
+            if let ExecOutput::Stdout(bytes) = r {
+                String::from_utf8_lossy(bytes).contains("pty-ok")
             } else {
                 false
             }
         });
         assert!(has_output, "expected pty-ok in output; got: {responses:?}");
         assert!(
-            responses
-                .iter()
-                .any(|r| matches!(r, DaemonResponse::ContainerStopped { exit_code: 0 })),
-            "expected ContainerStopped(0)"
+            responses.iter().any(|r| matches!(r, ExecOutput::Exit(0))),
+            "expected Exit(0)"
         );
     }
 }

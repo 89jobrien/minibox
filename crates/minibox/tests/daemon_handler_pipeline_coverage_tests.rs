@@ -196,6 +196,7 @@ async fn test_handle_update_restart_true_stopped_container_not_restarted() {
             pid: None,
         },
         pid: None,
+        runtime_id: None,
         rootfs_path: tmp.path().join("rootfs"),
         cgroup_path: tmp.path().join("cgroup"),
         post_exit_hooks: vec![],

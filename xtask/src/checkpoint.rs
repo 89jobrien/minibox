@@ -24,23 +24,41 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum GateId {
+    /// Rust formatting check.
     Fmt,
+    /// Clippy lint check.
     Clippy,
+    /// Combined workspace lint gate.
     Lint,
+    /// Read-only local verification gate.
     Verify,
+    /// Pre-commit validation gate.
     PreCommit,
+    /// Pre-push validation gate.
     Prepush,
+    /// Unit test suite.
     TestUnit,
+    /// Adapter conformance test suite.
     TestConformance,
+    /// Property test suite.
     TestProperty,
+    /// `QuickCheck` test suite.
     TestQuickcheck,
+    /// Turmoil simulation test suite.
     TestTurmoil,
+    /// Shuttle concurrency test suite.
     TestShuttle,
+    /// End-to-end test suite.
     TestE2e,
+    /// Integration test suite.
     TestIntegration,
+    /// System test suite.
     TestSystemSuite,
+    /// Sandbox test suite.
     TestSandbox,
+    /// Borrow-reasoning fixture checks.
     BorrowFixtures,
+    /// Documentation lint gate.
     DocsLint,
 }
 
@@ -57,10 +75,15 @@ impl fmt::Display for GateId {
 /// Stored proof that a gate passed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CheckpointRecord {
+    /// Gate proven by this record.
     pub gate: GateId,
+    /// Git tree hash at the time the gate passed.
     pub tree_hash: String,
+    /// Platform on which the gate passed.
     pub platform: String,
+    /// Rust compiler version used by the gate.
     pub rustc_version: String,
+    /// Time the checkpoint was recorded.
     pub timestamp: DateTime<Utc>,
 }
 
@@ -88,9 +111,13 @@ pub trait TreeHasher {
 
 /// Persistent storage for checkpoint records.
 pub trait CheckpointStore {
+    /// Loads the checkpoint for `gate`, if one exists.
     fn load(&self, gate: GateId) -> Result<Option<CheckpointRecord>>;
+    /// Persists a checkpoint record.
     fn save(&self, record: &CheckpointRecord) -> Result<()>;
+    /// Removes the checkpoint for `gate`.
     fn clear(&self, gate: GateId) -> Result<()>;
+    /// Removes every stored checkpoint.
     fn clear_all(&self) -> Result<()>;
 }
 
@@ -145,6 +172,7 @@ pub struct FileCheckpointStore {
 
 impl FileCheckpointStore {
     #[must_use]
+    /// Creates a file checkpoint store rooted at `dir`.
     pub const fn new(dir: PathBuf) -> Self {
         Self { dir }
     }

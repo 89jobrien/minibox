@@ -250,7 +250,9 @@
 
 ## Known issues
 
-- Stabilization freeze active — no new features without approval
+- Stabilization freeze (#127) closed 2026-08-22 — 5/6 acceptance sub-issues done
+  (#122 protocol, #114 state, #120 docs, #123 security, #117 support tiers, #133
+  CI enforcement); #116 (handler.rs coverage) remains open and tracked separately
 - krun metrics inconsistency — constructs its own `NoOpMetricsRecorder`
   internally rather than accepting the shared broker
 - Colima path validation bypass via `..` (P1)

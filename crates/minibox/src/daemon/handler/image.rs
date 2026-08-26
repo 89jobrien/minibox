@@ -5,6 +5,7 @@
 use anyhow::Result;
 use minibox_core::events::EventSink;
 use minibox_core::image::reference::ImageRef;
+use minibox_core::progress::TokioProgressSink;
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -93,6 +94,7 @@ pub(super) fn resolve_platform_registry(
 
 // qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
+/// Pulls an image through the selected registry and returns its metadata.
 pub async fn handle_pull(
     image: String,
     tag: Option<String>,
@@ -269,7 +271,11 @@ pub async fn handle_push(
     });
 
     match pusher
-        .push_image(&image_ref, &creds, Some(Arc::new(progress_tx)))
+        .push_image(
+            &image_ref,
+            &creds,
+            Some(TokioProgressSink::shared(progress_tx)),
+        )
         .await
     {
         Ok(result) => {
@@ -311,6 +317,7 @@ pub async fn handle_push(
 
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
+/// Commits a container's writable layer and streams the terminal response.
 pub async fn handle_commit(
     container_id: String,
     target_image: String,
@@ -487,7 +494,7 @@ pub async fn handle_build(
     });
 
     match builder
-        .build_image(&context, &config, Arc::new(progress_tx))
+        .build_image(&context, &config, TokioProgressSink::shared(progress_tx))
         .await
     {
         Ok(meta) => {

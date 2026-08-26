@@ -15,12 +15,19 @@ const TICK: Duration = Duration::from_secs(1);
 
 /// Messages fed into the main loop from input, the poll timer, and the daemon event stream.
 pub enum Message {
+    /// Request application shutdown.
     Quit,
+    /// Select the next container row.
     SelectNext,
+    /// Select the previous container row.
     SelectPrev,
+    /// Refresh timer elapsed.
     Tick,
+    /// Updated container list from the daemon.
     ContainerList(Vec<minibox_core::protocol::ContainerInfo>),
+    /// Lifecycle event received from the daemon.
     DaemonEvent(ContainerEvent),
+    /// Background daemon operation failed.
     DaemonError(String),
 }
 

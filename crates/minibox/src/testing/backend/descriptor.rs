@@ -1,3 +1,5 @@
+//! Capability-aware construction descriptor for a backend under test.
+
 use minibox_core::adapters::conformance::CapabilityExtras;
 use minibox_core::domain::{
     BackendCapability, BackendCapabilitySet, DynContainerCommitter, DynImageBuilder, DynImagePusher,

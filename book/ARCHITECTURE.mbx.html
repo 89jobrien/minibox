@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ad5c0b05.js";
+            window.path_to_searchindex_js = "searchindex-c1193201.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-d8edc199.js"></script>
+        <script src="toc-b1eea390.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -178,12 +178,29 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <hr>
-<h2 id="watches---cratescargotoml---cratesminiboxdsrcadapter_registryrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcprotocolrs"><a class="header" href="#watches---cratescargotoml---cratesminiboxdsrcadapter_registryrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcdomainrs---cratesminibox-coresrcprotocolrs">watches:
-- crates/<em>/Cargo.toml
-- crates/miniboxd/src/adapter_registry.rs
-- crates/minibox-core/src/domain.rs
-- crates/minibox-core/src/domain/</em>.rs
-- crates/minibox-core/src/protocol.rs</a></h2>
+<p>source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+sources:</p>
+<ul>
+<li>Cargo.toml</li>
+<li>crates/minibox-macros</li>
+<li>crates/minibox-core</li>
+<li>crates/minibox</li>
+<li>crates/macbox</li>
+<li>crates/smolbox</li>
+<li>crates/winbox</li>
+<li>crates/miniboxd</li>
+<li>crates/mbx</li>
+<li>crates/minibox-crux-plugin</li>
+<li>crates/mcp</li>
+<li>crates/minibox-testsuite</li>
+<li>crates/minibox-bench</li>
+<li>crates/minibox-cni</li>
+<li>crates/minibox-tui</li>
+<li>crates/ail</li>
+<li>xtask
+generated: 2026-08-22</li>
+</ul>
+<hr>
 <h1 id="minibox-architecture-reference"><a class="header" href="#minibox-architecture-reference">Minibox Architecture Reference</a></h1>
 <blockquote>
 <p>Generated 2026-04-27 from automated codebase analysis.
@@ -194,27 +211,35 @@ vz wiring row corrected (selectable via macbox env-var branch, feature-gated,
 macOS only — not in AdapterSuite enum). Colima push/commit/build are now wired
 via macbox::build_colima_handler_dependencies.
 Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
-removed.</p>
+removed.
+Updated 2026-07-25: crate count corrected to 13 crates, plus xtask as the
+workspace dev-tool member (added ail and minibox-bench).
+Updated 2026-07-26: added <code>minibox-mcp</code> MCP stdio control surface.
+Updated 2026-08-08: crate count corrected to 15 crates, plus xtask (added
+<code>minibox-cni</code> and <code>minibox-tui</code>).</p>
 </blockquote>
 <h2 id="workspace-overview"><a class="header" href="#workspace-overview">Workspace Overview</a></h2>
-<p>10 crates, Rust 2024 edition, workspace version 0.30.0.</p>
-<!-- fact:crate_count=10 -->
-<!-- fact:workspace_version=0.30.0 -->
+<p>16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.32.0.</p>
+<!-- fact:crate_count=15 -->
+<!-- fact:workspace_version=0.32.0 -->
 <pre><code class="language-text">minibox-macros          (proc-macro, ~300 LOC)
     ^
 minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain traits, protocol, image ops
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
-    ^     ^
-macbox       winbox     (platform libs)   — macOS backends (colima/krun/smolvm) | Windows stub
-    ^
-smolbox                 (macOS VM backend) — smolvm adapter; default macOS runtime
-    ^          ^
+    ^        ^        ^
+macbox   smolbox   winbox  (platform libs) — Colima | smolvm/krun | Windows stub
+    ^        ^        ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
 mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
+minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
 minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
+minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
+minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
+minibox-tui             (bin) — read-only TUI dashboard (ratatui + crossterm), `mbx tui`
+ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 </code></pre>
 <h3 id="cross-crate-dependency-graph"><a class="header" href="#cross-crate-dependency-graph">Cross-Crate Dependency Graph</a></h3>
@@ -228,19 +253,27 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 <tr><td>minibox-core</td><td>minibox-macros</td></tr>
 <tr><td>minibox</td><td>minibox-core, minibox-macros</td></tr>
 <tr><td>macbox</td><td>minibox, minibox-core</td></tr>
+<tr><td>smolbox</td><td>minibox, minibox-core</td></tr>
 <tr><td>winbox</td><td>minibox, minibox-core</td></tr>
-<tr><td>miniboxd</td><td>minibox, minibox-core (unix), macbox (unix), winbox (windows)</td></tr>
+<tr><td>miniboxd</td><td>minibox, minibox-core (unix), macbox/smolbox (unix), winbox (windows)</td></tr>
 <tr><td>mbx</td><td>minibox-core</td></tr>
 <tr><td>minibox-crux-plugin</td><td>minibox-core</td></tr>
+<tr><td>minibox-mcp</td><td>minibox-core</td></tr>
 <tr><td>minibox-testsuite</td><td>minibox, minibox-core</td></tr>
+<tr><td>minibox-bench</td><td>minibox, minibox-core, minibox-macros</td></tr>
+<tr><td>minibox-cni</td><td>minibox-core</td></tr>
+<tr><td>minibox-tui</td><td>minibox-core</td></tr>
+<tr><td>ail</td><td>–</td></tr>
 <tr><td>xtask</td><td>(standalone)</td></tr>
 </tbody>
 </table>
 </div>
 <hr>
 <h2 id="domain-traits-hexagonal-ports"><a class="header" href="#domain-traits-hexagonal-ports">Domain Traits (Hexagonal Ports)</a></h2>
-<p>All defined in <code>crates/minibox-core/src/domain.rs</code> and re-exported
-via <code>crates/minibox/src/domain.rs</code>.</p>
+<p>Most are defined under <code>crates/minibox-core/src/domain/</code>; <code>NetworkProvider</code> is in
+<code>crates/minibox-core/src/domain/networking.rs</code>. The <code>minibox</code> crate re-exports the
+core domain surface via <code>crates/minibox/src/domain.rs</code> for adapter and macro
+compatibility.</p>
 <h3 id="primary-ports-wired-in-handlerdependencies"><a class="header" href="#primary-ports-wired-in-handlerdependencies">Primary Ports (wired in HandlerDependencies)</a></h3>
 <div class="table-wrapper">
 <table>
@@ -266,6 +299,7 @@ via <code>crates/minibox/src/domain.rs</code>.</p>
 </table>
 </div>
 <h3 id="extension-ports-defined-not-in-handlerdependencies"><a class="header" href="#extension-ports-defined-not-in-handlerdependencies">Extension Ports (defined, not in HandlerDependencies)</a></h3>
+<p>Defined in <code>crates/minibox-core/src/domain/extensions.rs</code>.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -357,20 +391,22 @@ broker — an inconsistency vs native/gke/smolvm.</p>
 </code></pre>
 <hr>
 <h2 id="protocol-json-over-newline-on-unix-socket"><a class="header" href="#protocol-json-over-newline-on-unix-socket">Protocol (JSON-over-newline on Unix socket)</a></h2>
-<p>27 request variants, 28 response variants. Canonical source:
+<p>29 request variants, 28 response variants. Canonical source:
 <code>crates/minibox-core/src/protocol.rs</code>.</p>
 <h3 id="daemonrequest-variants"><a class="header" href="#daemonrequest-variants">DaemonRequest Variants</a></h3>
 <p>Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
-RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest</p>
+RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest,
+ListPipelines, ShowPipeline, RunWorkflow</p>
 <h3 id="daemonresponse-variants"><a class="header" href="#daemonresponse-variants">DaemonResponse Variants</a></h3>
 <p><strong>Terminal</strong> (end a request): ContainerCreated, Success, ContainerPaused,
 ContainerResumed, ContainerList, ImageLoaded, ImageList, Error,
-ContainerStopped, BuildComplete, Pruned, PipelineComplete, SnapshotSaved,
-SnapshotRestored, SnapshotList, Manifest, VerifyResult</p>
+ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
+PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
+Manifest, VerifyResult, WorkflowComplete</p>
 <p><strong>Non-terminal</strong> (streaming): ContainerOutput, ExecStarted, PushProgress,
-BuildOutput, Event, LogLine, UpdateProgress</p>
+BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete</p>
 <hr>
 <h2 id="execution-manifest"><a class="header" href="#execution-manifest">Execution Manifest</a></h2>
 <p>(see <code>crates/minibox-core/src/domain/execution_manifest.rs</code>,
@@ -460,7 +496,7 @@ container records to disk (atomic rename) on every add/remove.
 Records survive daemon restart; running processes do not reattach.
 State machine: Created -&gt; Running -&gt; Paused -&gt; Stopped
 (+ Failed, Orphaned).
-See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
+See <code>docs/core/STATE_MODEL.mbx.md</code> for full detail.</p>
 <hr>
 <h2 id="reference-documents"><a class="header" href="#reference-documents">Reference Documents</a></h2>
 <div class="table-wrapper">
@@ -514,22 +550,6 @@ See <code>docs/STATE_MODEL.mbx.md</code> for full detail.</p>
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

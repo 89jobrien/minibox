@@ -1,7 +1,10 @@
 //! Native adapter isolation tests (#22).
 //!
-//! Tests `OverlayFilesystem`, `CgroupV2Limiter`, and `LinuxNamespaceRuntime`
-//! against real kernel infrastructure.
+//! Tests `OverlayFilesystem` and `CgroupV2Limiter` against real kernel
+//! infrastructure. `LinuxNamespaceRuntime` has no real-kernel coverage here
+//! yet — namespace isolation is exercised end-to-end by `system_tests.rs`.
+//! Lifecycle failure paths live in
+//! `native_adapter_lifecycle_failure_tests.rs` (#74).
 //!
 //! **Linux only** — all tests are gated on `cfg(target_os = "linux")` and
 //! skip gracefully via `require_capability!` if the host lacks the necessary
@@ -14,7 +17,7 @@
 #![cfg(target_os = "linux")]
 
 use minibox::adapters::{CgroupV2Limiter, OverlayFilesystem};
-use minibox::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter, RootfsSetup};
+use minibox::domain::{ResourceConfig, ResourceLimiter, RootfsSetup};
 use minibox::preflight::probe;
 use minibox_macros::require_capability;
 use std::fs;

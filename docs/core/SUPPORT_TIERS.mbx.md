@@ -1,11 +1,35 @@
+---
+source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
+sources:
+  - crates/minibox-core
+  - crates/minibox
+  - crates/miniboxd
+  - crates/mbx
+  - crates/macbox
+  - crates/smolbox
+  - crates/minibox/src/adapters/colima.rs
+  - crates/winbox
+  - crates/minibox/src/adapters/docker_desktop.rs
+generated: 2026-08-22
+---
+
 # Support Tiers
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-08-15
+Last updated: 2026-08-22
 
 See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
-(per-adapter capability breakdown).
+(per-adapter capability breakdown), `docs/core/CRATE_TIERS.mbx.md` (architectural layer
+classification — Core/Platform/Experimental/Internal/External).
+
+> **Relationship to CRATE_TIERS.mbx.md:** This document classifies by *support commitment level*
+> (SLA, CI coverage, breaking-change policy). CRATE_TIERS classifies by *architectural role*
+> (stable API contract, adapter suite, dev tooling). The two axes are independent: a crate can
+> be Platform-tier architecturally while still being Stub-tier by support level (e.g. `winbox`),
+> or Experimental-tier by support level while being Platform-tier architecturally (e.g. `macbox`
+> adapters). When in doubt, CRATE_TIERS answers "where does this code live?"; this document
+> answers "what guarantees does it carry?"
 
 ---
 

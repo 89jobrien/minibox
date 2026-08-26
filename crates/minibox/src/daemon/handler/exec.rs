@@ -2,8 +2,11 @@
 // Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
 #![allow(clippy::too_many_arguments)]
 
-use minibox_core::domain::SessionId;
-use minibox_core::protocol::DaemonResponse;
+use base64::Engine as _;
+use minibox_core::domain::{ExecOutput, ExecSession, SessionId};
+#[cfg(test)]
+use minibox_core::progress::TokioExecOutputStream;
+use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{info, warn};
@@ -12,12 +15,44 @@ use crate::daemon::state::DaemonState;
 
 use super::{HandlerDependencies, send_error};
 
+fn exec_output_to_response(value: ExecOutput) -> DaemonResponse {
+    match value {
+        ExecOutput::Stdout(bytes) => DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stdout,
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        },
+        ExecOutput::Stderr(bytes) => DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stderr,
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        },
+        ExecOutput::Exit(exit_code) => DaemonResponse::ContainerStopped { exit_code },
+        ExecOutput::Error(message) => DaemonResponse::Error { message },
+    }
+}
+
+async fn forward_exec_outputs(tx: &mpsc::Sender<DaemonResponse>, mut session: ExecSession) {
+    if tx
+        .send(DaemonResponse::ExecStarted {
+            exec_id: session.handle.id,
+        })
+        .await
+        .is_err()
+    {
+        return;
+    }
+    while let Some(output) = session.output.next().await {
+        let terminal = matches!(output, ExecOutput::Exit(_) | ExecOutput::Error(_));
+        if tx.send(exec_output_to_response(output)).await.is_err() || terminal {
+            break;
+        }
+    }
+}
+
 /// Run a command inside an already-running container via namespace join.
 ///
 /// Streams `ContainerOutput` messages and terminates with `ContainerStopped`.
 /// Returns `Error` immediately if the exec runtime is unavailable or the
 /// container is not running.
-// qual:allow(iosp) reason: "handler orchestration — validates, dispatches, streams"
 pub async fn handle_exec(
     container_id: String,
     cmd: Vec<String>,
@@ -76,15 +111,11 @@ pub async fn handle_exec(
         tty,
     };
 
-    match exec_rt
-        .as_ref()
-        .run_in_container(&cid, spec, Arc::new(tx.clone()))
-        .await
-    {
-        Ok(handle) => {
+    match exec_rt.as_ref().run_in_container(&cid, spec).await {
+        Ok(session) => {
             info!(
                 container_id = %container_id,
-                exec_id = %handle.id,
+                exec_id = %session.handle.id,
                 "exec: started"
             );
             deps.events.metrics.increment_counter(
@@ -96,9 +127,7 @@ pub async fn handle_exec(
                 start.elapsed().as_secs_f64(),
                 &[("op", "exec"), ("adapter", "daemon")],
             );
-            let _ = tx
-                .send(DaemonResponse::ExecStarted { exec_id: handle.id })
-                .await;
+            forward_exec_outputs(&tx, session).await;
             // Session ends when run_in_container's output stream closes; clean up
             // PTY channels so the registry does not grow unboundedly.
             deps.exec.pty_sessions.lock().await.cleanup(&session_key);
@@ -123,7 +152,7 @@ pub async fn handle_exec(
 
 /// Forward base64-encoded stdin bytes to a running PTY session.
 ///
-/// Looks up the session in [`PtySessionRegistry`] and forwards decoded bytes.
+/// Looks up the session in the PTY session registry and forwards decoded bytes.
 /// Returns `Success` on delivery, `Error` when the session is unknown or the
 /// channel has been closed.
 pub async fn handle_send_input(
@@ -170,7 +199,7 @@ pub async fn handle_send_input(
 
 /// Forward a terminal resize event to a running PTY session.
 ///
-/// Looks up the session in [`PtySessionRegistry`] and sends `(cols, rows)`.
+/// Looks up the session in the PTY session registry and sends `(cols, rows)`.
 /// Returns `Success` on delivery, `Error` when the session is unknown or the
 /// channel has been closed.
 pub async fn handle_resize_pty(
@@ -205,5 +234,87 @@ pub async fn handle_resize_pty(
         .is_err()
     {
         warn!(session_id = %session_id, "resize_pty: client disconnected");
+    }
+}
+
+#[cfg(test)]
+mod exec_output_tests {
+    use super::*;
+
+    #[test]
+    fn exec_output_to_response_preserves_streams_and_terminal_values() {
+        assert!(matches!(
+            exec_output_to_response(ExecOutput::Stdout(b"out".to_vec())),
+            DaemonResponse::ContainerOutput {
+                stream: OutputStreamKind::Stdout,
+                ..
+            }
+        ));
+        assert!(matches!(
+            exec_output_to_response(ExecOutput::Stderr(b"err".to_vec())),
+            DaemonResponse::ContainerOutput {
+                stream: OutputStreamKind::Stderr,
+                ..
+            }
+        ));
+        assert!(matches!(
+            exec_output_to_response(ExecOutput::Exit(7)),
+            DaemonResponse::ContainerStopped { exit_code: 7 }
+        ));
+        assert!(matches!(
+            exec_output_to_response(ExecOutput::Error("failed".to_string())),
+            DaemonResponse::Error { message } if message == "failed"
+        ));
+    }
+
+    #[test]
+    fn exec_output_to_response_base64_encodes_output_bytes() {
+        let response = exec_output_to_response(ExecOutput::Stdout(vec![0, 1, 2, 255]));
+        let DaemonResponse::ContainerOutput { data, .. } = response else {
+            panic!("expected container output");
+        };
+        assert_eq!(data, "AAEC/w==");
+    }
+
+    #[tokio::test]
+    async fn forward_exec_outputs_sends_started_before_buffered_output() {
+        let (output_tx, output_rx) = mpsc::channel(2);
+        output_tx
+            .send(ExecOutput::Stdout(b"ready".to_vec()))
+            .await
+            .expect("output receiver must be open");
+        output_tx
+            .send(ExecOutput::Exit(0))
+            .await
+            .expect("output receiver must be open");
+        drop(output_tx);
+
+        let (response_tx, mut response_rx) = mpsc::channel(3);
+        forward_exec_outputs(
+            &response_tx,
+            ExecSession {
+                handle: minibox_core::domain::ExecHandle {
+                    id: "exec-1".to_string(),
+                },
+                output: Box::new(TokioExecOutputStream::new(output_rx)),
+            },
+        )
+        .await;
+
+        assert!(matches!(
+            response_rx.recv().await,
+            Some(DaemonResponse::ExecStarted { exec_id }) if exec_id == "exec-1"
+        ));
+        assert!(matches!(
+            response_rx.recv().await,
+            Some(DaemonResponse::ContainerOutput {
+                stream: OutputStreamKind::Stdout,
+                ..
+            })
+        ));
+        assert!(matches!(
+            response_rx.recv().await,
+            Some(DaemonResponse::ContainerStopped { exit_code: 0 })
+        ));
     }
 }

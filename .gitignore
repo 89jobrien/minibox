@@ -127,6 +127,7 @@ Thumbs.db
 
 # Documentation build
 /target/doc/
+/docs/dist/
 
 # Backup files
 *.bak
@@ -167,7 +168,6 @@ docs/archive/
 !.ctx/handoff.*.config.toml.example
 .ctx/HANDOFF.*.*.state.json
 .ctx/HANDOFF.hj.hj.state.json
-.ctx/HANDOFF.*.minibox.state.yaml
 .ctx/.initialized
 # handoff-end
 .claude/skills/whatidid/cache/
@@ -176,3 +176,5 @@ bench/results/
 .taskit-state.json
 .taskit-cache/
 .taskit/
+dupehound-results.*
+dupehound-card.*

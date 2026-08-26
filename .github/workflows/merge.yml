@@ -3,7 +3,8 @@ name: Merge
 on:
   merge_group:
   push:
-    branches: [develop, main, next, staging, "feature/*", "hotfix/*", "chore/*"]
+    branches:
+      [develop, main, staging, release, "feature/*", "hotfix/*", "chore/*"]
   workflow_dispatch:
     inputs:
       fail_fast:
@@ -49,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/staging","refs/heads/release","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true' ||
@@ -89,7 +90,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes, lint]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/staging","refs/heads/release","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true' ||
@@ -111,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref)
+      contains(fromJSON('["refs/heads/develop","refs/heads/staging","refs/heads/release","refs/heads/main"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -130,7 +131,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [detect-changes]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/staging","refs/heads/release","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true'
       )
@@ -150,7 +151,7 @@ jobs:
   audit:
     name: cargo audit
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
@@ -161,7 +162,7 @@ jobs:
   deny:
     name: cargo deny
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -169,7 +170,7 @@ jobs:
   machete:
     name: cargo machete
     runs-on: ubuntu-latest
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
       - uses: taiki-e/install-action@v2
@@ -192,7 +193,7 @@ jobs:
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -214,7 +215,7 @@ jobs:
   test-integration:
     name: integration tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -236,7 +237,7 @@ jobs:
   test-protocol-e2e-linux:
     name: protocol e2e (Linux)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -260,7 +261,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [detect-changes]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/staging","refs/heads/release","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true'
       )
@@ -275,7 +276,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: build daemon and CLI
-        run: cargo build --release -p miniboxd -p mbx
+        run: cargo build --release -p miniboxd -p minibox-cli
       - name: run protocol e2e tests
         run: cargo test -p miniboxd --test protocol_e2e_tests --release -- --test-threads=1
 
@@ -284,7 +285,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs: [detect-changes]
     if: |
-      contains(fromJSON('["refs/heads/develop","refs/heads/next","refs/heads/staging","refs/heads/main"]'), github.ref) && (
+      contains(fromJSON('["refs/heads/develop","refs/heads/staging","refs/heads/release","refs/heads/main"]'), github.ref) && (
         needs.detect-changes.outputs.core == 'true' ||
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true'
@@ -298,7 +299,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: build daemon and CLI
-        run: cargo build --release -p miniboxd -p mbx
+        run: cargo build --release -p miniboxd -p minibox-cli
       - name: run CLI e2e tests
         env:
           MINIBOX_ADAPTER: smolvm
@@ -349,54 +350,10 @@ jobs:
           done
           echo "All jobs passed or were skipped"
 
-  promote-next:
-    name: promote develop -> next
+  promote-staging:
+    name: promote develop -> staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
-    needs: [ci-ok]
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: check if next is already up-to-date
-        id: check
-        run: |
-          git fetch origin next
-          BEHIND=$(git log --oneline origin/next..origin/develop | wc -l | tr -d ' ')
-          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
-          if [ "$BEHIND" = "0" ]; then
-            echo "next is already up-to-date with develop"
-          else
-            echo "$BEHIND commit(s) to promote"
-          fi
-      - name: create or update develop -> next PR
-        if: steps.check.outputs.behind != '0'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          existing=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
-          if [ -n "$existing" ]; then
-            echo "PR #$existing already open for develop -> next"
-          else
-            gh pr create \
-              --base next \
-              --head develop \
-              --title "promote(develop->next): auto-promote after CI passed" \
-              --body "Automated promotion from develop. CI passed on develop branch." \
-              --label auto-promote
-            NEW_PR=$(gh pr list --base next --head develop --state open --json number -q '.[0].number')
-            if [ -n "$NEW_PR" ]; then
-              gh pr merge "$NEW_PR" --auto --merge
-            fi
-          fi
-
-  promote-staging:
-    name: promote next -> staging
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/next'
     needs: [ci-ok]
     permissions:
       contents: write
@@ -409,49 +366,93 @@ jobs:
         id: check
         run: |
           git fetch origin staging
-          BEHIND=$(git log --oneline origin/staging..origin/next | wc -l | tr -d ' ')
+          BEHIND=$(git log --oneline origin/staging..origin/develop | wc -l | tr -d ' ')
           echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
           if [ "$BEHIND" = "0" ]; then
-            echo "staging is already up-to-date with next"
+            echo "staging is already up-to-date with develop"
           else
             echo "$BEHIND commit(s) to promote"
           fi
-      - name: create or update next -> staging PR
+      - name: create or update develop -> staging PR
         if: steps.check.outputs.behind != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          existing=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+          existing=$(gh pr list --base staging --head develop --state open --json number -q '.[0].number')
           if [ -n "$existing" ]; then
-            echo "PR #$existing already open for next -> staging"
+            echo "PR #$existing already open for develop -> staging"
           else
             gh pr create \
               --base staging \
-              --head next \
-              --title "promote(next->staging): auto-promote after CI passed" \
-              --body "Automated promotion from next. CI passed on next branch." \
+              --head develop \
+              --title "promote(develop->staging): auto-promote after CI passed" \
+              --body "Automated promotion from develop. CI passed on develop branch." \
               --label auto-promote
-            NEW_PR=$(gh pr list --base staging --head next --state open --json number -q '.[0].number')
+            NEW_PR=$(gh pr list --base staging --head develop --state open --json number -q '.[0].number')
             if [ -n "$NEW_PR" ]; then
               gh pr merge "$NEW_PR" --auto --merge
             fi
           fi
-      - name: create or update staging -> main PR
+
+  promote-release:
+    name: promote staging -> release
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    needs: [ci-ok]
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: check if release is already up-to-date
+        id: check
+        run: |
+          git fetch origin release
+          BEHIND=$(git log --oneline origin/release..origin/staging | wc -l | tr -d ' ')
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" = "0" ]; then
+            echo "release is already up-to-date with staging"
+          else
+            echo "$BEHIND commit(s) to promote"
+          fi
+      - name: create or update staging -> release PR
         if: steps.check.outputs.behind != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          existing=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+          existing=$(gh pr list --base release --head staging --state open --json number -q '.[0].number')
           if [ -n "$existing" ]; then
-            echo "PR #$existing already open for staging -> main"
+            echo "PR #$existing already open for staging -> release"
+          else
+            gh pr create \
+              --base release \
+              --head staging \
+              --title "promote(staging->release): auto-promote after CI passed" \
+              --body "Automated promotion from staging. CI passed on staging branch." \
+              --label auto-promote
+            NEW_PR=$(gh pr list --base release --head staging --state open --json number -q '.[0].number')
+            if [ -n "$NEW_PR" ]; then
+              gh pr merge "$NEW_PR" --auto --merge
+            fi
+          fi
+      - name: create or update release -> main PR
+        if: steps.check.outputs.behind != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing=$(gh pr list --base main --head release --state open --json number -q '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open for release -> main"
           else
             gh pr create \
               --base main \
-              --head staging \
-              --title "promote(staging->main): auto-promote after CI passed" \
-              --body "Automated promotion from staging. Status checks must pass before merge." \
+              --head release \
+              --title "promote(release->main): auto-promote after CI passed" \
+              --body "Automated promotion from release. Status checks must pass before merge." \
               --label auto-promote
-            NEW_PR=$(gh pr list --base main --head staging --state open --json number -q '.[0].number')
+            NEW_PR=$(gh pr list --base main --head release --state open --json number -q '.[0].number')
             if [ -n "$NEW_PR" ]; then
               gh pr merge "$NEW_PR" --auto --merge
             fi
@@ -460,7 +461,7 @@ jobs:
   cleanup-linux:
     name: cleanup (Linux)
     runs-on: [self-hosted, minibox]
-    if: always() && contains(fromJSON('["refs/heads/next","refs/heads/staging"]'), github.ref)
+    if: always() && contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     needs: [test-e2e, test-integration, test-protocol-e2e-linux]
     steps:
       - uses: actions/checkout@v5
