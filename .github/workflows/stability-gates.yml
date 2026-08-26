@@ -19,7 +19,7 @@ on:
 
 jobs:
   doc-sync:
-    name: doc-sync (docs audit + FEATURE_MATRIX staleness)
+    name: doc-sync (FEATURE_MATRIX staleness)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
