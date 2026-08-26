@@ -139,6 +139,7 @@ pub mod run;
 pub mod sandbox;
 pub mod snapshot;
 pub mod stop;
+#[cfg(feature = "tui")]
 pub mod tui;
 pub mod update;
 pub mod upgrade;
