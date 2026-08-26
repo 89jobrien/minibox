@@ -1,3 +1,5 @@
+//! Hash-based drift detection for wire protocol and domain contract surfaces.
+
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

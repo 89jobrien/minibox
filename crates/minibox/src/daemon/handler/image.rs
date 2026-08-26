@@ -93,6 +93,7 @@ pub(super) fn resolve_platform_registry(
 
 // qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
+/// Pulls an image through the selected registry and returns its metadata.
 pub async fn handle_pull(
     image: String,
     tag: Option<String>,
@@ -311,6 +312,7 @@ pub async fn handle_push(
 
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
+/// Commits a container's writable layer and streams the terminal response.
 pub async fn handle_commit(
     container_id: String,
     target_image: String,

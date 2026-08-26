@@ -116,8 +116,10 @@ pub struct ExecutionManifestMount {
 /// Resource limits recorded in the manifest.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExecutionManifestResourceLimits {
+    /// Optional maximum memory allocation in bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory_limit_bytes: Option<u64>,
+    /// Optional relative CPU scheduling weight.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cpu_weight: Option<u64>,
 }
@@ -125,7 +127,9 @@ pub struct ExecutionManifestResourceLimits {
 /// A content digest with algorithm prefix (e.g. `sha256:abcdef...`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ExecutionManifestDigest {
+    /// Digest algorithm name, such as `sha256`.
     pub algorithm: String,
+    /// Hex-encoded digest bytes.
     pub hex: String,
 }
 

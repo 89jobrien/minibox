@@ -1,3 +1,5 @@
+//! Linux cgroup v2 integration-test setup and execution.
+
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, bail};
 #[cfg(target_os = "linux")]

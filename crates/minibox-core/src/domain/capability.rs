@@ -1,3 +1,5 @@
+//! Backend capability declarations and conformance gating support.
+
 #[cfg(test)]
 use super::{
     AsAny, BackendRootfsMetadata, ChildInit, ContainerHooks, ContainerId, ContainerState,

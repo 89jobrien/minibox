@@ -15,12 +15,14 @@ use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::{Descriptor, OciManifest};
 use std::sync::Arc;
 
+/// Commits native overlay writable layers into the local image store.
 pub struct OverlayCommitAdapter {
     image_store: Arc<ImageStore>,
     state: StateHandle,
 }
 
 impl OverlayCommitAdapter {
+    /// Creates a commit adapter backed by an image store and daemon state.
     pub fn new(image_store: Arc<ImageStore>, state: StateHandle) -> Self {
         Self { image_store, state }
     }
@@ -55,6 +57,7 @@ impl ContainerCommitter for OverlayCommitAdapter {
     }
 }
 
+/// Packages an overlay upper directory as a new local image.
 pub fn commit_upper_dir_to_image(
     image_store: Arc<ImageStore>,
     upper_dir: &std::path::Path,
@@ -150,6 +153,7 @@ fn parse_image_ref(s: &str) -> (String, String) {
     }
 }
 
+/// Constructs a dynamic native overlay commit adapter.
 pub fn overlay_commit_adapter(
     image_store: Arc<ImageStore>,
     state: StateHandle,

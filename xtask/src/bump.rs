@@ -93,9 +93,7 @@ fn today() -> String {
 
 fn minor_bumped_today(root: &Path) -> bool {
     let path = root.join(BUMP_STATE_FILE);
-    fs::read_to_string(path)
-        .ok()
-        .is_some_and(|content| content.trim() == today())
+    fs::read_to_string(path).is_ok_and(|content| content.trim() == today())
 }
 
 fn record_minor_bump(root: &Path) {

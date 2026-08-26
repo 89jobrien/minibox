@@ -266,6 +266,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 
 // ── Input extraction helpers ───────────────────────────────────────────────────
 
+/// Parses and validates bind mounts from a handler input object.
 pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
     let Some(arr) = v["mounts"].as_array() else {
         return Ok(vec![]);
@@ -311,6 +312,7 @@ pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
         .collect()
 }
 
+/// Extracts a required string field from a handler input object.
 pub fn str_field(v: &Value, key: &str) -> Result<String> {
     v[key]
         .as_str()
@@ -319,16 +321,19 @@ pub fn str_field(v: &Value, key: &str) -> Result<String> {
 }
 
 #[must_use]
+/// Extracts an optional string field from a handler input object.
 pub fn opt_str_field(v: &Value, key: &str) -> Option<String> {
     v[key].as_str().map(std::string::ToString::to_string)
 }
 
 #[must_use]
+/// Extracts an optional unsigned integer field from a handler input object.
 pub fn opt_u64_field(v: &Value, key: &str) -> Option<u64> {
     v[key].as_u64()
 }
 
 #[must_use]
+/// Extracts an optional array of string values from a handler input object.
 pub fn str_array_field(v: &Value, key: &str) -> Option<Vec<String>> {
     v[key].as_array().map(|arr| {
         arr.iter()

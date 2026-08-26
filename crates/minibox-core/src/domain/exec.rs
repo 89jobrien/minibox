@@ -1,3 +1,5 @@
+//! Domain ports and value types for executing commands in containers.
+
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -14,15 +16,20 @@ use super::{AsAny, ContainerId};
 /// adapter layer (`minibox::adapters::exec`).
 #[derive(Debug, Clone)]
 pub struct ExecSpec {
+    /// Command and arguments to execute.
     pub cmd: Vec<String>,
+    /// Environment variables in `KEY=VALUE` form.
     pub env: Vec<String>,
+    /// Optional working directory inside the container.
     pub working_dir: Option<std::path::PathBuf>,
+    /// Whether to allocate a pseudo-terminal.
     pub tty: bool,
 }
 
 /// Handle representing a started exec instance.
 #[derive(Debug, Clone)]
 pub struct ExecHandle {
+    /// Adapter-assigned identifier for the exec instance.
     pub id: String,
 }
 
@@ -72,6 +79,7 @@ pub type DynProgressSink<T> = Arc<dyn ProgressSink<T>>;
 /// Port for running commands inside already-running containers.
 #[async_trait]
 pub trait ExecRuntime: AsAny + Send + Sync {
+    /// Starts a command in a running container and streams its responses.
     async fn run_in_container(
         &self,
         container_id: &ContainerId,

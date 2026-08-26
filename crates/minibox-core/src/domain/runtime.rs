@@ -1,3 +1,5 @@
+//! Container runtime and resource-limiting domain ports.
+
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;

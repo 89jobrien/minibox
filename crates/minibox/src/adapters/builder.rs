@@ -24,6 +24,7 @@ use uuid::Uuid;
 use crate::adapters::commit::commit_upper_dir_to_image;
 use crate::image::dockerfile::{Instruction, ShellOrExec, parse};
 
+/// Native image builder that executes supported Dockerfile instructions.
 pub struct MiniboxImageBuilder {
     image_store: Arc<ImageStore>,
     data_dir: PathBuf,
@@ -33,6 +34,7 @@ pub struct MiniboxImageBuilder {
 }
 
 impl MiniboxImageBuilder {
+    /// Creates a builder from the image store and runtime adapter dependencies.
     pub fn new(
         image_store: Arc<ImageStore>,
         data_dir: PathBuf,
@@ -417,6 +419,7 @@ impl ImageBuilder for MiniboxImageBuilder {
     }
 }
 
+/// Constructs a dynamic native image-builder adapter.
 pub fn minibox_image_builder(
     image_store: Arc<ImageStore>,
     data_dir: PathBuf,

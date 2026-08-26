@@ -8,11 +8,24 @@ use std::sync::Mutex;
 #[derive(Debug, Clone)]
 pub enum MetricEvent {
     /// A counter was incremented.
-    Counter { name: String },
+    Counter {
+        /// Counter metric name.
+        name: String,
+    },
     /// A histogram value was recorded.
-    Histogram { name: String, value: f64 },
+    Histogram {
+        /// Histogram metric name.
+        name: String,
+        /// Recorded histogram value.
+        value: f64,
+    },
     /// A gauge was set.
-    Gauge { name: String, value: f64 },
+    Gauge {
+        /// Gauge metric name.
+        name: String,
+        /// Recorded gauge value.
+        value: f64,
+    },
 }
 
 /// Mock metrics recorder that captures all events in memory.

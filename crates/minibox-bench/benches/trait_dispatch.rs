@@ -9,7 +9,7 @@
 // Bench setup code: panicking on setup failure is the correct behaviour.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_main};
 use minibox_core::adapters::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 use minibox_core::domain::{
     ContainerHooks, ContainerRuntime, ContainerSpawnConfig, FilesystemProvider, ImageRegistry,
@@ -119,7 +119,8 @@ fn bench_runtime_trait_object_call(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
+minibox_bench::documented_criterion_group!(
+    "Runs adapter trait dispatch benchmarks.",
     trait_dispatch,
     bench_registry_direct_call,
     bench_registry_trait_object_call,

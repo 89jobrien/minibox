@@ -16,6 +16,7 @@
 // from minibox. Using `$crate` here would wrongly resolve to minibox-macros,
 // which does not export `AsAny`. Suppressing the clippy lint is correct here.
 #[allow(clippy::crate_in_macro_def)]
+/// Implements the call site's `AsAny` trait for one or more concrete types.
 #[macro_export]
 macro_rules! as_any {
     ($($t:ty),+ $(,)?) => {

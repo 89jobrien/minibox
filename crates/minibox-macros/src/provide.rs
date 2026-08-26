@@ -11,6 +11,7 @@
 //! ```
 
 #[allow(clippy::crate_in_macro_def)]
+/// Adds environment-based constructors to an LLM provider type.
 #[macro_export]
 macro_rules! provide {
     ($provider:ty, $env_var:expr, $default_model:expr) => {

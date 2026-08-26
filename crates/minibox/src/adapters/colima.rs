@@ -788,6 +788,7 @@ impl ColimaRuntime {
         self
     }
 
+    /// Injects a custom Lima process spawner for testing.
     pub fn with_spawner(mut self, spawner: LimaSpawner) -> Self {
         self.spawner = Some(spawner);
         self

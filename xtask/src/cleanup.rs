@@ -1,3 +1,5 @@
+//! Cleanup tasks for build artifacts and leaked integration-test state.
+
 use anyhow::Result;
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
@@ -8,7 +10,7 @@ pub fn clean_artifacts(sh: &Shell) -> Result<()> {
         let p = Path::new(dir);
         if p.exists() {
             for entry in fs::read_dir(p).into_iter().flatten().flatten() {
-                if entry.file_type().ok().is_some_and(|t| t.is_file()) {
+                if entry.file_type().is_ok_and(|t| t.is_file()) {
                     fs::remove_file(entry.path()).ok();
                 }
             }
@@ -21,7 +23,7 @@ pub fn clean_artifacts(sh: &Shell) -> Result<()> {
             for entry in fs::read_dir(p).into_iter().flatten().flatten() {
                 let path = entry.path();
                 let keep = path.extension().is_some_and(|e| e == "d");
-                if !keep && entry.file_type().ok().is_some_and(|t| t.is_file()) {
+                if !keep && entry.file_type().is_ok_and(|t| t.is_file()) {
                     fs::remove_file(&path).ok();
                 }
             }

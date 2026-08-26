@@ -224,6 +224,7 @@ impl MiniboxMcpServer {
 }
 
 #[tool_handler(router = self.tool_router)]
+#[allow(clippy::unused_async_trait_impl)] // Generated ServerHandler methods must be async.
 impl ServerHandler for MiniboxMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())

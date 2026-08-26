@@ -28,7 +28,7 @@ impl Tier {
         PIPELINE.iter().position(|&b| b == s).map(Tier)
     }
 
-    pub fn branch(self) -> &'static str {
+    pub const fn branch(self) -> &'static str {
         PIPELINE[self.0]
     }
 }

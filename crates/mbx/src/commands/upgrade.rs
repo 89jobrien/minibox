@@ -358,15 +358,15 @@ mod tests {
     }
 
     impl ReleaseProvider for MockProvider {
-        async fn fetch_release(
+        fn fetch_release(
             &self,
             _version: Option<&str>,
             _triple: &str,
-        ) -> Result<ReleaseInfo> {
-            Ok(ReleaseInfo {
+        ) -> impl std::future::Future<Output = Result<ReleaseInfo>> + Send {
+            std::future::ready(Ok(ReleaseInfo {
                 tag: self.tag.clone(),
                 asset_url: self.asset_url.clone(),
-            })
+            }))
         }
     }
 
@@ -375,8 +375,11 @@ mod tests {
     }
 
     impl AssetDownloader for MockDownloader {
-        async fn download(&self, _url: &str) -> Result<Vec<u8>> {
-            Ok(self.bytes.clone())
+        fn download(
+            &self,
+            _url: &str,
+        ) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send {
+            std::future::ready(Ok(self.bytes.clone()))
         }
     }
 
@@ -400,9 +403,12 @@ mod tests {
 
         struct TrackingDownloader;
         impl AssetDownloader for TrackingDownloader {
-            async fn download(&self, _url: &str) -> Result<Vec<u8>> {
+            fn download(
+                &self,
+                _url: &str,
+            ) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send {
                 *DOWNLOADED.lock().unwrap() = true;
-                Ok(vec![])
+                std::future::ready(Ok(vec![]))
             }
         }
 

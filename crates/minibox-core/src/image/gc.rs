@@ -36,6 +36,7 @@ pub struct ImageGc {
 }
 
 impl ImageGc {
+    /// Creates a collector backed by an image store and lease service.
     pub fn new(store: Arc<ImageStore>, leases: Arc<dyn ImageLeaseService>) -> Self {
         Self { store, leases }
     }

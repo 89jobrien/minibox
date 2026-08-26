@@ -9,6 +9,7 @@
 //! adapt!(ColimaRegistry, ColimaFilesystem, ColimaLimiter, ColimaRuntime);
 //! ```
 
+/// Implements both `AsAny` and `Default` for one or more adapter types.
 #[macro_export]
 macro_rules! adapt {
     ($($t:ty),+ $(,)?) => {

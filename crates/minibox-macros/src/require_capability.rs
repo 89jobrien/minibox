@@ -10,6 +10,7 @@
 //! minibox_macros::require_capability!(caps, is_root, "requires root");
 //! ```
 
+/// Returns early from a test when a required host capability is unavailable.
 #[macro_export]
 macro_rules! require_capability {
     ($caps:expr, $field:ident, $reason:expr) => {

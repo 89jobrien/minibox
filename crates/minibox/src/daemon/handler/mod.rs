@@ -315,8 +315,11 @@ pub struct ContainerPolicy {
 /// Fields are `Option` — `None` means "use the base policy value".
 #[derive(Debug, Clone, Default)]
 pub struct PolicyOverride {
+    /// Optional override for host bind-mount permission.
     pub allow_bind_mounts: Option<bool>,
+    /// Optional override for privileged container permission.
     pub allow_privileged: Option<bool>,
+    /// Optional override for the minimum accepted priority, including clearing it.
     pub min_priority: Option<Option<slashcrux::Priority>>,
 }
 
@@ -351,8 +354,7 @@ impl ContainerPolicy {
 /// Parse a boolean-ish environment variable (absent or unrecognised = false).
 pub(crate) fn env_flag(name: &str) -> bool {
     std::env::var(name)
-        .ok()
-        .is_some_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
+        .is_ok_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
 /// Validate a container run request against the active policy.

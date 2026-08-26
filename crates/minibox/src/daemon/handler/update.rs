@@ -15,9 +15,13 @@ use super::{HandlerDependencies, send_error};
 
 /// Bundled user-supplied parameters for an image update request.
 pub struct UpdateParams {
+    /// Explicit image references to update.
     pub images: Vec<String>,
+    /// Whether to update every cached image.
     pub all: bool,
+    /// Whether to update images referenced by containers.
     pub containers: bool,
+    /// Whether affected containers should be restarted.
     pub restart: bool,
 }
 

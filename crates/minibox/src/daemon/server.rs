@@ -37,7 +37,9 @@ impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> AsyncStream
 /// Peer credentials from an accepted connection.
 #[derive(Debug, Clone)]
 pub struct PeerCreds {
+    /// Peer user identifier.
     pub uid: u32,
+    /// Peer process identifier, or zero when unavailable.
     pub pid: i32,
 }
 
@@ -46,6 +48,7 @@ pub struct PeerCreds {
 /// Implementors wrap a platform-specific listener (Unix socket, Named Pipe, etc.)
 /// and yield a stream + optional peer credentials on each `accept()` call.
 pub trait ServerListener: Send + 'static {
+    /// Connection stream returned by this listener.
     type Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin + 'static;
 
     /// Accept the next incoming connection.

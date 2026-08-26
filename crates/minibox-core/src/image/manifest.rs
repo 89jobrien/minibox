@@ -12,9 +12,13 @@ use std::fmt;
 // Media type constants
 // ---------------------------------------------------------------------------
 
+/// OCI single-platform image manifest media type.
 pub const MEDIA_TYPE_OCI_MANIFEST: &str = "application/vnd.oci.image.manifest.v1+json";
+/// OCI multi-platform image index media type.
 pub const MEDIA_TYPE_OCI_INDEX: &str = "application/vnd.oci.image.index.v1+json";
+/// Docker distribution single-platform manifest media type.
 pub const MEDIA_TYPE_DOCKER_MANIFEST: &str = "application/vnd.docker.distribution.manifest.v2+json";
+/// Docker distribution multi-platform manifest list media type.
 pub const MEDIA_TYPE_DOCKER_MANIFEST_LIST: &str =
     "application/vnd.docker.distribution.manifest.list.v2+json";
 

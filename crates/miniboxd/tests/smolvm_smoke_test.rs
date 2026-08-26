@@ -1,3 +1,5 @@
+//! Ignored smoke tests for the smolvm-backed daemon fixture.
+
 mod helpers;
 
 use helpers::smolvm::{SmolVmFixture, smolvm_available};

@@ -51,9 +51,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum PushCredentials {
+    /// Authenticate anonymously.
     Anonymous,
-    Basic { username: String, password: String },
-    Token { token: String },
+    /// Authenticate with a username and password.
+    Basic {
+        /// Registry account username.
+        username: String,
+        /// Registry account password.
+        password: String,
+    },
+    /// Authenticate with a bearer token.
+    Token {
+        /// Secret bearer token.
+        token: String,
+    },
 }
 
 impl PushCredentials {
@@ -252,12 +263,20 @@ pub enum DaemonRequest {
     },
 
     /// Send raw bytes to a running exec or run session stdin (base64-encoded).
-    SendInput { session_id: SessionId, data: String },
+    SendInput {
+        /// Target interactive session.
+        session_id: SessionId,
+        /// Base64-encoded input bytes.
+        data: String,
+    },
 
     /// Notify the daemon the client terminal was resized.
     ResizePty {
+        /// Target interactive session.
         session_id: SessionId,
+        /// New terminal width in columns.
         cols: u16,
+        /// New terminal height in rows.
         rows: u16,
     },
 
@@ -271,14 +290,20 @@ pub enum DaemonRequest {
 
     /// Snapshot a container's filesystem changes into a new local image.
     Commit {
+        /// Container to snapshot.
         container_id: String,
+        /// Target image reference for the snapshot.
         target_image: String,
+        /// Optional image author metadata.
         #[serde(default)]
         author: Option<String>,
+        /// Optional commit message metadata.
         #[serde(default)]
         message: Option<String>,
+        /// Environment entries to add or replace.
         #[serde(default)]
         env_overrides: Vec<String>,
+        /// Optional replacement image command.
         #[serde(default)]
         cmd_override: Option<Vec<String>>,
     },
@@ -306,6 +331,7 @@ pub enum DaemonRequest {
 
     /// Remove unused images (optionally dry-run).
     Prune {
+        /// Report reclaimable images without deleting them.
         #[serde(default)]
         dry_run: bool,
     },

@@ -1,3 +1,5 @@
+//! Integration tests for the daemon metrics HTTP server.
+
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

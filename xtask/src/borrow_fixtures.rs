@@ -1,3 +1,5 @@
+//! Compile-pass and compile-fail validation for borrow-reasoning fixtures.
+
 use anyhow::{Context, Result, bail};
 use std::{
     ffi::OsStr,

@@ -1,3 +1,5 @@
+//! Workflow definitions, execution status types, and evaluation helpers.
+
 #[cfg(test)]
 use super::{BindMount, ExecutionContext};
 use super::{Priority, StepState};
@@ -391,7 +393,10 @@ pub enum StepCompletion {
     /// `terminal` is `true` when the error is inherently unrecoverable
     /// (e.g. image not found), and `false` when the retry policy is
     /// exhausted or timed out.
-    Failed { terminal: bool },
+    Failed {
+        /// Whether the failure is inherently unrecoverable.
+        terminal: bool,
+    },
     /// Step encountered an unexpected runtime error (reserved for future use).
     Errored,
     /// Step failed transiently and should be retried by the caller.

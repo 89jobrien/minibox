@@ -12,7 +12,7 @@
 // Bench setup code: panicking on setup failure is the correct behaviour.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{BatchSize, Criterion, SamplingMode, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, SamplingMode, criterion_main};
 use minibox_bench::fixtures::{BenchRegistry, LayerSpec, build_layer_tar_gz};
 use minibox_core::ImageStore;
 use std::hint::black_box;
@@ -26,7 +26,7 @@ const MIB: usize = 1024 * 1024;
 
 /// A ~4 MiB layer; `dir_depth` varies the content so multi-layer scenarios
 /// get distinct digests from otherwise identical shapes.
-fn layer_4mib(dir_depth: usize) -> LayerSpec {
+const fn layer_4mib(dir_depth: usize) -> LayerSpec {
     LayerSpec {
         file_count: 64,
         file_size_bytes: 64 * KIB,
@@ -94,5 +94,9 @@ fn bench_image_pull(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(image_pull, bench_image_pull);
+minibox_bench::documented_criterion_group!(
+    "Runs OCI image pull benchmarks.",
+    image_pull,
+    bench_image_pull
+);
 criterion_main!(image_pull);

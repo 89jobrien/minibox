@@ -1,3 +1,5 @@
+//! Workspace quality gates and their checkpoint-aware orchestration.
+
 use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};

@@ -34,9 +34,13 @@ use super::mocks::{MockFilesystem, MockLimiter, MockRegistry, MockRuntime};
 
 /// A complete set of mock domain adapters, ready for injection into tests.
 pub struct MockAdapterSet {
+    /// Mock filesystem provider.
     pub filesystem: DynFilesystemProvider,
+    /// Mock resource limiter.
     pub limiter: DynResourceLimiter,
+    /// Mock image registry.
     pub registry: DynImageRegistry,
+    /// Mock container runtime.
     pub runtime: DynContainerRuntime,
 }
 

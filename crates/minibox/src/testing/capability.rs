@@ -7,12 +7,21 @@
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SkipReason {
     /// The backend did not declare this capability in its `BackendCapabilitySet`.
-    CapabilityNotDeclared { capability: &'static str },
+    CapabilityNotDeclared {
+        /// Name of the undeclared capability.
+        capability: &'static str,
+    },
     /// The backend declared the capability but the required external service
     /// (e.g. a local OCI registry) is not available in this environment.
-    ExternalServiceUnavailable { service: &'static str },
+    ExternalServiceUnavailable {
+        /// Name of the unavailable service.
+        service: &'static str,
+    },
     /// The test is platform-gated and the current platform does not support it.
-    PlatformUnsupported { platform: &'static str },
+    PlatformUnsupported {
+        /// Platform required by the test.
+        platform: &'static str,
+    },
 }
 
 impl SkipReason {
@@ -66,6 +75,7 @@ pub fn should_skip(cap: &dyn ConformanceCapability) -> Option<String> {
 
 /// Capability: backend can commit a container FS diff to a new image.
 pub struct CommitCapability {
+    /// Whether commit conformance tests should run.
     pub supported: bool,
 }
 
@@ -85,6 +95,7 @@ impl ConformanceCapability for CommitCapability {
 
 /// Capability: backend can build an image from a Dockerfile context.
 pub struct BuildCapability {
+    /// Whether image-build conformance tests should run.
     pub supported: bool,
 }
 
@@ -104,6 +115,7 @@ impl ConformanceCapability for BuildCapability {
 
 /// Capability: backend can push an image to a registry.
 pub struct PushCapability {
+    /// Whether image-push conformance tests should run.
     pub supported: bool,
 }
 
@@ -123,6 +135,7 @@ impl ConformanceCapability for PushCapability {
 
 /// Capability: backend supports GC (image garbage collection).
 pub struct GcCapability {
+    /// Whether image-GC conformance tests should run.
     pub supported: bool,
 }
 
@@ -142,6 +155,7 @@ impl ConformanceCapability for GcCapability {
 
 /// Capability: backend provides filesystem operations (`RootfsSetup` + `ChildInit`).
 pub struct FilesystemCapability {
+    /// Whether filesystem conformance tests should run.
     pub supported: bool,
 }
 
@@ -161,6 +175,7 @@ impl ConformanceCapability for FilesystemCapability {
 
 /// Capability: backend provides exec into running containers.
 pub struct ExecCapability {
+    /// Whether exec conformance tests should run.
     pub supported: bool,
 }
 
@@ -178,6 +193,7 @@ impl ConformanceCapability for ExecCapability {
 
 /// Capability: backend provides network namespace setup.
 pub struct NetworkCapability {
+    /// Whether network conformance tests should run.
     pub supported: bool,
 }
 
@@ -197,6 +213,7 @@ impl ConformanceCapability for NetworkCapability {
 
 /// Capability: backend provides TTY allocation.
 pub struct TtyCapability {
+    /// Whether TTY conformance tests should run.
     pub supported: bool,
 }
 
@@ -214,6 +231,7 @@ impl ConformanceCapability for TtyCapability {
 
 /// Capability: backend provides low-level PTY pair allocation.
 pub struct PtyCapability {
+    /// Whether PTY allocator conformance tests should run.
     pub supported: bool,
 }
 
@@ -231,6 +249,7 @@ impl ConformanceCapability for PtyCapability {
 
 /// Capability: backend provides metrics recording.
 pub struct MetricsCapability {
+    /// Whether metrics conformance tests should run.
     pub supported: bool,
 }
 
@@ -250,6 +269,7 @@ impl ConformanceCapability for MetricsCapability {
 
 /// Capability: backend provides multi-registry routing.
 pub struct RegistryRouterCapability {
+    /// Whether registry-routing conformance tests should run.
     pub supported: bool,
 }
 
@@ -269,6 +289,7 @@ impl ConformanceCapability for RegistryRouterCapability {
 
 /// Capability: backend provides local OCI tarball loading.
 pub struct ImageLoaderCapability {
+    /// Whether local image-loading conformance tests should run.
     pub supported: bool,
 }
 

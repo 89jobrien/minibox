@@ -163,8 +163,16 @@ struct TokenResponse {
 /// `Debug` is manually implemented to redact secrets.
 #[derive(Clone, PartialEq, Eq)]
 pub enum PushAuth {
+    /// Send no authentication credentials.
     None,
-    Basic { username: String, password: String },
+    /// Authenticate with a username and password.
+    Basic {
+        /// Registry account username.
+        username: String,
+        /// Registry account password.
+        password: String,
+    },
+    /// Authenticate with a bearer token.
     Bearer(String),
 }
 

@@ -32,6 +32,7 @@ use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tracing::info;
 
+/// Pushes images from local storage to an OCI distribution registry.
 pub struct OciPushAdapter {
     client: RegistryClient,
     store: Arc<ImageStore>,
@@ -39,6 +40,7 @@ pub struct OciPushAdapter {
 
 impl OciPushAdapter {
     #[must_use]
+    /// Creates a push adapter from a registry client and local image store.
     pub const fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
         Self { client, store }
     }

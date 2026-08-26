@@ -179,28 +179,43 @@ const STATE_FILENAME: &str = "state.json";
 /// original creation request (e.g. for container restart support).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunCreationParams {
+    /// Source image name or reference.
     pub image: String,
+    /// Optional image tag.
     pub tag: Option<String>,
+    /// Command and arguments used at creation.
     pub command: Vec<String>,
+    /// Optional memory limit in bytes.
     pub memory_limit_bytes: Option<u64>,
+    /// Optional relative CPU scheduling weight.
     pub cpu_weight: Option<u64>,
+    /// Requested network mode.
     pub network: Option<NetworkMode>,
+    /// Environment variables in `KEY=VALUE` form.
     #[serde(default)]
     pub env: Vec<String>,
+    /// Requested host bind mounts.
     #[serde(default)]
     pub mounts: Vec<BindMount>,
+    /// Whether privileged execution was requested.
     #[serde(default)]
     pub privileged: bool,
+    /// Optional human-readable container name.
     #[serde(default)]
     pub name: Option<String>,
+    /// Whether a pseudo-terminal was requested.
     #[serde(default)]
     pub tty: bool,
+    /// Optional entrypoint override.
     #[serde(default)]
     pub entrypoint: Option<String>,
+    /// Optional container user override.
     #[serde(default)]
     pub user: Option<String>,
+    /// Optional image platform override.
     #[serde(default)]
     pub platform: Option<String>,
+    /// Optional parent cgroup path.
     #[serde(default)]
     pub cgroup_parent: Option<String>,
 }

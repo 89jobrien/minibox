@@ -10,7 +10,7 @@
 // Bench setup code: panicking on setup failure is the correct behaviour.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{BatchSize, Criterion, SamplingMode, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, SamplingMode, criterion_main};
 use minibox_bench::fixtures::{LayerSpec, build_layer_tar_gz};
 use minibox_core::image::layer::extract_layer;
 use std::hint::black_box;
@@ -79,5 +79,9 @@ fn bench_layer_extract(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(layer_extract, bench_layer_extract);
+minibox_bench::documented_criterion_group!(
+    "Runs OCI layer extraction benchmarks.",
+    layer_extract,
+    bench_layer_extract
+);
 criterion_main!(layer_extract);

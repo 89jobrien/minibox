@@ -1,18 +1,28 @@
+//! Parsing and canonicalization of OCI image references.
+
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// Parsed OCI image reference with explicit registry, namespace, name, and tag.
 pub struct ImageRef {
+    /// Registry hostname as supplied or inferred.
     pub registry: String,
+    /// Repository namespace or organization.
     pub namespace: String,
+    /// Image repository name.
     pub name: String,
+    /// Image tag, defaulting to `latest` when omitted.
     pub tag: String,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
+/// Errors produced while parsing an image reference.
 pub enum ImageRefError {
+    /// The reference was empty.
     #[error("empty image reference")]
     Empty,
+    /// The reference had an unsupported or incomplete shape.
     #[error("invalid image reference: {0}")]
     Invalid(String),
 }
@@ -87,6 +97,7 @@ impl ImageRef {
     }
 
     #[must_use]
+    /// Returns the HTTP registry host used for API requests.
     pub fn registry_host(&self) -> &str {
         match self.registry.as_str() {
             "docker.io" => "registry-1.docker.io",
@@ -95,6 +106,7 @@ impl ImageRef {
     }
 
     #[must_use]
+    /// Returns the namespace-qualified repository path.
     pub fn repository(&self) -> String {
         format!("{}/{}", self.namespace, self.name)
     }
@@ -111,6 +123,7 @@ impl ImageRef {
     }
 
     #[must_use]
+    /// Returns the local cache path for this image reference.
     pub fn cache_path(&self, images_dir: &Path) -> PathBuf {
         if self.registry == "docker.io" {
             // Backward compat: docker.io omits registry prefix to preserve existing caches.

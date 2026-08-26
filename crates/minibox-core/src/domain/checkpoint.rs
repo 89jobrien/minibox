@@ -1,3 +1,5 @@
+//! VM checkpoint metadata and persistence port definitions.
+
 use anyhow::Result;
 use std::path::Path;
 use std::sync::Arc;

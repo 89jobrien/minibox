@@ -1,3 +1,5 @@
+//! Shared daemon and image-GC helpers for adapter tests.
+
 pub mod daemon;
 pub mod gc;
 

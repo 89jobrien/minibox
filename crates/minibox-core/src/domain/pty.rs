@@ -1,3 +1,5 @@
+//! Pseudo-terminal allocation ports and shared PTY value types.
+
 use std::sync::Arc;
 
 // ---------------------------------------------------------------------------

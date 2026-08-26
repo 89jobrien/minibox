@@ -1,3 +1,5 @@
+//! Image registry, loading, building, commit, and push domain ports.
+
 use anyhow::Result;
 use async_trait::async_trait;
 use std::path::PathBuf;
@@ -157,29 +159,49 @@ pub struct LayerInfo {
 /// Credentials for authenticating to a registry.
 #[derive(Debug, Clone)]
 pub enum RegistryCredentials {
+    /// Connect without authentication.
     Anonymous,
-    Basic { username: String, password: String },
+    /// Authenticate with a username and password.
+    Basic {
+        /// Registry account username.
+        username: String,
+        /// Registry account password.
+        password: String,
+    },
+    /// Authenticate with a bearer token.
     Token(String),
 }
 
 /// Result of a successful image push.
 #[derive(Debug, Clone)]
 pub struct PushResult {
+    /// Digest reported for the pushed image.
+    ///
+    /// Adapters may fall back to a layer digest when the registry does not
+    /// return a manifest digest.
     pub digest: String,
+    /// Total layer payload size considered by the push.
+    ///
+    /// This includes layers already present in the registry and therefore
+    /// does not necessarily equal the number of bytes transferred.
     pub size_bytes: u64,
 }
 
 /// Push progress update.
 #[derive(Debug, Clone)]
 pub struct PushProgress {
+    /// Digest of the layer currently being uploaded.
     pub layer_digest: String,
+    /// Bytes uploaded for the current layer.
     pub bytes_uploaded: u64,
+    /// Total bytes in the current layer.
     pub total_bytes: u64,
 }
 
 /// Port for pushing images to OCI-compliant registries.
 #[async_trait]
 pub trait ImagePusher: AsAny + Send + Sync {
+    /// Pushes a local image and optionally streams layer upload progress.
     async fn push_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
@@ -198,15 +220,20 @@ pub type DynImagePusher = Arc<dyn ImagePusher>;
 /// Configuration for committing a container to a new image.
 #[derive(Debug, Clone)]
 pub struct CommitConfig {
+    /// Optional image author metadata.
     pub author: Option<String>,
+    /// Optional commit message metadata.
     pub message: Option<String>,
+    /// Environment entries to add or replace in the image config.
     pub env_overrides: Vec<String>,
+    /// Optional replacement image command.
     pub cmd_override: Option<Vec<String>>,
 }
 
 /// Port for snapshotting a container's filesystem diff into a new image.
 #[async_trait]
 pub trait ContainerCommitter: AsAny + Send + Sync {
+    /// Snapshots a container's writable layer as `target_ref`.
     async fn commit(
         &self,
         container_id: &ContainerId,

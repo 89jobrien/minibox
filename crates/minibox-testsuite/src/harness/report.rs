@@ -16,6 +16,7 @@ pub struct ReportConfig {
     pub show_timing: bool,
 }
 
+/// Generates conformance reports in supported output formats.
 pub struct ReportGenerator;
 
 impl ReportGenerator {

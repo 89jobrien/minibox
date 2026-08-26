@@ -1,3 +1,5 @@
+//! Tool, environment, and host-capability checks for `cargo xtask doctor`.
+
 /// Domain port: probe whether a named tool is functional.
 ///
 /// Implementations call the real process; test doubles return canned results.

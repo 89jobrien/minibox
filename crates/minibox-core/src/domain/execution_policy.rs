@@ -11,7 +11,9 @@ use super::execution_manifest::ExecutionManifest;
 /// A policy decision: allow the run or deny with reason.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PolicyDecision {
+    /// Permit the workload to run.
     Allow,
+    /// Reject the workload with a human-readable reason.
     Deny(String),
 }
 

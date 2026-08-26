@@ -6,7 +6,7 @@
 //! passes; on Linux without root the benches skip at runtime.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{criterion_group, criterion_main};
+use criterion::criterion_main;
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -67,7 +67,7 @@ use linux::bench_cgroup;
 
 /// No-op on non-Linux targets so criterion `--test` mode passes everywhere.
 #[cfg(not(target_os = "linux"))]
-fn bench_cgroup(_c: &mut criterion::Criterion) {}
+const fn bench_cgroup(_c: &mut criterion::Criterion) {}
 
-criterion_group!(benches, bench_cgroup);
+minibox_bench::documented_criterion_group!("Runs Linux cgroup benchmarks.", benches, bench_cgroup);
 criterion_main!(benches);

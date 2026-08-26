@@ -16,7 +16,7 @@
 
 #[cfg(not(target_os = "linux"))]
 use criterion::Criterion;
-use criterion::{criterion_group, criterion_main};
+use criterion::criterion_main;
 
 #[cfg(target_os = "linux")]
 mod real {
@@ -112,7 +112,11 @@ use real::bench_linux_rootfs;
 
 /// No-op on non-Linux platforms so criterion `--test` mode still passes.
 #[cfg(not(target_os = "linux"))]
-fn bench_linux_rootfs(_c: &mut Criterion) {}
+const fn bench_linux_rootfs(_c: &mut Criterion) {}
 
-criterion_group!(linux_rootfs, bench_linux_rootfs);
+minibox_bench::documented_criterion_group!(
+    "Runs Linux root filesystem benchmarks.",
+    linux_rootfs,
+    bench_linux_rootfs
+);
 criterion_main!(linux_rootfs);

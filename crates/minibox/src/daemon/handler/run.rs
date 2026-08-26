@@ -33,20 +33,35 @@ use super::{HandlerDependencies, PolicyOverride, send_error};
 /// in the run pipeline without changing observable behaviour.
 #[derive(Default)]
 pub struct RunParams {
+    /// Source image name or reference.
     pub image: String,
+    /// Optional image tag.
     pub tag: Option<String>,
+    /// Command and arguments to execute.
     pub command: Vec<String>,
+    /// Optional memory limit in bytes.
     pub memory_limit_bytes: Option<u64>,
+    /// Optional relative CPU scheduling weight.
     pub cpu_weight: Option<u64>,
+    /// Whether the container is removed after it exits.
     pub ephemeral: bool,
+    /// Requested network mode.
     pub network: Option<NetworkMode>,
+    /// Host bind mounts requested for the container.
     pub mounts: Vec<BindMount>,
+    /// Whether privileged execution is requested.
     pub privileged: bool,
+    /// Environment variables in `KEY=VALUE` form.
     pub env: Vec<String>,
+    /// Optional human-readable container name.
     pub name: Option<String>,
+    /// Optional image platform override.
     pub platform: Option<String>,
+    /// Optional parent cgroup path.
     pub cgroup_parent: Option<String>,
+    /// Optional scheduling priority.
     pub priority: Option<slashcrux::Priority>,
+    /// Scoped policy overrides for trusted internal callers.
     pub policy_override: Option<PolicyOverride>,
 }
 

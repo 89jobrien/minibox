@@ -9,7 +9,7 @@
 // Bench setup code: panicking on setup failure is the correct behaviour.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_main};
 use minibox::daemon::handler;
 use minibox::daemon::handler::RunParams;
 use minibox::daemon::state::{CgroupFreezeChecker, ProcessChecker};
@@ -151,8 +151,13 @@ fn bench_handler_pause_not_found(c: &mut Criterion) {
     });
 }
 
-criterion_group!(state_reconcile, bench_state_reconcile);
-criterion_group!(
+minibox_bench::documented_criterion_group!(
+    "Runs daemon state reconciliation benchmarks.",
+    state_reconcile,
+    bench_state_reconcile
+);
+minibox_bench::documented_criterion_group!(
+    "Runs daemon handler dispatch benchmarks.",
     handler_pipeline,
     bench_handler_list,
     bench_handler_run_dispatch,

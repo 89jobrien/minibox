@@ -9,6 +9,7 @@
 //! default_new!(CgroupV2Limiter, OverlayFilesystem);
 //! ```
 
+/// Implements `Default` by delegating to a type's zero-argument `new` method.
 #[macro_export]
 macro_rules! default_new {
     ($($t:ty),+ $(,)?) => {

@@ -2,7 +2,7 @@
 //!
 //! Benches `LinuxNamespaceRuntime::spawn_process` + `wait_for_exit` for a
 //! trivial `/bin/true` workload: clone with new namespaces, cgroup attach,
-//! pivot_root, execve, and reap. Setup (rootfs build, cgroup create) happens
+//! `pivot_root`, `execve`, and reap. Setup (rootfs build, cgroup create) happens
 //! once outside the timing loop; each iteration is one full spawn+wait.
 //!
 //! The bench rootfs is built by copying the host's `/bin/true` and its
@@ -19,7 +19,7 @@
 // Bench setup code: panicking on setup failure is the correct behaviour.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use criterion::{criterion_group, criterion_main};
+use criterion::criterion_main;
 
 #[cfg(target_os = "linux")]
 mod linux {
@@ -145,7 +145,11 @@ use linux::bench_spawn;
 
 /// No-op on non-Linux targets so criterion `--test` mode passes everywhere.
 #[cfg(not(target_os = "linux"))]
-fn bench_spawn(_c: &mut criterion::Criterion) {}
+const fn bench_spawn(_c: &mut criterion::Criterion) {}
 
-criterion_group!(benches, bench_spawn);
+minibox_bench::documented_criterion_group!(
+    "Runs Linux container spawn benchmarks.",
+    benches,
+    bench_spawn
+);
 criterion_main!(benches);

@@ -29,18 +29,26 @@ use super::traits::TestResult;
 /// Structured log entry captured during a test run.
 #[derive(Debug, Clone)]
 pub struct LogEntry {
+    /// Classification of the captured value.
     pub kind: LogKind,
+    /// Human-readable value label.
     pub label: String,
+    /// Rendered value.
     pub value: String,
 }
 
 /// Classification of a log entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LogKind {
+    /// Test input value.
     Input,
+    /// Expected assertion value.
     Expected,
+    /// Actual assertion value.
     Actual,
+    /// Informational message.
     Info,
+    /// Assertion failure detail.
     Fail,
 }
 

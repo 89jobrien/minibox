@@ -1,3 +1,5 @@
+//! Validated identifiers for containers and interactive sessions.
+
 use anyhow::Result;
 
 /// Container identifier type.

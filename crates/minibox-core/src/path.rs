@@ -1,7 +1,13 @@
+//! Path validation primitives that prevent traversal outside trusted roots.
+
 use anyhow::{Context, Result, bail};
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A path lexically validated against a canonical trusted base directory.
+///
+/// Existing paths are canonicalized. New paths retain their joined form, so
+/// callers still need race-safe filesystem operations when creating them.
 pub struct ValidatedPath {
     inner: PathBuf,
     base: PathBuf,
@@ -70,6 +76,7 @@ impl ValidatedPath {
     }
 
     #[cfg(test)]
+    /// Validates an existing absolute path against a trusted base directory.
     pub fn from_absolute(abs_path: &Path, base_dir: &Path) -> Result<Self> {
         let canonical_base = base_dir
             .canonicalize()
@@ -91,16 +98,19 @@ impl ValidatedPath {
     }
 
     #[must_use]
+    /// Returns the validated path.
     pub fn as_path(&self) -> &Path {
         &self.inner
     }
 
     #[must_use]
+    /// Returns the canonical base directory used for validation.
     pub fn base_dir(&self) -> &Path {
         &self.base
     }
 
     #[cfg(test)]
+    /// Appends and validates a relative component against the original base.
     pub fn join_validated(&self, component: &Path) -> Result<Self> {
         if component.is_absolute() {
             bail!(
@@ -149,11 +159,13 @@ pub struct InternalPath(PathBuf);
 
 impl InternalPath {
     #[must_use]
+    /// Wraps a trusted daemon-internal path.
     pub const fn new(path: PathBuf) -> Self {
         Self(path)
     }
 
     #[must_use]
+    /// Consumes the wrapper and returns the underlying path.
     pub fn into_inner(self) -> PathBuf {
         self.0
     }

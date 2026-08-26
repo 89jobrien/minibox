@@ -1,3 +1,5 @@
+//! Property tests for parsing smolvm version output.
+
 use proptest::prelude::*;
 use smolbox::preflight::parse_version_output;
 

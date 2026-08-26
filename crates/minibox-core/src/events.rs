@@ -12,45 +12,77 @@ use tokio::sync::broadcast;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContainerEvent {
+    /// A container record was created.
     Created {
+        /// Container identifier.
         id: String,
+        /// Source image reference.
         image: String,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// A container process started.
     Started {
+        /// Container identifier.
         id: String,
+        /// Host process identifier.
         pid: u32,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// A container process exited.
     Stopped {
+        /// Container identifier.
         id: String,
+        /// Process exit code.
         exit_code: i32,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// A running container was paused.
     Paused {
+        /// Container identifier.
         id: String,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// A paused container resumed.
     Resumed {
+        /// Container identifier.
         id: String,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// A container was terminated by the out-of-memory killer.
     OomKilled {
+        /// Container identifier.
         id: String,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// An image pull completed.
     ImagePulled {
+        /// Pulled image reference.
         image: String,
+        /// Downloaded image size in bytes.
         size_bytes: u64,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// An image was removed from local storage.
     ImageRemoved {
+        /// Removed image reference.
         image: String,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
+    /// Unused images were pruned.
     ImagePruned {
+        /// Number of images removed.
         count: usize,
+        /// Number of bytes freed.
         freed_bytes: u64,
+        /// Time the event occurred.
         timestamp: SystemTime,
     },
 }
@@ -78,6 +110,7 @@ pub struct BroadcastEventBroker {
 }
 
 impl BroadcastEventBroker {
+    /// Creates a broker with capacity for 1,024 pending events.
     #[must_use]
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1024);

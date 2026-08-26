@@ -1,3 +1,5 @@
+//! Container filesystem ports, bind mounts, and rootfs metadata.
+
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -249,7 +251,9 @@ pub enum BackendRootfsMetadata {
     /// `metadata` carries adapter-specific key/value pairs, e.g.:
     /// - `"colima_instance"` — Lima/Colima instance name
     Overlay {
+        /// Writable overlay layer path visible to the backend.
         upper_dir: crate::path::InternalPath,
+        /// Adapter-specific rootfs metadata.
         #[serde(default, skip_serializing_if = "HashMap::is_empty")]
         metadata: HashMap<String, String>,
     },
