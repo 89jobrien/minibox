@@ -7,7 +7,6 @@ rust-version.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Read-only terminal dashboard for the minibox daemon (container table + live event log)"
-publish = false
 
 [lib]
 name = "minibox_tui"
