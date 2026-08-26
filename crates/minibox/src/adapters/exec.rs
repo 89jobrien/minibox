@@ -35,6 +35,7 @@ use crate::container_state::StateHandle;
 /// Channels are infrastructure concerns — the pure domain spec is [`ExecSpec`].
 #[derive(Debug)]
 pub struct ExecConfig {
+    /// Domain-level command, environment, working directory, and TTY settings.
     pub spec: ExecSpec,
     /// Stdin bytes channel (handler → exec adapter). `None` = no stdin relay.
     pub stdin_tx: Option<mpsc::Sender<Vec<u8>>>,
@@ -42,11 +43,13 @@ pub struct ExecConfig {
     pub resize_rx: Option<mpsc::Receiver<(u16, u16)>>,
 }
 
+/// Linux implementation that executes commands inside container namespaces.
 pub struct NativeExecRuntime {
     state: StateHandle,
 }
 
 impl NativeExecRuntime {
+    /// Creates an exec runtime backed by the shared container state.
     pub fn new(state: StateHandle) -> Self {
         Self { state }
     }
