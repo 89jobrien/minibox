@@ -2,7 +2,7 @@
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-08-22
+Last updated: 2026-08-26
 
 ---
 
@@ -98,35 +98,35 @@ Last updated: 2026-08-22
 
 Key implementation sites backing the "Yes" entries above:
 
-| Feature area                                 | Source                                                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Container lifecycle (run/stop/rm/ps/restart) | `crates/minibox/src/daemon/handler/lifecycle.rs`, `handler/run.rs`, `handler/stop.rs`             |
-| pause/resume (native, cgroup.freeze)         | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter`                                          |
-| exec                                         | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-core/src/domain/exec.rs:ExecRuntime` |
-| logs                                         | `crates/minibox/src/daemon/handler/logs.rs`                                                       |
-| events                                       | `crates/minibox-core/src/events.rs:EventSink`/`EventSource`                                       |
-| Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image`                                            |
-| Image pull (ghcr.io)                         | `crates/minibox/src/adapters/ghcr.rs`                                                             |
-| prune/rmi                                    | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector`                                       |
-| push                                         | `crates/minibox-core/src/domain/image.rs:ImagePusher`                                             |
-| commit                                       | `crates/minibox-core/src/domain/image.rs:ContainerCommitter`                                      |
-| build                                        | `crates/minibox-core/src/domain/image.rs:ImageBuilder`                                            |
-| PID/Mount/Net/UTS/IPC namespaces (native)    | `crates/minibox/src/container/namespace.rs`                                                       |
-| cgroups v2                                   | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter`                                          |
-| Overlay FS                                   | `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem`                                     |
-| Bridge networking                            | `crates/minibox/src/adapters/network/bridge.rs:BridgeNetwork`                                     |
-| Bind mounts / privileged mode                | `crates/minibox/src/daemon/handler/run.rs`                                                        |
-| SO_PEERCRED auth                             | `crates/minibox/src/daemon/server.rs:is_authorized`                                               |
-| Tar path validation                          | `crates/minibox-core/src/image/layer.rs:validate_tar_entry_path`                                  |
-| Setuid stripping                             | `crates/minibox-core/src/image/layer.rs` (mode & 0o777)                                           |
-| Device node rejection                        | `crates/minibox-core/src/image/layer.rs` (Block/Char check)                                       |
-| Layer digest verify                          | `crates/minibox-core/src/image/registry.rs`                                                       |
-| Request frame limits                         | `crates/minibox/src/daemon/server.rs:MAX_REQUEST_SIZE`                                            |
-| Execution manifest + verify                  | `crates/minibox-core/src/domain/execution_manifest.rs`                                            |
-| Admission policy gate                        | `crates/minibox-core/src/domain/execution_policy.rs`                                              |
-| State persistence + PID reconciliation       | `crates/minibox/src/daemon/state.rs:DaemonState`                                                  |
-| Structured tracing                           | `crates/miniboxd/src/main.rs` (tracing subscriber init)                                           |
-| OTLP export                                  | `crates/miniboxd/src/main.rs` (otel feature gate)                                                 |
+| Feature area                                 | Source                                                                                       |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Container lifecycle (run/stop/rm/ps/restart) | `crates/minibox/src/daemon/handler/lifecycle.rs`, `handler/run.rs`, `handler/stop.rs`        |
+| pause/resume (native, cgroup.freeze)         | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter`                                     |
+| exec                                         | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-domain/src/exec.rs:ExecRuntime` |
+| logs                                         | `crates/minibox/src/daemon/handler/logs.rs`                                                  |
+| events                                       | `crates/minibox-core/src/events.rs:EventSink`/`EventSource`                                  |
+| Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image`                                       |
+| Image pull (ghcr.io)                         | `crates/minibox/src/adapters/ghcr.rs`                                                        |
+| prune/rmi                                    | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector`                                  |
+| push                                         | `crates/minibox-domain/src/image.rs:ImagePusher`                                             |
+| commit                                       | `crates/minibox-domain/src/image.rs:ContainerCommitter`                                      |
+| build                                        | `crates/minibox-domain/src/image.rs:ImageBuilder`                                            |
+| PID/Mount/Net/UTS/IPC namespaces (native)    | `crates/minibox/src/container/namespace.rs`                                                  |
+| cgroups v2                                   | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter`                                     |
+| Overlay FS                                   | `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem`                                |
+| Bridge networking                            | `crates/minibox/src/adapters/network/bridge.rs:BridgeNetwork`                                |
+| Bind mounts / privileged mode                | `crates/minibox/src/daemon/handler/run.rs`                                                   |
+| SO_PEERCRED auth                             | `crates/minibox/src/daemon/server.rs:is_authorized`                                          |
+| Tar path validation                          | `crates/minibox-core/src/image/layer.rs:validate_tar_entry_path`                             |
+| Setuid stripping                             | `crates/minibox-core/src/image/layer.rs` (mode & 0o777)                                      |
+| Device node rejection                        | `crates/minibox-core/src/image/layer.rs` (Block/Char check)                                  |
+| Layer digest verify                          | `crates/minibox-core/src/image/registry.rs`                                                  |
+| Request frame limits                         | `crates/minibox/src/daemon/server.rs:MAX_REQUEST_SIZE`                                       |
+| Execution manifest + verify                  | `crates/minibox-domain/src/execution_manifest.rs`                                            |
+| Admission policy gate                        | `crates/minibox-domain/src/execution_policy.rs`                                              |
+| State persistence + PID reconciliation       | `crates/minibox/src/daemon/state.rs:DaemonState`                                             |
+| Structured tracing                           | `crates/miniboxd/src/main.rs` (tracing subscriber init)                                      |
+| OTLP export                                  | `crates/miniboxd/src/main.rs` (otel feature gate)                                            |
 
 ---
 
@@ -193,10 +193,10 @@ Key implementation sites backing the "Yes" entries above:
   and `crates/minibox/src/daemon/handler/manifest.rs`). All
   adapters that support `run` inherit manifest persist,
   `mbx manifest`, `mbx verify`, and admission-policy gating
-  (see `crates/minibox-core/src/domain/execution_policy.rs:ExecutionPolicy`).
+  (see `crates/minibox-domain/src/execution_policy.rs:ExecutionPolicy`).
   Environment variable values are stored as SHA-256 digests --
   never plaintext -- in `execution-manifest.json`
-  (see `crates/minibox-core/src/domain/execution_manifest.rs:ExecutionManifest::seal`).
+  (see `crates/minibox-domain/src/execution_manifest.rs:ExecutionManifest::seal`).
 - **Observability env vars** (daemon startup,
   see `crates/miniboxd/src/main.rs`):
   - `MINIBOX_OTLP_ENDPOINT` -- OTLP trace export endpoint

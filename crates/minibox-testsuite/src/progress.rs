@@ -1,7 +1,7 @@
 //! Tokio sender adapter for domain `ProgressSink` in tests.
 
 use async_trait::async_trait;
-use minibox_core::domain::{DynProgressSink, ProgressSink};
+use minibox_core::domain::{DynProgressSink, ProgressClosed, ProgressSink};
 
 #[derive(Debug)]
 struct TokioSenderProgressSink<T> {
@@ -17,7 +17,7 @@ pub fn tokio_progress_sink<T: Send + 'static>(
 
 #[async_trait]
 impl<T: Send + 'static> ProgressSink<T> for TokioSenderProgressSink<T> {
-    async fn send(&self, value: T) -> Result<(), ()> {
-        self.sender.send(value).await.map_err(|_| ())
+    async fn send(&self, value: T) -> Result<(), ProgressClosed> {
+        self.sender.send(value).await.map_err(|_| ProgressClosed)
     }
 }

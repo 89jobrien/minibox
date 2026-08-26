@@ -37,13 +37,14 @@ pub fn lint(sh: &Shell) -> Result<()> {
             .context("cargo fmt --check failed")?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
         )
         .run()
         .context("cargo clippy failed")?;
         cmd!(sh, "cargo check --workspace")
             .run()
             .context("cargo check --workspace failed")?;
+        crate::architecture::run(&sh.current_dir()).context("architecture check failed")?;
         eprintln!("lint gate passed");
         Ok(())
     })
@@ -69,10 +70,13 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
         eprintln!("--- verify: clippy ---");
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p winbox -p ail -- -D warnings"
         )
         .run()
         .context("cargo clippy failed")?;
+
+        eprintln!("--- verify: architecture ---");
+        crate::architecture::run(&root)?;
 
         eprintln!("--- verify: borrow fixtures ---");
         borrow_fixtures::run(&root)?;
@@ -108,7 +112,7 @@ pub fn fix(sh: &Shell) -> Result<()> {
         auto_bump(sh)?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail --fix --allow-dirty --allow-staged"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail --fix --allow-dirty --allow-staged"
         )
         .run()
         .context("clippy --fix failed")?;
@@ -140,10 +144,11 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
             .context("git add -u after fmt failed")?;
         cmd!(
             sh,
-            "cargo clippy -p minibox -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
+            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p mbx -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
         )
         .run()
         .context("clippy failed")?;
+        crate::architecture::run(&sh.current_dir()).context("architecture check failed")?;
     }
 
     // Agent config lint: validate .claude/, .codex/, .agents/, .cursor/ files.

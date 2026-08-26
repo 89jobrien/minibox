@@ -160,7 +160,7 @@ fn image_matches(image: &str, pattern: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::execution_manifest::{
+    use crate::execution_manifest::{
         ExecutionManifestImage, ExecutionManifestMount, ExecutionManifestRequest,
         ExecutionManifestResourceLimits, ExecutionManifestRuntime, ExecutionManifestSubject,
     };

@@ -1,11 +1,12 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
 sources:
+  - crates/minibox-domain
   - crates/minibox-core
   - crates/minibox
   - crates/miniboxd
   - crates/minibox-macros
-generated: 2026-08-22
+generated: 2026-08-26
 ---
 
 # Code Style and Conventions
@@ -235,7 +236,7 @@ No sentence case. No trailing period.
 Minibox follows the **hexagonal (ports and adapters)** pattern:
 
 ```text
-Domain Layer (minibox-core/src/domain/)
+Domain Layer (minibox-domain/src/)
   → Defines trait "ports": ImageRegistry, FilesystemProvider, ResourceLimiter, ContainerRuntime
   → Zero infrastructure imports
 
@@ -250,7 +251,7 @@ Composition Root (miniboxd/src/main.rs)
 
 Rules:
 
-- Domain traits live under `crates/minibox-core/src/domain/`. Never add a trait there that
+- Domain traits live under `crates/minibox-domain/src/`. Never add a trait there that
   imports from `nix`, `libc`, or any platform crate.
 - New adapter suites are added to `crates/minibox/src/adapters/` (Linux/cross-platform) or `smolbox/`
   (smolvm/krun macOS VM adapters) and exported from the module root.

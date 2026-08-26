@@ -28,7 +28,7 @@ impl ContainerState {
     ///
     /// The returned strings (`"Created"`, `"Running"`, `"Paused"`, `"Stopped"`,
     /// `"Failed"`, `"Orphaned"`) are used directly in
-    /// [`crate::protocol::ContainerInfo::state`] list responses sent to the CLI.
+    /// protocol container-list responses sent to clients.
     #[must_use]
     pub const fn as_str(&self) -> &'static str {
         match self {

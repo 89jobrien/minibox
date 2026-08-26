@@ -260,7 +260,8 @@ See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the full 
 Issues and PRs are welcome. A few things to know before contributing:
 
 - Run `cargo xtask pre-commit` before committing and `cargo xtask prepush` before pushing.
-- New adapters implement the domain traits under `crates/minibox-core/src/domain/`.
+- New adapters implement ports from `crates/minibox-domain/src/`; the
+  `minibox_core::domain` facade preserves compatibility paths.
 - Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and
   snapshot tests together.
 - Linux-only code must be gated with `#[cfg(target_os = "linux")]` so macOS `cargo check`

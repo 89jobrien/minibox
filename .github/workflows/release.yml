@@ -30,9 +30,24 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish -p minibox-macros || echo "minibox-macros already published"
+          publish_crate() {
+            local crate="$1"
+            local output
+            if output="$(cargo publish -p "$crate" 2>&1)"; then
+              printf "%s\n" "$output"
+            elif [[ "$output" == *"already uploaded"* ]]; then
+              printf "%s is already published\n" "$crate"
+            else
+              printf "%s\n" "$output" >&2
+              return 1
+            fi
+          }
+
+          publish_crate minibox-macros
           sleep 30
-          cargo publish -p minibox-core || echo "minibox-core already published"
+          publish_crate minibox-domain
+          sleep 30
+          publish_crate minibox-core
           sleep 30
           cargo publish -p minibox-mcp || echo "minibox-mcp already published"
           sleep 30

@@ -41,8 +41,7 @@ impl crate::domain::ExecRuntime for NoopExecRuntime {
         &self,
         _container_id: &crate::domain::ContainerId,
         _spec: crate::domain::ExecSpec,
-        _tx: crate::domain::DynProgressSink<crate::protocol::DaemonResponse>,
-    ) -> anyhow::Result<crate::domain::ExecHandle> {
+    ) -> anyhow::Result<crate::domain::ExecSession> {
         anyhow::bail!(
             "exec is not supported on the '{}' adapter",
             self.adapter_name
@@ -75,7 +74,6 @@ impl crate::domain::ExecRuntime for NoopExecRuntime {
 mod tests {
     use super::NoopExecRuntime;
     use crate::domain::{ContainerId, ExecRuntime, ExecSpec};
-    use std::sync::Arc;
 
     /// Issue #134: non-native adapters (GKE, Colima, macOS VZ) must return a
     /// clear error when `exec` is called — they must NOT panic or silently succeed.
@@ -91,9 +89,7 @@ mod tests {
             working_dir: None,
             tty: false,
         };
-        let (tx, _rx) = tokio::sync::mpsc::channel(8);
-
-        let result = exec.run_in_container(&id, spec, Arc::new(tx)).await;
+        let result = exec.run_in_container(&id, spec).await;
 
         assert!(result.is_err(), "NoopExecRuntime must always return Err");
         let msg = result.unwrap_err().to_string();
@@ -113,7 +109,6 @@ mod tests {
     async fn noop_exec_runtime_error_includes_adapter_name() {
         for name in &["colima", "gke", "wsl2", "vz"] {
             let exec = NoopExecRuntime::new(*name);
-            let (tx, _rx) = tokio::sync::mpsc::channel(8);
             let result = exec
                 .run_in_container(
                     &ContainerId::new("cid1234".to_string()).expect("valid container id"),
@@ -123,7 +118,6 @@ mod tests {
                         working_dir: None,
                         tty: false,
                     },
-                    Arc::new(tx),
                 )
                 .await;
 

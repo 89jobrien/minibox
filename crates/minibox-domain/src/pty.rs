@@ -74,13 +74,13 @@ impl PtyAllocator for NullPtyAllocator {
 ///
 /// Enabled only when the `test-utils` feature is active so production binaries
 /// do not pull in test scaffolding.
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 pub struct MockPtyAllocator {
     master_fd: i32,
     slave_fd: i32,
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 impl MockPtyAllocator {
     /// Create a `MockPtyAllocator` that returns `master_fd` and `slave_fd`.
     #[must_use]
@@ -92,7 +92,7 @@ impl MockPtyAllocator {
     }
 }
 
-#[cfg(feature = "test-utils")]
+#[cfg(any(test, feature = "test-utils"))]
 impl PtyAllocator for MockPtyAllocator {
     fn allocate(&self, _config: &PtyConfig) -> anyhow::Result<PtyHandle> {
         Ok(PtyHandle {

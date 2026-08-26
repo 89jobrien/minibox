@@ -1,7 +1,8 @@
 ---
-source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
 sources:
   - Cargo.toml
+  - crates/minibox-domain
   - crates/minibox-core
   - crates/minibox
   - crates/miniboxd
@@ -16,7 +17,7 @@ sources:
   - xtask
   - crates/minibox-macros
   - crates/minibox-testsuite
-generated: 2026-08-22
+generated: 2026-08-26
 ---
 
 # Crate Support Tiers
@@ -96,7 +97,8 @@ that breaks callers outside the workspace is a semver-major event.
 
 | Crate                 | Path                         | Role                                                                                                                                                                                                        |
 | --------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `minibox-core`        | `crates/minibox-core`        | Cross-platform shared types: protocol, domain traits, error types, OCI image types, `ImageStore`, `RegistryClient`, `DaemonClient`, preflight. Single source of truth for `DaemonRequest`/`DaemonResponse`. |
+| `minibox-domain`      | `crates/minibox-domain`      | Pure inner ring: domain values, lifecycle events, policies, and ports. Contains no production async-runtime, HTTP, process, socket, or filesystem adapter dependencies.                                  |
+| `minibox-core`        | `crates/minibox-core`        | Cross-platform shared infrastructure: protocol, client transport, OCI image storage/registry, preflight, tracing, and compatibility re-exports from `minibox-domain`.                                  |
 | `minibox`             | `crates/minibox`             | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.                                             |
 | `miniboxd`            | `crates/miniboxd`            | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                                                  |
 | `mbx`                 | `crates/mbx`                 | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                                                             |
@@ -115,7 +117,7 @@ that breaks callers outside the workspace is a semver-major event.
 ## Platform Tier
 
 Adapter suites for specific host environments. Each `{platform}box` crate implements
-the domain traits from `minibox-core` for its target platform.
+the ports from `minibox-domain` through the compatibility paths in `minibox-core`.
 
 | Crate    | Path            | Role                                                                                                                                                        |
 | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |

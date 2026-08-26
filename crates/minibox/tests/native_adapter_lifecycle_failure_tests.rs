@@ -24,7 +24,7 @@
 
 use minibox::container::cgroups::{CgroupConfig, CgroupManager, cgroup_path_for};
 use minibox::container::filesystem::cleanup_bind_mounts;
-use minibox::container::{Container, ContainerState};
+use minibox::container::{Container, NativeContainerState};
 use minibox::preflight::probe;
 use minibox_core::domain::BindMount;
 use minibox_macros::require_capability;
@@ -90,7 +90,7 @@ fn container_start_overlay_failure_rolls_back_cgroup() {
     assert!(result.is_err(), "start with no layers must fail");
     assert_eq!(
         container.state,
-        ContainerState::Created,
+        NativeContainerState::Created,
         "failed start must not transition state"
     );
     assert!(
@@ -138,11 +138,11 @@ fn stop_escalates_to_sigkill_when_sigterm_ignored() {
     )
     .expect("Container::new");
     container.pid = Some(pid);
-    container.state = ContainerState::Running;
+    container.state = NativeContainerState::Running;
 
     container.stop().expect("stop must succeed via SIGKILL");
 
-    assert_eq!(container.state, ContainerState::Stopped);
+    assert_eq!(container.state, NativeContainerState::Stopped);
     // After SIGKILL + reap, signalling the PID must fail (process gone).
     let alive = nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid as i32), None).is_ok();
     assert!(!alive, "PID {pid} must be dead after SIGKILL escalation");
@@ -168,12 +168,12 @@ fn stop_tolerates_already_reaped_pid() {
     )
     .expect("Container::new");
     container.pid = Some(pid);
-    container.state = ContainerState::Running;
+    container.state = NativeContainerState::Running;
 
     container
         .stop()
         .expect("stop must tolerate an already-reaped PID");
-    assert_eq!(container.state, ContainerState::Stopped);
+    assert_eq!(container.state, NativeContainerState::Stopped);
 }
 
 // ---------------------------------------------------------------------------

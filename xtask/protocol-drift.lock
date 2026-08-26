@@ -3,99 +3,124 @@
   "algorithm": "sha256-normalized-core-contract-v1",
   "surfaces": [
     {
+      "name": "domain-root",
+      "path": "crates/minibox-domain/src/lib.rs",
+      "hash": "04d824d9a312ab505231da05fa2644b6b55da621ce357d315a98be6799938afb"
+    },
+    {
+      "name": "domain-compatibility-facade",
+      "path": "crates/minibox-core/src/domain/mod.rs",
+      "hash": "dc893b945ae66cc385c3f8e7819f8ef68382b1e49887893c981003cefb595d72"
+    },
+    {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "fb44be98e1d47502d795016e0799aff03badcbf4da487c824d77fe7088566c92"
+      "hash": "2088cbf7334caa59ae85dc9f0f109e68b3d65a6a3d997899ba1e8dab29daa24e"
     },
     {
       "name": "domain-capability",
-      "path": "crates/minibox-core/src/domain/capability.rs",
+      "path": "crates/minibox-domain/src/capability.rs",
       "hash": "fb23da727719e07ae5cbd8885462353d643dd98f4159c449a3b34052e04f665b"
     },
     {
       "name": "domain-checkpoint",
-      "path": "crates/minibox-core/src/domain/checkpoint.rs",
+      "path": "crates/minibox-domain/src/checkpoint.rs",
       "hash": "ffe017b2f73bcf476b48c276e7cfa580452059760603da41c15c790d532e3b08"
     },
     {
       "name": "domain-error",
-      "path": "crates/minibox-core/src/domain/error.rs",
+      "path": "crates/minibox-domain/src/error.rs",
       "hash": "ba7094ebe630987508b369d4c3be22a4e5d6a9e26a2ddc2438556eac20048c3a"
     },
     {
       "name": "domain-exec",
-      "path": "crates/minibox-core/src/domain/exec.rs",
-      "hash": "a5f541466169a664899b949bfe87e36ee12b98d4f509d7a1f7968c6bca7a46f4"
+      "path": "crates/minibox-domain/src/exec.rs",
+      "hash": "a36158a8df508865a2246a829bbec9fdb2ec960176c6ba7b45b2b65f66cbbaf0"
     },
     {
       "name": "domain-filesystem",
-      "path": "crates/minibox-core/src/domain/filesystem.rs",
-      "hash": "b00e2de2b43cc92f3002c53f3fb733bb9cac743537852217603b9de6d6503ca3"
+      "path": "crates/minibox-domain/src/filesystem.rs",
+      "hash": "f40109d2d8037f330f950e0dba3267b80ce4ac448e7d8eaa3c5c18cd4ac3f21b"
     },
     {
       "name": "domain-ids",
-      "path": "crates/minibox-core/src/domain/ids.rs",
+      "path": "crates/minibox-domain/src/ids.rs",
       "hash": "f639db882fd776f283234792bf802643bfb44617c943021d80be1296210c10d6"
     },
     {
       "name": "domain-image",
-      "path": "crates/minibox-core/src/domain/image.rs",
-      "hash": "9817ae3f85e79b978d153f5cdeb4c51c8fc1569ca7d2ce4385fb9e22019fe28a"
+      "path": "crates/minibox-domain/src/image.rs",
+      "hash": "3435f6d0234033a98c4c90f7255214c0c3ea7adcca3bf5816068470ec67b7ed7"
     },
     {
       "name": "domain-metrics",
-      "path": "crates/minibox-core/src/domain/metrics.rs",
+      "path": "crates/minibox-domain/src/metrics.rs",
       "hash": "65a1d0cc117b5f5a4aeef013bffd74746aa62bdcd5553eb2101801a5b9ac6b10"
     },
     {
       "name": "domain-pty",
-      "path": "crates/minibox-core/src/domain/pty.rs",
-      "hash": "60c65da013ebce36ac23ec1b1b60d3d8424749202878e6873738ba81ceb35cdf"
+      "path": "crates/minibox-domain/src/pty.rs",
+      "hash": "f30eaf9b5972680369b6c1a70d1c7dc1cedd3f7b7f61d8a3f520de9bc81927c6"
     },
     {
       "name": "domain-runtime",
-      "path": "crates/minibox-core/src/domain/runtime.rs",
-      "hash": "0f3d2364821a939c160455121bb0f26cd311e54c6042257b9604fbe688670774"
+      "path": "crates/minibox-domain/src/runtime.rs",
+      "hash": "767ffc87e60db3cd058c2081e3780d13ac7f4da07e0a636836a17bd3ba53c3bd"
     },
     {
       "name": "domain-state",
-      "path": "crates/minibox-core/src/domain/state.rs",
+      "path": "crates/minibox-domain/src/state.rs",
       "hash": "71e78b780ec27dcdb63c4c9149548e3bc473a19ba4715a14b2261dd3d5e01588"
     },
     {
       "name": "domain-workflow",
-      "path": "crates/minibox-core/src/domain/workflow.rs",
-      "hash": "85498eba69f9cf868b3beb6798262db2976eba36cce15f1845d3d70ed96107a2"
+      "path": "crates/minibox-domain/src/workflow.rs",
+      "hash": "8a7a0b458c15fcb675b0dd15ff592a21c66ad86ea1c089a0fde4c70e8770859e"
     },
     {
       "name": "domain-networking",
-      "path": "crates/minibox-core/src/domain/networking.rs",
+      "path": "crates/minibox-domain/src/networking.rs",
       "hash": "cbce5ff883a5e85b90e9eae5b68202fd50b4c31a2fe75f8664cfcc8938e14e99"
     },
     {
       "name": "domain-extensions",
-      "path": "crates/minibox-core/src/domain/extensions.rs",
+      "path": "crates/minibox-domain/src/extensions.rs",
       "hash": "1b0dbb6e523aa62f042c5a4e8ed37a1ad0a29b8f57cd6294f19816784365c2d7"
     },
     {
       "name": "lifecycle-events",
-      "path": "crates/minibox-core/src/events.rs",
-      "hash": "2c4b3d7767426f89398a2528bbb437299d8536abf9f1aaf384d124b0e41d25e1"
+      "path": "crates/minibox-domain/src/events.rs",
+      "hash": "eba5a3f441c8d7bf92b405591f71d28ea5f95c0cdabcd6e0d0e63196930b9fce"
     },
     {
       "name": "execution-manifest",
-      "path": "crates/minibox-core/src/domain/execution_manifest.rs",
+      "path": "crates/minibox-domain/src/execution_manifest.rs",
       "hash": "a460482edbed0400335028c3b0f54d3cda53dbdd70e0776b9365983e90cf4ae1"
     },
     {
       "name": "execution-policy",
-      "path": "crates/minibox-core/src/domain/execution_policy.rs",
+      "path": "crates/minibox-domain/src/execution_policy.rs",
       "hash": "c6b57567e59cb8369e3d7e5084da61c03669aa9b9311b3131918b3ee1ee77fef"
+    },
+    {
+      "name": "domain-progress",
+      "path": "crates/minibox-domain/src/progress.rs",
+      "hash": "403d552643dd590bda5b37f90b587773c02faca3592d2121b5c4773e41465855"
+    },
+    {
+      "name": "domain-image-reference",
+      "path": "crates/minibox-domain/src/image_reference.rs",
+      "hash": "a919e73fda63ae78246ee62aa914f9c5a2144832837e430ac847b4415fd4eed9"
+    },
+    {
+      "name": "domain-path",
+      "path": "crates/minibox-domain/src/path.rs",
+      "hash": "2e4ba2f2408182784a1f1ace9b1c98e7e9988a3fa8a01bb4b92bf33623a282a7"
     },
     {
       "name": "error-types",
       "path": "crates/minibox-core/src/error.rs",
-      "hash": "f4acf285769d13db166d97951be3ae6349bb9caaa11dc649677042907770b342"
+      "hash": "bdb10de5fefeecc2c6ae4c9ced75f8ed6d1ff2c135f2fd34e13d2207704f19f7"
     },
     {
       "name": "client-api",

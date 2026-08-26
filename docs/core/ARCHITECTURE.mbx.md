@@ -1,7 +1,8 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
 sources:
   - Cargo.toml
+  - crates/minibox-domain
   - crates/minibox-macros
   - crates/minibox-core
   - crates/minibox
@@ -18,7 +19,7 @@ sources:
   - crates/minibox-tui
   - crates/ail
   - xtask
-generated: 2026-08-22
+generated: 2026-08-26
 ---
 
 # Minibox Architecture Reference
@@ -37,18 +38,22 @@ generated: 2026-08-22
 > Updated 2026-07-26: added `minibox-mcp` MCP stdio control surface.
 > Updated 2026-08-08: crate count corrected to 15 crates, plus xtask (added
 > `minibox-cni` and `minibox-tui`).
+> Updated 2026-08-26: extracted the pure `minibox-domain` dependency ring and
+> added an enforced domain -> core -> runtime dependency direction.
 
 ## Workspace Overview
 
-16 workspace members (15 crates + xtask), Rust 2024 edition, workspace version 0.32.0.
+17 workspace members (16 crates + xtask), Rust 2024 edition, workspace version 0.33.0.
 
-<!-- fact:crate_count=15 -->
-<!-- fact:workspace_version=0.32.0 -->
+<!-- fact:crate_count=16 -->
+<!-- fact:workspace_version=0.33.0 -->
 
 ```text
 minibox-macros          (proc-macro, ~300 LOC)
     ^
-minibox-core            (lib, ~12.6k LOC) — cross-platform types, domain traits, protocol, image ops
+minibox-domain          (lib) — pure values, policies, lifecycle events, and ports
+    ^
+minibox-core            (lib) — protocol, clients, OCI/image services, shared adapters
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
     ^        ^        ^
@@ -72,7 +77,8 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | Crate               | Depends on (workspace)                                        |
 | ------------------- | ------------------------------------------------------------- |
 | minibox-macros      | --                                                            |
-| minibox-core        | minibox-macros                                                |
+| minibox-domain      | --                                                            |
+| minibox-core        | minibox-domain, minibox-macros                                |
 | minibox             | minibox-core, minibox-macros                                  |
 | macbox              | minibox, minibox-core                                         |
 | smolbox             | minibox, minibox-core                                         |
@@ -92,10 +98,10 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 
 ## Domain Traits (Hexagonal Ports)
 
-Most are defined under `crates/minibox-core/src/domain/`; `NetworkProvider` is in
-`crates/minibox-core/src/domain/networking.rs`. The `minibox` crate re-exports the
-core domain surface via `crates/minibox/src/domain.rs` for adapter and macro
-compatibility.
+Most are defined under `crates/minibox-domain/src/`; `NetworkProvider` is in
+`crates/minibox-domain/src/networking.rs`. The `minibox` crate re-exports the
+domain facade from `crates/minibox/src/lib.rs`; `minibox-core::domain::*`
+remains a compatibility path to the same type identities.
 
 ### Primary Ports (wired in HandlerDependencies)
 
@@ -118,7 +124,7 @@ compatibility.
 
 ### Extension Ports (defined, not in HandlerDependencies)
 
-Defined in `crates/minibox-core/src/domain/extensions.rs`.
+Defined in `crates/minibox-domain/src/extensions.rs`.
 
 | Trait          | Status                      |
 | -------------- | --------------------------- |
@@ -233,7 +239,7 @@ BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
 
 ## Execution Manifest
 
-(see `crates/minibox-core/src/domain/execution_manifest.rs`,
+(see `crates/minibox-domain/src/execution_manifest.rs`,
 persisted in `crates/minibox/src/daemon/handler/run.rs:prepare_run`)
 
 Every container run produces a persisted `execution-manifest.json` at
@@ -257,7 +263,7 @@ A deterministic `sha256` digest computed from a stable JSON projection
 that excludes volatile fields (`created_at`, `manifest_path`,
 `workload_digest` itself). Equal semantic inputs always produce equal
 digests. Canonical implementation: `ExecutionManifest::seal()` in
-`crates/minibox-core/src/domain/execution_manifest.rs`.
+`crates/minibox-domain/src/execution_manifest.rs`.
 
 ### Execution Policy
 
@@ -265,7 +271,7 @@ digests. Canonical implementation: `ExecutionManifest::seal()` in
 allowed/denied image patterns, network mode restrictions, privileged
 gate, memory limit cap, mount path prefix allowlist. Loaded from JSON.
 Canonical implementation:
-`crates/minibox-core/src/domain/execution_policy.rs`.
+`crates/minibox-domain/src/execution_policy.rs`.
 
 ### CLI
 

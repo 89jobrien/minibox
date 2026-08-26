@@ -268,9 +268,9 @@ impl BackendRootfsMetadata {
         }
     }
 
-    /// Look up a backend-specific metadata value by key.
-    #[cfg(test)]
-    pub(crate) fn metadata_value(&self, key: &str) -> Option<&str> {
+    /// Return an adapter-specific metadata value by key.
+    #[must_use]
+    pub fn metadata_value(&self, key: &str) -> Option<&str> {
         match self {
             Self::Overlay { metadata, .. } => metadata.get(key).map(String::as_str),
         }

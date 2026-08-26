@@ -17,7 +17,7 @@
 #![cfg(target_os = "linux")]
 
 use minibox::adapters::{CgroupV2Limiter, OverlayFilesystem};
-use minibox::domain::{FilesystemProvider, ResourceConfig, ResourceLimiter, RootfsSetup};
+use minibox::domain::{ResourceConfig, ResourceLimiter, RootfsSetup};
 use minibox::preflight::probe;
 use minibox_macros::require_capability;
 use std::fs;

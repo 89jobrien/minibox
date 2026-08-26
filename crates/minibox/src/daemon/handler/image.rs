@@ -5,6 +5,7 @@
 use anyhow::Result;
 use minibox_core::events::EventSink;
 use minibox_core::image::reference::ImageRef;
+use minibox_core::progress::TokioProgressSink;
 use minibox_core::protocol::DaemonResponse;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -270,7 +271,11 @@ pub async fn handle_push(
     });
 
     match pusher
-        .push_image(&image_ref, &creds, Some(Arc::new(progress_tx)))
+        .push_image(
+            &image_ref,
+            &creds,
+            Some(TokioProgressSink::shared(progress_tx)),
+        )
         .await
     {
         Ok(result) => {
@@ -489,7 +494,7 @@ pub async fn handle_build(
     });
 
     match builder
-        .build_image(&context, &config, Arc::new(progress_tx))
+        .build_image(&context, &config, TokioProgressSink::shared(progress_tx))
         .await
     {
         Ok(meta) => {

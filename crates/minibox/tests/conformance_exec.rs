@@ -44,11 +44,9 @@
 
 use minibox::testing::mocks::MockExecRuntime;
 use minibox_core::domain::{ContainerId, ExecRuntime, ExecSpec};
-use minibox_core::protocol::DaemonResponse;
 use std::any::Any;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::mpsc;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,18 +73,17 @@ fn make_container_id(s: &str) -> ContainerId {
 #[tokio::test]
 async fn exec_success_returns_handle_with_id() {
     let runtime = MockExecRuntime::new();
-    let (tx, _rx) = mpsc::channel::<DaemonResponse>(8);
     let cid = make_container_id("execconf01ab1234");
 
-    let handle = runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx))
+    let session = runtime
+        .run_in_container(&cid, default_spec())
         .await
         .expect("exec must succeed on default mock");
 
     assert!(
-        !handle.id.is_empty(),
+        !session.handle.id.is_empty(),
         "ExecHandle.id must be non-empty, got: {:?}",
-        handle.id
+        session.handle.id
     );
 }
 
@@ -94,12 +91,11 @@ async fn exec_success_returns_handle_with_id() {
 #[tokio::test]
 async fn exec_success_increments_call_count() {
     let runtime = MockExecRuntime::new();
-    let (tx, _rx) = mpsc::channel::<DaemonResponse>(8);
     let cid = make_container_id("execconf02ab1234");
 
     assert_eq!(runtime.call_count(), 0);
     runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx))
+        .run_in_container(&cid, default_spec())
         .await
         .expect("unwrap in test");
     assert_eq!(runtime.call_count(), 1);
@@ -111,20 +107,18 @@ async fn exec_successive_calls_produce_different_ids() {
     let runtime = MockExecRuntime::new();
     let cid = make_container_id("execconf03ab1234");
 
-    let (tx1, _) = mpsc::channel::<DaemonResponse>(8);
     let h1 = runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx1))
+        .run_in_container(&cid, default_spec())
         .await
         .expect("unwrap in test");
 
-    let (tx2, _) = mpsc::channel::<DaemonResponse>(8);
     let h2 = runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx2))
+        .run_in_container(&cid, default_spec())
         .await
         .expect("unwrap in test");
 
     assert_ne!(
-        h1.id, h2.id,
+        h1.handle.id, h2.handle.id,
         "successive exec handles must have different ids"
     );
 }
@@ -142,9 +136,8 @@ async fn exec_captures_last_spec() {
         tty: true,
     };
 
-    let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     runtime
-        .run_in_container(&cid, spec.clone(), Arc::new(tx))
+        .run_in_container(&cid, spec.clone())
         .await
         .expect("unwrap in test");
 
@@ -162,9 +155,8 @@ async fn exec_captures_last_container_id() {
     let runtime = MockExecRuntime::new();
     let cid = make_container_id("execconf05ab1234");
 
-    let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx))
+        .run_in_container(&cid, default_spec())
         .await
         .expect("unwrap in test");
 
@@ -179,12 +171,9 @@ async fn exec_captures_last_container_id() {
 #[tokio::test]
 async fn exec_failure_returns_err() {
     let runtime = MockExecRuntime::new().with_failure();
-    let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     let cid = make_container_id("execconf06ab1234");
 
-    let result = runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx))
-        .await;
+    let result = runtime.run_in_container(&cid, default_spec()).await;
     assert!(
         result.is_err(),
         "exec must fail when configured with_failure"
@@ -195,12 +184,9 @@ async fn exec_failure_returns_err() {
 #[tokio::test]
 async fn exec_failure_increments_call_count() {
     let runtime = MockExecRuntime::new().with_failure();
-    let (tx, _) = mpsc::channel::<DaemonResponse>(8);
     let cid = make_container_id("execconf07ab1234");
 
-    let _ = runtime
-        .run_in_container(&cid, default_spec(), Arc::new(tx))
-        .await;
+    let _ = runtime.run_in_container(&cid, default_spec()).await;
     assert_eq!(
         runtime.call_count(),
         1,

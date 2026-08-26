@@ -28,7 +28,7 @@ dependencies = [
 
 [[package]]
 name = "ail"
-version = "0.32.1"
+version = "0.33.0"
 
 [[package]]
 name = "allocator-api2"
@@ -1697,7 +1697,7 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "macbox"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1739,7 +1739,7 @@ checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
 name = "mbx"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1819,7 +1819,7 @@ checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
 
 [[package]]
 name = "minibox"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-bench"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "criterion",
@@ -1884,7 +1884,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-cni"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1901,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-core"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1915,6 +1915,7 @@ dependencies = [
  "libc",
  "miette",
  "minibox-core",
+ "minibox-domain",
  "minibox-macros",
  "pin-project-lite",
  "proptest",
@@ -1936,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-crux-plugin"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "minibox-core",
@@ -1949,12 +1950,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "minibox-domain"
+version = "0.33.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "hex",
+ "proptest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "slashcrux",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "minibox-macros"
-version = "0.32.1"
+version = "0.33.0"
 
 [[package]]
 name = "minibox-mcp"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "base64",
  "miette",
@@ -1972,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-testsuite"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1993,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "minibox-tui"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "crossterm",
  "miette",
@@ -2005,7 +2023,7 @@ dependencies = [
 
 [[package]]
 name = "miniboxd"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3477,7 +3495,7 @@ checksum = "8ed6a63f02c8539c91a8685a86f4099661ba3da017932f6ebbea6de3f0fa7c90"
 
 [[package]]
 name = "smolbox"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "macbox",
@@ -4314,7 +4332,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "winbox"
-version = "0.32.1"
+version = "0.33.0"
 dependencies = [
  "anyhow",
  "dirs",

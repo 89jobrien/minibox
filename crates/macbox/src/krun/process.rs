@@ -23,7 +23,7 @@ impl SmolvmProcess {
     }
 
     /// Spawn using an explicit binary path (useful for testing missing-binary path).
-    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
+    #[allow(unknown_lints, clippy::unused_async, clippy::unused_async_trait_impl)]
     pub async fn spawn_with_bin(
         bin: &Path,
         image: &str,

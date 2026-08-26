@@ -68,7 +68,10 @@ impl ChangeSet {
 /// Returns `None` for paths that don't match any tracked area (e.g. `fuzz/`).
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 pub fn classify_path(path: &str) -> Option<Area> {
-    if path.starts_with("crates/minibox-core/") || path.starts_with("crates/minibox-macros/") {
+    if path.starts_with("crates/minibox-domain/")
+        || path.starts_with("crates/minibox-core/")
+        || path.starts_with("crates/minibox-macros/")
+    {
         Some(Area::Core)
     } else if path.starts_with("crates/miniboxd/") {
         Some(Area::Daemon)
@@ -199,6 +202,14 @@ mod tests {
     fn classify_minibox_core() {
         assert_eq!(
             classify_path("crates/minibox-core/src/domain.rs"),
+            Some(Area::Core)
+        );
+    }
+
+    #[test]
+    fn classify_minibox_domain() {
+        assert_eq!(
+            classify_path("crates/minibox-domain/src/runtime.rs"),
             Some(Area::Core)
         );
     }
