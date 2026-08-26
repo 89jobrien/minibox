@@ -20,7 +20,7 @@ use super::{AsAny, ContainerId, DynProgressSink};
 /// # Examples
 ///
 /// ```rust,ignore
-/// use minibox::domain::ImageRegistry;
+/// use minibox_domain::ImageRegistry;
 ///
 /// struct DockerHubRegistry {
 ///     client: RegistryClient,
@@ -67,7 +67,7 @@ pub trait ImageRegistry: AsAny + Send + Sync {
     /// - Digest verification fails
     async fn pull_image(
         &self,
-        image_ref: &crate::image::reference::ImageRef,
+        image_ref: &crate::image_reference::ImageRef,
     ) -> Result<ImageMetadata>;
 
     /// Get the layer paths for a cached image.
@@ -101,13 +101,13 @@ pub trait ImageRegistry: AsAny + Send + Sync {
 ///
 /// # Implementations
 ///
-/// - [`minibox_core::adapters::HostnameRegistryRouter`]: routes by lowercase hostname;
+/// - `minibox_core::adapters::HostnameRegistryRouter`: routes by lowercase hostname and
 ///   falls back to a default registry for unrecognised hostnames.
 ///
 /// # Example
 ///
 /// ```rust,ignore
-/// use minibox_core::domain::{DynRegistryRouter, RegistryRouter};
+/// use minibox_domain::{DynRegistryRouter, RegistryRouter};
 ///
 /// let router: DynRegistryRouter = Arc::new(HostnameRegistryRouter::new(
 ///     docker_hub_registry,
@@ -117,7 +117,7 @@ pub trait ImageRegistry: AsAny + Send + Sync {
 /// ```
 pub trait RegistryRouter: Send + Sync {
     /// Return the registry adapter that should handle `image_ref`.
-    fn route(&self, image_ref: &crate::image::reference::ImageRef) -> &dyn ImageRegistry;
+    fn route(&self, image_ref: &crate::image_reference::ImageRef) -> &dyn ImageRegistry;
 }
 
 /// Port for loading a local OCI image tarball into the image store.
@@ -204,7 +204,7 @@ pub trait ImagePusher: AsAny + Send + Sync {
     /// Pushes a local image and optionally streams layer upload progress.
     async fn push_image(
         &self,
-        image_ref: &crate::image::reference::ImageRef,
+        image_ref: &crate::image_reference::ImageRef,
         credentials: &RegistryCredentials,
         progress_tx: Option<DynProgressSink<PushProgress>>,
     ) -> anyhow::Result<PushResult>;

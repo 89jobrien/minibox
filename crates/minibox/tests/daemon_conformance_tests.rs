@@ -862,7 +862,11 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, Arc::new(tx))
+            .build_image(
+                &context,
+                &config,
+                minibox_core::progress::TokioProgressSink::shared(tx),
+            )
             .await
             .expect("build must succeed");
 
@@ -900,7 +904,11 @@ mod build_conformance {
 
         let (tx, _rx) = mpsc::channel(16);
         let meta = builder
-            .build_image(&context, &config, Arc::new(tx))
+            .build_image(
+                &context,
+                &config,
+                minibox_core::progress::TokioProgressSink::shared(tx),
+            )
             .await
             .expect("build must succeed");
 

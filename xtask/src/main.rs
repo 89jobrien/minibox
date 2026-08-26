@@ -21,6 +21,7 @@ use anyhow::{Result, bail};
 use std::env;
 use xshell::Shell;
 
+mod architecture;
 mod bench;
 mod borrow_fixtures;
 mod bump;
@@ -101,6 +102,7 @@ fn main() -> Result<()> {
             gates::coverage(&sh, open, lcov_only, html_only)
         }
         Some("coverage-check") => gates::coverage_check(&sh),
+        Some("architecture") => architecture::run(root),
 
         // ── Build / VM / image ───────────────────────────────────────
         Some("build-test-image") => {
@@ -633,6 +635,7 @@ fn print_help() -> Result<()> {
     eprintln!("  agentlint [--all]  lint agent config files");
     eprintln!("  coverage [--open] [--lcov-only] [--html-only]");
     eprintln!("  coverage-check     handler module function coverage gate");
+    eprintln!("  architecture       enforce dependency rings and canonical owners");
     eprintln!();
     eprintln!("Build / VM:");
     eprintln!("  build-test-image [--force]     cross-compile + OCI tarball");

@@ -66,6 +66,7 @@ use minibox_core::domain::{
     BackendCapability, BuildConfig, BuildContext, DynImageBuilder, DynImageRegistry,
 };
 use minibox_core::image::ImageStore;
+use minibox_core::progress::TokioProgressSink;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
@@ -140,7 +141,9 @@ async fn build_minimal_dockerfile_succeeds() -> Result<()> {
     };
     let config = build_config("conformance/build-test:latest");
 
-    let meta = builder.build_image(&context, &config, Arc::new(tx)).await?;
+    let meta = builder
+        .build_image(&context, &config, TokioProgressSink::shared(tx))
+        .await?;
 
     // Drain progress messages (non-empty channel means progress was emitted).
     let mut progress_count = 0;
@@ -184,7 +187,9 @@ async fn build_result_is_present_in_store() -> Result<()> {
     };
     let config = build_config("conformance/stored-image:v1");
 
-    builder.build_image(&context, &config, Arc::new(tx)).await?;
+    builder
+        .build_image(&context, &config, TokioProgressSink::shared(tx))
+        .await?;
 
     // The image must be findable in the store after build.
     assert!(
@@ -218,7 +223,9 @@ async fn build_metadata_reflects_config_tag() -> Result<()> {
     };
     let config = build_config("conformance/meta-test:v42");
 
-    let meta = builder.build_image(&context, &config, Arc::new(tx)).await?;
+    let meta = builder
+        .build_image(&context, &config, TokioProgressSink::shared(tx))
+        .await?;
 
     assert_eq!(meta.tag, "v42", "returned tag must match BuildConfig.tag");
     assert!(
@@ -262,7 +269,9 @@ async fn build_empty_dockerfile_returns_error_or_empty() -> Result<()> {
     };
     let config = build_config("conformance/empty-dockerfile:v1");
 
-    let result = builder.build_image(&context, &config, Arc::new(tx)).await;
+    let result = builder
+        .build_image(&context, &config, TokioProgressSink::shared(tx))
+        .await;
 
     // Either empty layers or an error — but no panic.
     if let Ok(meta) = result {
@@ -302,7 +311,9 @@ async fn build_tag_without_registry_prefix_is_accepted() -> Result<()> {
     };
     let config = build_config("myimage:v1");
 
-    let meta = builder.build_image(&context, &config, Arc::new(tx)).await?;
+    let meta = builder
+        .build_image(&context, &config, TokioProgressSink::shared(tx))
+        .await?;
 
     assert_eq!(meta.name, "myimage", "name must be 'myimage'");
     assert_eq!(meta.tag, "v1", "tag must be 'v1'");

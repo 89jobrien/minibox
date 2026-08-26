@@ -53,6 +53,7 @@ pub mod error;
 pub mod events;
 pub mod path;
 pub mod preflight;
+pub mod progress;
 pub mod protocol;
 pub mod trace;
 pub mod tracing_init;

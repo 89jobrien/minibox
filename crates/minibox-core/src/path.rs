@@ -3,6 +3,8 @@
 use anyhow::{Context, Result, bail};
 use std::path::{Component, Path, PathBuf};
 
+pub use minibox_domain::path::InternalPath;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// A path lexically validated against a canonical trusted base directory.
 ///
@@ -145,60 +147,6 @@ impl ValidatedPath {
 impl std::fmt::Display for ValidatedPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.inner.display().fmt(f)
-    }
-}
-
-/// A daemon-internal path that is deliberately unvalidated.
-///
-/// Used for paths constructed by trusted daemon code (rootfs outputs,
-/// cgroup paths, container state dirs). Has `Deref<Target=Path>` for
-/// ergonomic reads. Cannot be passed where `ValidatedPath` is expected.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(transparent)]
-pub struct InternalPath(PathBuf);
-
-impl InternalPath {
-    #[must_use]
-    /// Wraps a trusted daemon-internal path.
-    pub const fn new(path: PathBuf) -> Self {
-        Self(path)
-    }
-
-    #[must_use]
-    /// Consumes the wrapper and returns the underlying path.
-    pub fn into_inner(self) -> PathBuf {
-        self.0
-    }
-}
-
-impl std::ops::Deref for InternalPath {
-    type Target = Path;
-    fn deref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl AsRef<Path> for InternalPath {
-    fn as_ref(&self) -> &Path {
-        &self.0
-    }
-}
-
-impl From<PathBuf> for InternalPath {
-    fn from(p: PathBuf) -> Self {
-        Self(p)
-    }
-}
-
-impl From<&str> for InternalPath {
-    fn from(s: &str) -> Self {
-        Self(PathBuf::from(s))
-    }
-}
-
-impl std::fmt::Display for InternalPath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.display().fmt(f)
     }
 }
 

@@ -77,7 +77,7 @@ pub enum BackendCapability {
 /// [`BackendCapabilitySet::with`] calls:
 ///
 /// ```rust
-/// use minibox_core::domain::{BackendCapability, BackendCapabilitySet};
+/// use minibox_domain::{BackendCapability, BackendCapabilitySet};
 ///
 /// let caps = BackendCapabilitySet::new()
 ///     .with(BackendCapability::Commit)
@@ -391,7 +391,7 @@ mod tests {
     /// value type that must not depend on tokio infrastructure.
     #[test]
     fn exec_spec_is_pure_domain() {
-        let spec = crate::domain::ExecSpec {
+        let spec = crate::ExecSpec {
             cmd: vec!["echo".to_string()],
             env: vec![],
             working_dir: None,
@@ -628,7 +628,6 @@ mod tests {
             );
         }
 
-        #[cfg(feature = "test-utils")]
         #[test]
         fn mock_pty_allocator_returns_configured_handle() {
             let alloc = MockPtyAllocator::new(5, 6);

@@ -1,7 +1,8 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
 sources:
   - Cargo.toml
+  - crates/minibox-domain
   - crates/minibox-core
   - crates/minibox
   - crates/minibox-macros
@@ -16,7 +17,7 @@ sources:
   - crates/minibox-bench
   - crates/ail
   - xtask
-generated: 2026-08-22
+generated: 2026-08-26
 ---
 
 # Crate Inventory
@@ -25,6 +26,7 @@ generated: 2026-08-22
 
 | Crate               | Type       | LOC    | Source files | Test files              | Features                  |
 | ------------------- | ---------- | ------ | ------------ | ----------------------- | ------------------------- |
+| minibox-domain      | lib        | ~6.1k  | 21           | inline                  | test-utils                |
 | minibox-core        | lib        | ~12.6k | 28           | 10 integration + inline | test-utils, fuzzing       |
 | minibox             | lib        | ~21.5k | 71           | 56 integration + inline | test-utils, metrics, otel |
 | minibox-macros      | proc-macro | ~175   | 9            | 1 integration           | --                        |
@@ -41,21 +43,34 @@ generated: 2026-08-22
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
 **Estimated total:** run `cargo xtask info metrics` for the current workspace
-member count and Rust source-line total. All crates are at version 0.32.0
+member count and Rust source-line total. All crates are at version 0.33.0
 (xtask 0.1.0).
 
-<!-- fact:workspace_version=0.32.0 -->
+<!-- fact:workspace_version=0.33.0 -->
+
+---
+
+## minibox-domain
+
+Pure inner dependency ring and canonical owner of domain values, policies,
+lifecycle events, and ports. Production dependencies contain no async runtime,
+HTTP client, process runner, socket transport, or filesystem adapter.
+
+**Key modules:** `runtime.rs`, `filesystem.rs`, `image.rs`, `exec.rs`,
+`networking.rs`, `events.rs`, `execution_manifest.rs`, `execution_policy.rs`,
+`workflow.rs`, and typed ID/path values.
 
 ---
 
 ## minibox-core
 
-Cross-platform shared types. Single source of truth for protocol, domain
-traits, error types, image management, and the Unix socket client.
+Cross-platform shared infrastructure. Single source of truth for protocol,
+shared errors, image management, registry clients, and the Unix socket client;
+`domain/` is a compatibility facade over `minibox-domain`.
 
 **Key modules:** `protocol.rs` (DaemonRequest /
-DaemonResponse), `domain/` (domain ports, workflow/execution policy, runtime
-capabilities), `image/` (ImageStore, ImageRef, RegistryClient, layer
+DaemonResponse), `domain/` (compatibility re-exports), `image/` (ImageStore,
+RegistryClient, layer
 extraction, GC, leases, dockerfile), `client/` (DaemonClient,
 DaemonResponseStream), `events.rs` (ContainerEvent, EventSink/Source,
 BroadcastEventBroker), `adapters/` (HostnameRegistryRouter, mocks,
@@ -73,7 +88,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 
 **Key modules:**
 
-- `domain.rs` (compatibility re-exports of `minibox-core` domain ports)
+- `lib.rs` (compatibility re-export of the `minibox-core::domain` facade)
 - `container/` (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
   process.rs
 - `adapters/`: native (overlay, cgroup, namespace, bridge network), gke

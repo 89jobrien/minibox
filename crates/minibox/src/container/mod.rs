@@ -27,7 +27,7 @@ use uuid::Uuid;
 
 /// Lifecycle state of a container.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ContainerState {
+pub enum NativeContainerState {
     /// Created but not yet started.
     Created,
     /// The container process is running.
@@ -40,7 +40,7 @@ pub enum ContainerState {
     Orphaned,
 }
 
-impl std::fmt::Display for ContainerState {
+impl std::fmt::Display for NativeContainerState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Created => write!(f, "created"),
@@ -68,7 +68,7 @@ pub struct Container {
     /// PID of the container init process (set after [`start`](Self::start)).
     pub pid: Option<u32>,
     /// Current lifecycle state.
-    pub state: ContainerState,
+    pub state: NativeContainerState,
     /// Timestamp when the container was created.
     pub created_at: DateTime<Utc>,
     /// Path to the overlay `merged/` directory used as the container rootfs.
@@ -110,7 +110,7 @@ impl Container {
             image: image.into(),
             command,
             pid: None,
-            state: ContainerState::Created,
+            state: NativeContainerState::Created,
             created_at: Utc::now(),
             rootfs_path,
             cgroup_path,
@@ -121,14 +121,14 @@ impl Container {
     /// 1. Create and configure the cgroup.
     /// 2. Mount the overlay rootfs.
     /// 3. Clone a child process with all namespaces.
-    /// 4. Store the child PID and transition to [`Running`](ContainerState::Running).
+    /// 4. Store the child PID and transition to [`Running`](NativeContainerState::Running).
     pub fn start(
         &mut self,
         base_dir: &Path,
         image_layers: &[PathBuf],
         cgroup_config: CgroupConfig,
     ) -> anyhow::Result<()> {
-        if self.state != ContainerState::Created {
+        if self.state != NativeContainerState::Created {
             bail!("container {} is not in Created state", self.id);
         }
 
@@ -204,7 +204,7 @@ impl Container {
         };
 
         self.pid = Some(spawn.pid);
-        self.state = ContainerState::Running;
+        self.state = NativeContainerState::Running;
         info!("container {} running with PID={}", self.id, spawn.pid);
         Ok(())
     }
@@ -215,7 +215,7 @@ impl Container {
     /// 3. Send SIGKILL if still running.
     /// 4. Remove the cgroup.
     pub fn stop(&mut self) -> anyhow::Result<()> {
-        if self.state != ContainerState::Running {
+        if self.state != NativeContainerState::Running {
             bail!("container {} is not running", self.id);
         }
 
@@ -277,19 +277,19 @@ impl Container {
             warn!("cgroup cleanup for container {} failed: {}", self.id, e);
         }
 
-        self.state = ContainerState::Stopped;
+        self.state = NativeContainerState::Stopped;
         info!("container {} stopped", self.id);
         Ok(())
     }
 
     /// Remove the container: clean up the overlay mounts and mark as removed.
     ///
-    /// The container must be in the [`Stopped`](ContainerState::Stopped) state.
+    /// The container must be in the [`Stopped`](NativeContainerState::Stopped) state.
     pub fn remove(&mut self, base_dir: &Path) -> anyhow::Result<()> {
-        if self.state == ContainerState::Running {
+        if self.state == NativeContainerState::Running {
             bail!("container {} is still running; stop it first", self.id);
         }
-        if self.state == ContainerState::Removed {
+        if self.state == NativeContainerState::Removed {
             return Ok(());
         }
 
@@ -299,7 +299,7 @@ impl Container {
             warn!("mount cleanup for container {} failed: {}", self.id, e);
         }
 
-        self.state = ContainerState::Removed;
+        self.state = NativeContainerState::Removed;
         info!("container {} removed", self.id);
         Ok(())
     }

@@ -96,8 +96,6 @@ pub use exec::NativeExecRuntime;
 mod filesystem;
 #[cfg(target_os = "linux")]
 mod limiter;
-#[cfg(feature = "registry")]
-mod registry;
 #[cfg(target_os = "linux")]
 mod runtime;
 
@@ -110,6 +108,7 @@ mod colima_commit;
 mod colima_push;
 mod docker_desktop;
 mod hcs;
+#[cfg(feature = "registry")]
 mod smolvm;
 mod vf;
 mod wsl2;
@@ -140,7 +139,7 @@ pub use filesystem::OverlayFilesystem;
 #[cfg(target_os = "linux")]
 pub use limiter::CgroupV2Limiter;
 #[cfg(feature = "registry")]
-pub use registry::DockerHubRegistry;
+pub use minibox_core::adapters::DockerHubRegistry;
 #[cfg(target_os = "linux")]
 pub use runtime::LinuxNamespaceRuntime;
 
@@ -159,6 +158,7 @@ pub use docker_desktop::{DockerDesktopFilesystem, DockerDesktopLimiter, DockerDe
 pub use ghcr::GhcrRegistry;
 pub use hcs::{HcsFilesystem, HcsLimiter, HcsRegistry, HcsRuntime};
 pub use network::{HostNetwork, NoopNetwork};
+#[cfg(feature = "registry")]
 pub use smolvm::{SmolVmExecutor, SmolVmFilesystem, SmolVmLimiter, SmolVmRegistry, SmolVmRuntime};
 pub use vf::{VfFilesystem, VfLimiter, VfRegistry, VfRuntime};
 pub use wsl2::{Wsl2Filesystem, Wsl2Limiter, Wsl2Runtime};

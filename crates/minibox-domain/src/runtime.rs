@@ -2,13 +2,12 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
-use std::any::Any;
 use std::os::fd::OwnedFd;
 use std::sync::Arc;
 
 use super::{
-    BindMount, FilesystemProvider, ImageLoader, ImageRegistry, MetricsRecorder, NetworkProvider,
-    RegistryRouter,
+    AsAny, BindMount, FilesystemProvider, ImageLoader, ImageRegistry, MetricsRecorder,
+    NetworkProvider, RegistryRouter,
 };
 
 // ---------------------------------------------------------------------------
@@ -31,24 +30,8 @@ pub type DynNetworkProvider = Arc<dyn NetworkProvider>;
 pub type DynMetricsRecorder = Arc<dyn MetricsRecorder>;
 /// Type alias for a shared, dynamic [`EventSink`] implementation.
 pub type DynEventSink = Arc<dyn crate::events::EventSink>;
-/// Type alias for a shared, dynamic [`EventSource`] implementation.
-pub type DynEventSource = Arc<dyn crate::events::EventSource>;
 /// Type alias for a shared, dynamic [`RegistryRouter`] implementation.
 pub type DynRegistryRouter = Arc<dyn RegistryRouter>;
-
-// ---------------------------------------------------------------------------
-// Downcasting support for testing
-// ---------------------------------------------------------------------------
-
-/// Trait to enable downcasting trait objects back to concrete types.
-///
-/// This allows tests to retrieve the concrete adapter behind a `Dyn*` trait
-/// object (e.g. to call adapter-specific helpers in integration tests).
-/// Production code should use the trait interface exclusively.
-pub trait AsAny: Send + Sync {
-    /// Return `self` as `&dyn Any` so callers can use `downcast_ref::<T>()`.
-    fn as_any(&self) -> &dyn Any;
-}
 
 // ---------------------------------------------------------------------------
 // Resource Limiter Port

@@ -20,7 +20,7 @@ default = ["registry"]
 # dev-dependencies of other crates without cfg(test) restrictions.
 # tempfile is pulled in as a real dependency because test_fixtures.rs and
 # conformance.rs compile as library code (not cfg(test)) under this feature.
-test-utils = ["dep:tempfile", "dep:inventory"]
+test-utils = ["dep:tempfile", "dep:inventory", "minibox-domain/test-utils"]
 # Exposes internal functions needed by the cargo-fuzz harnesses in fuzz/.
 # Never enable in production builds.
 fuzzing = []
@@ -30,6 +30,7 @@ fuzzing = []
 registry = ["dep:reqwest"]
 
 [dependencies]
+minibox-domain = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

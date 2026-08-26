@@ -90,7 +90,8 @@ No Python scripts are expected in the project; use Rust scripts or Nushell helpe
 
 ## Architecture Guardrails
 
-- Domain ports live under `crates/minibox-core/src/domain/` and are re-exported by `crates/minibox/src/domain.rs` for adapter compatibility.
+- Domain ports live under `crates/minibox-domain/src/`; `minibox_core::domain`
+  and `minibox::domain` are compatibility re-exports of those same types.
 - `minibox` re-exports `minibox-core`; do not remove re-exports needed by `as_any!`/`adapt!` macro expansion.
 - `DaemonRequest`/`DaemonResponse` are canonical in `crates/minibox-core/src/protocol.rs`.
 - `DaemonResponse::ContainerOutput` is non-terminal; most other response variants end request streaming. Update terminal-response logic when adding variants.

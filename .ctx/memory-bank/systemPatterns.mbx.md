@@ -2,11 +2,12 @@
 
 ## High-level layout
 
-14-crate Rust 2024 workspace + `xtask` (v0.31.0):
+16-crate Rust 2024 workspace + `xtask` (v0.33.0):
 
 ```
 minibox-macros       proc-macro (~300 LOC)
-minibox-core         cross-platform types, domain traits, protocol (~12.6k LOC)
+minibox-domain       pure domain values, policies, lifecycle events, and ports
+minibox-core         protocol, clients, OCI/image services, shared adapters
 minibox              Linux adapters, daemon handler/server/state (~21.5k LOC)
 macbox               macOS backend wiring (delegates to smolbox)
 smolbox              smolvm + krun adapter implementations
@@ -32,8 +33,9 @@ xtask                CI gates, test runners, bench (~5k LOC)
 
 ## Patterns to follow
 
-- **Hexagonal architecture**: domain traits in `crates/minibox/src/domain.rs`,
-  adapters in `crates/minibox/src/adapters/`
+- **Hexagonal architecture**: domain traits in `crates/minibox-domain/src/`,
+  shared adapters in `crates/minibox-core/src/adapters/`, runtime adapters in
+  `crates/minibox/src/adapters/`
 - **Error handling**: `anyhow::Context` everywhere, no `.unwrap()` in production
 - **Tracing**: structured `key = value` fields, never embedded in message string
 - **Path validation**: all external paths through `validate_layer_path()` before

@@ -5,6 +5,7 @@
 use minibox::testing::mocks::push::MockImagePusher;
 use minibox_core::domain::{ImagePusher, RegistryCredentials};
 use minibox_core::image::reference::ImageRef;
+use minibox_core::progress::TokioProgressSink;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -80,7 +81,11 @@ crate::conformance_test! {
         let mock = MockImagePusher::new();
         let (tx, mut rx) = tokio::sync::mpsc::channel(8);
         let result =
-            rt().block_on(mock.push_image(&alpine(), &anon(), Some(std::sync::Arc::new(tx))));
+            rt().block_on(mock.push_image(
+                &alpine(),
+                &anon(),
+                Some(TokioProgressSink::shared(tx)),
+            ));
         ctx.assert_ok(result, "push_image with progress channel should succeed");
         let got = rt().block_on(rx.recv());
         ctx.assert_true(got.is_some(), "at least one progress event should be sent");

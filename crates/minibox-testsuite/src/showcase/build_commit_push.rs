@@ -34,6 +34,7 @@ use minibox_core::domain::{
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
 use minibox_core::image::registry::RegistryClient;
+use minibox_core::progress::TokioProgressSink;
 use tokio::sync::mpsc;
 
 use super::reporter::Reporter;
@@ -154,7 +155,7 @@ impl BuildCommitPush {
 
         let (tx, _rx) = mpsc::channel(64);
         builder
-            .build_image(&build_context, &build_config, Arc::new(tx))
+            .build_image(&build_context, &build_config, TokioProgressSink::shared(tx))
             .await
             .map_err(|e| anyhow::anyhow!("build_image: {e}"))
     }

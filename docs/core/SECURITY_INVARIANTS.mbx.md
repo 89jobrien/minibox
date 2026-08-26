@@ -1,5 +1,5 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
 sources:
   - crates/minibox-core/src/image/layer.rs
   - crates/minibox/src/container/process.rs
@@ -8,11 +8,11 @@ sources:
   - crates/minibox-core/src/image/registry.rs
   - crates/minibox/src/adapters/ghcr.rs
   - crates/minibox/src/container/mount_seccomp.rs
-  - crates/minibox-core/src/domain/execution_manifest.rs
+  - crates/minibox-domain/src/execution_manifest.rs
   - crates/minibox/src/daemon/handler/run.rs
   - crates/minibox/tests/security_regression.rs
   - crates/minibox/tests/daemon_security_regression.rs
-generated: 2026-08-22
+generated: 2026-08-26
 ---
 
 # Security Invariants
@@ -23,7 +23,7 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
-Last updated: 2026-08-22
+Last updated: 2026-08-26
 
 ---
 
@@ -393,7 +393,7 @@ variable values are stored as SHA-256 digests, never plaintext.
 
 **Code path:**
 
-- `crates/minibox-core/src/domain/execution_manifest.rs` — manifest types,
+- `crates/minibox-domain/src/execution_manifest.rs` — manifest types,
   digest computation, `seal()`.
 - `crates/minibox/src/daemon/handler/run.rs` — `prepare_run()` builds and persists
   the manifest before returning.

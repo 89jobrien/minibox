@@ -2192,8 +2192,7 @@ impl minibox_core::domain::ExecRuntime for FailingExecRuntime {
         &self,
         _container_id: &minibox_core::domain::ContainerId,
         _spec: minibox_core::domain::ExecSpec,
-        _tx: minibox_core::domain::DynProgressSink<minibox_core::protocol::DaemonResponse>,
-    ) -> anyhow::Result<minibox_core::domain::ExecHandle> {
+    ) -> anyhow::Result<minibox_core::domain::ExecSession> {
         anyhow::bail!("mock exec runtime failure: setns not supported")
     }
 }

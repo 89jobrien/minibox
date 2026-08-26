@@ -1070,7 +1070,23 @@ mod start_from_step_tests {
 #[cfg(test)]
 mod slashcrux_tests {
     use super::*;
-    use crate::protocol::execution_context_to_env;
+
+    fn execution_context_to_env(ctx: &ExecutionContext) -> Vec<String> {
+        ctx.all()
+            .iter()
+            .filter_map(|(key, value)| {
+                let value = value.as_ref()?;
+                let rendered = match value {
+                    serde_json::Value::Null => return None,
+                    serde_json::Value::String(value) => value.clone(),
+                    serde_json::Value::Number(value) => value.to_string(),
+                    serde_json::Value::Bool(value) => value.to_string(),
+                    other => serde_json::to_string(other).expect("JSON value must serialize"),
+                };
+                Some(format!("{key}={rendered}"))
+            })
+            .collect()
+    }
 
     // ── meets_min_priority ─────────────────────────────────────────────
 
