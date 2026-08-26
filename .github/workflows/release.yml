@@ -20,6 +20,12 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Validate public crates publishability
+        run: |
+          cargo publish --dry-run --locked -p minibox-macros
+          cargo publish --dry-run --locked -p minibox-core
+          cargo publish --dry-run --locked -p minibox-mcp
+
       - name: Publish crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -27,6 +33,8 @@ jobs:
           cargo publish -p minibox-macros || echo "minibox-macros already published"
           sleep 30
           cargo publish -p minibox-core || echo "minibox-core already published"
+          sleep 30
+          cargo publish -p minibox-mcp || echo "minibox-mcp already published"
           sleep 30
 
   build:

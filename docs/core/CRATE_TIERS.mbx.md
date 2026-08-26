@@ -25,7 +25,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-08-22
+Last updated: 2026-08-26
 
 See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
 Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
@@ -48,6 +48,44 @@ Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
 | **Experimental** | Unstable. APIs may change or modules may move without notice. Not suitable for external consumers.                               |
 | **Internal**     | Dev tooling. Never shipped as a library or binary in releases.                                                                   |
 | **External**     | Non-Rust module. Governed by its own toolchain and release process.                                                              |
+
+---
+
+## crates.io Publishing Policy (library-first)
+
+This workspace uses a **library-first** crates.io model.
+
+### Public crates intended for crates.io
+
+These crates are intended to resolve fully from crates.io and are treated as public packages:
+
+| Crate            | Publish intent | Why it is public                                                                 |
+| ---------------- | -------------- | --------------------------------------------------------------------------------- |
+| `minibox-macros` | Yes            | Reusable proc-macros consumed by public/shared runtime crates.                    |
+| `minibox-core`   | Yes            | Stable shared domain/protocol library for clients and integrations.               |
+| `minibox-mcp`    | Yes            | MCP integration surface for agent/tooling workflows (experimental but published). |
+
+### Internal / non-publish crates
+
+All other workspace crates are internal and **not** part of the crates.io distribution
+contract today. Most are explicitly `publish = false`; the remainder are treated as
+non-publish by policy until explicitly promoted.
+
+Rationale:
+
+- Runtime/operator binaries (`mbx`, `miniboxd`, adapter crates, test/tooling crates) are
+  released through repository workflows and release artifacts, not crates.io.
+- Keeping these crates internal avoids accidental API/distribution commitments while the
+  runtime surface continues stabilization.
+
+### Current distribution model
+
+- crates.io: shared library surfaces (`minibox-core`, `minibox-macros`) plus MCP integration
+  crate (`minibox-mcp`).
+- Not yet crates.io: first-party runtime/operator binaries (`mbx`, `miniboxd`, `minibox-tui`,
+  `minibox-crux-plugin`) and platform adapter stacks.
+
+Any change to this policy must update this document and release automation in the same PR.
 
 ---
 
