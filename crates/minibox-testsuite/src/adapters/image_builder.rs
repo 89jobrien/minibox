@@ -43,7 +43,7 @@ crate::conformance_test! {
         let result = rt().block_on(mock.build_image(
             &empty_context(),
             &build_config("myapp:v1"),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         if let Some(meta) = ctx.assert_ok(result, "build_image should succeed") {
             ctx.assert_eq("myapp".to_string(), meta.name, "image name");
@@ -64,7 +64,7 @@ crate::conformance_test! {
         let _ = rt().block_on(mock.build_image(
             &empty_context(),
             &build_config("img:tag"),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         ctx.assert_eq(1, mock.call_count(), "call_count after one build");
         ctx.result()
@@ -82,7 +82,7 @@ crate::conformance_test! {
         let _ = rt().block_on(mock.build_image(
             &empty_context(),
             &build_config("img:tag"),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         let event = rt().block_on(rx.recv());
         ctx.assert_true(
@@ -104,7 +104,7 @@ crate::conformance_test! {
         let result = rt().block_on(mock.build_image(
             &empty_context(),
             &build_config("img:tag"),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         ctx.assert_err(
             result,

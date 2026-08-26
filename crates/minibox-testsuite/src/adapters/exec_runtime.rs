@@ -42,7 +42,7 @@ crate::conformance_test! {
         let result = rt().block_on(mock.run_in_container(
             &container_id(),
             basic_spec(),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         ctx.assert_ok(result, "run_in_container should succeed");
         ctx.result()
@@ -61,7 +61,7 @@ crate::conformance_test! {
         let _ = rt().block_on(mock.run_in_container(
             &container_id(),
             basic_spec(),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         ctx.assert_eq(1, mock.call_count(), "call_count after one exec");
         ctx.result()
@@ -84,7 +84,7 @@ crate::conformance_test! {
             tty: false,
         };
         let _ =
-            rt().block_on(mock.run_in_container(&container_id(), spec, std::sync::Arc::new(tx)));
+            rt().block_on(mock.run_in_container(&container_id(), spec, crate::progress::tokio_progress_sink(tx)));
         let recorded = mock.last_spec();
         ctx.assert_true(recorded.is_some(), "last_spec should be recorded");
         if let Some(s) = recorded {
@@ -110,7 +110,7 @@ crate::conformance_test! {
         let result = rt().block_on(mock.run_in_container(
             &container_id(),
             basic_spec(),
-            std::sync::Arc::new(tx),
+            crate::progress::tokio_progress_sink(tx),
         ));
         ctx.assert_err(
             result,
