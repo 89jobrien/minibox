@@ -13,16 +13,15 @@
     )
 )]
 
+use crate::protocol::{HandlerDecl, Request, Response};
 use anyhow::{Context, Result};
-use crux_plugin::protocol::{HandlerDecl, Request, Response};
 use minibox_core::client::{DaemonClient, default_socket_path};
 use minibox_core::domain::BindMount;
 use minibox_core::protocol::DaemonRequest;
 use serde_json::Value;
 use tracing::{debug, warn};
 
-// Re-export protocol types for fuzz targets.
-pub use crux_plugin::protocol;
+pub mod protocol;
 
 // ── Handler declarations ───────────────────────────────────────────────────────
 
