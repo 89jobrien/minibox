@@ -411,6 +411,7 @@ async fn conformance_mock_runtime_spawn_increments_pid() {
         skip_network_namespace: false,
         mounts: vec![],
         privileged: false,
+        uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
         image_ref: None,
     };
 
@@ -442,6 +443,7 @@ async fn conformance_mock_runtime_spawn_failure() {
         skip_network_namespace: false,
         mounts: vec![],
         privileged: false,
+        uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
         image_ref: None,
     };
 

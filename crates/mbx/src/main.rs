@@ -126,6 +126,10 @@ enum Commands {
         #[arg(long)]
         privileged: bool,
 
+        /// Reuse one host UID/GID range across containers (weaker isolation).
+        #[arg(long)]
+        shared_uid_range: bool,
+
         /// Bind mount in src:dst[:ro] format. Repeatable.
         /// Example: -v /tmp/bin:/minibox  -v /tmp/traces:/traces:ro
         #[arg(short = 'v', long = "volume", value_name = "SRC:DST[:ro]")]
@@ -481,6 +485,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             tag,
             network,
             privileged,
+            shared_uid_range,
             volumes,
             mounts,
             name,
@@ -504,6 +509,11 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
                         cpu_weight,
                         network,
                         privileged,
+                        uid_range_mode: if shared_uid_range {
+                            minibox_core::domain::UidRangeMode::Shared
+                        } else {
+                            minibox_core::domain::UidRangeMode::Exclusive
+                        },
                         volumes,
                         mount_specs: mounts,
                         name,

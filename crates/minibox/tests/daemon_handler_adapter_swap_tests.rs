@@ -84,6 +84,7 @@ async fn handle_run_once(
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,

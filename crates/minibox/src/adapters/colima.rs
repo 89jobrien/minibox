@@ -1217,6 +1217,7 @@ mod tests {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -1462,6 +1463,7 @@ mod tests {
             hooks: ContainerHooks::default(),
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 

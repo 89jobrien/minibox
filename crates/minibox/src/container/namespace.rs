@@ -33,6 +33,7 @@ pub struct NamespaceConfig {
     /// Isolate System V IPC objects (`CLONE_NEWIPC`).
     pub new_ipc: bool,
     /// Isolate the network namespace (`CLONE_NEWNET`).
+    /// A user namespace is always created; UID/GID range policy is configured separately.
     pub new_net: bool,
 }
 
@@ -51,7 +52,7 @@ impl NamespaceConfig {
     /// Converts the configuration into the [`CloneFlags`] bitmask expected by
     /// `nix::sched::clone` / `libc::clone`.
     pub fn to_clone_flags(&self) -> CloneFlags {
-        let mut flags = CloneFlags::empty();
+        let mut flags = CloneFlags::CLONE_NEWUSER;
         if self.new_pid {
             flags |= CloneFlags::CLONE_NEWPID;
         }
@@ -75,6 +76,20 @@ impl Default for NamespaceConfig {
     /// Returns `all()` — all supported namespaces enabled.
     fn default() -> Self {
         Self::all()
+    }
+}
+
+#[cfg(test)]
+mod user_namespace_tests {
+    use super::*;
+
+    #[test]
+    fn all_includes_user_namespace() {
+        assert!(
+            NamespaceConfig::all()
+                .to_clone_flags()
+                .contains(CloneFlags::CLONE_NEWUSER)
+        );
     }
 }
 

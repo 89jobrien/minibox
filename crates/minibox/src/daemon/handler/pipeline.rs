@@ -158,6 +158,7 @@ pub async fn handle_pipeline(
                 network: None,
                 mounts: vec![pipeline_mount],
                 privileged: false,
+                shared_uid_range: false,
                 env: container_env,
                 name: None,
                 platform: None,
