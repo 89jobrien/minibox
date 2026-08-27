@@ -12,7 +12,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use minibox_testsuite::harness::{ReportConfig, ReportGenerator, TestRunner};
+use minibox_testsuite::harness::{
+    ConformanceArtifacts, ConformanceResult, ReportConfig, ReportGenerator, TestRunner,
+};
 
 fn main() {
     let artifact_dir = std::env::var("CONFORMANCE_ARTIFACT_DIR")
@@ -43,20 +45,29 @@ fn main() {
     ReportGenerator::text(&mut text_out, &summary, &cfg).expect("text report");
     eprint!("{}", String::from_utf8_lossy(&text_out));
 
-    // JSON report.
     let json_path = artifact_dir.join("conformance.json");
+    let junit_path = artifact_dir.join("conformance.xml");
+    let md_path = artifact_dir.join("conformance.md");
+    let result = ConformanceResult::new(
+        &summary,
+        ConformanceArtifacts {
+            json: json_path.clone(),
+            junit: junit_path.clone(),
+            markdown: md_path.clone(),
+        },
+    );
+
+    // JSON report.
     let mut f = fs::File::create(&json_path).expect("create json report");
-    ReportGenerator::json(&mut f, &summary).expect("write json");
+    ReportGenerator::json(&mut f, &result).expect("write json");
     println!("conformance:json={}", json_path.display());
 
     // JUnit XML report.
-    let junit_path = artifact_dir.join("conformance.xml");
     let mut f = fs::File::create(&junit_path).expect("create junit report");
     ReportGenerator::junit_xml(&mut f, &summary).expect("write junit");
     println!("conformance:junit={}", junit_path.display());
 
     // Markdown report.
-    let md_path = artifact_dir.join("conformance.md");
     let mut f = fs::File::create(&md_path).expect("create markdown report");
     ReportGenerator::markdown(&mut f, &summary).expect("write markdown");
     println!("conformance:markdown={}", md_path.display());

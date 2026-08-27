@@ -136,7 +136,8 @@ macro_rules! conformance_test {
 /// Convenience re-export of the full harness prelude.
 pub mod prelude {
     pub use crate::harness::{
-        ConformanceTest, ReportConfig, ReportGenerator, TestCategory, TestContext, TestResult,
-        TestRunner, TestSummary,
+        ConformanceArtifacts, ConformanceResult, ConformanceSummary, ConformanceTest, ReportConfig,
+        ReportGenerator, TestCategory, TestContext, TestResult, TestRunResult, TestRunner,
+        TestSummary,
     };
 }
