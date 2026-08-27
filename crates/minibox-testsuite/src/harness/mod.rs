@@ -10,5 +10,8 @@ pub mod traits;
 pub use context::TestContext;
 pub use macros::ConformanceTestEntry;
 pub use report::{ReportConfig, ReportGenerator};
-pub use runner::{TestRunner, TestSummary};
+pub use runner::{
+    ConformanceArtifacts, ConformanceResult, ConformanceSummary, TestRunResult, TestRunner,
+    TestSummary,
+};
 pub use traits::{ConformanceTest, TestCategory, TestResult};

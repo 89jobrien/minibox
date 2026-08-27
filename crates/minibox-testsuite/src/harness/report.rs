@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use super::runner::TestSummary;
+use super::runner::{ConformanceResult, TestSummary};
 use super::traits::TestResult;
 
 /// Configuration for the text report format.
@@ -89,22 +89,9 @@ impl ReportGenerator {
     }
 
     /// JSON report for machine consumption.
-    pub fn json<W: Write>(w: &mut W, summary: &TestSummary) -> std::io::Result<()> {
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-        let report = serde_json::json!({
-            "report_version": "1.0",
-            "generated_at": now,
-            "summary": {
-                "total": summary.total,
-                "passed": summary.passed,
-                "failed": summary.failed,
-                "skipped": summary.skipped,
-                "duration_ms": summary.duration_ms,
-                "success": summary.is_success(),
-            },
-            "results": summary.results,
-        });
-        writeln!(w, "{}", serde_json::to_string_pretty(&report).unwrap())?; // allow:unwrap — serde_json::Value always serializes
+    pub fn json<W: Write>(w: &mut W, result: &ConformanceResult) -> std::io::Result<()> {
+        serde_json::to_writer_pretty(&mut *w, result).map_err(std::io::Error::other)?;
+        writeln!(w)?;
         Ok(())
     }
 

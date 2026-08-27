@@ -3,12 +3,12 @@
 //! Every conformance test in this crate is a struct implementing `ConformanceTest`.
 //! The trait is `Send + Sync` so the `TestRunner` can execute tests in parallel.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::context::TestContext;
 
 /// Broad category of a conformance test — used for filtering and reporting.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TestCategory {
     /// Verifies a single trait method or invariant in isolation.
@@ -32,7 +32,7 @@ impl TestCategory {
 }
 
 /// Outcome of a single conformance test run.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "lowercase")]
 pub enum TestResult {
     /// Test completed successfully.
