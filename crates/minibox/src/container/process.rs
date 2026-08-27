@@ -81,6 +81,10 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
     info!(command = %config.command, rootfs = ?config.rootfs, "container: spawning process");
 
+    if !config.mounts.is_empty() {
+        crate::container::filesystem::preflight_idmapped_mounts()?;
+    }
+
     // Run pre-exec hooks on the host before cloning.
     run_hooks(&config.pre_exec_hooks, &config.rootfs, None)
         .with_context(|| "pre-exec hooks failed")?;
@@ -428,8 +432,15 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
 
     // 3. Apply bind mounts into the overlay rootfs before pivot_root.
     //    These mounts live inside this child's new mount namespace (CLONE_NEWNS).
-    crate::container::filesystem::apply_bind_mounts(&config.mounts, &config.rootfs)
-        .with_context(|| "child: apply_bind_mounts")?;
+    use std::os::fd::AsRawFd as _;
+    let user_namespace = std::fs::File::open("/proc/self/ns/user")
+        .context("child: open user namespace for ID-mapped mounts")?;
+    crate::container::filesystem::apply_bind_mounts(
+        &config.mounts,
+        &config.rootfs,
+        user_namespace.as_raw_fd(),
+    )
+    .with_context(|| "child: apply_bind_mounts")?;
 
     // 4. Pivot root to the overlay merged directory.
     pivot_root_to(&config.rootfs).with_context(|| "child: pivot_root")?;

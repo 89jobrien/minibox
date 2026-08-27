@@ -126,6 +126,21 @@ impl BindMount {
     }
 }
 
+/// Return whether a Linux release supports `mount_setattr(MOUNT_ATTR_IDMAP)`.
+#[must_use]
+pub fn kernel_supports_idmapped_mounts(release: &str) -> bool {
+    let mut parts = release.split(|c: char| c == char::from(46) || c == char::from(45));
+    let major = parts
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    let minor = parts
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    (major, minor) >= (5, 12)
+}
+
 // ---------------------------------------------------------------------------
 // Filesystem Provider Port
 // ---------------------------------------------------------------------------
@@ -287,4 +302,20 @@ pub struct RootfsLayout {
     pub rootfs_metadata: Option<BackendRootfsMetadata>,
     /// Source image reference associated with this rootfs when known.
     pub source_image_ref: Option<String>,
+}
+
+#[cfg(test)]
+mod idmapped_mount_tests {
+    use super::kernel_supports_idmapped_mounts;
+
+    #[test]
+    fn rejects_kernels_before_5_12() {
+        assert!(!kernel_supports_idmapped_mounts("5.11.19"));
+    }
+
+    #[test]
+    fn accepts_5_12_and_newer_kernels() {
+        assert!(kernel_supports_idmapped_mounts("5.12.0"));
+        assert!(kernel_supports_idmapped_mounts("6.10.3-custom"));
+    }
 }
