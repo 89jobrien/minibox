@@ -15,7 +15,7 @@
     {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "8e2602cbe2e072caa5f29be7f72c86af7d2d59bf008d14306cd25892f0e2690d"
+      "hash": "d25b98233b99f0c7f5726a997b2df65c554f02a5b3d1b1d2f96f1842dd299203"
     },
     {
       "name": "domain-capability",

@@ -131,7 +131,7 @@ Tests use mock adapters — no real HTTP or filesystem required.
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
-**Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
+**Protocol.** JSON-over-newline on a Unix socket. 30 request variants, 29 response variants.
 Canonical source: `crates/minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`ARCHITECTURE`](ARCHITECTURE.mbx.md).

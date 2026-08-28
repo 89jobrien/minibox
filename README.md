@@ -32,7 +32,7 @@ structured tracing, property testing.
 
 - Container lifecycle — pull, run, stop, rm, ps, pause/resume
 - OCI image pull — Docker Hub v2 + ghcr.io, anonymous auth, parallel layers
-- Image management — `prune` / `rmi` with lease-based GC
+- Image management — local `search`, `prune` / `rmi` with lease-based GC
 - Bind mounts and privileged mode — `-v`/`--mount`, `--privileged`
 - Log capture — `mbx logs <id>` for stored stdout/stderr
 - Container events — `mbx events` streams lifecycle events
@@ -64,6 +64,7 @@ sudo ./target/release/miniboxd
 
 # Pull and run
 sudo ./target/release/mbx pull alpine
+sudo ./target/release/mbx search alpine
 sudo ./target/release/mbx run alpine -- /bin/echo "hello from minibox"
 
 # Manage containers

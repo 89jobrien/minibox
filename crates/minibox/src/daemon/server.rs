@@ -608,6 +608,19 @@ async fn dispatch(
                 tx,
             ));
         }
+        DaemonRequest::SearchImages {
+            query,
+            remote,
+            limit,
+        } => {
+            tokio::spawn(handler::handle_search_images(
+                query,
+                remote,
+                limit,
+                Arc::clone(&deps.image.image_store),
+                tx,
+            ));
+        }
         DaemonRequest::RemoveImage { image_ref } => {
             tokio::spawn(handler::handle_remove_image(
                 image_ref,
@@ -1046,6 +1059,10 @@ mod tests {
                 true, // terminal: complete list returned in one response
             ),
             (
+                DaemonResponse::SearchResults { results: vec![] },
+                true, // terminal: complete search returned in one response
+            ),
+            (
                 DaemonResponse::Manifest {
                     manifest: serde_json::json!({}),
                 },
@@ -1112,6 +1129,7 @@ mod tests {
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
                 DaemonResponse::ImageList { .. } => true,
+                DaemonResponse::SearchResults { .. } => true,
                 DaemonResponse::Manifest { .. } => true,
                 DaemonResponse::VerifyResult { .. } => true,
                 DaemonResponse::WorkflowStepComplete { .. } => true,
@@ -1194,6 +1212,44 @@ mod tests {
                 assert!(containers.is_empty(), "expected empty container list");
             }
             other => panic!("expected ContainerList, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_connection_searches_local_image_tags() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+        let image_dir = tmp
+            .path()
+            .join("images")
+            .join("library_alpine")
+            .join("latest");
+        std::fs::create_dir_all(&image_dir).expect("create image dir");
+        std::fs::write(image_dir.join("manifest.json"), "{}").expect("write manifest");
+
+        let (client, server) = tokio::io::duplex(4096);
+        tokio::spawn(async move {
+            let _ = handle_connection(server, state, deps).await;
+        });
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+        send_request(
+            &mut write_half,
+            &DaemonRequest::SearchImages {
+                query: "alpine".to_string(),
+                remote: false,
+                limit: 25,
+            },
+        )
+        .await;
+
+        match read_response(&mut reader).await {
+            DaemonResponse::SearchResults { results } => {
+                assert_eq!(results.len(), 1);
+                assert_eq!(results[0].name, "library/alpine");
+                assert_eq!(results[0].tags, vec!["latest"]);
+            }
+            other => panic!("expected SearchResults, got {other:?}"),
         }
     }
 
