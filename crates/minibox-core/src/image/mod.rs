@@ -14,6 +14,7 @@ pub mod manifest;
 pub mod reference;
 #[cfg(feature = "registry")]
 pub mod registry;
+pub mod volume;
 
 use crate::error::ImageError;
 use crate::image::layer::extract_layer;

@@ -306,6 +306,9 @@ pub enum DaemonRequest {
         /// Optional replacement image command.
         #[serde(default)]
         cmd_override: Option<Vec<String>>,
+        /// Include image-declared volume paths in the committed layer.
+        #[serde(default)]
+        include_volumes: bool,
     },
 
     /// Build an image from a Dockerfile.

@@ -228,6 +228,28 @@ pub struct CommitConfig {
     pub env_overrides: Vec<String>,
     /// Optional replacement image command.
     pub cmd_override: Option<Vec<String>>,
+    /// Include data below image-declared `VOLUME` paths in the committed layer.
+    pub include_volumes: bool,
+}
+
+/// Result of committing a writable layer.
+#[derive(Debug, Clone)]
+pub struct CommitResult {
+    /// Metadata for the newly-created image.
+    pub image: ImageMetadata,
+    /// Declared volume paths that contained data but were excluded.
+    pub excluded_volume_paths: Vec<PathBuf>,
+}
+
+impl CommitResult {
+    /// Construct a result without exclusion warnings.
+    #[must_use]
+    pub const fn without_warnings(image: ImageMetadata) -> Self {
+        Self {
+            image,
+            excluded_volume_paths: Vec::new(),
+        }
+    }
 }
 
 /// Port for snapshotting a container's filesystem diff into a new image.
@@ -239,7 +261,7 @@ pub trait ContainerCommitter: AsAny + Send + Sync {
         container_id: &ContainerId,
         target_ref: &str,
         config: &CommitConfig,
-    ) -> anyhow::Result<ImageMetadata>;
+    ) -> anyhow::Result<CommitResult>;
 }
 
 /// Type alias for a shared, dynamic [`ContainerCommitter`] implementation.

@@ -328,12 +328,14 @@ fn daemon_request_commit_backward_compat_omits_optional_fields() {
             message,
             env_overrides,
             cmd_override,
+            include_volumes,
             ..
         } => {
             assert!(author.is_none());
             assert!(message.is_none());
             assert!(env_overrides.is_empty());
             assert!(cmd_override.is_none());
+            assert!(!include_volumes);
         }
         other => panic!("expected DaemonRequest::Commit, got {other:?}"),
     }

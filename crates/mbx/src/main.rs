@@ -246,7 +246,7 @@ enum Commands {
     /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped` is
     /// received.  Exits with the exec process exit code.
     Exec {
-        /// Container ID or name.
+        /// Container ID.
         container_id: String,
 
         /// Command and arguments to run (everything after --)
@@ -385,6 +385,29 @@ enum Commands {
         /// Path to the JSON policy file.
         #[arg(long)]
         policy: String,
+    },
+
+    /// Commit a container writable layer to a local image.
+    Commit {
+        /// Container ID or name.
+        container_id: String,
+        /// Target image reference.
+        target_image: String,
+        /// Image author metadata.
+        #[arg(long)]
+        author: Option<String>,
+        /// Commit message metadata.
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Environment entry to add or replace. Repeatable.
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env_overrides: Vec<String>,
+        /// Replacement image command.
+        #[arg(long = "cmd", num_args = 1..)]
+        cmd_override: Vec<String>,
+        /// Include data under image-declared VOLUME paths.
+        #[arg(long)]
+        include_volumes: bool,
     },
 
     /// Load an image from a local OCI tar archive
@@ -573,6 +596,30 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             into_cli(commands::pull::execute(image, tag, platform, socket_path).await)
         }
 
+        Commands::Commit {
+            container_id,
+            target_image,
+            author,
+            message,
+            env_overrides,
+            cmd_override,
+            include_volumes,
+        } => into_cli(
+            commands::commit::execute(
+                commands::commit::CommitOpts {
+                    container_id,
+                    target_image,
+                    author,
+                    message,
+                    env_overrides,
+                    cmd_override: (!cmd_override.is_empty()).then_some(cmd_override),
+                    include_volumes,
+                },
+                socket_path,
+            )
+            .await,
+        ),
+
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
             into_cli(commands::load::execute(path, name, tag, socket_path).await)
@@ -705,6 +752,20 @@ async fn main() -> miette::Result<()> {
 pub mod main_tests_shim {
     use super::{Cli, Commands};
     use clap::Parser;
+
+    #[test]
+    fn cli_parses_commit_include_volumes() {
+        let cli =
+            Cli::try_parse_from(["mbx", "commit", "abc123", "example:v1", "--include-volumes"])
+                .expect("parse commit");
+        assert!(matches!(
+            cli.command,
+            Commands::Commit {
+                include_volumes: true,
+                ..
+            }
+        ));
+    }
 
     /// Parse a `logs` subcommand invocation and return `(id, follow)`.
     pub fn parse_logs(args: &[&str]) -> (String, bool) {

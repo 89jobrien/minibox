@@ -61,8 +61,8 @@ use minibox::adapters::commit_upper_dir_to_image;
 use minibox::testing::backend::BackendDescriptor;
 use minibox::testing::fixtures::WritableUpperDirFixture;
 use minibox_core::domain::{
-    AsAny, BackendCapability, CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter,
-    ImageMetadata,
+    AsAny, BackendCapability, CommitConfig, CommitResult, ContainerCommitter, ContainerId,
+    DynContainerCommitter,
 };
 use minibox_core::image::ImageStore;
 use std::path::PathBuf;
@@ -94,7 +94,7 @@ impl ContainerCommitter for ConformanceCommitAdapter {
         _container_id: &ContainerId,
         target_ref: &str,
         config: &CommitConfig,
-    ) -> anyhow::Result<ImageMetadata> {
+    ) -> anyhow::Result<CommitResult> {
         let image_store = Arc::clone(&self.image_store);
         let upper_dir = self.upper_dir.clone();
         let target_ref = target_ref.to_string();
@@ -104,6 +104,7 @@ impl ContainerCommitter for ConformanceCommitAdapter {
         })
         .await
         .expect("spawn_blocking join")
+        .map(CommitResult::without_warnings)
     }
 }
 
@@ -139,6 +140,7 @@ fn default_commit_config() -> CommitConfig {
         message: Some("conformance commit".to_string()),
         env_overrides: vec![],
         cmd_override: None,
+        include_volumes: false,
     }
 }
 
@@ -165,12 +167,12 @@ async fn commit_returns_metadata() -> Result<()> {
         .await?;
 
     assert_eq!(
-        meta.name, "conformance/test-image",
+        meta.image.name, "conformance/test-image",
         "metadata name mismatch"
     );
-    assert_eq!(meta.tag, "v1", "metadata tag mismatch");
+    assert_eq!(meta.image.tag, "v1", "metadata tag mismatch");
     assert!(
-        !meta.layers.is_empty(),
+        !meta.image.layers.is_empty(),
         "commit result must have at least one layer"
     );
 
@@ -200,7 +202,7 @@ async fn commit_writes_layer_artifact_to_store() -> Result<()> {
         .await?;
 
     // The layer digest reported in metadata must be a sha256 digest.
-    let layer_digest = &meta.layers[0].digest;
+    let layer_digest = &meta.image.layers[0].digest;
     assert!(
         layer_digest.starts_with("sha256:"),
         "layer digest must be a sha256 digest, got: {layer_digest}"
@@ -247,10 +249,10 @@ async fn commit_metadata_is_consistent_across_calls() -> Result<()> {
         .commit(&cid, "conformance/image-b:v2", &default_commit_config())
         .await?;
 
-    assert_eq!(meta_a.name, "conformance/image-a");
-    assert_eq!(meta_a.tag, "v1");
-    assert_eq!(meta_b.name, "conformance/image-b");
-    assert_eq!(meta_b.tag, "v2");
+    assert_eq!(meta_a.image.name, "conformance/image-a");
+    assert_eq!(meta_a.image.tag, "v1");
+    assert_eq!(meta_b.image.name, "conformance/image-b");
+    assert_eq!(meta_b.image.tag, "v2");
 
     // Both committed images must be independently findable in the store.
     assert!(
@@ -300,11 +302,11 @@ async fn commit_empty_upperdir_returns_error() -> Result<()> {
     match result {
         Ok(meta) => {
             assert_eq!(
-                meta.name, "conformance/empty-upper",
+                meta.image.name, "conformance/empty-upper",
                 "Ok metadata name must match target ref even for an empty upperdir"
             );
             assert_eq!(
-                meta.tag, "v1",
+                meta.image.tag, "v1",
                 "Ok metadata tag must match target ref even for an empty upperdir"
             );
         }
@@ -341,10 +343,10 @@ async fn commit_nonexistent_container_id_is_accepted() -> Result<()> {
         .await?;
 
     assert_eq!(
-        meta.name, "conformance/zero-id",
+        meta.image.name, "conformance/zero-id",
         "name must match target ref"
     );
-    assert_eq!(meta.tag, "v1", "tag must match target ref");
+    assert_eq!(meta.image.tag, "v1", "tag must match target ref");
 
     Ok(())
 }

@@ -27,9 +27,9 @@ use minibox::adapters::{MiniboxImageBuilder, OciPushAdapter, commit_upper_dir_to
 use minibox::testing::fixtures::{BuildContextFixture, WritableUpperDirFixture};
 use minibox_core::adapters::HostnameRegistryRouter;
 use minibox_core::domain::{
-    AsAny, BackendCapability, BuildConfig, BuildContext, CommitConfig, ContainerCommitter,
-    ContainerId, DynContainerCommitter, DynFilesystemProvider, DynImageBuilder, DynImagePusher,
-    DynImageRegistry, DynRegistryRouter, ImageMetadata, RegistryCredentials,
+    AsAny, BackendCapability, BuildConfig, BuildContext, CommitConfig, CommitResult,
+    ContainerCommitter, ContainerId, DynContainerCommitter, DynFilesystemProvider, DynImageBuilder,
+    DynImagePusher, DynImageRegistry, DynRegistryRouter, ImageMetadata, RegistryCredentials,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
@@ -192,6 +192,7 @@ impl BuildCommitPush {
             message: Some("showcase build_commit_push scenario".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
 
         match committer
@@ -200,9 +201,9 @@ impl BuildCommitPush {
         {
             Ok(meta) => r.success(&format!(
                 "committed '{}:{}' ({} layer(s))",
-                meta.name,
-                meta.tag,
-                meta.layers.len()
+                meta.image.name,
+                meta.image.tag,
+                meta.image.layers.len()
             )),
             Err(e) => r.failure(&format!("commit failed: {e}")),
         }
@@ -244,6 +245,7 @@ impl BuildCommitPush {
             message: Some("showcase push test".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
         commit_upper_dir_to_image(
             Arc::clone(&image_store),
@@ -302,7 +304,7 @@ impl ContainerCommitter for ScenarioCommitAdapter {
         _container_id: &ContainerId,
         target_ref: &str,
         config: &CommitConfig,
-    ) -> anyhow::Result<ImageMetadata> {
+    ) -> anyhow::Result<CommitResult> {
         let image_store = Arc::clone(&self.image_store);
         let upper_dir = self.upper_dir.clone();
         let target_ref = target_ref.to_string();
@@ -312,6 +314,7 @@ impl ContainerCommitter for ScenarioCommitAdapter {
         })
         .await
         .map_err(|e| anyhow::anyhow!("spawn_blocking join: {e}"))?
+        .map(CommitResult::without_warnings)
     }
 }
 

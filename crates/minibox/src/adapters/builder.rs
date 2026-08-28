@@ -21,7 +21,7 @@ use std::sync::Arc;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use crate::adapters::commit::commit_upper_dir_to_image;
+use crate::adapters::commit::{commit_upper_dir_to_image, commit_upper_dir_to_image_with_volumes};
 use crate::image::dockerfile::{Instruction, ShellOrExec, parse};
 
 /// Native image builder that executes supported Dockerfile instructions.
@@ -68,6 +68,7 @@ fn instr_display(instr: &Instruction) -> String {
         Instruction::Arg { name, .. } => format!("ARG {name}"),
         Instruction::Expose { port, proto } => format!("EXPOSE {port}/{proto}"),
         Instruction::Label(_) => "LABEL".to_string(),
+        Instruction::Volume(paths) => format!("VOLUME {}", paths.len()),
         Instruction::User { name, .. } => format!("USER {name}"),
         Instruction::Comment(_) => "# comment".to_string(),
     }
@@ -208,6 +209,7 @@ async fn execute_run_step(
                 message: None,
                 env_overrides: vec![],
                 cmd_override: None,
+                include_volumes: false,
             },
         )
     })
@@ -301,6 +303,7 @@ impl ImageBuilder for MiniboxImageBuilder {
         let mut base_image = String::new();
         let mut env_state: Vec<String> = vec![];
         let mut cmd_override: Option<Vec<String>> = None;
+        let mut declared_volumes: Vec<PathBuf> = Vec::new();
         let mut run_step = 0u32;
 
         for (step_idx, instr) in steps.iter().enumerate() {
@@ -379,6 +382,7 @@ impl ImageBuilder for MiniboxImageBuilder {
                 Instruction::Cmd(ShellOrExec::Shell(s)) => {
                     cmd_override = Some(vec!["/bin/sh".to_string(), "-c".to_string(), s.clone()]);
                 }
+                Instruction::Volume(paths) => declared_volumes.extend(paths.iter().cloned()),
 
                 // COPY, ADD, WORKDIR, ENTRYPOINT, ARG, EXPOSE, LABEL, USER
                 // are not yet implemented — treat as no-ops so the build
@@ -403,12 +407,19 @@ impl ImageBuilder for MiniboxImageBuilder {
             message: Some(format!("built from {base_image}")),
             env_overrides: env_state,
             cmd_override,
+            include_volumes: false,
         };
 
         let image_store = Arc::clone(&self.image_store);
         let target_tag = config.tag.clone();
         let meta = tokio::task::spawn_blocking(move || {
-            commit_upper_dir_to_image(image_store, &upper_dir, &target_tag, &commit_config)
+            commit_upper_dir_to_image_with_volumes(
+                image_store,
+                &upper_dir,
+                &target_tag,
+                &commit_config,
+                &declared_volumes,
+            )
         })
         .await
         .context("spawn_blocking build commit")?
