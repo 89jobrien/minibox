@@ -254,6 +254,7 @@ mod tests {
             mounts: vec![bind.clone()],
             privileged: true,
             image_ref: None,
+            uid_range_mode: UidRangeMode::Shared,
         };
 
         // Build ContainerConfig the same way spawn_process does.
@@ -269,6 +270,11 @@ mod tests {
             pre_exec_hooks: spawn_config.hooks.pre_exec.clone(),
             mounts: spawn_config.mounts.clone(),
             privileged: spawn_config.privileged,
+            uid_mapping: crate::container::process::UidMapping {
+                host_uid: 100_000,
+                host_gid: 100_000,
+                size: 65_536,
+            },
             pty: None,
         };
 
