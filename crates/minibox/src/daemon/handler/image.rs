@@ -637,6 +637,44 @@ pub async fn handle_remove_image(
     }
 }
 
+/// Search cached image repository names and tags.
+pub async fn handle_search_images(
+    query: String,
+    remote: bool,
+    limit: usize,
+    image_store: Arc<minibox_core::image::ImageStore>,
+    tx: mpsc::Sender<DaemonResponse>,
+) {
+    if remote {
+        send_error(
+            &tx,
+            "handle_search_images",
+            "remote registry search is not supported by the configured registry adapters; omit --remote to search the local image store".to_string(),
+        )
+        .await;
+        return;
+    }
+
+    const MAX_SEARCH_RESULTS: usize = 100;
+    match image_store
+        .search(&query, limit.min(MAX_SEARCH_RESULTS))
+        .await
+    {
+        Ok(results) => {
+            if tx
+                .send(DaemonResponse::SearchResults { results })
+                .await
+                .is_err()
+            {
+                warn!(
+                    "handle_search_images: client disconnected before SearchResults could be sent"
+                );
+            }
+        }
+        Err(error) => send_error(&tx, "handle_search_images", error.to_string()).await,
+    }
+}
+
 /// List all cached images stored in the image store.
 pub async fn handle_list_images(
     image_store: Arc<minibox_core::image::ImageStore>,
@@ -655,6 +693,30 @@ pub async fn handle_list_images(
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod search_handler_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn remote_search_returns_explicit_unsupported_error() {
+        let temp = tempfile::TempDir::new().expect("tempdir");
+        let store = Arc::new(
+            minibox_core::image::ImageStore::new(temp.path().join("images"))
+                .expect("create image store"),
+        );
+        let (tx, mut rx) = mpsc::channel(1);
+
+        handle_search_images("alpine".into(), true, 25, store, tx).await;
+
+        match rx.recv().await.expect("search response") {
+            DaemonResponse::Error { message } => {
+                assert!(message.contains("remote registry search is not supported"));
+            }
+            other => panic!("expected Error, got {other:?}"),
+        }
+    }
+}
 
 #[cfg(all(test, feature = "registry"))]
 mod registry_router_tests {

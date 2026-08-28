@@ -66,6 +66,7 @@
 
 use minibox_core::domain::{PhaseOutcome, SnapshotInfo, StepStatus};
 use minibox_core::events::ContainerEvent;
+use minibox_core::image::search::{ImageSearchResult, SearchSource};
 use minibox_core::protocol::{ContainerInfo, DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::time::SystemTime;
 
@@ -166,6 +167,13 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         // --- terminal variants added after initial list ---
         DaemonResponse::ImageList {
             images: vec!["alpine:latest".to_string()],
+        },
+        DaemonResponse::SearchResults {
+            results: vec![ImageSearchResult {
+                name: "library/alpine".to_string(),
+                tags: vec!["latest".to_string()],
+                source: SearchSource::Local,
+            }],
         },
         DaemonResponse::SnapshotSaved {
             info: SnapshotInfo {
@@ -299,6 +307,24 @@ fn daemon_request_exec_backward_compat_omits_optional_fields() {
 
 /// Verifies that a Prune request omitting `dry_run` deserializes with false.
 #[test]
+fn daemon_request_search_backward_compat_defaults_to_local() {
+    let json = r#"{"type":"SearchImages","query":"alpine"}"#;
+    let req: DaemonRequest = serde_json::from_str(json).expect("deserialize SearchImages");
+    match req {
+        DaemonRequest::SearchImages {
+            query,
+            remote,
+            limit,
+        } => {
+            assert_eq!(query, "alpine");
+            assert!(!remote);
+            assert_eq!(limit, 25);
+        }
+        other => panic!("expected SearchImages, got {other:?}"),
+    }
+}
+
+#[test]
 fn daemon_request_prune_backward_compat_omits_dry_run() {
     let json = r#"{"type":"Prune"}"#;
 
@@ -392,6 +418,7 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::SnapshotRestored { .. }
         | DaemonResponse::SnapshotList { .. }
         | DaemonResponse::ImageList { .. }
+        | DaemonResponse::SearchResults { .. }
         | DaemonResponse::PipelineList { .. }
         | DaemonResponse::PipelineDetail { .. } => true,
 
@@ -452,6 +479,7 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::ImageList {
             images: vec!["alpine:latest".to_string()],
         },
+        DaemonResponse::SearchResults { results: vec![] },
         DaemonResponse::SnapshotSaved {
             info: SnapshotInfo {
                 container_id: "abc123".to_string(),

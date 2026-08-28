@@ -137,6 +137,7 @@ pub mod rm;
 pub mod rmi;
 pub mod run;
 pub mod sandbox;
+pub mod search;
 pub mod snapshot;
 pub mod stop;
 #[cfg(feature = "tui")]

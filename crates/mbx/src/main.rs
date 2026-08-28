@@ -226,6 +226,20 @@ enum Commands {
         restart: bool,
     },
 
+    /// Search cached image repositories and tags.
+    Search {
+        /// Case-insensitive repository name or tag query.
+        query: String,
+
+        /// Query a remote registry in addition to the local store.
+        #[arg(long)]
+        remote: bool,
+
+        /// Maximum number of repositories to return.
+        #[arg(long, default_value_t = 25)]
+        limit: usize,
+    },
+
     /// Pull an image from Docker Hub
     Pull {
         /// Image name (e.g., alpine, library/nginx)
@@ -564,6 +578,12 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             into_cli(commands::update::execute(images, all, containers, restart, socket_path).await)
         }
 
+        Commands::Search {
+            query,
+            remote,
+            limit,
+        } => into_cli(commands::search::execute(query, remote, limit, socket_path).await),
+
         Commands::Pull {
             image,
             tag,
@@ -847,6 +867,36 @@ mod tests {
         match cli.command {
             Commands::Run { name, .. } => assert_eq!(name, None),
             _ => panic!("expected Run"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_search_options() {
+        let cli = Cli::try_parse_from(["mbx", "search", "alpine", "--remote", "--limit", "7"])
+            .expect("parse search");
+        match cli.command {
+            Commands::Search {
+                query,
+                remote,
+                limit,
+            } => {
+                assert_eq!(query, "alpine");
+                assert!(remote);
+                assert_eq!(limit, 7);
+            }
+            _ => panic!("expected Search"),
+        }
+    }
+
+    #[test]
+    fn cli_search_defaults_to_local_limit() {
+        let cli = Cli::try_parse_from(["mbx", "search", "nginx"]).expect("parse search");
+        match cli.command {
+            Commands::Search { remote, limit, .. } => {
+                assert!(!remote);
+                assert_eq!(limit, 25);
+            }
+            _ => panic!("expected Search"),
         }
     }
 

@@ -47,7 +47,9 @@ mod update;
 pub(crate) use self::events::handle_subscribe_events;
 pub use self::exec::{handle_exec, handle_resize_pty, handle_send_input};
 pub use self::image::{handle_build, handle_commit, handle_load_image, handle_pull, handle_push};
-pub(crate) use self::image::{handle_list_images, handle_prune, handle_remove_image};
+pub(crate) use self::image::{
+    handle_list_images, handle_prune, handle_remove_image, handle_search_images,
+};
 pub use self::lifecycle::{handle_list, handle_pause, handle_remove, handle_resume};
 pub use self::logs::handle_logs;
 pub use self::manifest::{handle_get_manifest, handle_verify_manifest};

@@ -339,6 +339,18 @@ pub enum DaemonRequest {
     /// List all cached images.
     ListImages,
 
+    /// Search cached image repositories and tags.
+    SearchImages {
+        /// Case-insensitive repository or tag query. Empty lists all local images.
+        query: String,
+        /// Also query a remote registry. Currently rejected when no adapter supports it.
+        #[serde(default)]
+        remote: bool,
+        /// Maximum repository results.
+        #[serde(default = "default_search_limit")]
+        limit: usize,
+    },
+
     /// Remove a specific image by reference.
     RemoveImage {
         /// Image reference, e.g. `"alpine:latest"`.
@@ -492,6 +504,7 @@ impl DaemonRequest {
             Self::SubscribeEvents => "SubscribeEvents",
             Self::Prune { .. } => "Prune",
             Self::ListImages => "ListImages",
+            Self::SearchImages { .. } => "SearchImages",
             Self::RemoveImage { .. } => "RemoveImage",
             Self::ContainerLogs { .. } => "ContainerLogs",
             Self::RunPipeline { .. } => "RunPipeline",
@@ -506,6 +519,10 @@ impl DaemonRequest {
             Self::RunWorkflow(_) => "RunWorkflow",
         }
     }
+}
+
+const fn default_search_limit() -> usize {
+    25
 }
 
 const fn default_max_depth() -> u32 {
@@ -652,6 +669,12 @@ pub enum DaemonResponse {
         images: Vec<String>,
     },
 
+    /// Ranked image repository matches returned by `SearchImages`.
+    SearchResults {
+        /// Matching local or registry repositories.
+        results: Vec<crate::image::search::ImageSearchResult>,
+    },
+
     /// Result of a prune operation.
     Pruned {
         /// Image refs that were (or would be) removed.
@@ -793,6 +816,7 @@ impl DaemonResponse {
                 | Self::SnapshotRestored { .. }
                 | Self::SnapshotList { .. }
                 | Self::ImageList { .. }
+                | Self::SearchResults { .. }
                 | Self::Manifest { .. }
                 | Self::VerifyResult { .. }
                 | Self::WorkflowComplete { .. }
@@ -2295,6 +2319,7 @@ mod tests {
                 },
                 true,
             ),
+            (DaemonResponse::SearchResults { results: vec![] }, true),
             (
                 DaemonResponse::Manifest {
                     manifest: serde_json::json!({}),
@@ -2385,6 +2410,7 @@ mod tests {
                 DaemonResponse::SnapshotList { .. } => true,
                 DaemonResponse::UpdateProgress { .. } => false,
                 DaemonResponse::ImageList { .. } => true,
+                DaemonResponse::SearchResults { .. } => true,
                 DaemonResponse::Manifest { .. } => true,
                 DaemonResponse::VerifyResult { .. } => true,
                 DaemonResponse::WorkflowStepComplete { .. } => false,

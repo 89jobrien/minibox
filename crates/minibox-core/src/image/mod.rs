@@ -14,6 +14,7 @@ pub mod manifest;
 pub mod reference;
 #[cfg(feature = "registry")]
 pub mod registry;
+pub mod search;
 
 use crate::error::ImageError;
 use crate::image::layer::extract_layer;
@@ -131,6 +132,22 @@ impl ImageStore {
             }
         }
         Ok(result)
+    }
+
+    /// Search cached images by repository name or tag.
+    ///
+    /// Results are deterministic and aggregated by repository.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the store directory cannot be read.
+    pub async fn search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<search::ImageSearchResult>> {
+        let images = self.list_all_images().await?;
+        Ok(search::search_image_refs(images, query, limit))
     }
 
     /// Return the total disk usage of an image's layer dirs in bytes.
