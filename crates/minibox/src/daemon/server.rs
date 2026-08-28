@@ -729,6 +729,10 @@ async fn dispatch(
                 tx,
             ));
         }
+        DaemonRequest::GetCapabilities => {
+            let response = handler::handle_capabilities();
+            send_terminal_response(&tx, "GetCapabilities", response).await;
+        }
         DaemonRequest::RunWorkflow(_) => {
             send_terminal_response(
                 &tx,
@@ -1080,6 +1084,12 @@ mod tests {
                 },
                 true, // terminal: single trace returned
             ),
+            (
+                DaemonResponse::CapabilityMatrix {
+                    matrix: minibox_core::domain::capability_matrix(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -1124,6 +1134,7 @@ mod tests {
                 DaemonResponse::WorkflowComplete { .. } => true,
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
+                DaemonResponse::CapabilityMatrix { .. } => true,
             };
         }
     }

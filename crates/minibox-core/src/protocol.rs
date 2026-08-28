@@ -483,6 +483,9 @@ pub enum DaemonRequest {
         id: String,
     },
 
+    /// Return the canonical typed backend capability matrix.
+    GetCapabilities,
+
     /// Execute a sequential multi-container workflow.
     RunWorkflow(WorkflowDef),
 }
@@ -521,6 +524,7 @@ impl DaemonRequest {
             Self::VerifyManifest { .. } => "VerifyManifest",
             Self::ListPipelines { .. } => "ListPipelines",
             Self::ShowPipeline { .. } => "ShowPipeline",
+            Self::GetCapabilities => "GetCapabilities",
             Self::RunWorkflow(_) => "RunWorkflow",
         }
     }
@@ -776,6 +780,12 @@ pub enum DaemonResponse {
         reason: Option<String>,
     },
 
+    /// Canonical backend capability matrix.
+    CapabilityMatrix {
+        /// Versioned typed capability data.
+        matrix: crate::domain::CapabilityMatrix,
+    },
+
     /// Non-terminal: emitted after each workflow step completes.
     WorkflowStepComplete {
         /// The step alias that just finished.
@@ -827,6 +837,7 @@ impl DaemonResponse {
                 | Self::WorkflowComplete { .. }
                 | Self::PipelineList { .. }
                 | Self::PipelineDetail { .. }
+                | Self::CapabilityMatrix { .. }
         )
     }
 }
@@ -2386,6 +2397,12 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::CapabilityMatrix {
+                    matrix: crate::domain::capability_matrix(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -2428,6 +2445,7 @@ mod tests {
                 DaemonResponse::WorkflowComplete { .. } => true,
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
+                DaemonResponse::CapabilityMatrix { .. } => true,
             };
         }
     }

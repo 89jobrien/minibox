@@ -89,6 +89,7 @@ fn conformance_daemon_request_variants_serialize() {
     // Verify key request variants round-trip through serde.
     let requests = vec![
         DaemonRequest::List,
+        DaemonRequest::GetCapabilities,
         DaemonRequest::Pull {
             image: "alpine".to_string(),
             tag: Some("latest".to_string()),
@@ -118,6 +119,9 @@ fn conformance_daemon_response_variants_serialize() {
             message: "fail".to_string(),
         },
         DaemonResponse::ContainerList { containers: vec![] },
+        DaemonResponse::CapabilityMatrix {
+            matrix: minibox_core::domain::capability_matrix(),
+        },
     ];
 
     for resp in &responses {

@@ -121,6 +121,7 @@ pub async fn send_request(
 }
 
 pub mod build;
+pub mod capabilities;
 pub mod diagnose;
 pub mod doctor;
 pub mod events;
