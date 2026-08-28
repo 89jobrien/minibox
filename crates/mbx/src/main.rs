@@ -353,6 +353,13 @@ enum Commands {
         version: Option<String>,
     },
 
+    /// Show the typed backend capability matrix reported by the daemon.
+    Capabilities {
+        /// Emit machine-readable JSON instead of a table.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Diagnose a container: gather state, process info, and cgroup context.
     ///
     /// Queries the daemon for container metadata and inspects host-visible
@@ -522,6 +529,10 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
         }
 
         Commands::Ps => into_cli(commands::ps::execute(socket_path).await),
+
+        Commands::Capabilities { json } => {
+            into_cli(commands::capabilities::execute(json, socket_path).await)
+        }
 
         Commands::Diagnose { container_id } => {
             into_cli(commands::diagnose::execute(&container_id, socket_path).await)
@@ -731,6 +742,13 @@ pub mod main_tests_shim {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn cli_parses_capabilities_json() {
+        let cli =
+            Cli::try_parse_from(["mbx", "capabilities", "--json"]).expect("parse capabilities");
+        assert!(matches!(cli.command, Commands::Capabilities { json: true }));
+    }
 
     #[test]
     fn cli_parses_network_none() {

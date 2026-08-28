@@ -19,6 +19,7 @@
 use std::any::Any;
 
 pub mod capability;
+pub mod capability_matrix;
 pub mod checkpoint;
 pub mod error;
 pub mod events;
@@ -40,6 +41,7 @@ pub mod state;
 pub mod workflow;
 
 pub use capability::*;
+pub use capability_matrix::*;
 pub use checkpoint::*;
 pub use error::*;
 pub use events::*;

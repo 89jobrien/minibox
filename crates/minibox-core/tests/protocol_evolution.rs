@@ -205,6 +205,9 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         DaemonResponse::WorkflowComplete {
             final_phase: PhaseOutcome::Succeeded,
         },
+        DaemonResponse::CapabilityMatrix {
+            matrix: minibox_core::domain::capability_matrix(),
+        },
     ]
 }
 
@@ -393,7 +396,8 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         | DaemonResponse::SnapshotList { .. }
         | DaemonResponse::ImageList { .. }
         | DaemonResponse::PipelineList { .. }
-        | DaemonResponse::PipelineDetail { .. } => true,
+        | DaemonResponse::PipelineDetail { .. }
+        | DaemonResponse::CapabilityMatrix { .. } => true,
 
         // --- non-terminal (streaming) ---
         DaemonResponse::ContainerCreated { .. }

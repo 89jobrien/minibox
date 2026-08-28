@@ -5,7 +5,7 @@
     {
       "name": "domain-root",
       "path": "crates/minibox-domain/src/lib.rs",
-      "hash": "04d824d9a312ab505231da05fa2644b6b55da621ce357d315a98be6799938afb"
+      "hash": "6702d18e1e8c50c7fa2e6c9864e74fef8ba065e5561935fbb733f0e33e68aeb5"
     },
     {
       "name": "domain-compatibility-facade",
@@ -15,7 +15,7 @@
     {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "2088cbf7334caa59ae85dc9f0f109e68b3d65a6a3d997899ba1e8dab29daa24e"
+      "hash": "f70b49b962ed300f2ebc5a3677e107716ffbff6d6fca16a3717c407ceee8e55e"
     },
     {
       "name": "domain-capability",
