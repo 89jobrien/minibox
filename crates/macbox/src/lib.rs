@@ -20,7 +20,7 @@ pub mod krun;
 pub mod paths;
 pub mod preflight;
 
-#[cfg(feature = "vz")]
+#[cfg(all(feature = "vz", target_os = "macos"))]
 pub mod vz;
 
 use anyhow::{Context, Result};
