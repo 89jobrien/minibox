@@ -76,6 +76,14 @@ use tracing::warn;
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
+/// Return the canonical typed backend capability matrix.
+#[must_use]
+pub fn handle_capabilities() -> DaemonResponse {
+    DaemonResponse::CapabilityMatrix {
+        matrix: minibox_core::domain::capability_matrix(),
+    }
+}
+
 /// Send a terminal `DaemonResponse::Error` on `tx`, logging a warning if the
 /// receiver has already been dropped.
 ///
@@ -499,6 +507,14 @@ mod pub_crate_handler_tests {
         let mut deps = (*make_deps(tmp)).clone();
         deps.policy = policy;
         Arc::new(deps)
+    }
+
+    #[test]
+    fn handle_capabilities_returns_typed_matrix() {
+        let response = handle_capabilities();
+        assert!(
+            matches!(response, DaemonResponse::CapabilityMatrix { matrix } if matrix.schema_version == 1 && matrix.capabilities.len() == minibox_core::domain::Capability::ALL.len())
+        );
     }
 
     // ── handle_list_images ────────────────────────────────────────────────────

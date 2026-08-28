@@ -3,6 +3,9 @@ source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/limiter.rs
+  - crates/minibox-domain/src/capability_matrix.rs
+  - crates/minibox-core/src/protocol.rs
+  - crates/mbx/src/commands/capabilities.rs
   - crates/minibox-domain/src/exec.rs
   - crates/minibox-core/src/events.rs
   - crates/minibox-core/src/image/registry.rs
@@ -25,14 +28,14 @@ sources:
   - crates/macbox/src/vz
   - crates/minibox/src/adapters/docker_desktop.rs
   - crates/mcp
-generated: 2026-08-26
+generated: 2026-08-28
 ---
 
 # Feature Matrix
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
 ---
 
@@ -72,66 +75,28 @@ Last updated: 2026-08-26
 
 ## Capability Matrix
 
-| Feature                 | native | gke  | colima  | smolvm | krun | vz  | winbox |
-| ----------------------- | ------ | ---- | ------- | ------ | ---- | --- | ------ |
-| **Container lifecycle** |        |      |         |        |      |     |        |
-| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| pause/resume            | Yes    | No   | No      | No     | No   | No  | No     |
-| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| exec (-it)              | Yes    | No   | Limited | No     | No   | No  | No     |
-| logs                    | Yes    | No   | Limited | No     | No   | No  | No     |
-| events                  | Yes    | Yes  | No      | No     | No   | No  | No     |
-| **Image management**    |        |      |         |        |      |     |        |
-| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| prune / rmi             | Yes    | No   | No      | No     | No   | No  | No     |
-| push (exp)              | Yes    | Yes  | Yes     | No     | No   | No  | No     |
-| commit (exp)            | Yes    | No   | Yes     | No     | No   | No  | No     |
-| build (exp)             | Yes    | No   | Yes     | Yes    | No   | No  | No     |
-| **Isolation**           |        |      |         |        |      |     |        |
-| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Yes | No     |
-| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Yes | No     |
-| **Networking**          |        |      |         |        |      |     |        |
-| Bridge (exp)            | Yes    | No   | No      | No     | No   | No  | No     |
-| Port forwarding         | No     | No   | No      | No     | No   | No  | No     |
-| DNS                     | No     | No   | No      | No     | No   | No  | No     |
-| **Mounts & Privileges** |        |      |         |        |      |     |        |
-| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No  | No     |
-| Privileged mode         | Yes    | No   | No      | No     | No   | No  | No     |
-| **Security**            |        |      |         |        |      |     |        |
-| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
-| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
-| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
-| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| **Execution integrity** |        |      |         |        |      |     |        |
-| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| **State persistence**   |        |      |         |        |      |     |        |
-| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| PID reconciliation      | Yes    | No   | No      | No     | No   | No  | No     |
-| **Observability**       |        |      |         |        |      |     |        |
-| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+The canonical capability matrix is typed data in
+`crates/minibox-domain/src/capability_matrix.rs`; this document does not carry a
+second manually maintained copy. Query the running daemon through either CLI
+format:
+
+```console
+mbx capabilities
+mbx capabilities --json
+```
+
+The daemon endpoint is `DaemonRequest::GetCapabilities` and returns the
+versioned `DaemonResponse::CapabilityMatrix`. JSON consumers can query backend,
+capability, group, and support-level enums directly without parsing this
+document or human-readable CLI output. Support levels distinguish `supported`,
+`unsupported`, `limited`, and `provided_by` (VM, Lima VM, copy filesystem, or
+nerdctl). Existing protocol variant encodings are unchanged.
 
 ---
 
 ## Source References for Capability Matrix
 
-Key implementation sites backing the "Yes" entries above:
+Key implementation sites backing the typed support declarations:
 
 | Feature area | Source |
 | --- | --- |
