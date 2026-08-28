@@ -97,6 +97,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         network: None,
                         mounts: vec![],
                         privileged: false,
+                        shared_uid_range: false,
                         env: vec![],
                         name: None,
                         tty: false,
@@ -166,9 +167,18 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
             option::of(any::<String>()),
             prop::collection::vec(any::<String>(), 0..4),
             option::of(prop::collection::vec(any::<String>(), 0..4)),
+            any::<bool>(),
         )
             .prop_map(
-                |(container_id, target_image, author, message, env_overrides, cmd_override)| {
+                |(
+                    container_id,
+                    target_image,
+                    author,
+                    message,
+                    env_overrides,
+                    cmd_override,
+                    include_volumes,
+                )| {
                     DaemonRequest::Commit {
                         container_id,
                         target_image,
@@ -176,6 +186,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         message,
                         env_overrides,
                         cmd_override,
+                        include_volumes,
                     }
                 },
             ),
@@ -404,6 +415,7 @@ proptest! {
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env,
             name,
             tty,

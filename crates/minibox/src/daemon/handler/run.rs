@@ -8,7 +8,7 @@ use anyhow::{Context as _, Result};
 use chrono::Utc;
 use minibox_core::domain::{
     BindMount, ContainerHooks, ContainerSpawnConfig, DomainError, DynContainerRuntime, HookSpec,
-    NetworkMode, ResourceConfig,
+    NetworkMode, ResourceConfig, UidRangeMode,
 };
 use minibox_core::events::{ContainerEvent, EventSink};
 use minibox_core::image::reference::ImageRef;
@@ -51,6 +51,8 @@ pub struct RunParams {
     pub mounts: Vec<BindMount>,
     /// Whether privileged execution is requested.
     pub privileged: bool,
+    /// Explicit opt-in to a shared host UID/GID range.
+    pub shared_uid_range: bool,
     /// Environment variables in `KEY=VALUE` form.
     pub env: Vec<String>,
     /// Optional human-readable container name.
@@ -580,6 +582,7 @@ async fn prepare_run(
         network,
         mounts,
         privileged,
+        shared_uid_range,
         env,
         name,
         platform,
@@ -837,6 +840,11 @@ async fn prepare_run(
         skip_network_namespace: skip_net_ns,
         mounts: mounts.clone(),
         privileged,
+        uid_range_mode: if shared_uid_range {
+            UidRangeMode::Shared
+        } else {
+            UidRangeMode::Exclusive
+        },
         image_ref: Some(image_label.clone()),
     };
 
@@ -1153,6 +1161,7 @@ pub(super) async fn run_from_params(
         network: creation_params.network,
         mounts: creation_params.mounts.clone(),
         privileged: creation_params.privileged,
+        shared_uid_range: false,
         env: creation_params.env.clone(),
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),

@@ -23,6 +23,7 @@ const fn commit_config() -> CommitConfig {
         message: None,
         env_overrides: vec![],
         cmd_override: None,
+        include_volumes: false,
     }
 }
 
@@ -39,8 +40,8 @@ crate::conformance_test! {
         let mock = MockContainerCommitter::new();
         let result = rt().block_on(mock.commit(&container_id(), "myimage:v1", &commit_config()));
         if let Some(meta) = ctx.assert_ok(result, "commit should succeed") {
-            ctx.assert_eq("myimage".to_string(), meta.name, "image name");
-            ctx.assert_eq("v1".to_string(), meta.tag, "image tag");
+            ctx.assert_eq("myimage".to_string(), meta.image.name, "image name");
+            ctx.assert_eq("v1".to_string(), meta.image.tag, "image tag");
         }
         ctx.result()
     }
@@ -71,7 +72,7 @@ crate::conformance_test! {
         if let Some(meta) = ctx.assert_ok(result, "commit with no tag should succeed") {
             ctx.assert_eq(
                 "latest".to_string(),
-                meta.tag,
+                meta.image.tag,
                 "default tag should be latest",
             );
         }

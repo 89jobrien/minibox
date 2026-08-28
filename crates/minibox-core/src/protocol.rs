@@ -144,6 +144,9 @@ pub enum DaemonRequest {
         /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
         #[serde(default)]
         privileged: bool,
+        /// Reuse one host UID/GID range instead of the secure exclusive default.
+        #[serde(default)]
+        shared_uid_range: bool,
         /// Optional human-readable name for the container.
         ///
         /// When set, the container can be referenced by name in `stop` and `rm`
@@ -306,6 +309,9 @@ pub enum DaemonRequest {
         /// Optional replacement image command.
         #[serde(default)]
         cmd_override: Option<Vec<String>>,
+        /// Include image-declared volume paths in the committed layer.
+        #[serde(default)]
+        include_volumes: bool,
     },
 
     /// Build an image from a Dockerfile.
@@ -466,6 +472,9 @@ pub enum DaemonRequest {
         id: String,
     },
 
+    /// Return the canonical typed backend capability matrix.
+    GetCapabilities,
+
     /// Execute a sequential multi-container workflow.
     RunWorkflow(WorkflowDef),
 }
@@ -503,6 +512,7 @@ impl DaemonRequest {
             Self::VerifyManifest { .. } => "VerifyManifest",
             Self::ListPipelines { .. } => "ListPipelines",
             Self::ShowPipeline { .. } => "ShowPipeline",
+            Self::GetCapabilities => "GetCapabilities",
             Self::RunWorkflow(_) => "RunWorkflow",
         }
     }
@@ -748,6 +758,12 @@ pub enum DaemonResponse {
         reason: Option<String>,
     },
 
+    /// Canonical backend capability matrix.
+    CapabilityMatrix {
+        /// Versioned typed capability data.
+        matrix: crate::domain::CapabilityMatrix,
+    },
+
     /// Non-terminal: emitted after each workflow step completes.
     WorkflowStepComplete {
         /// The step alias that just finished.
@@ -798,6 +814,7 @@ impl DaemonResponse {
                 | Self::WorkflowComplete { .. }
                 | Self::PipelineList { .. }
                 | Self::PipelineDetail { .. }
+                | Self::CapabilityMatrix { .. }
         )
     }
 }
@@ -898,6 +915,7 @@ pub struct TestRunDefaults {
     pub network: Option<crate::domain::NetworkMode>,
     pub mounts: Vec<crate::domain::BindMount>,
     pub privileged: bool,
+    pub shared_uid_range: bool,
     pub env: Vec<String>,
     pub name: Option<String>,
     pub tty: bool,
@@ -922,6 +940,7 @@ impl Default for TestRunDefaults {
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             tty: false,
@@ -950,6 +969,7 @@ impl TestRunDefaults {
             network: self.network,
             mounts: self.mounts,
             privileged: self.privileged,
+            shared_uid_range: self.shared_uid_range,
             env: self.env,
             name: self.name,
             tty: self.tty,
@@ -1519,6 +1539,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: true,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             tty: false,
@@ -1680,6 +1701,7 @@ mod tests {
             env: vec!["FOO=bar".to_string()],
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             name: Some("my-container".to_string()),
             tty: false,
             entrypoint: None,
@@ -1905,6 +1927,7 @@ mod tests {
                 env: vec!["SECRET=hunter2".into()],
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 name: None,
                 tty: false,
                 entrypoint: None,
@@ -2350,6 +2373,12 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::CapabilityMatrix {
+                    matrix: crate::domain::capability_matrix(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -2391,6 +2420,7 @@ mod tests {
                 DaemonResponse::WorkflowComplete { .. } => true,
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
+                DaemonResponse::CapabilityMatrix { .. } => true,
             };
         }
     }

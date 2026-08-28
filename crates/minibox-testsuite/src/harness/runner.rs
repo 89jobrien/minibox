@@ -21,9 +21,10 @@
 //! meaningful benefit while complicating output ordering).
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::Instant;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use minibox_core::adapters::conformance::BackendDescriptor;
 
@@ -32,7 +33,7 @@ use super::macros::ConformanceTestEntry;
 use super::traits::{ConformanceTest, TestCategory, TestResult};
 
 /// Result of a single test execution.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestRunResult {
     /// Fully-qualified `"adapter::name"` id.
     pub id: String,
@@ -48,12 +49,12 @@ pub struct TestRunResult {
     /// Execution duration in milliseconds.
     pub duration_ms: u64,
     /// Failure reasons (empty on pass/skip).
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub failures: Vec<String>,
 }
 
 /// Aggregate summary of a runner execution.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TestSummary {
     /// Total number of executed and skipped tests.
     pub total: usize,
@@ -67,6 +68,77 @@ pub struct TestSummary {
     pub duration_ms: u64,
     /// Individual test results in execution order.
     pub results: Vec<TestRunResult>,
+}
+
+/// Paths to reports emitted for one conformance execution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConformanceArtifacts {
+    /// Machine-readable JSON report.
+    pub json: PathBuf,
+    /// JUnit XML report for CI ingestion.
+    pub junit: PathBuf,
+    /// Human-readable Markdown report.
+    pub markdown: PathBuf,
+}
+
+/// Aggregate counters and timing for one conformance execution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConformanceSummary {
+    /// Total number of executed and skipped tests.
+    pub total: usize,
+    /// Number of passing tests.
+    pub passed: usize,
+    /// Number of failing tests.
+    pub failed: usize,
+    /// Number of skipped tests.
+    pub skipped: usize,
+    /// Total runner duration in milliseconds.
+    pub duration_ms: u64,
+    /// Whether the execution completed without test failures.
+    pub success: bool,
+}
+
+/// Typed outcome of a complete conformance execution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConformanceResult {
+    /// Report schema version.
+    pub report_version: String,
+    /// UTC timestamp at which the result was assembled.
+    pub generated_at: String,
+    /// Aggregate counters and execution timing.
+    pub summary: ConformanceSummary,
+    /// Per-test outcomes, timing, and assertion diagnostics in execution order.
+    #[serde(rename = "results")]
+    pub outcomes: Vec<TestRunResult>,
+    /// Paths to all generated report artifacts.
+    pub artifacts: ConformanceArtifacts,
+}
+
+impl ConformanceResult {
+    /// Combines a runner summary with its generated report paths.
+    #[must_use]
+    pub fn new(summary: &TestSummary, artifacts: ConformanceArtifacts) -> Self {
+        Self {
+            report_version: "1.0".to_string(),
+            generated_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            summary: ConformanceSummary {
+                total: summary.total,
+                passed: summary.passed,
+                failed: summary.failed,
+                skipped: summary.skipped,
+                duration_ms: summary.duration_ms,
+                success: summary.is_success(),
+            },
+            outcomes: summary.results.clone(),
+            artifacts,
+        }
+    }
+
+    /// Returns whether the execution completed without test failures.
+    #[must_use]
+    pub const fn is_success(&self) -> bool {
+        self.summary.success
+    }
 }
 
 impl TestSummary {
@@ -281,6 +353,7 @@ impl TestRunner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     struct PassTest;
     impl ConformanceTest for PassTest {
@@ -367,5 +440,33 @@ mod tests {
         let summary = runner.run();
         assert_eq!(summary.total, 1);
         assert_eq!(summary.passed, 1);
+    }
+
+    #[test]
+    fn conformance_result_round_trips_outcomes_artifacts_and_timing() {
+        let mut runner = TestRunner::new();
+        runner.add(PassTest);
+        runner.add(FailTest);
+        let summary = runner.run();
+        let artifacts = ConformanceArtifacts {
+            json: PathBuf::from("artifacts/conformance/conformance.json"),
+            junit: PathBuf::from("artifacts/conformance/conformance.xml"),
+            markdown: PathBuf::from("artifacts/conformance/conformance.md"),
+        };
+        let result = ConformanceResult::new(&summary, artifacts);
+
+        let encoded = serde_json::to_string(&result).expect("serialize conformance result");
+        let decoded: ConformanceResult =
+            serde_json::from_str(&encoded).expect("deserialize conformance result");
+
+        assert_eq!(decoded.summary.total, 2);
+        assert_eq!(decoded.summary.passed, 1);
+        assert_eq!(decoded.summary.failed, 1);
+        assert_eq!(decoded.outcomes.len(), 2);
+        assert_eq!(decoded.summary.duration_ms, result.summary.duration_ms);
+        assert_eq!(decoded.artifacts, result.artifacts);
+        assert!(decoded.outcomes[1].result.is_fail());
+        assert_eq!(decoded.report_version, "1.0");
+        assert!(!decoded.generated_at.is_empty());
     }
 }

@@ -909,6 +909,7 @@ async fn test_handle_commit_no_adapter_returns_error() {
         None,
         vec![],
         None,
+        false,
         state,
         deps,
         tx,
@@ -944,6 +945,7 @@ async fn test_handle_commit_invalid_container_id_returns_error() {
         None,
         vec![],
         None,
+        false,
         state,
         deps,
         tx,
@@ -979,6 +981,7 @@ async fn test_handle_commit_success() {
         Some("test commit".to_string()),
         vec![],
         None,
+        false,
         state,
         deps,
         tx,
@@ -1248,6 +1251,7 @@ async fn test_handle_commit_adapter_failure_returns_error() {
         None,
         vec![],
         None,
+        false,
         state,
         deps,
         tx,
@@ -1367,6 +1371,7 @@ async fn test_handle_run_invalid_platform_returns_error() {
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: Some("not/a/valid/platform/triple".to_string()),
@@ -1788,3 +1793,42 @@ async fn test_handle_update_restart_stops_running_containers() {
 }
 
 // ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_handle_commit_warns_for_excluded_volume_data() {
+    let temp_dir = TempDir::new().expect("temp dir");
+    let state = create_test_state_with_dir(&temp_dir);
+    let mock_committer = Arc::new(
+        minibox_core::adapters::mocks::MockContainerCommitter::new()
+            .with_excluded_volume_path(std::path::PathBuf::from("/var/lib/docker")),
+    );
+    let deps = {
+        let mut deps = (*create_test_deps_with_dir(&temp_dir)).clone();
+        deps.build.commit_adapter =
+            Some(Arc::clone(&mock_committer) as minibox_core::domain::DynContainerCommitter);
+        Arc::new(deps)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(4);
+
+    handler::handle_commit(
+        "abc123def456abcd".to_string(),
+        "myimage:v1".to_string(),
+        None,
+        None,
+        vec![],
+        None,
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+
+    let response = rx.recv().await.expect("commit response");
+    assert!(matches!(
+        response,
+        DaemonResponse::Success { ref message }
+            if message.contains("warning: image VOLUME /var/lib/docker contains data")
+                && message.contains("--include-volumes")
+    ));
+}

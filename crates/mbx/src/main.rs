@@ -126,6 +126,10 @@ enum Commands {
         #[arg(long)]
         privileged: bool,
 
+        /// Reuse one host UID/GID range across containers (weaker isolation).
+        #[arg(long)]
+        shared_uid_range: bool,
+
         /// Bind mount in src:dst[:ro] format. Repeatable.
         /// Example: -v /tmp/bin:/minibox  -v /tmp/traces:/traces:ro
         #[arg(short = 'v', long = "volume", value_name = "SRC:DST[:ro]")]
@@ -246,7 +250,7 @@ enum Commands {
     /// `ContainerOutput` chunks to stdout/stderr until `ContainerStopped` is
     /// received.  Exits with the exec process exit code.
     Exec {
-        /// Container ID or name.
+        /// Container ID.
         container_id: String,
 
         /// Command and arguments to run (everything after --)
@@ -353,6 +357,13 @@ enum Commands {
         version: Option<String>,
     },
 
+    /// Show the typed backend capability matrix reported by the daemon.
+    Capabilities {
+        /// Emit machine-readable JSON instead of a table.
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Diagnose a container: gather state, process info, and cgroup context.
     ///
     /// Queries the daemon for container metadata and inspects host-visible
@@ -385,6 +396,29 @@ enum Commands {
         /// Path to the JSON policy file.
         #[arg(long)]
         policy: String,
+    },
+
+    /// Commit a container writable layer to a local image.
+    Commit {
+        /// Container ID or name.
+        container_id: String,
+        /// Target image reference.
+        target_image: String,
+        /// Image author metadata.
+        #[arg(long)]
+        author: Option<String>,
+        /// Commit message metadata.
+        #[arg(short, long)]
+        message: Option<String>,
+        /// Environment entry to add or replace. Repeatable.
+        #[arg(long = "env", value_name = "KEY=VALUE")]
+        env_overrides: Vec<String>,
+        /// Replacement image command.
+        #[arg(long = "cmd", num_args = 1..)]
+        cmd_override: Vec<String>,
+        /// Include data under image-declared VOLUME paths.
+        #[arg(long)]
+        include_volumes: bool,
     },
 
     /// Load an image from a local OCI tar archive
@@ -481,6 +515,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             tag,
             network,
             privileged,
+            shared_uid_range,
             volumes,
             mounts,
             name,
@@ -504,6 +539,11 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
                         cpu_weight,
                         network,
                         privileged,
+                        uid_range_mode: if shared_uid_range {
+                            minibox_core::domain::UidRangeMode::Shared
+                        } else {
+                            minibox_core::domain::UidRangeMode::Exclusive
+                        },
                         volumes,
                         mount_specs: mounts,
                         name,
@@ -522,6 +562,10 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
         }
 
         Commands::Ps => into_cli(commands::ps::execute(socket_path).await),
+
+        Commands::Capabilities { json } => {
+            into_cli(commands::capabilities::execute(json, socket_path).await)
+        }
 
         Commands::Diagnose { container_id } => {
             into_cli(commands::diagnose::execute(&container_id, socket_path).await)
@@ -572,6 +616,30 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             let (image, tag) = split_image_tag(image, tag);
             into_cli(commands::pull::execute(image, tag, platform, socket_path).await)
         }
+
+        Commands::Commit {
+            container_id,
+            target_image,
+            author,
+            message,
+            env_overrides,
+            cmd_override,
+            include_volumes,
+        } => into_cli(
+            commands::commit::execute(
+                commands::commit::CommitOpts {
+                    container_id,
+                    target_image,
+                    author,
+                    message,
+                    env_overrides,
+                    cmd_override: (!cmd_override.is_empty()).then_some(cmd_override),
+                    include_volumes,
+                },
+                socket_path,
+            )
+            .await,
+        ),
 
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
@@ -706,6 +774,20 @@ pub mod main_tests_shim {
     use super::{Cli, Commands};
     use clap::Parser;
 
+    #[test]
+    fn cli_parses_commit_include_volumes() {
+        let cli =
+            Cli::try_parse_from(["mbx", "commit", "abc123", "example:v1", "--include-volumes"])
+                .expect("parse commit");
+        assert!(matches!(
+            cli.command,
+            Commands::Commit {
+                include_volumes: true,
+                ..
+            }
+        ));
+    }
+
     /// Parse a `logs` subcommand invocation and return `(id, follow)`.
     pub fn parse_logs(args: &[&str]) -> (String, bool) {
         let cli = Cli::try_parse_from(args).expect("parse failed");
@@ -731,6 +813,13 @@ pub mod main_tests_shim {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn cli_parses_capabilities_json() {
+        let cli =
+            Cli::try_parse_from(["mbx", "capabilities", "--json"]).expect("parse capabilities");
+        assert!(matches!(cli.command, Commands::Capabilities { json: true }));
+    }
 
     #[test]
     fn cli_parses_network_none() {
