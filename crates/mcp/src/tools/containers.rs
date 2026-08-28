@@ -190,6 +190,7 @@ fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonR
         env: input.env,
         mounts,
         privileged: input.privileged.unwrap_or(false),
+        shared_uid_range: false,
         name: input.name,
         tty: false,
         entrypoint: None,

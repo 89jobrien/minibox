@@ -210,6 +210,7 @@ async fn test_handle_commit_no_adapter_returns_error() {
         None, // message
         vec![],
         None, // cmd_override
+        false,
         state,
         deps,
         tx,
@@ -1516,6 +1517,7 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
         None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,

@@ -325,6 +325,7 @@ pub async fn handle_commit(
     message: Option<String>,
     env_overrides: Vec<String>,
     cmd_override: Option<Vec<String>>,
+    include_volumes: bool,
     _state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -357,6 +358,7 @@ pub async fn handle_commit(
         message,
         env_overrides,
         cmd_override,
+        include_volumes,
     };
 
     match committer.commit(&cid, &target_image, &config).await {
@@ -364,7 +366,7 @@ pub async fn handle_commit(
             info!(
                 container_id = %container_id,
                 target = %target_image,
-                layers = meta.layers.len(),
+                layers = meta.image.layers.len(),
                 "commit: completed"
             );
             deps.events.metrics.increment_counter(
@@ -376,15 +378,33 @@ pub async fn handle_commit(
                 start.elapsed().as_secs_f64(),
                 &[("op", "commit"), ("adapter", "daemon")],
             );
-            let _ = tx
-                .send(DaemonResponse::Success {
-                    message: format!(
-                        "committed {} digest:{}",
-                        target_image,
-                        meta.layers.first().map_or("unknown", |l| l.digest.as_str())
-                    ),
+            let mut response_lines = meta
+                .excluded_volume_paths
+                .iter()
+                .map(|path| {
+                    format!(
+                        "warning: image VOLUME {} contains data and was excluded; use --include-volumes to capture it",
+                        path.display()
+                    )
                 })
-                .await;
+                .collect::<Vec<_>>();
+            response_lines.push(format!(
+                "committed {} digest:{}",
+                target_image,
+                meta.image
+                    .layers
+                    .first()
+                    .map_or("unknown", |layer| layer.digest.as_str())
+            ));
+            if tx
+                .send(DaemonResponse::Success {
+                    message: response_lines.join("\n"),
+                })
+                .await
+                .is_err()
+            {
+                warn!("commit: client disconnected before completion response");
+            }
         }
         Err(e) => {
             deps.events.metrics.increment_counter(

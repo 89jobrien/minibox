@@ -220,6 +220,74 @@ fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyho
 }
 
 // ---------------------------------------------------------------------------
+// Ephemeral runtime directories
+// ---------------------------------------------------------------------------
+
+fn setup_runtime_directories(new_root: &Path) -> anyhow::Result<()> {
+    use minibox_core::domain::{VarRunMountStrategy, var_run_mount_strategy};
+
+    let run_dir = new_root.join("run");
+    fs::create_dir_all(&run_dir).with_context(|| format!("create {}", run_dir.display()))?;
+    mount(
+        Some("tmpfs"),
+        &run_dir,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+        Some("mode=0755"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs-run".into(),
+        target: run_dir.display().to_string(),
+        source,
+    })
+    .context("mount fresh tmpfs at container /run")?;
+
+    let var_dir = new_root.join("var");
+    let var_run = var_dir.join("run");
+    fs::create_dir_all(&var_dir).with_context(|| format!("create {}", var_dir.display()))?;
+    let metadata = fs::symlink_metadata(&var_run).ok();
+    let points_to_run = metadata.as_ref().is_some_and(|meta| {
+        meta.file_type().is_symlink()
+            && fs::read_link(&var_run)
+                .is_ok_and(|target| target == Path::new("../run") || target == Path::new("/run"))
+    });
+    match var_run_mount_strategy(
+        metadata.is_some(),
+        metadata
+            .as_ref()
+            .is_some_and(|meta| meta.file_type().is_symlink()),
+        points_to_run,
+    ) {
+        VarRunMountStrategy::ExistingSymlink => {}
+        VarRunMountStrategy::BindToRun => {
+            if metadata.as_ref().is_some_and(|meta| !meta.is_dir()) {
+                fs::remove_file(&var_run)
+                    .with_context(|| format!("replace stale {} symlink", var_run.display()))?;
+                fs::create_dir_all(&var_run)
+                    .with_context(|| format!("create {}", var_run.display()))?;
+            }
+            mount(
+                Some(&run_dir),
+                &var_run,
+                None::<&str>,
+                MsFlags::MS_BIND | MsFlags::MS_REC,
+                None::<&str>,
+            )
+            .map_err(|source| FilesystemError::Mount {
+                fs: "bind-run".into(),
+                target: var_run.display().to_string(),
+                source,
+            })?;
+        }
+        VarRunMountStrategy::CreateSymlink => {
+            std::os::unix::fs::symlink("../run", &var_run)
+                .with_context(|| format!("create {} -> ../run", var_run.display()))?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // pivot_root (child process)
 // ---------------------------------------------------------------------------
 
@@ -278,6 +346,10 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
         target: new_root.display().to_string(),
         source,
     })?;
+
+    // Hide image-provided PID files before init starts. Both systemd and
+    // non-systemd images receive a fresh /run, with /var/run pointing at it.
+    setup_runtime_directories(new_root).context("pivot_root: setup runtime directories")?;
 
     // Mount proc inside new_root.
     // SECURITY: Mount with nosuid, nodev, noexec flags
@@ -350,6 +422,109 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// ID-mapped shared-volume support
+// ---------------------------------------------------------------------------
+
+fn require_idmapped_mount_kernel(release: &str) -> anyhow::Result<()> {
+    if !minibox_core::domain::kernel_supports_idmapped_mounts(release) {
+        anyhow::bail!(
+            "ID-mapped shared volumes require Linux kernel 5.12 or newer; found {release}"
+        );
+    }
+    Ok(())
+}
+
+/// Fail early when the running kernel cannot provide ID-mapped mounts.
+pub fn preflight_idmapped_mounts() -> anyhow::Result<()> {
+    let release = std::fs::read_to_string("/proc/sys/kernel/osrelease")
+        .context("read Linux kernel release for ID-mapped mount preflight")?;
+    require_idmapped_mount_kernel(release.trim())
+}
+
+#[repr(C)]
+struct MountAttr {
+    attr_set: u64,
+    attr_clr: u64,
+    propagation: u64,
+    userns_fd: u64,
+}
+
+fn mount_idmapped_bind(
+    source: &Path,
+    target: &Path,
+    userns_fd: std::os::fd::RawFd,
+) -> anyhow::Result<()> {
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::fs::OpenOptionsExt;
+
+    const OPEN_TREE_CLONE: libc::c_uint = 1;
+    const AT_RECURSIVE: libc::c_uint = 0x8000;
+    const AT_EMPTY_PATH: libc::c_uint = 0x1000;
+    const MOVE_MOUNT_F_EMPTY_PATH: libc::c_uint = 0x0000_0004;
+    const MOUNT_ATTR_IDMAP: u64 = 0x0010_0000;
+
+    let source_fd = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_CLOEXEC)
+        .open(source)
+        .with_context(|| format!("open shared volume {}", source.display()))?;
+    let empty = b"\0";
+    // SAFETY: open_tree receives a valid O_PATH fd and a NUL-terminated empty path; no Rust memory is retained.
+    let tree_raw = unsafe {
+        libc::syscall(
+            libc::SYS_open_tree,
+            source_fd.as_raw_fd(),
+            empty.as_ptr(),
+            OPEN_TREE_CLONE | libc::O_CLOEXEC as u32 | AT_EMPTY_PATH | AT_RECURSIVE,
+        )
+    };
+    if tree_raw < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("open_tree clone for ID-mapped volume");
+    }
+    // SAFETY: a non-negative open_tree result is a newly owned descriptor.
+    let tree = unsafe { OwnedFd::from_raw_fd(tree_raw as i32) };
+    let attr = MountAttr {
+        attr_set: MOUNT_ATTR_IDMAP,
+        attr_clr: 0,
+        propagation: 0,
+        userns_fd: userns_fd as u64,
+    };
+    // SAFETY: MountAttr matches the Linux mount_attr ABI and all pointers remain valid for the syscall.
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_mount_setattr,
+            tree.as_raw_fd(),
+            empty.as_ptr(),
+            AT_EMPTY_PATH,
+            &attr,
+            std::mem::size_of::<MountAttr>(),
+        )
+    };
+    if result < 0 {
+        return Err(std::io::Error::last_os_error())
+            .context("mount_setattr(MOUNT_ATTR_IDMAP) for shared volume");
+    }
+    let target_c = std::ffi::CString::new(target.as_os_str().as_encoded_bytes())
+        .context("ID-mapped mount target contains NUL")?;
+    // SAFETY: both paths are NUL-terminated and tree remains open for the duration of the syscall.
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_move_mount,
+            tree.as_raw_fd(),
+            empty.as_ptr(),
+            libc::AT_FDCWD,
+            target_c.as_ptr(),
+            MOVE_MOUNT_F_EMPTY_PATH,
+        )
+    };
+    if result < 0 {
+        return Err(std::io::Error::last_os_error()).context("move_mount ID-mapped shared volume");
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Bind mount setup (child process, inside new mount namespace)
 // ---------------------------------------------------------------------------
 
@@ -357,7 +532,7 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
 ///
 /// Must be called inside the child process's new mount namespace, after
 /// `setup_overlay` but before `pivot_root_to`. Each `BindMount` is
-/// applied as an `MS_BIND | MS_REC` mount from `host_path` to
+/// cloned with `open_tree(2)`, ID-mapped with `mount_setattr(2)`, and attached from `host_path` to
 /// `rootfs/container_path`. If `read_only`, a remount with `MS_RDONLY` is
 /// applied immediately after.
 ///
@@ -366,9 +541,10 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
 pub fn apply_bind_mounts(
     mounts: &[minibox_core::domain::BindMount],
     rootfs: &Path,
+    userns_fd: std::os::fd::RawFd,
 ) -> anyhow::Result<()> {
     for (i, m) in mounts.iter().enumerate() {
-        if let Err(e) = apply_one_bind_mount(m, rootfs) {
+        if let Err(e) = apply_one_bind_mount(m, rootfs, userns_fd) {
             // Best-effort cleanup of already-applied mounts.
             unmount_bind_mounts(&mounts[..i], rootfs);
             return Err(e);
@@ -377,7 +553,11 @@ pub fn apply_bind_mounts(
     Ok(())
 }
 
-fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> anyhow::Result<()> {
+fn apply_one_bind_mount(
+    m: &minibox_core::domain::BindMount,
+    rootfs: &Path,
+    userns_fd: std::os::fd::RawFd,
+) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
     // Canonicalize host path — fails fast if the path does not exist.
@@ -437,20 +617,11 @@ fn apply_one_bind_mount(m: &minibox_core::domain::BindMount, rootfs: &Path) -> a
         );
     }
 
-    // Apply the bind mount.
-    mount(
-        Some(host_canonical.as_path()),
-        canonical_target.as_path(),
-        None::<&str>,
-        MsFlags::MS_BIND | MsFlags::MS_REC,
-        None::<&str>,
-    )
-    .map_err(|source| FilesystemError::Mount {
-        fs: "bind".into(),
-        target: target.display().to_string(),
-        source,
-    })
-    .with_context(|| format!("bind mount {host_canonical:?} -> {target:?} failed"))?;
+    // Clone the source mount, apply this container user namespace as its
+    // mount ID map, then attach it at the target. No ownership shifting or
+    // shiftfs is involved.
+    mount_idmapped_bind(&host_canonical, &canonical_target, userns_fd)
+        .with_context(|| format!("ID-mapped bind mount {host_canonical:?} -> {target:?} failed"))?;
 
     if m.read_only {
         mount(
@@ -781,6 +952,62 @@ mod tests {
     // Verified: fs_util::tests has device_nodes_complete, dev_symlinks_complete,
     // and device_node_majmin_matches_linux_standard with equivalent coverage.
 
+    #[test]
+    fn kernel_5_11_is_rejected_for_idmapped_mounts() {
+        let error = require_idmapped_mount_kernel("5.11.19").expect_err("5.11 must fail");
+        assert!(error.to_string().contains("5.12"));
+    }
+
+    #[test]
+    fn kernel_5_12_and_newer_support_idmapped_mounts() {
+        assert!(require_idmapped_mount_kernel("5.12.0").is_ok());
+        assert!(require_idmapped_mount_kernel("6.10.3-custom").is_ok());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fresh_run_tmpfs_hides_stale_pid_files_for_directory_var_run() {
+        // SAFETY: geteuid only reads the current process credentials.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+        let rootfs = TempDir::new().expect("rootfs");
+        std::fs::create_dir_all(rootfs.path().join("run")).expect("create run");
+        std::fs::create_dir_all(rootfs.path().join("var/run")).expect("create var run");
+        std::fs::write(rootfs.path().join("run/systemd.pid"), b"1").expect("write systemd pid");
+        std::fs::write(rootfs.path().join("var/run/dockerd.pid"), b"2").expect("write dockerd pid");
+
+        setup_runtime_directories(rootfs.path()).expect("setup runtime directories");
+
+        assert!(!rootfs.path().join("run/systemd.pid").exists());
+        assert!(!rootfs.path().join("var/run/dockerd.pid").exists());
+        let _ = umount2(
+            rootfs.path().join("var/run").as_path(),
+            MntFlags::MNT_DETACH,
+        );
+        let _ = umount2(rootfs.path().join("run").as_path(), MntFlags::MNT_DETACH);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fresh_run_tmpfs_works_with_systemd_var_run_symlink() {
+        // SAFETY: geteuid only reads the current process credentials.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+        let rootfs = TempDir::new().expect("rootfs");
+        std::fs::create_dir_all(rootfs.path().join("run")).expect("create run");
+        std::fs::create_dir_all(rootfs.path().join("var")).expect("create var");
+        std::fs::write(rootfs.path().join("run/containerd.pid"), b"3").expect("write pid");
+        std::os::unix::fs::symlink("../run", rootfs.path().join("var/run"))
+            .expect("create var run symlink");
+
+        setup_runtime_directories(rootfs.path()).expect("setup runtime directories");
+
+        assert!(!rootfs.path().join("var/run/containerd.pid").exists());
+        let _ = umount2(rootfs.path().join("run").as_path(), MntFlags::MNT_DETACH);
+    }
+
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
     // Run with: sudo cargo test -p minibox container::filesystem::tests
@@ -789,6 +1016,7 @@ mod tests {
     mod bind_mount_tests {
         use super::*;
         use minibox_core::domain::BindMount;
+        use std::os::fd::AsRawFd as _;
         use std::path::PathBuf;
         use tempfile::TempDir;
 
@@ -796,6 +1024,7 @@ mod tests {
         fn apply_bind_mounts_mounts_directory() {
             // SAFETY: geteuid() is a pure read of the process credential with no
             // side effects; always safe to call.
+            // SAFETY: geteuid only reads the current process credentials.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -812,7 +1041,14 @@ mod tests {
                 read_only: false,
             }];
 
-            apply_bind_mounts(&mounts, rootfs.path()).unwrap();
+            apply_bind_mounts(
+                &mounts,
+                rootfs.path(),
+                std::fs::File::open("/proc/self/ns/user")
+                    .unwrap()
+                    .as_raw_fd(),
+            )
+            .unwrap();
 
             // The sentinel should be visible at rootfs/data/sentinel.txt
             let sentinel = rootfs.path().join("data").join("sentinel.txt");
@@ -825,6 +1061,7 @@ mod tests {
         fn apply_bind_mounts_read_only() {
             // SAFETY: geteuid() is a pure read of the process credential with no
             // side effects; always safe to call.
+            // SAFETY: geteuid only reads the current process credentials.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -838,7 +1075,14 @@ mod tests {
                 read_only: true,
             }];
 
-            apply_bind_mounts(&mounts, rootfs.path()).unwrap();
+            apply_bind_mounts(
+                &mounts,
+                rootfs.path(),
+                std::fs::File::open("/proc/self/ns/user")
+                    .unwrap()
+                    .as_raw_fd(),
+            )
+            .unwrap();
 
             // Writing to the read-only mount should fail.
             let result = std::fs::write(rootfs.path().join("ro").join("test.txt"), b"fail");
@@ -855,7 +1099,13 @@ mod tests {
                 container_path: PathBuf::from("/data"),
                 read_only: false,
             }];
-            let result = apply_bind_mounts(&mounts, rootfs.path());
+            let result = apply_bind_mounts(
+                &mounts,
+                rootfs.path(),
+                std::fs::File::open("/proc/self/ns/user")
+                    .unwrap()
+                    .as_raw_fd(),
+            );
             assert!(result.is_err());
         }
 
@@ -869,7 +1119,13 @@ mod tests {
                 container_path: PathBuf::from("/../../../etc"),
                 read_only: false,
             }];
-            let result = apply_bind_mounts(&mounts, rootfs.path());
+            let result = apply_bind_mounts(
+                &mounts,
+                rootfs.path(),
+                std::fs::File::open("/proc/self/ns/user")
+                    .unwrap()
+                    .as_raw_fd(),
+            );
             assert!(result.is_err());
             let msg = format!("{:#}", result.unwrap_err());
             assert!(
@@ -887,7 +1143,13 @@ mod tests {
                 container_path: PathBuf::from("../escape"),
                 read_only: false,
             }];
-            let result = apply_bind_mounts(&mounts, rootfs.path());
+            let result = apply_bind_mounts(
+                &mounts,
+                rootfs.path(),
+                std::fs::File::open("/proc/self/ns/user")
+                    .unwrap()
+                    .as_raw_fd(),
+            );
             assert!(result.is_err());
             let msg = format!("{:#}", result.unwrap_err());
             assert!(
@@ -900,6 +1162,7 @@ mod tests {
         fn apply_bind_mounts_creates_target_dir() {
             // SAFETY: geteuid() is a pure read of the process credential with no
             // side effects; always safe to call.
+            // SAFETY: geteuid only reads the current process credentials.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -914,7 +1177,14 @@ mod tests {
             }];
 
             // Target dir does not exist yet — apply_bind_mounts must create it.
-            apply_bind_mounts(&mounts, rootfs.path()).unwrap();
+            apply_bind_mounts(
+                &mounts,
+                rootfs.path(),
+                std::fs::File::open("/proc/self/ns/user")
+                    .unwrap()
+                    .as_raw_fd(),
+            )
+            .unwrap();
             assert!(rootfs.path().join("nested/dir/target").is_dir());
 
             cleanup_bind_mounts(&mounts, rootfs.path());

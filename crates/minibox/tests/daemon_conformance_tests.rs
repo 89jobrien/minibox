@@ -89,6 +89,7 @@ async fn handle_run_once(
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,
@@ -370,6 +371,7 @@ mod conformance {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -395,6 +397,7 @@ mod conformance {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -721,16 +724,20 @@ mod commit_conformance {
             message: Some("commit test".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
         let meta = committer
             .commit(&container_id, "conformance-image:v1", &config)
             .await
             .expect("commit must succeed");
 
-        assert_eq!(meta.name, "conformance-image", "name must match target ref");
-        assert_eq!(meta.tag, "v1", "tag must match target ref");
+        assert_eq!(
+            meta.image.name, "conformance-image",
+            "name must match target ref"
+        );
+        assert_eq!(meta.image.tag, "v1", "tag must match target ref");
         assert!(
-            !meta.layers.is_empty(),
+            !meta.image.layers.is_empty(),
             "committed image must have at least one layer"
         );
     }
@@ -765,6 +772,7 @@ mod commit_conformance {
             message: None,
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
 
         let meta_a = committer_a
@@ -777,16 +785,16 @@ mod commit_conformance {
             .expect("commit B must succeed");
 
         assert_eq!(
-            meta_a.name, meta_b.name,
+            meta_a.image.name, meta_b.image.name,
             "both backends must return same image name"
         );
         assert_eq!(
-            meta_a.tag, meta_b.tag,
+            meta_a.image.tag, meta_b.image.tag,
             "both backends must return same image tag"
         );
         assert_eq!(
-            meta_a.layers.len(),
-            meta_b.layers.len(),
+            meta_a.image.layers.len(),
+            meta_b.image.layers.len(),
             "both backends must return same layer count"
         );
     }
@@ -1244,6 +1252,7 @@ mod runtime_conformance {
             skip_network_namespace: false,
             mounts: vec![],
             privileged: false,
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -1287,6 +1296,7 @@ mod runtime_conformance {
             skip_network_namespace: false,
             mounts: vec![],
             privileged: false,
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -1749,6 +1759,7 @@ mod krun_suite {
                 network: None,
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 env: vec![],
                 name: None,
                 platform: None,
@@ -1823,6 +1834,7 @@ mod krun_suite {
                 network: None,
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 env: vec![],
                 name: None,
                 platform: None,
@@ -2696,6 +2708,7 @@ mod policy_conformance {
                 network: None,
                 mounts: mounts,
                 privileged: privileged,
+                shared_uid_range: false,
                 env: vec![],
                 name: None,
                 platform: None,

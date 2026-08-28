@@ -17,6 +17,17 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
+/// Concrete host ID range installed in a container user namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UidMapping {
+    /// First host UID mapped to container UID zero.
+    pub host_uid: u32,
+    /// First host GID mapped to container GID zero.
+    pub host_gid: u32,
+    /// Number of contiguous IDs in both maps.
+    pub size: u32,
+}
+
 /// All information required to launch a containerised process.
 #[derive(Debug, Clone)]
 pub struct ContainerConfig {
@@ -42,6 +53,8 @@ pub struct ContainerConfig {
     pub mounts: Vec<minibox_core::domain::BindMount>,
     /// If `true`, call `capset(2)` with all capabilities set before `execvp`.
     pub privileged: bool,
+    /// Host IDs mapped to container IDs 0..size in the user namespace.
+    pub uid_mapping: UidMapping,
     /// Optional PTY configuration for interactive containers.
     ///
     /// When `Some`, the daemon should attempt to allocate a PTY pair via the
@@ -68,6 +81,10 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
     info!(command = %config.command, rootfs = ?config.rootfs, "container: spawning process");
 
+    if !config.mounts.is_empty() {
+        crate::container::filesystem::preflight_idmapped_mounts()?;
+    }
+
     // Run pre-exec hooks on the host before cloning.
     run_hooks(&config.pre_exec_hooks, &config.rootfs, None)
         .with_context(|| "pre-exec hooks failed")?;
@@ -92,12 +109,34 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     };
 
     let capture_output = config.capture_output;
+    let cgroup_path = config.cgroup_path.clone();
+    let uid_mapping = config.uid_mapping;
+
+    // Parent/child barrier: the child must not proceed until the parent has
+    // installed UID/GID maps and moved it into the cgroup.
+    let (sync_read, sync_write) = nix::unistd::pipe2(OFlag::O_CLOEXEC)
+        .context("creating user namespace synchronization pipe")?;
+    let sync_read_raw = sync_read.as_raw_fd();
+    let sync_write_raw = sync_write.as_raw_fd();
+    std::mem::forget(sync_read);
+    std::mem::forget(sync_write);
+
     let ns_config = config.namespace_config.clone();
     let pid = clone_with_namespaces(&ns_config, move || {
         // ----------------------------------------------------------------
         // Everything here runs in the child process.
         // We must not return; we must either exec or call _exit.
         // ----------------------------------------------------------------
+
+        // Wait until the parent has populated uid_map/gid_map and the cgroup.
+        unsafe {
+            libc::close(sync_write_raw);
+            let mut ready = 0u8;
+            if libc::read(sync_read_raw, (&raw mut ready).cast(), 1) != 1 {
+                libc::_exit(127);
+            }
+            libc::close(sync_read_raw);
+        }
 
         // Redirect stdout and stderr to the write end of the pipe.
         if capture_output && write_fd_raw >= 0 {
@@ -129,6 +168,8 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     .with_context(|| "failed to spawn container process");
 
     if let Err(ref _e) = pid {
+        unsafe { libc::close(sync_read_raw) };
+        unsafe { libc::close(sync_write_raw) };
         // Clone failed — the forgotten OwnedFds were never consumed by a
         // child (no child was created). Close both raw FDs to prevent leaks.
         if capture_output && read_fd_raw >= 0 {
@@ -138,6 +179,26 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     }
 
     let pid = pid?;
+    unsafe { libc::close(sync_read_raw) };
+    if let Err(error) = configure_child_isolation(pid.as_raw(), &cgroup_path, uid_mapping) {
+        unsafe { libc::close(sync_write_raw) };
+        let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGKILL);
+        let _ = waitpid(pid, None);
+        if capture_output && read_fd_raw >= 0 {
+            unsafe { libc::close(read_fd_raw) };
+            unsafe { libc::close(write_fd_raw) };
+        }
+        return Err(error);
+    }
+    let ready = [1u8];
+    let write_result = unsafe { libc::write(sync_write_raw, ready.as_ptr().cast(), 1) };
+    unsafe { libc::close(sync_write_raw) };
+    if write_result != 1 {
+        anyhow::bail!(
+            "failed to release user namespace child: {}",
+            std::io::Error::last_os_error()
+        );
+    }
 
     // Parent: close the write end so the read end gets EOF when the child exits.
     if capture_output && write_fd_raw >= 0 {
@@ -312,6 +373,30 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn configure_child_isolation(
+    pid: i32,
+    cgroup_path: &std::path::Path,
+    mapping: UidMapping,
+) -> anyhow::Result<()> {
+    let proc_dir = std::path::PathBuf::from(format!("/proc/{pid}"));
+    std::fs::write(proc_dir.join("setgroups"), "deny\n")
+        .with_context(|| format!("disable setgroups for child {pid}"))?;
+    std::fs::write(
+        proc_dir.join("uid_map"),
+        format!("0 {} {}\n", mapping.host_uid, mapping.size),
+    )
+    .with_context(|| format!("write exclusive uid_map for child {pid}"))?;
+    std::fs::write(
+        proc_dir.join("gid_map"),
+        format!("0 {} {}\n", mapping.host_gid, mapping.size),
+    )
+    .with_context(|| format!("write exclusive gid_map for child {pid}"))?;
+    std::fs::write(cgroup_path.join("cgroup.procs"), format!("{pid}\n"))
+        .with_context(|| format!("add child {pid} to cgroup {}", cgroup_path.display()))?;
+    Ok(())
+}
+
 /// Initialise the container environment inside the cloned child process.
 ///
 /// Called immediately after `clone(2)` returns in the child. Performs all
@@ -343,15 +428,19 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         ))
     })?;
 
-    // 2. Add ourselves to the cgroup so resource limits apply.
-    //    We write PID 0 which the kernel interprets as "current process"
-    //    for cgroup.procs.
-    add_self_to_cgroup(&config.cgroup_path).with_context(|| "child: add_self_to_cgroup")?;
+    // 2. UID/GID maps and cgroup membership were installed by the parent.
 
     // 3. Apply bind mounts into the overlay rootfs before pivot_root.
     //    These mounts live inside this child's new mount namespace (CLONE_NEWNS).
-    crate::container::filesystem::apply_bind_mounts(&config.mounts, &config.rootfs)
-        .with_context(|| "child: apply_bind_mounts")?;
+    use std::os::fd::AsRawFd as _;
+    let user_namespace = std::fs::File::open("/proc/self/ns/user")
+        .context("child: open user namespace for ID-mapped mounts")?;
+    crate::container::filesystem::apply_bind_mounts(
+        &config.mounts,
+        &config.rootfs,
+        user_namespace.as_raw_fd(),
+    )
+    .with_context(|| "child: apply_bind_mounts")?;
 
     // 4. Pivot root to the overlay merged directory.
     pivot_root_to(&config.rootfs).with_context(|| "child: pivot_root")?;
@@ -430,24 +519,6 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     unreachable!()
 }
 
-/// Add the calling process to the cgroup at `cgroup_path`.
-///
-/// Writes `"0\n"` to `cgroup.procs`; the kernel interprets PID 0 as the
-/// calling process. This is the correct mechanism to use from inside the
-/// child after `clone(2)`, because the child's PID inside its new PID
-/// namespace may differ from the PID visible to the parent.
-fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
-    let procs_file = cgroup_path.join("cgroup.procs");
-    std::fs::write(&procs_file, "0\n").map_err(|source| {
-        crate::error::CgroupError::AddProcessFailed {
-            pid: 0,
-            path: procs_file.display().to_string(),
-            source,
-        }
-    })?;
-    Ok(())
-}
-
 /// Close all file descriptors with index >= 3 (i.e., everything except
 /// stdin, stdout, and stderr).
 ///
@@ -514,6 +585,11 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: false,
+            uid_mapping: UidMapping {
+                host_uid: 165_536,
+                host_gid: 165_536,
+                size: 65_536,
+            },
             pty: None,
         };
         assert!(!cfg.privileged);
@@ -534,6 +610,11 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
+            uid_mapping: UidMapping {
+                host_uid: 165_536,
+                host_gid: 165_536,
+                size: 65_536,
+            },
             pty: None,
         };
         assert!(cfg.privileged);
@@ -556,6 +637,11 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
+            uid_mapping: UidMapping {
+                host_uid: 165_536,
+                host_gid: 165_536,
+                size: 65_536,
+            },
             pty: None,
         };
         assert!(cfg.privileged, "privileged mode must be set");

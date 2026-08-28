@@ -155,6 +155,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 network: None,
                 mounts,
                 privileged: input["privileged"].as_bool().unwrap_or(false),
+                shared_uid_range: false,
                 env,
                 name,
                 tty: false,

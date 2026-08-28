@@ -262,6 +262,17 @@ pub struct ContainerHooks {
     pub post_exit: Vec<HookSpec>,
 }
 
+/// Host UID/GID range strategy for a Linux user namespace.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UidRangeMode {
+    /// Allocate a distinct 65,536-ID host range for each container.
+    #[default]
+    Exclusive,
+    /// Reuse one host range across containers. This weakens tenant isolation.
+    Shared,
+}
+
 /// Configuration for spawning a containerized process.
 #[derive(Debug, Clone)]
 pub struct ContainerSpawnConfig {
@@ -293,6 +304,8 @@ pub struct ContainerSpawnConfig {
     /// If `true`, the container process is granted a full Linux capability set
     /// via `capset(2)` before `execvp`. Required for `DinD`.
     pub privileged: bool,
+    /// Host UID/GID range strategy. Defaults to per-container exclusive ranges.
+    pub uid_range_mode: UidRangeMode,
     /// OCI image reference that produced this container's rootfs
     /// (e.g. `"alpine:latest"`, `"ghcr.io/org/img:v1"`).
     ///
@@ -301,4 +314,19 @@ pub struct ContainerSpawnConfig {
     /// `None` for Linux-native backends that operate on the extracted rootfs
     /// directly.
     pub image_ref: Option<String>,
+}
+
+#[cfg(test)]
+mod uid_range_tests {
+    use super::UidRangeMode;
+
+    #[test]
+    fn uid_range_mode_defaults_to_exclusive() {
+        assert_eq!(UidRangeMode::default(), UidRangeMode::Exclusive);
+    }
+
+    #[test]
+    fn shared_uid_range_requires_explicit_selection() {
+        assert_ne!(UidRangeMode::default(), UidRangeMode::Shared);
+    }
 }

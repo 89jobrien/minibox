@@ -20,7 +20,7 @@ pub mod krun;
 pub mod paths;
 pub mod preflight;
 
-#[cfg(feature = "vz")]
+#[cfg(all(feature = "vz", target_os = "macos"))]
 pub mod vz;
 
 use anyhow::{Context, Result};
@@ -232,7 +232,7 @@ pub async fn start() -> Result<()> {
         Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
 
     // ── VZ branch ────────────────────────────────────────────────────────
-    #[cfg(feature = "vz")]
+    #[cfg(all(feature = "vz", target_os = "macos"))]
     if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("vz") {
         return start_vz(
             socket_path,
@@ -428,7 +428,7 @@ async fn start_krun(
 /// [`HandlerDependencies`], and then runs the standard socket server accept
 /// loop.
 // qual:allow(iosp) reason: "daemon entrypoint — GCD main-queue VM boot, wire deps, bind socket, run server"
-#[cfg(feature = "vz")]
+#[cfg(all(feature = "vz", target_os = "macos"))]
 async fn start_vz(
     socket_path: std::path::PathBuf,
     images_dir: std::path::PathBuf,

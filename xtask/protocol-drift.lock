@@ -5,7 +5,7 @@
     {
       "name": "domain-root",
       "path": "crates/minibox-domain/src/lib.rs",
-      "hash": "04d824d9a312ab505231da05fa2644b6b55da621ce357d315a98be6799938afb"
+      "hash": "6702d18e1e8c50c7fa2e6c9864e74fef8ba065e5561935fbb733f0e33e68aeb5"
     },
     {
       "name": "domain-compatibility-facade",
@@ -15,7 +15,7 @@
     {
       "name": "wire-protocol",
       "path": "crates/minibox-core/src/protocol.rs",
-      "hash": "2088cbf7334caa59ae85dc9f0f109e68b3d65a6a3d997899ba1e8dab29daa24e"
+      "hash": "d25b98233b99f0c7f5726a997b2df65c554f02a5b3d1b1d2f96f1842dd299203"
     },
     {
       "name": "domain-capability",
@@ -40,7 +40,7 @@
     {
       "name": "domain-filesystem",
       "path": "crates/minibox-domain/src/filesystem.rs",
-      "hash": "f40109d2d8037f330f950e0dba3267b80ce4ac448e7d8eaa3c5c18cd4ac3f21b"
+      "hash": "e4f61b83903e2f25f4a56c0c2b00fcf32e95e9209e3662f7869997a4f0588ec7"
     },
     {
       "name": "domain-ids",
@@ -50,7 +50,7 @@
     {
       "name": "domain-image",
       "path": "crates/minibox-domain/src/image.rs",
-      "hash": "3435f6d0234033a98c4c90f7255214c0c3ea7adcca3bf5816068470ec67b7ed7"
+      "hash": "2727f83a4bbf248a36496c41f7ba0bfe6fd903a4c198cfad80afd19f86b549f3"
     },
     {
       "name": "domain-metrics",
@@ -65,7 +65,7 @@
     {
       "name": "domain-runtime",
       "path": "crates/minibox-domain/src/runtime.rs",
-      "hash": "767ffc87e60db3cd058c2081e3780d13ac7f4da07e0a636836a17bd3ba53c3bd"
+      "hash": "0f1fa1ce721ff7949e7292b77ba375d99a5cb0a59fc962645eda287561eded95"
     },
     {
       "name": "domain-state",

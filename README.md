@@ -77,6 +77,16 @@ sudo ./target/release/mbx rm <id>
 ./target/release/mbx doctor
 ```
 
+### Commit and image volumes
+
+`mbx commit <container> <image:tag>` captures the container writable layer. Paths declared by the source image with Dockerfile `VOLUME` (stored as `config.Volumes` in the image config) are excluded by default, matching container-runtime commit semantics. If an excluded path contains data, the command prints a warning naming the path. Use `--include-volumes` to deliberately capture that data:
+
+```bash
+sudo ./target/release/mbx commit <id> my-image:latest --include-volumes
+```
+
+Host bind-mount contents are never captured. `--include-volumes` is currently supported by the native overlay adapter; Colima rejects the option rather than silently ignoring it.
+
 ---
 
 ## Platform Support

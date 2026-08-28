@@ -466,6 +466,7 @@ async fn dispatch(
             network,
             mounts,
             privileged,
+            shared_uid_range,
             env,
             name,
             tty: _,
@@ -484,6 +485,7 @@ async fn dispatch(
                 network,
                 mounts,
                 privileged,
+                shared_uid_range,
                 env,
                 name,
                 platform,
@@ -550,6 +552,7 @@ async fn dispatch(
             message,
             env_overrides,
             cmd_override,
+            include_volumes,
         } => {
             handler::handle_commit(
                 container_id,
@@ -558,6 +561,7 @@ async fn dispatch(
                 message,
                 env_overrides,
                 cmd_override,
+                include_volumes,
                 state,
                 deps,
                 tx,
@@ -726,6 +730,10 @@ async fn dispatch(
                 Arc::clone(&deps),
                 tx,
             ));
+        }
+        DaemonRequest::GetCapabilities => {
+            let response = handler::handle_capabilities();
+            send_terminal_response(&tx, "GetCapabilities", response).await;
         }
         DaemonRequest::RunWorkflow(_) => {
             send_terminal_response(
@@ -1078,6 +1086,12 @@ mod tests {
                 },
                 true, // terminal: single trace returned
             ),
+            (
+                DaemonResponse::CapabilityMatrix {
+                    matrix: minibox_core::domain::capability_matrix(),
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -1122,6 +1136,7 @@ mod tests {
                 DaemonResponse::WorkflowComplete { .. } => true,
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
+                DaemonResponse::CapabilityMatrix { .. } => true,
             };
         }
     }
