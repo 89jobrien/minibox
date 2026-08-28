@@ -1,6 +1,7 @@
 //! Workspace quality gates and their checkpoint-aware orchestration.
 
 use anyhow::{Context, Result};
+use minibox_testsuite::harness::ConformanceResult;
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
@@ -402,7 +403,7 @@ fn check_minibox_testsuite_has_tests(sh: &Shell) -> Result<()> {
 ///
 /// Set `CONFORMANCE_ADAPTER=<name>` to restrict to a single adapter.
 /// Set `CONFORMANCE_ARTIFACT_DIR=<path>` to override the output directory.
-pub fn test_conformance(sh: &Shell) -> Result<()> {
+pub fn test_conformance(sh: &Shell) -> Result<ConformanceResult> {
     // Build the harness binaries first so errors surface before test execution.
     cmd!(sh, "cargo build --release -p minibox-testsuite --bins")
         .run()
@@ -461,8 +462,34 @@ pub fn test_conformance(sh: &Shell) -> Result<()> {
         }
     }
 
+    let result = parse_conformance_result(&sh.current_dir(), &report_stdout)?;
     eprintln!("conformance suite passed");
-    Ok(())
+    Ok(result)
+}
+
+fn parse_conformance_result(root: &Path, report_stdout: &str) -> Result<ConformanceResult> {
+    let reported_path = report_stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("conformance:json="))
+        .context("generate-report did not emit a conformance JSON path")?;
+    let reported_path = Path::new(reported_path);
+    let json_path = if reported_path.is_absolute() {
+        reported_path.to_path_buf()
+    } else {
+        root.join(reported_path)
+    };
+    let contents = fs::read(&json_path).with_context(|| {
+        format!(
+            "failed to read conformance result at {}",
+            json_path.display()
+        )
+    })?;
+    serde_json::from_slice(&contents).with_context(|| {
+        format!(
+            "failed to parse conformance result at {}",
+            json_path.display()
+        )
+    })
 }
 
 /// krun adapter conformance tests (macOS HVF / Linux KVM, requires `MINIBOX_KRUN_TESTS=1`).
@@ -970,7 +997,8 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
 mod tests {
     use super::{
         GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, musl_check_required,
-        nextest_output_is_zero_tests, parse_handler_fn_coverage, phase_2_skipped,
+        nextest_output_is_zero_tests, parse_conformance_result, parse_handler_fn_coverage,
+        phase_2_skipped,
     };
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
@@ -1266,6 +1294,60 @@ mod tests {
             "`test_unit` must call `check_minibox_testsuite_has_tests` — \
              without it, a zero-test minibox-testsuite is silently ignored"
         );
+    }
+
+    #[test]
+    fn conformance_report_output_returns_typed_result() {
+        use minibox_testsuite::harness::{
+            ConformanceArtifacts, ConformanceResult, ConformanceSummary, TestCategory, TestResult,
+            TestRunResult,
+        };
+
+        let root = tempfile::tempdir().expect("temporary workspace");
+        let report_path = root.path().join("conformance.json");
+        let result = ConformanceResult {
+            report_version: "1.0".to_string(),
+            generated_at: "2026-08-27T12:00:00Z".to_string(),
+            summary: ConformanceSummary {
+                total: 1,
+                passed: 0,
+                failed: 1,
+                skipped: 0,
+                duration_ms: 42,
+                success: false,
+            },
+            outcomes: vec![TestRunResult {
+                id: "registry::pull".to_string(),
+                name: "pull".to_string(),
+                adapter: "registry".to_string(),
+                category: TestCategory::Integration,
+                result: TestResult::Fail {
+                    reason: "registry unavailable".to_string(),
+                },
+                duration_ms: 42,
+                failures: vec!["registry unavailable".to_string()],
+            }],
+            artifacts: ConformanceArtifacts {
+                json: report_path.clone(),
+                junit: root.path().join("conformance.xml"),
+                markdown: root.path().join("conformance.md"),
+            },
+        };
+        std::fs::write(
+            &report_path,
+            serde_json::to_vec(&result).expect("serialize fixture"),
+        )
+        .expect("write fixture");
+
+        let parsed = parse_conformance_result(
+            root.path(),
+            "conformance:json=conformance.json\nconformance:summary 0/1 passed\n",
+        )
+        .expect("parse typed result");
+
+        assert_eq!(parsed.summary.duration_ms, 42);
+        assert_eq!(parsed.outcomes, result.outcomes);
+        assert_eq!(parsed.artifacts, result.artifacts);
     }
 
     /// The published handler-coverage threshold remains enforceable.

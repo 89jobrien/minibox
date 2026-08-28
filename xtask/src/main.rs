@@ -345,7 +345,7 @@ fn cmd_test(sh: &Shell, root: &std::path::Path) -> Result<()> {
 fn dispatch_test(sh: &Shell, root: &std::path::Path, suite: &str) -> Result<()> {
     match suite {
         "unit" => gates::test_unit(sh),
-        "conformance" => gates::test_conformance(sh),
+        "conformance" => gates::test_conformance(sh).map(|_| ()),
         "krun-conformance" => gates::test_krun_conformance(sh),
         "turmoil" => gates::test_turmoil(sh),
         "shuttle" => gates::test_shuttle(sh),
