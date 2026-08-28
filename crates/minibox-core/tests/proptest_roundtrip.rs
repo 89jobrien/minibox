@@ -296,6 +296,13 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
         Just(DaemonRequest::SubscribeEvents),
         any::<bool>().prop_map(|dr| DaemonRequest::Prune { dry_run: dr }),
         Just(DaemonRequest::ListImages),
+        ("[a-z]{1,15}", any::<bool>(), 0..101usize).prop_map(|(query, remote, limit)| {
+            DaemonRequest::SearchImages {
+                query,
+                remote,
+                limit,
+            }
+        }),
         "[a-z:]{3,15}".prop_map(|r| DaemonRequest::RemoveImage { image_ref: r }),
         ("[a-f0-9]{8}", any::<bool>()).prop_map(|(id, f)| DaemonRequest::ContainerLogs {
             container_id: id,
@@ -339,6 +346,7 @@ fn arb_daemon_response() -> impl Strategy<Value = DaemonResponse> {
             .prop_map(|(id, tag)| DaemonResponse::BuildComplete { image_id: id, tag }),
         proptest::collection::vec("[a-z:]{3,15}", 0..3)
             .prop_map(|i| DaemonResponse::ImageList { images: i }),
+        Just(DaemonResponse::SearchResults { results: vec![] }),
         (
             proptest::collection::vec("[a-z:]{3,15}", 0..3),
             0..100_000u64,

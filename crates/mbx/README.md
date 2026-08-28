@@ -9,6 +9,7 @@ printing human-readable output.
 
 ```text
 mbx pull <image> [--tag TAG] [--platform PLATFORM]
+mbx search <query> [--limit N] [--remote]
 mbx run [OPTIONS] <image> -- <command>
 mbx ps
 mbx stop <id>
@@ -33,6 +34,13 @@ mbx manifest <id>
 mbx verify <id> --policy <path>
 mbx pipeline <run|list|show> ...
 ```
+
+### `search`
+
+`mbx search <query>` performs case-insensitive local repository and tag discovery.
+Exact repository names rank before prefixes and substrings; results and tags are stable.
+The default limit is 25 and the daemon caps requests at 100. `--remote` is reserved but
+returns an explicit unsupported error until registry discovery semantics are defined.
 
 ### `run` flags
 
