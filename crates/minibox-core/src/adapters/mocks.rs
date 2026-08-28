@@ -1253,8 +1253,8 @@ mod macro_contract_tests {
 // ---------------------------------------------------------------------------
 
 use crate::domain::{
-    CommitConfig, ContainerCommitter, ContainerId, ImagePusher, PushProgress, PushResult,
-    RegistryCredentials,
+    CommitConfig, CommitResult, ContainerCommitter, ContainerId, ImagePusher, PushProgress,
+    PushResult, RegistryCredentials,
 };
 
 /// In-memory mock for [`ContainerCommitter`].
@@ -1264,6 +1264,7 @@ use crate::domain::{
 pub struct MockContainerCommitter {
     call_count: AtomicUsize,
     should_fail: std::sync::atomic::AtomicBool,
+    excluded_volume_paths: Vec<PathBuf>,
 }
 
 impl MockContainerCommitter {
@@ -1273,6 +1274,7 @@ impl MockContainerCommitter {
         Self {
             call_count: AtomicUsize::new(0),
             should_fail: std::sync::atomic::AtomicBool::new(false),
+            excluded_volume_paths: Vec::new(),
         }
     }
 
@@ -1280,6 +1282,13 @@ impl MockContainerCommitter {
     pub fn with_failure(self) -> Self {
         self.should_fail
             .store(true, std::sync::atomic::Ordering::SeqCst);
+        self
+    }
+
+    /// Configure a populated image volume to report as excluded.
+    #[must_use]
+    pub fn with_excluded_volume_path(mut self, path: PathBuf) -> Self {
+        self.excluded_volume_paths.push(path);
         self
     }
 
@@ -1304,7 +1313,7 @@ impl ContainerCommitter for MockContainerCommitter {
         _container_id: &ContainerId,
         target_ref: &str,
         _config: &CommitConfig,
-    ) -> anyhow::Result<ImageMetadata> {
+    ) -> anyhow::Result<CommitResult> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
         if self.should_fail.load(std::sync::atomic::Ordering::SeqCst) {
             anyhow::bail!("mock commit failure");
@@ -1315,14 +1324,18 @@ impl ContainerCommitter for MockContainerCommitter {
         } else {
             (target_ref.to_string(), "latest".to_string())
         };
-        Ok(ImageMetadata {
-            name,
-            tag,
-            layers: vec![LayerInfo {
-                digest: "sha256:mock000000000000000000000000000000000000000000000000000000000000"
-                    .to_string(),
-                size: 1024,
-            }],
+        Ok(CommitResult {
+            image: ImageMetadata {
+                name,
+                tag,
+                layers: vec![LayerInfo {
+                    digest:
+                        "sha256:mock000000000000000000000000000000000000000000000000000000000000"
+                            .to_string(),
+                    size: 1024,
+                }],
+            },
+            excluded_volume_paths: self.excluded_volume_paths.clone(),
         })
     }
 }

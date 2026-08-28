@@ -3,7 +3,7 @@
 //! Supports the instruction subset needed for ~90% of real Dockerfiles:
 //! FROM, RUN, COPY, ADD, ENV, ARG, WORKDIR, CMD, ENTRYPOINT, EXPOSE, LABEL, USER.
 //!
-//! Does NOT support: HEALTHCHECK, VOLUME, ONBUILD, SHELL, STOPSIGNAL,
+//! Does NOT support: HEALTHCHECK, ONBUILD, SHELL, STOPSIGNAL,
 //! `BuildKit` --mount syntax, multi-stage (only first FROM is used).
 
 use anyhow::{Context, Result, bail};
@@ -77,6 +77,8 @@ pub enum Instruction {
         /// Transport protocol, usually `tcp` or `udp`.
         proto: String,
     },
+    /// Declare paths whose runtime data is stored outside the writable layer.
+    Volume(Vec<PathBuf>),
     /// Set image labels.
     Label(Vec<(String, String)>),
     /// Set the user and optional group for subsequent commands.
@@ -134,6 +136,7 @@ pub fn parse(input: &str) -> Result<Vec<Instruction>> {
             "WORKDIR" => Instruction::Workdir(PathBuf::from(rest)),
             "EXPOSE" => parse_expose(rest)?,
             "LABEL" => Instruction::Label(parse_env(rest)),
+            "VOLUME" => Instruction::Volume(parse_volume_instruction(rest)?),
             "USER" => parse_user(rest),
             other => bail!("line {}: unsupported instruction: {}", line_num + 1, other),
         };
@@ -180,6 +183,21 @@ fn parse_shell_or_exec(s: &str) -> Result<ShellOrExec> {
     } else {
         Ok(ShellOrExec::Shell(s.to_string()))
     }
+}
+
+fn parse_volume_instruction(s: &str) -> Result<Vec<PathBuf>> {
+    let raw_paths: Vec<String> = if s.trim_start().starts_with('[') {
+        serde_json::from_str(s).with_context(|| format!("invalid VOLUME JSON: {s}"))?
+    } else {
+        s.split_whitespace().map(str::to_owned).collect()
+    };
+    if raw_paths.is_empty() {
+        bail!("VOLUME requires at least one path");
+    }
+    raw_paths
+        .iter()
+        .map(|path| super::volume::validate_volume_path(path))
+        .collect()
 }
 
 fn parse_from(s: &str) -> Result<Instruction> {
@@ -368,5 +386,27 @@ mod tests {
         assert!(
             matches!(&instrs[1], Instruction::Arg { name, default } if name == "VERSION" && default.as_deref() == Some("1.0"))
         );
+    }
+
+    #[test]
+    fn parse_volume_shell_and_json_forms() {
+        let shell = parse("FROM alpine\nVOLUME /data /var/lib/docker\n").expect("shell form");
+        assert!(matches!(
+            &shell[1],
+            Instruction::Volume(paths)
+                if paths == &[PathBuf::from("/data"), PathBuf::from("/var/lib/docker")]
+        ));
+
+        let json = parse("FROM alpine\nVOLUME [\"/cache\", \"/logs\"]\n").expect("json form");
+        assert!(matches!(
+            &json[1],
+            Instruction::Volume(paths)
+                if paths == &[PathBuf::from("/cache"), PathBuf::from("/logs")]
+        ));
+    }
+
+    #[test]
+    fn parse_volume_rejects_unsafe_paths() {
+        assert!(parse("FROM alpine\nVOLUME ../data\n").is_err());
     }
 }

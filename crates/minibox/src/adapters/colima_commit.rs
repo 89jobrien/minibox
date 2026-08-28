@@ -11,7 +11,8 @@ use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use minibox_core::as_any;
 use minibox_core::domain::{
-    CommitConfig, ContainerCommitter, ContainerId, DynContainerCommitter, ImageMetadata, LayerInfo,
+    CommitConfig, CommitResult, ContainerCommitter, ContainerId, DynContainerCommitter,
+    ImageMetadata, LayerInfo,
 };
 use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::{Descriptor, OciManifest};
@@ -55,9 +56,13 @@ impl ContainerCommitter for ColimaContainerCommitter {
         container_id: &ContainerId,
         target_ref: &str,
         config: &CommitConfig,
-    ) -> Result<ImageMetadata> {
+    ) -> Result<CommitResult> {
         std::fs::create_dir_all(&self.export_dir)
             .with_context(|| format!("create export dir {}", self.export_dir.display()))?;
+
+        if config.include_volumes {
+            anyhow::bail!("--include-volumes is not supported by the colima commit adapter");
+        }
 
         let (target_name, target_tag) = parse_image_ref(target_ref);
         let full_ref = format!("{target_name}:{target_tag}");
@@ -91,7 +96,7 @@ impl ContainerCommitter for ColimaContainerCommitter {
 
         let _ = std::fs::remove_file(&archive_path);
 
-        Ok(metadata)
+        Ok(CommitResult::without_warnings(metadata))
     }
 }
 
@@ -166,6 +171,9 @@ fn import_docker_archive(
     let config_bytes = std::fs::read(&config_path)
         .with_context(|| format!("read config {}", config_path.display()))?;
     let config_digest = format!("sha256:{:x}", Sha256::digest(&config_bytes));
+    image_store
+        .store_config_blob(name, tag, &config_bytes)
+        .context("store committed image config")?;
 
     let mut layer_descriptors = Vec::with_capacity(entry.layers.len());
     let mut layer_infos = Vec::with_capacity(entry.layers.len());
@@ -292,6 +300,7 @@ mod tests {
             message: Some("test-message".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         }
     }
 
@@ -444,9 +453,9 @@ mod tests {
             .await
             .expect("commit should succeed");
 
-        assert_eq!(metadata.name, "example/app");
-        assert_eq!(metadata.tag, "latest");
-        assert_eq!(metadata.layers.len(), 1);
+        assert_eq!(metadata.image.name, "example/app");
+        assert_eq!(metadata.image.tag, "latest");
+        assert_eq!(metadata.image.layers.len(), 1);
 
         let recorded = commands.lock().unwrap();
         assert!(
@@ -471,5 +480,23 @@ mod tests {
             .load_manifest_pub("example/app", "latest")
             .expect("load stored manifest");
         assert_eq!(stored_manifest.layers.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn include_volumes_fails_instead_of_silently_ignoring_option() {
+        let tmp = tempfile::TempDir::new().expect("temp dir");
+        let image_store = Arc::new(ImageStore::new(tmp.path().join("images")).expect("store"));
+        let executor: LimaExecutor = Arc::new(|_| Ok(String::new()));
+        let committer =
+            ColimaContainerCommitter::new(image_store, tmp.path().join("exports"), executor);
+        let mut config = sample_config();
+        config.include_volumes = true;
+        let container_id = ContainerId::new("abc123".to_string()).expect("container id");
+
+        let error = committer
+            .commit(&container_id, "example:latest", &config)
+            .await
+            .expect_err("colima must not silently ignore include volumes");
+        assert!(error.to_string().contains("not supported"));
     }
 }

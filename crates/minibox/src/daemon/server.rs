@@ -552,6 +552,7 @@ async fn dispatch(
             message,
             env_overrides,
             cmd_override,
+            include_volumes,
         } => {
             handler::handle_commit(
                 container_id,
@@ -560,6 +561,7 @@ async fn dispatch(
                 message,
                 env_overrides,
                 cmd_override,
+                include_volumes,
                 state,
                 deps,
                 tx,
