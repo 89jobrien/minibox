@@ -5,12 +5,12 @@
 //! [`ContainerRuntime`] trait.
 
 use crate::container::namespace::NamespaceConfig;
-use crate::container::process::{ContainerConfig, spawn_container_process};
+use crate::container::process::{ContainerConfig, UidMapping, spawn_container_process};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use minibox_core::adapt;
 use minibox_core::domain::{
-    ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult,
+    ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult, UidRangeMode,
 };
 use tracing::{debug, instrument};
 
@@ -80,15 +80,44 @@ use tracing::{debug, instrument};
 ///     Ok(())
 /// }
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LinuxNamespaceRuntime;
+#[derive(Debug, Clone)]
+pub struct LinuxNamespaceRuntime {
+    next_exclusive_id: std::sync::Arc<std::sync::Mutex<u32>>,
+}
 
 impl LinuxNamespaceRuntime {
     /// Create a new Linux namespace container runtime adapter.
     ///
     /// This is a zero-sized type, so construction is trivial.
-    pub const fn new() -> Self {
-        Self
+    pub fn new() -> Self {
+        Self {
+            next_exclusive_id: std::sync::Arc::new(std::sync::Mutex::new(165_536)),
+        }
+    }
+
+    fn allocate_uid_mapping(&self, mode: UidRangeMode) -> Result<UidMapping> {
+        const RANGE_SIZE: u32 = 65_536;
+        const SHARED_RANGE_START: u32 = 100_000;
+        if mode == UidRangeMode::Shared {
+            return Ok(UidMapping {
+                host_uid: SHARED_RANGE_START,
+                host_gid: SHARED_RANGE_START,
+                size: RANGE_SIZE,
+            });
+        }
+        let mut next = self
+            .next_exclusive_id
+            .lock()
+            .map_err(|_| anyhow::anyhow!("UID range allocator poisoned"))?;
+        let start = *next;
+        *next = next
+            .checked_add(RANGE_SIZE)
+            .ok_or_else(|| anyhow::anyhow!("exclusive UID range pool exhausted"))?;
+        Ok(UidMapping {
+            host_uid: start,
+            host_gid: start,
+            size: RANGE_SIZE,
+        })
     }
 }
 
@@ -112,6 +141,7 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
         err
     )]
     async fn spawn_process(&self, config: &ContainerSpawnConfig) -> Result<SpawnResult> {
+        let uid_mapping = self.allocate_uid_mapping(config.uid_range_mode)?;
         debug!(
             "spawning container process: command={}, rootfs={:?}",
             config.command, config.rootfs
@@ -132,6 +162,7 @@ impl ContainerRuntime for LinuxNamespaceRuntime {
             pre_exec_hooks: config.hooks.pre_exec.clone(),
             mounts: config.mounts.clone(),
             privileged: config.privileged,
+            uid_mapping,
             pty: None,
         };
 
@@ -167,9 +198,33 @@ mod tests {
 
     #[test]
     fn test_runtime_default() {
-        let runtime = LinuxNamespaceRuntime;
-        // Unit struct equality — new() and the literal form must be identical.
-        assert_eq!(runtime, LinuxNamespaceRuntime::new());
+        let runtime = LinuxNamespaceRuntime::new();
+        assert!(runtime.capabilities().supports_user_namespaces);
+    }
+
+    #[test]
+    fn exclusive_ranges_do_not_overlap() {
+        let runtime = LinuxNamespaceRuntime::new();
+        let first = runtime
+            .allocate_uid_mapping(UidRangeMode::Exclusive)
+            .expect("first range");
+        let second = runtime
+            .allocate_uid_mapping(UidRangeMode::Exclusive)
+            .expect("second range");
+        assert_eq!(first.size, 65_536);
+        assert_eq!(second.host_uid, first.host_uid + first.size);
+    }
+
+    #[test]
+    fn shared_ranges_reuse_the_explicit_shared_pool() {
+        let runtime = LinuxNamespaceRuntime::new();
+        let first = runtime
+            .allocate_uid_mapping(UidRangeMode::Shared)
+            .expect("first range");
+        let second = runtime
+            .allocate_uid_mapping(UidRangeMode::Shared)
+            .expect("second range");
+        assert_eq!(first, second);
     }
 
     // Note: Actual spawn tests require Linux with root privileges

@@ -176,6 +176,11 @@ impl Container {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: false,
+            uid_mapping: crate::container::process::UidMapping {
+                host_uid: 165_536,
+                host_gid: 165_536,
+                size: 65_536,
+            },
             pty: None,
         };
 

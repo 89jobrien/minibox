@@ -126,6 +126,48 @@ impl BindMount {
     }
 }
 
+/// How the Linux adapter should make `/var/run` share the fresh `/run` tmpfs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VarRunMountStrategy {
+    /// Keep an image-provided `/var/run -> ../run` symlink.
+    ExistingSymlink,
+    /// Bind the fresh `/run` mount over an image-provided directory.
+    BindToRun,
+    /// Create the conventional `/var/run -> ../run` symlink.
+    CreateSymlink,
+}
+
+/// Select the safe `/var/run` setup without inspecting host paths in the domain layer.
+#[must_use]
+pub const fn var_run_mount_strategy(
+    exists: bool,
+    is_symlink: bool,
+    points_to_run: bool,
+) -> VarRunMountStrategy {
+    if is_symlink && points_to_run {
+        VarRunMountStrategy::ExistingSymlink
+    } else if exists {
+        VarRunMountStrategy::BindToRun
+    } else {
+        VarRunMountStrategy::CreateSymlink
+    }
+}
+
+/// Return whether a Linux release supports `mount_setattr(MOUNT_ATTR_IDMAP)`.
+#[must_use]
+pub fn kernel_supports_idmapped_mounts(release: &str) -> bool {
+    let mut parts = release.split(|c: char| c == char::from(46) || c == char::from(45));
+    let major = parts
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    let minor = parts
+        .next()
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(0);
+    (major, minor) >= (5, 12)
+}
+
 // ---------------------------------------------------------------------------
 // Filesystem Provider Port
 // ---------------------------------------------------------------------------
@@ -287,4 +329,38 @@ pub struct RootfsLayout {
     pub rootfs_metadata: Option<BackendRootfsMetadata>,
     /// Source image reference associated with this rootfs when known.
     pub source_image_ref: Option<String>,
+}
+
+#[cfg(test)]
+mod idmapped_mount_tests {
+    use super::{VarRunMountStrategy, var_run_mount_strategy};
+
+    #[test]
+    fn runtime_directory_plan_hides_existing_var_run_directories() {
+        assert_eq!(
+            var_run_mount_strategy(true, false, false),
+            VarRunMountStrategy::BindToRun
+        );
+        assert_eq!(
+            var_run_mount_strategy(true, true, true),
+            VarRunMountStrategy::ExistingSymlink
+        );
+        assert_eq!(
+            var_run_mount_strategy(false, false, false),
+            VarRunMountStrategy::CreateSymlink
+        );
+    }
+
+    use super::kernel_supports_idmapped_mounts;
+
+    #[test]
+    fn rejects_kernels_before_5_12() {
+        assert!(!kernel_supports_idmapped_mounts("5.11.19"));
+    }
+
+    #[test]
+    fn accepts_5_12_and_newer_kernels() {
+        assert!(kernel_supports_idmapped_mounts("5.12.0"));
+        assert!(kernel_supports_idmapped_mounts("6.10.3-custom"));
+    }
 }

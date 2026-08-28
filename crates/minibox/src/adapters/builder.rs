@@ -146,6 +146,7 @@ async fn execute_run_step(
         skip_network_namespace: true,
         mounts: vec![],
         privileged: false,
+        uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
         image_ref: None,
     };
 

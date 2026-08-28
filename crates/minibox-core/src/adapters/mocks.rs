@@ -996,6 +996,7 @@ mod tests {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: crate::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
         let result = runtime.spawn_process_sync(&cfg).unwrap();
@@ -1073,6 +1074,7 @@ mod tests {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: crate::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
