@@ -1,227 +1,139 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: f75ef70c764b570554053f964cc1ba2deb85cb25
 sources:
-  - crates/minibox/src/daemon/handler
-  - crates/minibox/src/adapters/limiter.rs
   - crates/minibox-domain/src/capability_matrix.rs
-  - crates/minibox-core/src/protocol.rs
-  - crates/mbx/src/commands/capabilities.rs
-  - crates/minibox-domain/src/exec.rs
-  - crates/minibox-core/src/events.rs
-  - crates/minibox-core/src/image/registry.rs
-  - crates/minibox/src/adapters/ghcr.rs
-  - crates/minibox-core/src/image/gc.rs
-  - crates/minibox-domain/src/image.rs
-  - crates/minibox/src/container/namespace.rs
-  - crates/minibox/src/adapters/filesystem.rs
-  - crates/minibox/src/adapters/network/bridge.rs
-  - crates/minibox/src/daemon/server.rs
-  - crates/minibox-core/src/image/layer.rs
-  - crates/minibox-domain/src/execution_manifest.rs
-  - crates/minibox-domain/src/execution_policy.rs
-  - crates/minibox/src/daemon/state.rs
+  - crates/miniboxd/src/adapter_registry.rs
   - crates/miniboxd/src/main.rs
+  - crates/minibox/src/daemon/handler
+  - crates/minibox/src/adapters/runtime.rs
   - crates/minibox/src/adapters/gke.rs
   - crates/minibox/src/adapters/colima.rs
   - crates/minibox/src/adapters/smolvm.rs
-  - crates/macbox/src/krun
-  - crates/macbox/src/vz
-  - crates/minibox/src/adapters/docker_desktop.rs
-  - crates/mcp
-generated: 2026-08-28
+  - crates/minibox/src/adapters/network/bridge.rs
+  - crates/minibox/src/container/namespace.rs
+  - crates/minibox/src/daemon/server.rs
+  - crates/minibox/src/daemon/state.rs
+  - crates/minibox-core/src/image/layer.rs
+  - crates/minibox-core/src/image/registry.rs
+  - crates/macbox/src/lib.rs
+  - crates/macbox/src/krun/runtime.rs
+  - crates/macbox/src/vz/adapter.rs
+  - crates/winbox/src/lib.rs
+generated: 2026-09-01
 ---
 
 # Feature Matrix
 
-Per-platform capability breakdown for minibox adapters.
+Canonical, code-cited capability declarations for minibox adapters.
 
-Last updated: 2026-08-28
+Last updated: 2026-09-01
 
----
+## How to read this matrix
 
-## Adapter Suites
+The daemon and CLI consume the typed matrix in
+`crates/minibox-domain/src/capability_matrix.rs:318-374`. The table below is the
+single human-readable copy. Each row citation covers all seven status cells in
+that row and points to the exact typed declaration. The support enum and display
+labels are defined at `crates/minibox-domain/src/capability_matrix.rs:244-267`.
 
-| Adapter  | Platform                        | Status       | Crate   | Default?                          |
-| -------- | ------------------------------- | ------------ | ------- | --------------------------------- |
-| `native` | Linux only (x86_64/arm64) [^1]  | Production   | minibox | Fallback on Linux                 |
-| `gke`    | Linux only (GKE pods) [^2]      | Production   | minibox | --                                |
-| `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
-| `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
-| `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
-| `vz`     | macOS only, `vz` feature [^5]   | Non-functional | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
-| `winbox` | Windows                         | Stub         | winbox  | --                                |
-
-[^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
-      (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.
-[^2]: `gke` is Linux only (`cfg!(target_os = "linux")`). Unprivileged — no root required.
-      Uses proot (ptrace) and copy-based filesystem instead of overlay.
-[^3]: `smolvm` is compiled only on Unix (`cfg!(unix)`). Not available on Windows builds.
-      Requires the `smolvm` binary on PATH at runtime.
-[^4]: `krun` fallback platform-splits: `native` on Linux, `krun` on macOS, when
-      `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
-[^5]: `vz` requires macOS + the `vz` Cargo feature (off by default). Removed
-      2026-05-07 (commit `00ee4427`, issue #305) after a Tahoe-beta VZ.framework
-      regression (`VZErrorInternal(1)`); code restored 2026-08-15, but the
-      adapter is **currently non-functional** — a follow-up minimal repro
-      showed `VZLinuxBootLoader` still fails with `VZErrorDomain code=1` on
-      macOS 26.4, confirmed against two independent kernel images. See the
-      status update at the top of
-      `docs/designs/2026-08-15-vz-adapter-revival-design.md`. Bypasses the
-      shared `run_daemon()`/`AdapterSuite` dispatch entirely — selected in
-      `main()` before the tokio runtime starts, because VM boot needs the OS main
-      thread for GCD completion-handler callbacks.
-
----
-
-## Capability Matrix
-
-The canonical capability matrix is typed data in
-`crates/minibox-domain/src/capability_matrix.rs`; this document does not carry a
-second manually maintained copy. Query the running daemon through either CLI
-format:
+Backend order is fixed at `crates/minibox-domain/src/capability_matrix.rs:26-36`.
+Query the same data without parsing Markdown:
 
 ```console
 mbx capabilities
 mbx capabilities --json
 ```
 
-The daemon endpoint is `DaemonRequest::GetCapabilities` and returns the
-versioned `DaemonResponse::CapabilityMatrix`. JSON consumers can query backend,
-capability, group, and support-level enums directly without parsing this
-document or human-readable CLI output. Support levels distinguish `supported`,
-`unsupported`, `limited`, and `provided_by` (VM, Lima VM, copy filesystem, or
-nerdctl). Existing protocol variant encodings are unchanged.
+### Legend
 
----
+- **Yes** — declared supported.
+- **No** — declared unsupported.
+- **Limited** — declared partially supported.
+- **VM** / **Lima VM** — provided by the underlying VM.
+- **Copy** / **nerdctl** — provided by the named filesystem mechanism.
 
-## Source References for Capability Matrix
+## Adapter availability
 
-Key implementation sites backing the typed support declarations:
+This table intentionally reports source-backed availability and wiring, not an
+uncodified production/experimental maturity label.
 
-| Feature area | Source |
+| Adapter | Availability and wiring | Citation |
+| --- | --- | --- |
+| `native` | Linux-only registered suite; requires root at startup | `crates/miniboxd/src/adapter_registry.rs:95-100`; `crates/miniboxd/src/main.rs:437-455` |
+| `gke` | Linux-only registered suite | `crates/miniboxd/src/adapter_registry.rs:101-106`; `crates/miniboxd/src/main.rs:732-740` |
+| `colima` | Unix registered suite | `crates/miniboxd/src/adapter_registry.rs:107-112`; `crates/miniboxd/src/main.rs:741-747` |
+| `smolvm` | Unix registered suite and default when its binary is available | `crates/miniboxd/src/adapter_registry.rs:113-118`; `crates/miniboxd/src/adapter_registry.rs:227-261` |
+| `krun` | Registered suite and fallback when `smolvm` is unavailable | `crates/miniboxd/src/adapter_registry.rs:119-124`; `crates/miniboxd/src/adapter_registry.rs:217-249` |
+| `vz` | macOS + `vz` feature; separately dispatched before the normal adapter builder | `crates/miniboxd/src/adapter_registry.rs:125-130`; `crates/miniboxd/src/main.rs:79-90` |
+| `winbox` | Windows daemon stub; startup returns an error | `crates/winbox/src/lib.rs:1-9`; `crates/winbox/src/lib.rs:42-55` |
+
+## Capability status
+
+<!-- capability-status-matrix -->
+| Group | Feature | native | gke | colima | smolvm | krun | vz | winbox | Citation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Container lifecycle | pull | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:329` |
+| Container lifecycle | run | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:330` |
+| Container lifecycle | stop | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:331` |
+| Container lifecycle | rm | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:332` |
+| Container lifecycle | ps | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:333` |
+| Container lifecycle | pause/resume | Yes | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:334` |
+| Container lifecycle | restart | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:335` |
+| Container lifecycle | exec (-it) | Yes | No | Limited | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:336` |
+| Container lifecycle | logs | Yes | No | Limited | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:337` |
+| Container lifecycle | events | Yes | Yes | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:338` |
+| Image management | Docker Hub v2 | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:339` |
+| Image management | ghcr.io | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:340` |
+| Image management | Parallel layer pull | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:341` |
+| Image management | prune / rmi | Yes | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:342` |
+| Image management | push (exp) | Yes | Yes | Yes | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:343` |
+| Image management | commit (exp) | Yes | No | Yes | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:344` |
+| Image management | build (exp) | Yes | No | Yes | Yes | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:345` |
+| Isolation | PID namespace | Yes | No | Lima VM | VM | VM | VM | No | `crates/minibox-domain/src/capability_matrix.rs:346` |
+| Isolation | Mount namespace | Yes | No | Lima VM | VM | VM | VM | No | `crates/minibox-domain/src/capability_matrix.rs:347` |
+| Isolation | Network namespace | Yes | No | Lima VM | VM | VM | VM | No | `crates/minibox-domain/src/capability_matrix.rs:348` |
+| Isolation | UTS namespace | Yes | No | Lima VM | VM | VM | VM | No | `crates/minibox-domain/src/capability_matrix.rs:349` |
+| Isolation | IPC namespace | Yes | No | Lima VM | VM | VM | VM | No | `crates/minibox-domain/src/capability_matrix.rs:350` |
+| Isolation | cgroups v2 | Yes | No | Lima VM | VM | No | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:351` |
+| Isolation | Overlay FS | Yes | Copy | nerdctl | No | No | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:352` |
+| Networking | Bridge (exp) | Yes | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:353` |
+| Networking | Port forwarding | No | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:354` |
+| Networking | DNS | No | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:355` |
+| Mounts & privileges | Bind mounts (-v) | Yes | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:356` |
+| Mounts & privileges | Privileged mode | Yes | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:357` |
+| Security | SO_PEERCRED auth | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:358` |
+| Security | Tar path validation | Yes | Yes | Yes | Yes | Yes | Yes | Yes | `crates/minibox-domain/src/capability_matrix.rs:359` |
+| Security | Setuid stripping | Yes | Yes | Yes | Yes | Yes | Yes | Yes | `crates/minibox-domain/src/capability_matrix.rs:360` |
+| Security | Device node rejection | Yes | Yes | Yes | Yes | Yes | Yes | Yes | `crates/minibox-domain/src/capability_matrix.rs:361` |
+| Security | Layer digest verify | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:362` |
+| Security | Request frame limits | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:363` |
+| Security | Env redaction in logs | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:364` |
+| Execution integrity | Execution manifest | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:365` |
+| Execution integrity | manifest get/verify | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:366` |
+| Execution integrity | Admission policy gate | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:367` |
+| State persistence | Records survive restart | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:368` |
+| State persistence | PID reconciliation | Yes | No | No | No | No | No | No | `crates/minibox-domain/src/capability_matrix.rs:369` |
+| Observability | Structured tracing | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:370` |
+| Observability | OTLP export (opt-in) | Yes | Yes | Yes | Yes | Yes | Yes | No | `crates/minibox-domain/src/capability_matrix.rs:371` |
+<!-- /capability-status-matrix -->
+
+## Implementation evidence
+
+The row citations above identify the exact status declarations. These additional
+sites show the principal implementation and absence evidence behind them:
+
+| Area | Evidence |
 | --- | --- |
-| Container lifecycle (run/stop/rm/ps/restart) | `crates/minibox/src/daemon/handler/lifecycle.rs`, `handler/run.rs`, `handler/stop.rs` |
-| pause/resume (native, cgroup.freeze) | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
-| exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-domain/src/exec.rs:ExecRuntime` |
-| logs | `crates/minibox/src/daemon/handler/logs.rs` |
-| events | `crates/minibox-core/src/events.rs:EventSink`/`EventSource` |
-| Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image` |
-| Image pull (ghcr.io) | `crates/minibox/src/adapters/ghcr.rs` |
-| prune/rmi | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector` |
-| push | `crates/minibox-domain/src/image.rs:ImagePusher` |
-| commit | `crates/minibox-domain/src/image.rs:ContainerCommitter` |
-| build | `crates/minibox-domain/src/image.rs:ImageBuilder` |
-| PID/Mount/Net/UTS/IPC namespaces (native) | `crates/minibox/src/container/namespace.rs` |
-| cgroups v2 | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
-| Overlay FS | `crates/minibox/src/adapters/filesystem.rs:OverlayFilesystem` |
-| Bridge networking | `crates/minibox/src/adapters/network/bridge.rs:BridgeNetwork` |
-| Bind mounts / privileged mode | `crates/minibox/src/daemon/handler/run.rs` |
-| SO_PEERCRED auth | `crates/minibox/src/daemon/server.rs:is_authorized` |
-| Tar path validation | `crates/minibox-core/src/image/layer.rs:validate_tar_entry_path` |
-| Setuid stripping | `crates/minibox-core/src/image/layer.rs` (mode & 0o777) |
-| Device node rejection | `crates/minibox-core/src/image/layer.rs` (Block/Char check) |
-| Layer digest verify | `crates/minibox-core/src/image/registry.rs` |
-| Request frame limits | `crates/minibox/src/daemon/server.rs:MAX_REQUEST_SIZE` |
-| Execution manifest + verify | `crates/minibox-domain/src/execution_manifest.rs` |
-| Admission policy gate | `crates/minibox-domain/src/execution_policy.rs` |
-| State persistence + PID reconciliation | `crates/minibox/src/daemon/state.rs:DaemonState` |
-| Structured tracing | `crates/miniboxd/src/main.rs` (tracing subscriber init) |
-| OTLP export | `crates/miniboxd/src/main.rs` (otel feature gate) |
-
----
-
-## Control Surfaces
-
-- `mbx` is the primary CLI and connects directly to the daemon Unix socket.
-- `minibox-crux-plugin` exposes a JSON-RPC stdio bridge for Crux workflows.
-- `minibox-mcp` exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.
-
----
-
-## Legend
-
-- **Yes** -- implemented and tested
-- **No** -- not implemented for this adapter
-- **Limited** -- partially working, known gaps
-- **WIP** -- actively being developed
-- **Copy** -- uses copy-based filesystem instead of overlay
-- **VM** -- isolation provided by the underlying VM, not
-  minibox namespaces
-
----
-
-## Notes
-
-- **`gke` adapter** uses proot for filesystem isolation
-  (see `crates/minibox/src/adapters/gke.rs:ProotRuntime`) and a
-  no-op resource limiter (`crates/minibox/src/adapters/gke.rs:NoopLimiter`).
-  Designed for running inside unprivileged GKE pods where namespaces and
-  cgroups are unavailable.
-- **`colima` adapter** delegates to `nerdctl`/`limactl` inside a
-  Lima VM
-  (see `crates/minibox/src/adapters/colima.rs:ColimaRuntime`).
-  Exec and logs are limited because they go through Lima's SSH
-  tunnel. Push, commit, and build are wired via
-  `ColimaImagePusher`, `OverlayCommitAdapter`, and
-  `MiniboxImageBuilder`.
-- **`smolvm` adapter** is the **default on Unix** when
-  `MINIBOX_ADAPTER` is unset and the `smolvm` binary is present on
-  PATH (see `crates/miniboxd/src/adapter_registry.rs`). Falls back
-  to `native` on Linux or `krun` on macOS when the binary is
-  absent. Not available on Windows (`cfg!(unix)`). Lightweight Linux
-  VMs with subsecond boot
-  (see `crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime`).
-- **`krun` adapter** uses libkrun to run containers in
-  lightweight VMs
-  (see `crates/macbox/src/krun/runtime.rs:KrunRuntime`).
-  All four adapter ports (runtime, registry, filesystem, limiter)
-  are wired into the daemon
-  (see `crates/miniboxd/src/main.rs:build_krun_handler_dependencies`)
-  and pass 31 conformance tests. Acts as the fallback when
-  `smolvm` is unavailable.
-- **`vz` adapter** uses Apple's Virtualization.framework directly
-  (see `crates/macbox/src/vz/`), communicating with the in-VM
-  `minibox-agent` over vsock
-  (`crates/macbox/src/vz/vsock.rs`, `proxy.rs`). Opt-in only via
-  `MINIBOX_ADAPTER=vz` and the `vz` Cargo feature — not wired into
-  `AdapterSuite`'s `build_handler_deps` dispatch like the other
-  adapters, because `VZVirtualMachine` construction and its
-  completion-handler callbacks must run on the GCD main queue, which
-  requires bypassing `#[tokio::main]` entirely
-  (see `vz_main()`/`start_vz()` in `crates/miniboxd/src/main.rs` and
-  `crates/macbox/src/lib.rs`). Removed 2026-05-07 (issue #305) after
-  a macOS 26 Tahoe-beta regression (`VZErrorInternal(1)`); code
-  restored 2026-08-15, but **currently non-functional** — a follow-up
-  minimal repro (isolated from all minibox configuration, tested
-  against two independent kernel images) showed `VZLinuxBootLoader`
-  still fails with `VZErrorDomain code=1` on macOS 26.4. The earlier
-  belief that the regression was fixed was based on a Lima repro that
-  used `VZEFIBootLoader` — a different boot mechanism than this
-  adapter needs. See the status update in
-  `docs/designs/2026-08-15-vz-adapter-revival-design.md`.
-  `exec`/`logs`/`push`/`commit`/`build` are unimplemented, same gaps
-  as `krun`.
-- **`docker_desktop` adapter**
-  (`DockerDesktopRuntime`/`Filesystem`/`Limiter`) exists in
-  `crates/minibox/src/adapters/docker_desktop.rs` and is publicly
-  exported, but is not registered in `AdapterSuite` or wired into
-  the daemon. Not included in the matrix above.
-  <!--joe:note::docker_desktop adapter logic lives in crates/minibox/src/adapters/docker_desktop.rs-->
-- **`winbox`** returns an error unconditionally. Phase 2 (Named Pipe
-  server, HCS/WSL2 wiring) has not started.
-- **Execution integrity** is implemented at the daemon handler
-  layer, not inside individual adapters
-  (see `crates/minibox/src/daemon/handler/run.rs:prepare_run`
-  and `crates/minibox/src/daemon/handler/manifest.rs`). All
-  adapters that support `run` inherit manifest persist,
-  `mbx manifest`, `mbx verify`, and admission-policy gating
-  (see `crates/minibox-domain/src/execution_policy.rs:ExecutionPolicy`).
-  Environment variable values are stored as SHA-256 digests --
-  never plaintext -- in `execution-manifest.json`
-  (see `crates/minibox-domain/src/execution_manifest.rs:ExecutionManifest::seal`).
-- **Observability env vars** (daemon startup,
-  see `crates/miniboxd/src/main.rs`):
-    - `MINIBOX_OTLP_ENDPOINT` -- OTLP trace export endpoint
-      (`otel` feature required).
-    - `MINIBOX_METRICS_ADDR` -- Prometheus metrics bind address
-      (e.g. `0.0.0.0:9090`); `metrics` feature required.
+| Adapter-specific optional exec, push, commit, and build wiring | `crates/miniboxd/src/main.rs:876-910`; `crates/miniboxd/src/main.rs:944-976`; `crates/macbox/src/lib.rs:99-135`; `crates/miniboxd/src/main.rs:1064-1096`; `crates/miniboxd/src/main.rs:1121-1156`; `crates/macbox/src/lib.rs:554-593` |
+| Native namespaces | `crates/minibox/src/adapters/runtime.rs:127-176`; `crates/minibox/src/container/namespace.rs:40-72` |
+| GKE no-op cgroups, copy filesystem, and proot isolation limits | `crates/minibox/src/adapters/gke.rs:46-77`; `crates/minibox/src/adapters/gke.rs:83-161`; `crates/minibox/src/adapters/gke.rs:287-397` |
+| Colima VM namespaces and output behavior | `crates/minibox/src/adapters/colima.rs:867-892`; `crates/minibox/src/adapters/colima.rs:925-1007` |
+| SmolVM runtime, VM filesystem, and limiter delegation | `crates/minibox/src/adapters/smolvm.rs:435-562`; `crates/minibox/src/adapters/smolvm.rs:568-667` |
+| krun runtime isolation declarations and process spawn | `crates/macbox/src/krun/runtime.rs:335-420` |
+| VZ runtime and in-VM filesystem/cgroup delegation | `crates/macbox/src/vz/adapter.rs:152-217`; `crates/macbox/src/vz/adapter.rs:223-344` |
+| Native bridge and DNAT implementation | `crates/minibox/src/adapters/network/bridge.rs:82-164`; `crates/minibox/src/adapters/network/bridge.rs:167-221` |
+| Tar path, device-node, and permission handling | `crates/minibox-core/src/image/layer.rs:200-230`; `crates/minibox-core/src/image/layer.rs:256-304`; `crates/minibox-core/src/image/layer.rs:319-390` |
+| Layer digest verification during pull | `crates/minibox-core/src/image/registry.rs:240-318` |
+| Request-size and peer-credential guards | `crates/minibox/src/daemon/server.rs:21`; `crates/minibox/src/daemon/server.rs:132-139`; `crates/minibox/src/daemon/server.rs:190-204` |
+| State load and startup reconciliation | `crates/minibox/src/daemon/state.rs:362-424`; `crates/minibox/src/daemon/state.rs:426-461` |
+| Windows unsupported status | `crates/winbox/src/lib.rs:1-15`; `crates/winbox/src/lib.rs:42-55` |

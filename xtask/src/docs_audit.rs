@@ -496,10 +496,98 @@ fn run_agentlint(sh: &Shell, root: &Path, json: bool) -> Result<AgentlintResult>
     })
 }
 
+// ── Feature-matrix citations ─────────────────────────────────────────────
+
+fn has_precise_rust_citation(cell: &str) -> bool {
+    cell.split(char::from(96))
+        .enumerate()
+        .any(|(index, citation)| {
+            if index % 2 == 0 {
+                return false;
+            }
+            let Some((path, lines)) = citation.rsplit_once(".rs:") else {
+                return false;
+            };
+            (path.starts_with("crates/") || path.starts_with("xtask/"))
+                && !lines.is_empty()
+                && lines
+                    .chars()
+                    .all(|ch| ch.is_ascii_digit() || ch == char::from(45))
+        })
+}
+
+fn validate_capability_status_citations(content: &str) -> Result<usize> {
+    const START: &str = "<!-- capability-status-matrix -->";
+    const END: &str = "<!-- /capability-status-matrix -->";
+
+    let (_, matrix) = content
+        .split_once(START)
+        .context("FEATURE_MATRIX missing capability-status-matrix start marker")?;
+    let (matrix, _) = matrix
+        .split_once(END)
+        .context("FEATURE_MATRIX missing capability-status-matrix end marker")?;
+
+    let mut rows = 0usize;
+    for (index, line) in matrix.lines().enumerate() {
+        let trimmed = line.trim();
+        if !trimmed.starts_with(char::from(124))
+            || trimmed.contains("| ---")
+            || trimmed.contains("| Group |")
+        {
+            continue;
+        }
+        let cells: Vec<_> = trimmed
+            .trim_matches(char::from(124))
+            .split(char::from(124))
+            .map(str::trim)
+            .collect();
+        if cells.len() != 10 {
+            bail!(
+                "FEATURE_MATRIX capability row {} has {} cells; expected 10",
+                index + 1,
+                cells.len()
+            );
+        }
+        if !has_precise_rust_citation(cells[9]) {
+            bail!(
+                "FEATURE_MATRIX capability row {} lacks a workspace-relative file.rs:line citation",
+                cells[1]
+            );
+        }
+        rows += 1;
+    }
+
+    if rows == 0 {
+        bail!("FEATURE_MATRIX capability-status-matrix has no status rows");
+    }
+    Ok(rows)
+}
+
+fn check_feature_matrix_citations(root: &Path) -> Result<usize> {
+    let doc = std::fs::read_to_string(root.join("docs/core/FEATURE_MATRIX.mbx.md"))
+        .context("read cited feature matrix")?;
+    let rows = validate_capability_status_citations(&doc)?;
+    let declarations =
+        std::fs::read_to_string(root.join("crates/minibox-domain/src/capability_matrix.rs"))
+            .context("read typed capability matrix")?
+            .lines()
+            .filter(|line| line.trim_start().starts_with("row!("))
+            .count();
+    if rows != declarations {
+        bail!(
+            "FEATURE_MATRIX has {rows} cited status rows but typed matrix has {declarations} declarations"
+        );
+    }
+    Ok(rows)
+}
+
 // ── Public entry point ───────────────────────────────────────────────────
 
 pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     eprintln!("--- docs-audit ---");
+
+    let cited_rows = check_feature_matrix_citations(root)?;
+    eprintln!("docs-audit: {cited_rows} capability status rows have precise code citations");
 
     let code = code_facts(root)?;
     let docs = doc_facts(root)?;
@@ -600,4 +688,37 @@ pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HEADER: &str = "<!-- capability-status-matrix -->
+| Group | Feature | native | gke | colima | smolvm | krun | vz | winbox | Citation |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+";
+
+    #[test]
+    fn accepts_cited_status_row() {
+        let tick = char::from(96);
+        let doc = format!(
+            "{HEADER}| Lifecycle | run | Yes | Yes | Yes | Yes | Yes | Yes | No | {tick}crates/example/src/lib.rs:42{tick} |
+<!-- /capability-status-matrix -->"
+        );
+        assert_eq!(
+            validate_capability_status_citations(&doc).expect("valid matrix"),
+            1
+        );
+    }
+
+    #[test]
+    fn rejects_uncited_status_row() {
+        let doc = format!(
+            "{HEADER}| Lifecycle | run | Yes | Yes | Yes | Yes | Yes | Yes | No | implemented |
+<!-- /capability-status-matrix -->"
+        );
+        let error = validate_capability_status_citations(&doc).expect_err("citation required");
+        assert!(error.to_string().contains("lacks a workspace-relative"));
+    }
 }
