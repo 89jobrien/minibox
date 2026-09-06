@@ -70,8 +70,7 @@ jobs:
       - name: Validate public crates publishability
         run: |
           cargo publish --dry-run --locked -p minibox-macros
-          cargo publish --dry-run --locked -p minibox-core
-          cargo publish --dry-run --locked -p minibox-mcp
+          cargo publish --dry-run --locked -p minibox-domain
 
       - name: Publish crates
         env:
@@ -94,9 +93,11 @@ jobs:
           sleep 30
           publish_crate minibox-domain
           sleep 30
+          cargo publish --dry-run --locked -p minibox-core
           publish_crate minibox-core
           sleep 30
-          cargo publish -p minibox-mcp || echo "minibox-mcp already published"
+          cargo publish --dry-run --locked -p minibox-mcp
+          publish_crate minibox-mcp
           sleep 30
 
   build:

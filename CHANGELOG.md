@@ -20,6 +20,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - **ci:** Gate VZ startup path to macOS
 - **bench:** Initialize shared UID range policy in daemon dispatch benchmarks
 - **protocol:** Cover capability matrix terminal response classification
+- **release:** Validate crates only after their new dependencies reach crates.io
 
 ### Features
 
