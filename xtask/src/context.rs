@@ -207,6 +207,32 @@ fn derive_crate_assignments(crates: &[CrateInfo]) -> Vec<CrateAssignment> {
     assignments
 }
 
+fn derive_file_assignments() -> Vec<FileAssignment> {
+    let mut assignments = [
+        (
+            "xtask/src/context.rs",
+            "context snapshot schema and derivation",
+        ),
+        ("xtask/src/main.rs", "info context command dispatch"),
+        (
+            "xtask/schema/cli.schema.json",
+            "machine-readable command contract",
+        ),
+        (
+            "docs/core/XTASK_CLI.mbx.md",
+            "human-readable context output contract",
+        ),
+    ]
+    .into_iter()
+    .map(|(path, responsibility)| FileAssignment {
+        path: path.to_string(),
+        responsibility: responsibility.to_string(),
+    })
+    .collect::<Vec<_>>();
+    assignments.sort_by(|left, right| left.path.cmp(&right.path));
+    assignments
+}
+
 /// Count .rs files and total lines under a crate directory.
 fn count_source(crate_dir: &Path) -> (usize, usize) {
     let src_dir = crate_dir.join("src");
@@ -375,6 +401,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
     let context_map = ContextMap {
         crate_assignments: derive_crate_assignments(&crates),
+        file_assignments: derive_file_assignments(),
         ..ContextMap::default()
     };
 
@@ -487,5 +514,29 @@ mod tests {
         assert_eq!(names, vec!["alpha", "zeta", "middle"]);
         assert_eq!(assignments[0].lines, 100);
         assert_eq!(assignments[2].lines, 50);
+    }
+
+    #[test]
+    fn file_assignments_cover_xtask_info_context_surface() {
+        let assignments = derive_file_assignments();
+        let paths: Vec<&str> = assignments
+            .iter()
+            .map(|assignment| assignment.path.as_str())
+            .collect();
+
+        assert_eq!(
+            paths,
+            vec![
+                "docs/core/XTASK_CLI.mbx.md",
+                "xtask/schema/cli.schema.json",
+                "xtask/src/context.rs",
+                "xtask/src/main.rs",
+            ]
+        );
+        assert!(
+            assignments
+                .iter()
+                .all(|assignment| !assignment.responsibility.is_empty())
+        );
     }
 }
