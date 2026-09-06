@@ -190,6 +190,23 @@ fn crate_graph(sh: &Shell) -> Result<Vec<CrateInfo>> {
     Ok(crates)
 }
 
+fn derive_crate_assignments(crates: &[CrateInfo]) -> Vec<CrateAssignment> {
+    let mut assignments: Vec<_> = crates
+        .iter()
+        .map(|crate_info| CrateAssignment {
+            crate_name: crate_info.name.clone(),
+            lines: crate_info.lines,
+        })
+        .collect();
+    assignments.sort_by(|left, right| {
+        right
+            .lines
+            .cmp(&left.lines)
+            .then_with(|| left.crate_name.cmp(&right.crate_name))
+    });
+    assignments
+}
+
 /// Count .rs files and total lines under a crate directory.
 fn count_source(crate_dir: &Path) -> (usize, usize) {
     let src_dir = crate_dir.join("src");
@@ -356,6 +373,10 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     }
 
     let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
+    let context_map = ContextMap {
+        crate_assignments: derive_crate_assignments(&crates),
+        ..ContextMap::default()
+    };
 
     let snapshot = ContextSnapshot {
         snapshot_version: 2,
@@ -371,7 +392,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         },
         ci_workflows: ci_workflows(root),
         recent_commits: recent_commits(sh)?,
-        context_map: ContextMap::default(),
+        context_map,
     };
 
     let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
@@ -405,6 +426,17 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
 mod tests {
     use super::*;
 
+    fn crate_info(name: &str, lines: usize) -> CrateInfo {
+        CrateInfo {
+            name: name.to_string(),
+            kind: vec!["lib".to_string()],
+            deps: Vec::new(),
+            test_count: 0,
+            src_files: 1,
+            lines,
+        }
+    }
+
     #[test]
     fn context_snapshot_includes_context_map() {
         let snapshot = ContextSnapshot {
@@ -436,5 +468,24 @@ mod tests {
         assert!(context_map.get("crate_assignments").is_some());
         assert!(context_map.get("file_assignments").is_some());
         assert!(context_map.get("task_slices").is_some());
+    }
+
+    #[test]
+    fn crate_assignments_are_sorted_and_stable() {
+        let crates = vec![
+            crate_info("zeta", 100),
+            crate_info("middle", 50),
+            crate_info("alpha", 100),
+        ];
+
+        let assignments = derive_crate_assignments(&crates);
+        let names: Vec<&str> = assignments
+            .iter()
+            .map(|assignment| assignment.crate_name.as_str())
+            .collect();
+
+        assert_eq!(names, vec!["alpha", "zeta", "middle"]);
+        assert_eq!(assignments[0].lines, 100);
+        assert_eq!(assignments[2].lines, 50);
     }
 }
