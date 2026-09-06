@@ -27,6 +27,7 @@ mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
+mod changelog;
 mod check_protocol_sites;
 pub mod checkpoint;
 mod ci_watch;
@@ -154,8 +155,24 @@ fn main() -> Result<()> {
 
         // ── CI / promotion / orchestration ───────────────────────────
         Some("bump") => {
-            let level = env::args().nth(2).unwrap_or_else(|| "patch".to_string());
-            bump::bump(root, &level)
+            let args: Vec<String> = env::args().skip(2).collect();
+            let (level, with_changelog) = parse_bump_args(&args)?;
+            let prepared_changelog = if with_changelog {
+                let next = bump::next_version(root, level)?;
+                let Some(contents) = changelog::prepare(root, &next)? else {
+                    eprintln!("[minibox] no release entries; version and changelog unchanged");
+                    return Ok(());
+                };
+                Some(contents)
+            } else {
+                None
+            };
+            let version = bump::bump(root, level)?;
+            if let Some(contents) = prepared_changelog {
+                changelog::write(root, &contents)?;
+                eprintln!("[minibox] changelog updated for v{version}");
+            }
+            Ok(())
         }
         Some("preflight") => {
             preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
@@ -617,6 +634,23 @@ fn info_alias_to_sub(cmd: &str) -> String {
 
 // ── Help ─────────────────────────────────────────────────────────────────────
 
+fn parse_bump_args(args: &[String]) -> Result<(&str, bool)> {
+    let usage = "usage: cargo xtask bump [patch|minor|major] [--changelog]";
+    match args {
+        [] => Ok(("patch", false)),
+        [flag] if flag == "--changelog" => Ok(("patch", true)),
+        [level] if matches!(level.as_str(), "patch" | "minor" | "major") => {
+            Ok((level.as_str(), false))
+        }
+        [level, flag]
+            if matches!(level.as_str(), "patch" | "minor" | "major") && flag == "--changelog" =>
+        {
+            Ok((level.as_str(), true))
+        }
+        _ => bail!(usage),
+    }
+}
+
 fn print_help() -> Result<()> {
     eprintln!("Usage: cargo xtask <command> [args...]");
     eprintln!();
@@ -644,7 +678,8 @@ fn print_help() -> Result<()> {
     eprintln!("  test-linux                     build + load + run tests in container");
     eprintln!();
     eprintln!("CI / promotion:");
-    eprintln!("  bump [patch|minor|major]       bump workspace version");
+    eprintln!("  bump [patch|minor|major] [--changelog]");
+    eprintln!("                       bump version and optionally insert release notes");
     eprintln!("  preflight                      check required tools");
     eprintln!("  doctor                         full preflight diagnostics");
     eprintln!("  promote [--from <tier>] [--to <tier>] [--dry-run]");
@@ -729,6 +764,36 @@ mod dispatch_args_tests {
         let rest = vec!["origin/main".to_string()];
         assert_eq!(changes_base_ref(&rest), "origin/main");
         assert_eq!(changes_base_ref(&[]), "HEAD^");
+    }
+
+    #[test]
+    fn bump_args_accept_level_and_changelog() {
+        let rest = vec!["minor".to_string(), "--changelog".to_string()];
+
+        let parsed = parse_bump_args(&rest).expect("valid bump arguments should parse");
+
+        assert_eq!(parsed, ("minor", true));
+    }
+
+    #[test]
+    fn bump_args_default_to_patch() {
+        assert_eq!(
+            parse_bump_args(&[]).expect("empty bump arguments should use defaults"),
+            ("patch", false)
+        );
+        assert_eq!(
+            parse_bump_args(&["--changelog".to_string()])
+                .expect("changelog-only arguments should use patch"),
+            ("patch", true)
+        );
+    }
+
+    #[test]
+    fn bump_args_reject_unknown_values() {
+        let error = parse_bump_args(&["banana".to_string()])
+            .expect_err("unknown bump levels must be rejected");
+
+        assert!(error.to_string().contains("usage: cargo xtask bump"));
     }
 
     #[test]

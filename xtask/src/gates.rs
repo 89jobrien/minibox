@@ -1626,7 +1626,7 @@ fn auto_bump(sh: &Shell) -> Result<()> {
 
     let level = if has_new_rust { "minor" } else { "patch" };
     let root = sh.current_dir();
-    bump::bump(&root, level)?;
+    let _version = bump::bump(&root, level)?;
 
     cmd!(sh, "git add Cargo.toml")
         .run()
