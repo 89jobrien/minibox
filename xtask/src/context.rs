@@ -406,6 +406,27 @@ fn adapter_table() -> BTreeMap<String, AdapterInfo> {
     m
 }
 
+fn persist_snapshot(root: &Path, snapshot: &ContextSnapshot) -> Result<std::path::PathBuf> {
+    let dir = root.join("artifacts/context");
+    std::fs::create_dir_all(&dir).context("create artifacts/context")?;
+
+    let latest = dir.join("snapshot.json");
+    let json = serde_json::to_string_pretty(snapshot).context("serialize snapshot")?;
+    std::fs::write(&latest, json).context("write snapshot.json")?;
+
+    let jsonl = dir.join("history.jsonl");
+    use std::io::Write;
+    let compact = serde_json::to_string(snapshot).context("serialize history record")?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&jsonl)
+        .context("open history.jsonl")?;
+    writeln!(file, "{compact}").context("append history.jsonl")?;
+
+    Ok(latest)
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 // qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
@@ -447,27 +468,11 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         context_map,
     };
 
-    let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
-
     if save {
-        let dir = root.join("artifacts/context");
-        std::fs::create_dir_all(&dir).context("create artifacts/context")?;
-
-        let latest = dir.join("snapshot.json");
-        std::fs::write(&latest, &json).context("write snapshot.json")?;
-
-        let jsonl = dir.join("history.jsonl");
-        use std::io::Write;
-        let compact = serde_json::to_string(&snapshot)?;
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&jsonl)
-            .context("open history.jsonl")?;
-        writeln!(f, "{compact}")?;
-
+        let latest = persist_snapshot(root, &snapshot)?;
         eprintln!("Context snapshot saved to {}", latest.display());
     } else {
+        let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
         println!("{json}");
     }
 
@@ -489,9 +494,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn context_snapshot_includes_context_map() {
-        let snapshot = ContextSnapshot {
+    fn snapshot_fixture() -> ContextSnapshot {
+        ContextSnapshot {
             snapshot_version: 2,
             commit: "abc1234".to_string(),
             branch: "develop".to_string(),
@@ -510,9 +514,12 @@ mod tests {
             ci_workflows: Vec::new(),
             recent_commits: Vec::new(),
             context_map: ContextMap::default(),
-        };
+        }
+    }
 
-        let value = serde_json::to_value(snapshot).expect("snapshot should serialize");
+    #[test]
+    fn context_snapshot_includes_context_map() {
+        let value = serde_json::to_value(snapshot_fixture()).expect("snapshot should serialize");
         assert_eq!(value["snapshot_version"], 2);
         let context_map = value
             .get("context_map")
@@ -583,5 +590,27 @@ mod tests {
         assert_eq!(dependencies["t3"], vec!["t1"]);
         assert_eq!(dependencies["t4"], vec!["t2", "t3"]);
         assert!(slices.iter().all(|slice| !slice.title.is_empty()));
+    }
+
+    #[test]
+    fn save_mode_persists_context_map_in_snapshot_and_history() {
+        let temp = tempfile::tempdir().expect("temporary output root should be created");
+        let snapshot = snapshot_fixture();
+
+        let saved = persist_snapshot(temp.path(), &snapshot)
+            .expect("snapshot and history should be persisted");
+        assert_eq!(saved, temp.path().join("artifacts/context/snapshot.json"));
+
+        let latest = std::fs::read_to_string(&saved).expect("snapshot.json should be readable");
+        let latest: serde_json::Value =
+            serde_json::from_str(&latest).expect("snapshot.json should contain valid JSON");
+        assert_eq!(latest["snapshot_version"], 2);
+        assert!(latest["context_map"].is_object());
+
+        let history = std::fs::read_to_string(temp.path().join("artifacts/context/history.jsonl"))
+            .expect("history.jsonl should be readable");
+        let record: serde_json::Value =
+            serde_json::from_str(history.trim()).expect("history line should contain valid JSON");
+        assert_eq!(record["context_map"], latest["context_map"]);
     }
 }
