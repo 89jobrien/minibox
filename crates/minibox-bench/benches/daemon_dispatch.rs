@@ -112,6 +112,7 @@ fn bench_handler_run_dispatch(c: &mut Criterion) {
                     network: None,
                     mounts: vec![],
                     privileged: false,
+                    shared_uid_range: false,
                     env: vec![],
                     name: None,
                     platform: None,

@@ -516,6 +516,9 @@ fn test_terminal_classification_is_exhaustive() {
             allowed: true,
             reason: None,
         },
+        DaemonResponse::CapabilityMatrix {
+            matrix: minibox_core::domain::capability_matrix(),
+        },
         DaemonResponse::WorkflowComplete {
             final_phase: PhaseOutcome::Succeeded,
         },

@@ -9,6 +9,39 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## 0.33.1 - 2026-09-06
+
+### Bug Fixes
+
+- **runtime:** Refresh PID runtime directories on restart; fixes #450 ([#450](/89jobrien/minibox/issues/450))
+- **commit:** Warn before excluding volume data, fixes #452 ([#452](/89jobrien/minibox/issues/452))
+- **runtime:** Cover UID mapping in all-feature builds
+- **ci:** Gate VZ dependencies to macOS
+- **ci:** Gate VZ startup path to macOS
+- **bench:** Initialize shared UID range policy in daemon dispatch benchmarks
+- **protocol:** Cover capability matrix terminal response classification
+
+### Features
+
+- **search:** Add local image discovery ([#250](/89jobrien/minibox/issues/250))
+- **conformance:** Return typed execution results ([#216](/89jobrien/minibox/issues/216))
+- **runtime:** Isolate containers with exclusive UID ranges; fixes #451 ([#451](/89jobrien/minibox/issues/451))
+- **filesystem:** Use ID-mapped shared volumes; fixes #448 ([#448](/89jobrien/minibox/issues/448))
+- **capabilities:** Expose typed backend matrix; fixes #231 ([#231](/89jobrien/minibox/issues/231))
+- **release:** Automate git-cliff changelogs
+
+### Miscellaneous
+
+- **protocol:** Accept Wave 1 contract changes
+
+### Other
+
+- Issue #216 typed conformance results ([#216](/89jobrien/minibox/issues/216))
+- Issues #451 #448 #450 Linux isolation and lifecycle ([#451](/89jobrien/minibox/issues/451), [#448](/89jobrien/minibox/issues/448), [#450](/89jobrien/minibox/issues/450))
+- Issue #452 VOLUME-aware commits ([#452](/89jobrien/minibox/issues/452))
+- Issue #231 typed capability matrix ([#231](/89jobrien/minibox/issues/231))
+- Sync local Searchbox with Wave 1
+
 ## [v0.32.0] - 2026-08-15
 
 ### Security
