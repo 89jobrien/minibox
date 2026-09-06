@@ -233,6 +233,31 @@ fn derive_file_assignments() -> Vec<FileAssignment> {
     assignments
 }
 
+fn derive_task_slices() -> Vec<TaskSlice> {
+    vec![
+        TaskSlice {
+            id: "t1".to_string(),
+            title: "Collect repository context".to_string(),
+            depends_on: Vec::new(),
+        },
+        TaskSlice {
+            id: "t2".to_string(),
+            title: "Derive crate assignments".to_string(),
+            depends_on: vec!["t1".to_string()],
+        },
+        TaskSlice {
+            id: "t3".to_string(),
+            title: "Derive file assignments".to_string(),
+            depends_on: vec!["t1".to_string()],
+        },
+        TaskSlice {
+            id: "t4".to_string(),
+            title: "Serialize and save context snapshot".to_string(),
+            depends_on: vec!["t2".to_string(), "t3".to_string()],
+        },
+    ]
+}
+
 /// Count .rs files and total lines under a crate directory.
 fn count_source(crate_dir: &Path) -> (usize, usize) {
     let src_dir = crate_dir.join("src");
@@ -402,7 +427,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let context_map = ContextMap {
         crate_assignments: derive_crate_assignments(&crates),
         file_assignments: derive_file_assignments(),
-        ..ContextMap::default()
+        task_slices: derive_task_slices(),
     };
 
     let snapshot = ContextSnapshot {
@@ -538,5 +563,25 @@ mod tests {
                 .iter()
                 .all(|assignment| !assignment.responsibility.is_empty())
         );
+    }
+
+    #[test]
+    fn task_slices_define_expected_dependency_graph() {
+        let slices = derive_task_slices();
+        let dependencies: BTreeMap<&str, Vec<&str>> = slices
+            .iter()
+            .map(|slice| {
+                (
+                    slice.id.as_str(),
+                    slice.depends_on.iter().map(String::as_str).collect(),
+                )
+            })
+            .collect();
+
+        assert_eq!(dependencies["t1"], Vec::<&str>::new());
+        assert_eq!(dependencies["t2"], vec!["t1"]);
+        assert_eq!(dependencies["t3"], vec!["t1"]);
+        assert_eq!(dependencies["t4"], vec!["t2", "t3"]);
+        assert!(slices.iter().all(|slice| !slice.title.is_empty()));
     }
 }
