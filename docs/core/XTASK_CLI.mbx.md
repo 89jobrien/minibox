@@ -1,14 +1,14 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 4ed9fbb7edca65a6b792174218f20d83ab8a9171
 sources:
   - xtask/src/main.rs
   - xtask/schema/cli.schema.json
-generated: 2026-08-22
+generated: 2026-09-06
 ---
 
 # xtask CLI Reference
 
-Last updated: 2026-08-22
+Last updated: 2026-09-06
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -90,6 +90,38 @@ Bare `cargo xtask info` prints the target list.
 | `changes` | `[<base-ref>]` | Classify changed paths; emits GitHub Actions step outputs. Default base ref: `HEAD^`. |
 
 Deprecated aliases: `collect-metrics`, `context`, `detect-changes`.
+
+#### Context snapshot v2
+
+`cargo xtask info context` prints the snapshot as formatted JSON. Passing `--save` also writes
+`artifacts/context/snapshot.json` and appends a compact record to
+`artifacts/context/history.jsonl`. No other arguments are accepted.
+
+Snapshot version 2 adds a deterministic `context_map` block:
+
+```json
+{
+  "snapshot_version": 2,
+  "context_map": {
+    "crate_assignments": [
+      { "crate_name": "minibox", "lines": 123 }
+    ],
+    "file_assignments": [
+      {
+        "path": "xtask/src/context.rs",
+        "responsibility": "context snapshot schema and derivation"
+      }
+    ],
+    "task_slices": [
+      { "id": "t1", "title": "Collect repository context", "depends_on": [] }
+    ]
+  }
+}
+```
+
+The values above illustrate the shape; source-line totals are measured from the current checkout.
+Crate assignments sort by lines descending and crate name ascending. File assignments sort by
+path. Task slices use stable IDs and explicit `depends_on` edges.
 
 ---
 

@@ -604,7 +604,7 @@ fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String])
             collect_metrics::collect_metrics(root, save)
         }
         "context" => {
-            let save = rest.iter().any(|a| a == "--save");
+            let save = parse_info_context_args(rest)?;
             context::context(sh, root, save)
         }
         "changes" => {
@@ -612,6 +612,14 @@ fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String])
             detect_changes::run(root, &base_ref)
         }
         other => bail!("unknown info target: {other}"),
+    }
+}
+
+fn parse_info_context_args(rest: &[String]) -> Result<bool> {
+    match rest {
+        [] => Ok(false),
+        [flag] if flag == "--save" => Ok(true),
+        _ => bail!("usage: cargo xtask info context [--save]"),
     }
 }
 
@@ -767,6 +775,17 @@ mod dispatch_args_tests {
         let rest = vec!["origin/main".to_string()];
         assert_eq!(changes_base_ref(&rest), "origin/main");
         assert_eq!(changes_base_ref(&[]), "HEAD^");
+    }
+
+    #[test]
+    fn info_context_args_accept_only_optional_save() {
+        assert!(!parse_info_context_args(&[]).expect("empty args should print JSON"));
+        assert!(
+            parse_info_context_args(&["--save".to_string()])
+                .expect("--save should persist the snapshot")
+        );
+        assert!(parse_info_context_args(&["--unknown".to_string()]).is_err());
+        assert!(parse_info_context_args(&["--save".to_string(), "extra".to_string()]).is_err());
     }
 
     #[test]
