@@ -1,5 +1,8 @@
 //! CI change detection: classify changed paths into workspace areas.
 
+// TODO(feature-idea-01): classify every workspace member and make workspace or unknown Rust
+// changes run the full CI gate set so new crates cannot silently skip lint and tests.
+
 use anyhow::{Context, Result};
 use std::path::Path;
 use xshell::{Shell, cmd};

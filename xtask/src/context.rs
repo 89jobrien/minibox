@@ -24,6 +24,33 @@ struct ContextSnapshot {
     tests: TestSummary,
     ci_workflows: Vec<String>,
     recent_commits: Vec<CommitInfo>,
+    context_map: ContextMap,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct ContextMap {
+    crate_assignments: Vec<CrateAssignment>,
+    file_assignments: Vec<FileAssignment>,
+    task_slices: Vec<TaskSlice>,
+}
+
+#[derive(Debug, Serialize)]
+struct CrateAssignment {
+    crate_name: String,
+    lines: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct FileAssignment {
+    path: String,
+    responsibility: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TaskSlice {
+    id: String,
+    title: String,
+    depends_on: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -331,7 +358,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
 
     let snapshot = ContextSnapshot {
-        snapshot_version: 1,
+        snapshot_version: 2,
         commit,
         branch,
         timestamp,
@@ -344,6 +371,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         },
         ci_workflows: ci_workflows(root),
         recent_commits: recent_commits(sh)?,
+        context_map: ContextMap::default(),
     };
 
     let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
@@ -371,4 +399,42 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn context_snapshot_includes_context_map() {
+        let snapshot = ContextSnapshot {
+            snapshot_version: 2,
+            commit: "abc1234".to_string(),
+            branch: "develop".to_string(),
+            timestamp: "2026-09-06T00:00:00Z".to_string(),
+            workspace: WorkspaceInfo {
+                version: "0.33.0".to_string(),
+                edition: "2024".to_string(),
+                rust_version: "1.89.0".to_string(),
+            },
+            crates: Vec::new(),
+            adapters: BTreeMap::new(),
+            tests: TestSummary {
+                total: 0,
+                by_crate: BTreeMap::new(),
+            },
+            ci_workflows: Vec::new(),
+            recent_commits: Vec::new(),
+            context_map: ContextMap::default(),
+        };
+
+        let value = serde_json::to_value(snapshot).expect("snapshot should serialize");
+        assert_eq!(value["snapshot_version"], 2);
+        let context_map = value
+            .get("context_map")
+            .expect("snapshot v2 should include context_map");
+        assert!(context_map.get("crate_assignments").is_some());
+        assert!(context_map.get("file_assignments").is_some());
+        assert!(context_map.get("task_slices").is_some());
+    }
 }

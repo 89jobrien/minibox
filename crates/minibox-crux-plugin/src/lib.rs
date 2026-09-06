@@ -25,6 +25,9 @@ pub mod protocol;
 
 // ── Handler declarations ───────────────────────────────────────────────────────
 
+// TODO(feature-idea-03): bring Crux handler inputs to protocol parity and either honor or remove
+// the advertised image push target instead of silently discarding it.
+
 /// All handlers exposed by this plugin, in declaration order.
 #[must_use]
 pub fn handler_decls() -> Vec<HandlerDecl> {

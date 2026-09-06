@@ -24,6 +24,9 @@ where
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
 
+// TODO(feature-idea-02): extend agentlint with semantic checks for local paths, Cargo package
+// names, and documented xtask commands so stale agent guidance fails validation.
+
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
@@ -1544,7 +1547,7 @@ fn auto_bump(sh: &Shell) -> Result<()> {
 
     let level = if has_new_rust { "minor" } else { "patch" };
     let root = sh.current_dir();
-    bump::bump(&root, level)?;
+    let _version = bump::bump(&root, level)?;
 
     cmd!(sh, "git add Cargo.toml")
         .run()

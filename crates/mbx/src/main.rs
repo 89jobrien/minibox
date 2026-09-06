@@ -226,6 +226,8 @@ enum Commands {
         restart: bool,
     },
 
+    // TODO(feature-idea-06): add CLI commands for image listing, build, and push to expose the
+    // daemon operations already available through the protocol and Crux plugin.
     /// Pull an image from Docker Hub
     Pull {
         /// Image name (e.g., alpine, library/nginx)

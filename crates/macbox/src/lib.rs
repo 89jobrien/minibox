@@ -114,6 +114,8 @@ pub fn build_colima_handler_dependencies(
             run_containers_base: run_containers_dir,
         },
         exec: minibox::daemon::handler::ExecDeps {
+            // TODO(feature-idea-13): provide VM-backed exec and historical log retrieval for
+            // macOS adapters instead of leaving the shared execution port unavailable.
             exec_runtime: None,
             pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
                 minibox::daemon::handler::PtySessionRegistry::default(),
@@ -125,6 +127,8 @@ pub fn build_colima_handler_dependencies(
             image_builder: Some(image_builder),
         },
         events: minibox::daemon::handler::EventDeps {
+            // TODO(feature-idea-11): use one shared event broker and metrics recorder so Colima
+            // events reach subscribers and macOS telemetry matches the other adapter suites.
             event_sink: Arc::new(minibox_core::events::NoopEventSink),
             event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
             metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),

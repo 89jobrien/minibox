@@ -120,7 +120,7 @@ impl AgentPolicy {
     fn allows(&self, permission: AgentPermission) -> bool {
         self.permissions.contains(&permission)
     }
-    // TODO(review): enforcement is a plain runtime bool check callers can simply omit —
+    // TODO(review)(#476): enforcement is a plain runtime bool check callers can simply omit —
     // pull_image (images.rs) does. Consider returning a marker type (e.g. Authorized<T>)
     // from validate_run/validate_mutation that daemon-call functions require, so a future
     // mutating tool can't compile without passing the gate.

@@ -5,7 +5,7 @@
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
 //!
 // TODO(#116): raise coverage on handler and lifecycle/error paths
-// TODO(review-10): 15+ qual:allow(complexity) in handler modules — consider
+// TODO(review-10)(#474): 15+ qual:allow(complexity) in handler modules — consider
 // raising the rustqual complexity threshold for handler/ instead of per-fn annotations.
 //!
 //! # Hexagonal Architecture

@@ -789,6 +789,8 @@ async fn build_handler_deps(
 #[cfg(target_os = "linux")]
 // qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
 fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
+    // TODO(feature-idea-05): reject unknown MINIBOX_NETWORK_MODE values instead of silently
+    // selecting NoopNetwork for misspelled configuration.
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
@@ -906,6 +908,8 @@ fn build_native_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // TODO(feature-idea-12): replace production NoopVmCheckpoint wiring with
+        // adapter-specific snapshot implementations for the existing snapshot protocol.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
