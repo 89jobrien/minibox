@@ -61,7 +61,7 @@ impl MiniboxDaemonClient {
             let response_type = response_type(&response);
             let raw = serde_json::to_value(&response)?;
             total_bytes = total_bytes.saturating_add(raw.to_string().len());
-            // TODO(review): this hard-errors on overflow, but normalize_run_output()
+            // TODO(review)(#477): this hard-errors on overflow, but normalize_run_output()
             // (containers.rs) has its own graceful truncation path with a `truncated` flag.
             // The hard error here fires first, so large-output runs fail instead of
             // returning truncated stdout/stderr. Reconcile the two strategies.

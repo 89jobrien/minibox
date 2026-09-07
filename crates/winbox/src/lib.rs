@@ -9,6 +9,8 @@
 //! functions that also bail immediately.
 //!
 //! **Phase 2 work required**:
+//! TODO(feature-idea-15): complete the Windows daemon with a Named Pipe listener, authenticated
+//! backend selection, and working HCS/WSL2 adapter composition.
 //! - Implement a Named Pipe server in place of the Unix socket (see [`paths::pipe_name`]).
 //! - Wire up HCS adapter in [`hcs`] for native Windows Containers.
 //! - Wire up WSL2 adapter in [`wsl2`] for Linux containers via WSL2.

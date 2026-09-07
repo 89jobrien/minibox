@@ -129,6 +129,7 @@
       "info": {
         "type": "object",
         "description": "Introspection. `cargo xtask info <target> [flags...]`. Bare `cargo xtask info` prints the target list.",
+        "outputSchema": { "$ref": "#/$defs/contextSnapshot" },
         "properties": {
           "command": { "const": "info" },
           "args": {
@@ -452,6 +453,58 @@
           }
         },
         "required": ["command", "args"]
+      }
+    },
+    "contextSnapshot": {
+      "type": "object",
+      "description": "Output contract for `cargo xtask info context`.",
+      "required": ["snapshot_version", "context_map"],
+      "properties": {
+        "snapshot_version": { "const": 2 },
+        "context_map": { "$ref": "#/$defs/contextMap" }
+      }
+    },
+    "contextMap": {
+      "type": "object",
+      "required": ["crate_assignments", "file_assignments", "task_slices"],
+      "properties": {
+        "crate_assignments": {
+          "type": "array",
+          "description": "Workspace crates ordered by source lines descending, then crate name ascending.",
+          "items": {
+            "type": "object",
+            "required": ["crate_name", "lines"],
+            "properties": {
+              "crate_name": { "type": "string" },
+              "lines": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "file_assignments": {
+          "type": "array",
+          "description": "Files that own the info-context implementation and documentation surface, ordered by path.",
+          "items": {
+            "type": "object",
+            "required": ["path", "responsibility"],
+            "properties": {
+              "path": { "type": "string" },
+              "responsibility": { "type": "string" }
+            }
+          }
+        },
+        "task_slices": {
+          "type": "array",
+          "description": "Deterministic dependency graph for collecting, deriving, and serializing context.",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "depends_on"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "depends_on": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
       }
     }
   }

@@ -10,30 +10,12 @@ use anyhow::{Result, bail};
 use std::fs;
 use std::path::Path;
 
-pub fn bump(root: &Path, level: &str) -> Result<()> {
+pub fn bump(root: &Path, level: &str) -> Result<String> {
     let manifest_path = root.join("Cargo.toml");
     let content = fs::read_to_string(&manifest_path)?;
+    let (current, next, record_minor) = calculate_next(root, &content, level)?;
 
-    let current = parse_workspace_version(&content).ok_or_else(|| {
-        anyhow::anyhow!("could not find [workspace.package] version in Cargo.toml")
-    })?;
-
-    let effective_level = if level == "minor" && minor_bumped_today(root) {
-        eprintln!("[minibox] minor bump already applied today — downgrading to patch");
-        "patch"
-    } else {
-        level
-    };
-
-    let (major, minor, patch) = parse_semver(&current)?;
-    let next = match effective_level {
-        "patch" => format!("{major}.{minor}.{}", patch + 1),
-        "minor" => format!("{major}.{}.0", minor + 1),
-        "major" => format!("{}.0.0", major + 1),
-        other => bail!("unknown bump level: {other} (expected patch, minor, or major)"),
-    };
-
-    if effective_level == "minor" {
+    if record_minor {
         record_minor_bump(root);
     }
 
@@ -50,7 +32,33 @@ pub fn bump(root: &Path, level: &str) -> Result<()> {
 
     fs::write(&manifest_path, updated)?;
     println!("[minibox] version bumped {current} → {next}");
-    Ok(())
+    Ok(next)
+}
+
+pub fn next_version(root: &Path, level: &str) -> Result<String> {
+    let content = fs::read_to_string(root.join("Cargo.toml"))?;
+    let (_, next, _) = calculate_next(root, &content, level)?;
+    Ok(next)
+}
+
+fn calculate_next(root: &Path, content: &str, level: &str) -> Result<(String, String, bool)> {
+    let current = parse_workspace_version(content).ok_or_else(|| {
+        anyhow::anyhow!("could not find [workspace.package] version in Cargo.toml")
+    })?;
+    let effective_level = if level == "minor" && minor_bumped_today(root) {
+        eprintln!("[minibox] minor bump already applied today — downgrading to patch");
+        "patch"
+    } else {
+        level
+    };
+    let (major, minor, patch) = parse_semver(&current)?;
+    let next = match effective_level {
+        "patch" => format!("{major}.{minor}.{}", patch + 1),
+        "minor" => format!("{major}.{}.0", minor + 1),
+        "major" => format!("{}.0.0", major + 1),
+        other => bail!("unknown bump level: {other} (expected patch, minor, or major)"),
+    };
+    Ok((current, next, effective_level == "minor"))
 }
 
 fn parse_workspace_version(content: &str) -> Option<String> {
@@ -99,4 +107,26 @@ fn minor_bumped_today(root: &Path) -> bool {
 fn record_minor_bump(root: &Path) {
     let path = root.join(BUMP_STATE_FILE);
     let _ = fs::write(path, today());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bump_returns_written_version() {
+        let temp = tempfile::tempdir().expect("temporary workspace should be created");
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[workspace.package]\nversion = \"0.33.0\"\n",
+        )
+        .expect("fixture manifest should be written");
+
+        let next = bump(temp.path(), "patch").expect("patch bump should succeed");
+
+        assert_eq!(next, "0.33.1");
+        let manifest = fs::read_to_string(temp.path().join("Cargo.toml"))
+            .expect("bumped manifest should be readable");
+        assert!(manifest.contains("version = \"0.33.1\""));
+    }
 }

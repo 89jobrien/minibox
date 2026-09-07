@@ -12,6 +12,8 @@ use anyhow::{Context, Result, bail};
 use std::path::Path;
 use xshell::{Shell, cmd};
 
+// TODO(feature-idea-09): discover all targets from the root fuzz manifest, fix corpus paths, and
+// expose a bounded smoke mode suitable for scheduled CI.
 const FUZZ_MANIFEST: &str = "crates/minibox/fuzz/Cargo.toml";
 const DEFAULT_TARGETS: &[&str] = &[
     // Tier 1: protocol codec

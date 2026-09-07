@@ -24,6 +24,33 @@ struct ContextSnapshot {
     tests: TestSummary,
     ci_workflows: Vec<String>,
     recent_commits: Vec<CommitInfo>,
+    context_map: ContextMap,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct ContextMap {
+    crate_assignments: Vec<CrateAssignment>,
+    file_assignments: Vec<FileAssignment>,
+    task_slices: Vec<TaskSlice>,
+}
+
+#[derive(Debug, Serialize)]
+struct CrateAssignment {
+    crate_name: String,
+    lines: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct FileAssignment {
+    path: String,
+    responsibility: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TaskSlice {
+    id: String,
+    title: String,
+    depends_on: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -161,6 +188,74 @@ fn crate_graph(sh: &Shell) -> Result<Vec<CrateInfo>> {
         let _ = pkg_id;
     }
     Ok(crates)
+}
+
+fn derive_crate_assignments(crates: &[CrateInfo]) -> Vec<CrateAssignment> {
+    let mut assignments: Vec<_> = crates
+        .iter()
+        .map(|crate_info| CrateAssignment {
+            crate_name: crate_info.name.clone(),
+            lines: crate_info.lines,
+        })
+        .collect();
+    assignments.sort_by(|left, right| {
+        right
+            .lines
+            .cmp(&left.lines)
+            .then_with(|| left.crate_name.cmp(&right.crate_name))
+    });
+    assignments
+}
+
+fn derive_file_assignments() -> Vec<FileAssignment> {
+    let mut assignments = [
+        (
+            "xtask/src/context.rs",
+            "context snapshot schema and derivation",
+        ),
+        ("xtask/src/main.rs", "info context command dispatch"),
+        (
+            "xtask/schema/cli.schema.json",
+            "machine-readable command contract",
+        ),
+        (
+            "docs/core/XTASK_CLI.mbx.md",
+            "human-readable context output contract",
+        ),
+    ]
+    .into_iter()
+    .map(|(path, responsibility)| FileAssignment {
+        path: path.to_string(),
+        responsibility: responsibility.to_string(),
+    })
+    .collect::<Vec<_>>();
+    assignments.sort_by(|left, right| left.path.cmp(&right.path));
+    assignments
+}
+
+fn derive_task_slices() -> Vec<TaskSlice> {
+    vec![
+        TaskSlice {
+            id: "t1".to_string(),
+            title: "Collect repository context".to_string(),
+            depends_on: Vec::new(),
+        },
+        TaskSlice {
+            id: "t2".to_string(),
+            title: "Derive crate assignments".to_string(),
+            depends_on: vec!["t1".to_string()],
+        },
+        TaskSlice {
+            id: "t3".to_string(),
+            title: "Derive file assignments".to_string(),
+            depends_on: vec!["t1".to_string()],
+        },
+        TaskSlice {
+            id: "t4".to_string(),
+            title: "Serialize and save context snapshot".to_string(),
+            depends_on: vec!["t2".to_string(), "t3".to_string()],
+        },
+    ]
 }
 
 /// Count .rs files and total lines under a crate directory.
@@ -311,6 +406,27 @@ fn adapter_table() -> BTreeMap<String, AdapterInfo> {
     m
 }
 
+fn persist_snapshot(root: &Path, snapshot: &ContextSnapshot) -> Result<std::path::PathBuf> {
+    let dir = root.join("artifacts/context");
+    std::fs::create_dir_all(&dir).context("create artifacts/context")?;
+
+    let latest = dir.join("snapshot.json");
+    let json = serde_json::to_string_pretty(snapshot).context("serialize snapshot")?;
+    std::fs::write(&latest, json).context("write snapshot.json")?;
+
+    let jsonl = dir.join("history.jsonl");
+    use std::io::Write;
+    let compact = serde_json::to_string(snapshot).context("serialize history record")?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&jsonl)
+        .context("open history.jsonl")?;
+    writeln!(file, "{compact}").context("append history.jsonl")?;
+
+    Ok(latest)
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 // qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
@@ -329,9 +445,14 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     }
 
     let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
+    let context_map = ContextMap {
+        crate_assignments: derive_crate_assignments(&crates),
+        file_assignments: derive_file_assignments(),
+        task_slices: derive_task_slices(),
+    };
 
     let snapshot = ContextSnapshot {
-        snapshot_version: 1,
+        snapshot_version: 2,
         commit,
         branch,
         timestamp,
@@ -344,31 +465,152 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         },
         ci_workflows: ci_workflows(root),
         recent_commits: recent_commits(sh)?,
+        context_map,
     };
 
-    let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
-
     if save {
-        let dir = root.join("artifacts/context");
-        std::fs::create_dir_all(&dir).context("create artifacts/context")?;
-
-        let latest = dir.join("snapshot.json");
-        std::fs::write(&latest, &json).context("write snapshot.json")?;
-
-        let jsonl = dir.join("history.jsonl");
-        use std::io::Write;
-        let compact = serde_json::to_string(&snapshot)?;
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&jsonl)
-            .context("open history.jsonl")?;
-        writeln!(f, "{compact}")?;
-
+        let latest = persist_snapshot(root, &snapshot)?;
         eprintln!("Context snapshot saved to {}", latest.display());
     } else {
+        let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
         println!("{json}");
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn crate_info(name: &str, lines: usize) -> CrateInfo {
+        CrateInfo {
+            name: name.to_string(),
+            kind: vec!["lib".to_string()],
+            deps: Vec::new(),
+            test_count: 0,
+            src_files: 1,
+            lines,
+        }
+    }
+
+    fn snapshot_fixture() -> ContextSnapshot {
+        ContextSnapshot {
+            snapshot_version: 2,
+            commit: "abc1234".to_string(),
+            branch: "develop".to_string(),
+            timestamp: "2026-09-06T00:00:00Z".to_string(),
+            workspace: WorkspaceInfo {
+                version: "0.33.0".to_string(),
+                edition: "2024".to_string(),
+                rust_version: "1.89.0".to_string(),
+            },
+            crates: Vec::new(),
+            adapters: BTreeMap::new(),
+            tests: TestSummary {
+                total: 0,
+                by_crate: BTreeMap::new(),
+            },
+            ci_workflows: Vec::new(),
+            recent_commits: Vec::new(),
+            context_map: ContextMap::default(),
+        }
+    }
+
+    #[test]
+    fn context_snapshot_includes_context_map() {
+        let value = serde_json::to_value(snapshot_fixture()).expect("snapshot should serialize");
+        assert_eq!(value["snapshot_version"], 2);
+        let context_map = value
+            .get("context_map")
+            .expect("snapshot v2 should include context_map");
+        assert!(context_map.get("crate_assignments").is_some());
+        assert!(context_map.get("file_assignments").is_some());
+        assert!(context_map.get("task_slices").is_some());
+    }
+
+    #[test]
+    fn crate_assignments_are_sorted_and_stable() {
+        let crates = vec![
+            crate_info("zeta", 100),
+            crate_info("middle", 50),
+            crate_info("alpha", 100),
+        ];
+
+        let assignments = derive_crate_assignments(&crates);
+        let names: Vec<&str> = assignments
+            .iter()
+            .map(|assignment| assignment.crate_name.as_str())
+            .collect();
+
+        assert_eq!(names, vec!["alpha", "zeta", "middle"]);
+        assert_eq!(assignments[0].lines, 100);
+        assert_eq!(assignments[2].lines, 50);
+    }
+
+    #[test]
+    fn file_assignments_cover_xtask_info_context_surface() {
+        let assignments = derive_file_assignments();
+        let paths: Vec<&str> = assignments
+            .iter()
+            .map(|assignment| assignment.path.as_str())
+            .collect();
+
+        assert_eq!(
+            paths,
+            vec![
+                "docs/core/XTASK_CLI.mbx.md",
+                "xtask/schema/cli.schema.json",
+                "xtask/src/context.rs",
+                "xtask/src/main.rs",
+            ]
+        );
+        assert!(
+            assignments
+                .iter()
+                .all(|assignment| !assignment.responsibility.is_empty())
+        );
+    }
+
+    #[test]
+    fn task_slices_define_expected_dependency_graph() {
+        let slices = derive_task_slices();
+        let dependencies: BTreeMap<&str, Vec<&str>> = slices
+            .iter()
+            .map(|slice| {
+                (
+                    slice.id.as_str(),
+                    slice.depends_on.iter().map(String::as_str).collect(),
+                )
+            })
+            .collect();
+
+        assert_eq!(dependencies["t1"], Vec::<&str>::new());
+        assert_eq!(dependencies["t2"], vec!["t1"]);
+        assert_eq!(dependencies["t3"], vec!["t1"]);
+        assert_eq!(dependencies["t4"], vec!["t2", "t3"]);
+        assert!(slices.iter().all(|slice| !slice.title.is_empty()));
+    }
+
+    #[test]
+    fn save_mode_persists_context_map_in_snapshot_and_history() {
+        let temp = tempfile::tempdir().expect("temporary output root should be created");
+        let snapshot = snapshot_fixture();
+
+        let saved = persist_snapshot(temp.path(), &snapshot)
+            .expect("snapshot and history should be persisted");
+        assert_eq!(saved, temp.path().join("artifacts/context/snapshot.json"));
+
+        let latest = std::fs::read_to_string(&saved).expect("snapshot.json should be readable");
+        let latest: serde_json::Value =
+            serde_json::from_str(&latest).expect("snapshot.json should contain valid JSON");
+        assert_eq!(latest["snapshot_version"], 2);
+        assert!(latest["context_map"].is_object());
+
+        let history = std::fs::read_to_string(temp.path().join("artifacts/context/history.jsonl"))
+            .expect("history.jsonl should be readable");
+        let record: serde_json::Value =
+            serde_json::from_str(history.trim()).expect("history line should contain valid JSON");
+        assert_eq!(record["context_map"], latest["context_map"]);
+    }
 }

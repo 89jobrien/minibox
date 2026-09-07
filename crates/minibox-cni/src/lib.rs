@@ -8,6 +8,9 @@
 //! keeping the door open for a future non-Linux (WinCNI/HNS) caller
 //! without modification here.
 
+// TODO(feature-idea-10): add installable CNI plugin packaging and an operational rollout path
+// for the provider already wired into miniboxd behind the cni feature.
+
 pub mod config;
 pub mod error;
 pub mod exec;

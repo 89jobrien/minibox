@@ -7,7 +7,7 @@
 )]
 //! Integration tests for the minibox MCP server.
 //
-// TODO(review): remaining end-to-end coverage gaps —
+// TODO(review)(#475): remaining end-to-end coverage gaps —
 // (from_env()/MINIBOX_MCP_ALLOW_* allow-path behavior is now unit-tested in policy.rs,
 // but nothing below exercises it through the real MCP/stdio stack.)
 // - No test calls minibox_stop/minibox_rm/minibox_pull through this real MCP/stdio
