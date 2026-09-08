@@ -10,6 +10,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use xshell::{Shell, cmd};
 
+#[allow(dead_code)]
+mod model;
+
 // ─── Output schema ───────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
