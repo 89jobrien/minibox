@@ -7,11 +7,19 @@
 use anyhow::{Context, Result};
 use serde::Serialize;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use xshell::{Shell, cmd};
 
 #[allow(dead_code)]
 mod model;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ContextOptions {
+    pub save: bool,
+    pub strict: bool,
+    pub validate_all: bool,
+    pub evidence_dir: Option<PathBuf>,
+}
 
 // ─── Output schema ───────────────────────────────────────────────────────────
 
@@ -433,7 +441,7 @@ fn persist_snapshot(root: &Path, snapshot: &ContextSnapshot) -> Result<std::path
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 // qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
-pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
+pub fn context(sh: &Shell, root: &Path, options: &ContextOptions) -> Result<()> {
     let (commit, branch, timestamp) = git_info(sh)?;
     let workspace = workspace_version(sh)?;
     let mut crates = crate_graph(sh)?;
@@ -471,7 +479,7 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         context_map,
     };
 
-    if save {
+    if options.save {
         let latest = persist_snapshot(root, &snapshot)?;
         eprintln!("Context snapshot saved to {}", latest.display());
     } else {

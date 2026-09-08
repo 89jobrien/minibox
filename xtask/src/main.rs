@@ -591,7 +591,7 @@ fn cmd_info(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> {
         eprintln!();
         eprintln!("Targets:");
         eprintln!("  metrics [--save]             aggregate crate count, test count, source lines");
-        eprintln!("  context [--save]             machine-readable repo context snapshot");
+        eprintln!("  context [--save] [--strict] [--validate-all] [--evidence-dir <path>]");
         eprintln!("  changes [<base-ref>]         classify changed paths; emit GHA outputs");
         Ok(())
     }
@@ -604,8 +604,8 @@ fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String])
             collect_metrics::collect_metrics(root, save)
         }
         "context" => {
-            let save = parse_info_context_args(rest)?;
-            context::context(sh, root, save)
+            let options = parse_info_context_args(rest)?;
+            context::context(sh, root, &options)
         }
         "changes" => {
             let base_ref = changes_base_ref(rest);
@@ -615,12 +615,32 @@ fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String])
     }
 }
 
-fn parse_info_context_args(rest: &[String]) -> Result<bool> {
-    match rest {
-        [] => Ok(false),
-        [flag] if flag == "--save" => Ok(true),
-        _ => bail!("usage: cargo xtask info context [--save]"),
+fn parse_info_context_args(rest: &[String]) -> Result<context::ContextOptions> {
+    let mut options = context::ContextOptions::default();
+    let mut index = 0;
+
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--save" if !options.save => options.save = true,
+            "--strict" if !options.strict => options.strict = true,
+            "--validate-all" if !options.validate_all => options.validate_all = true,
+            "--evidence-dir" if options.evidence_dir.is_none() => {
+                index += 1;
+                let value = rest
+                    .get(index)
+                    .filter(|value| !value.starts_with("--"))
+                    .ok_or_else(|| anyhow::anyhow!("--evidence-dir requires a path"))?;
+                options.evidence_dir = Some(std::path::PathBuf::from(value));
+            }
+            _ => bail!(
+                "usage: cargo xtask info context [--save] [--strict] [--validate-all] \
+                 [--evidence-dir <path>]"
+            ),
+        }
+        index += 1;
     }
+
+    Ok(options)
 }
 
 fn changes_base_ref(rest: &[String]) -> String {
@@ -778,14 +798,41 @@ mod dispatch_args_tests {
     }
 
     #[test]
-    fn info_context_args_accept_only_optional_save() {
-        assert!(!parse_info_context_args(&[]).expect("empty args should print JSON"));
-        assert!(
-            parse_info_context_args(&["--save".to_string()])
-                .expect("--save should persist the snapshot")
+    fn info_context_args_parse_v3_options() {
+        assert_eq!(
+            parse_info_context_args(&[]).expect("empty args should use defaults"),
+            context::ContextOptions::default()
         );
-        assert!(parse_info_context_args(&["--unknown".to_string()]).is_err());
-        assert!(parse_info_context_args(&["--save".to_string(), "extra".to_string()]).is_err());
+        let parsed = parse_info_context_args(&[
+            "--save".to_string(),
+            "--strict".to_string(),
+            "--validate-all".to_string(),
+            "--evidence-dir".to_string(),
+            "artifacts/evidence".to_string(),
+        ])
+        .expect("all v3 options should parse");
+        assert!(parsed.save);
+        assert!(parsed.strict);
+        assert!(parsed.validate_all);
+        assert_eq!(
+            parsed.evidence_dir,
+            Some(std::path::PathBuf::from("artifacts/evidence"))
+        );
+
+        for invalid in [
+            vec!["--save".to_string(), "--save".to_string()],
+            vec!["--strict".to_string(), "--strict".to_string()],
+            vec!["--validate-all".to_string(), "--validate-all".to_string()],
+            vec!["--evidence-dir".to_string()],
+            vec!["--evidence-dir".to_string(), "--strict".to_string()],
+            vec!["positional".to_string()],
+            vec!["--unknown".to_string()],
+        ] {
+            assert!(
+                parse_info_context_args(&invalid).is_err(),
+                "accepted {invalid:?}"
+            );
+        }
     }
 
     #[test]
