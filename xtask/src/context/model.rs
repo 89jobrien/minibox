@@ -149,6 +149,80 @@ pub(super) struct ContextDiagnostic {
     pub(super) evidence_ids: Vec<EvidenceId>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct RepositoryIdentity {
+    pub(super) commit: String,
+    pub(super) branch: String,
+    pub(super) dirty: bool,
+    pub(super) changed_paths: Vec<RepositoryPath>,
+    pub(super) worktree_fingerprint: String,
+    pub(super) evidence_ids: Vec<EvidenceId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct EnvironmentSnapshot {
+    pub(super) host: String,
+    pub(super) target: String,
+    pub(super) enabled_features: Vec<String>,
+    pub(super) rustc_version: Fact<String>,
+    pub(super) cargo_version: Fact<String>,
+    pub(super) nextest_version: Fact<String>,
+    pub(super) generated_at: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct WorkspaceSnapshot {
+    pub(super) version: Fact<String>,
+    pub(super) edition: Fact<String>,
+    pub(super) msrv: Fact<String>,
+    pub(super) packages: Vec<PackageSnapshot>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct PackageSnapshot {
+    pub(super) package_id: String,
+    pub(super) name: String,
+    pub(super) manifest_path: RepositoryPath,
+    pub(super) targets: Vec<TargetSnapshot>,
+    pub(super) features: Vec<String>,
+    pub(super) dependencies: Vec<DependencySnapshot>,
+    pub(super) metrics: SourceMetrics,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct DependencySnapshot {
+    pub(super) package_name: String,
+    pub(super) rename: Option<String>,
+    pub(super) kind: DependencyKind,
+    pub(super) target_predicate: Option<String>,
+    pub(super) optional: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DependencyKind {
+    Normal,
+    Build,
+    Dev,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct TargetSnapshot {
+    pub(super) name: String,
+    pub(super) kinds: Vec<String>,
+    pub(super) source_path: RepositoryPath,
+    pub(super) required_features: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct SourceMetrics {
+    pub(super) rust_files: usize,
+    pub(super) physical_lines: usize,
+    pub(super) non_empty_lines: usize,
+    pub(super) included_roots: Vec<RepositoryPath>,
+    pub(super) includes_generated: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,5 +281,61 @@ mod tests {
         assert!(value["fact"].get("observed").is_some());
         assert!(value["diagnostic"].get("profile_id").is_some());
         assert!(value["evidence"].get("content_sha256").is_some());
+    }
+
+    #[test]
+    fn workspace_snapshot_separates_msrv_and_toolchain() {
+        let declared = |value: &str| {
+            Fact::new(
+                Some(value.to_string()),
+                None,
+                Validation {
+                    state: ValidationState::DeclaredOnly,
+                    reason: None,
+                },
+                vec![EvidenceId::from("cargo-manifest")],
+            )
+        };
+        let observed = |value: &str| {
+            Fact::new(
+                None,
+                Some(value.to_string()),
+                Validation {
+                    state: ValidationState::ObservedOnly,
+                    reason: None,
+                },
+                vec![EvidenceId::from("tool-version")],
+            )
+        };
+        let workspace = WorkspaceSnapshot {
+            version: declared("0.1.0"),
+            edition: declared("2024"),
+            msrv: declared("1.85"),
+            packages: Vec::new(),
+        };
+        let environment = EnvironmentSnapshot {
+            host: "aarch64-apple-darwin".to_string(),
+            target: "aarch64-apple-darwin".to_string(),
+            enabled_features: Vec::new(),
+            rustc_version: observed("1.98.0"),
+            cargo_version: observed("1.98.0"),
+            nextest_version: observed("0.9.100"),
+            generated_at: "2026-09-08T00:00:00Z".to_string(),
+        };
+        let value = serde_json::json!({
+            "workspace": workspace,
+            "environment": environment,
+        });
+
+        assert_eq!(
+            value.pointer("/workspace/msrv/declared"),
+            Some(&serde_json::json!("1.85"))
+        );
+        assert_eq!(
+            value.pointer("/environment/rustc_version/observed"),
+            Some(&serde_json::json!("1.98.0"))
+        );
+        assert!(value.pointer("/workspace/rust_version").is_none());
+        assert!(value.pointer("/environment/msrv").is_none());
     }
 }
