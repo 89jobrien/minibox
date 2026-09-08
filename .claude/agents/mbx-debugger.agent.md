@@ -276,9 +276,10 @@ fn spawn_child(write_fd: OwnedFd) -> Result<Pid> {
 **Verification checklist**:
 
 - [ ] Original reproduction case no longer fails
-- [ ] `cargo xtask test-unit` passes (all unit + conformance)
+- [ ] `cargo xtask test unit` passes (all unit + conformance)
 - [ ] `just test-integration` passes (requires Linux+root)
-- [ ] `just test-e2e` passes (requires Linux+root)
+- [ ] `just test-e2e` passes (cross-platform protocol tests)
+- [ ] `just test-system` passes (requires Linux+root)
 - [ ] `cargo fmt --all --check` clean
 - [ ] `cargo clippy -p minibox-cli ... -- -D warnings` clean
 - [ ] `just doctor` shows all capabilities satisfied

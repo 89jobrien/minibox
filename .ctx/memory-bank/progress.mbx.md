@@ -118,7 +118,7 @@
 - `cargo xtask musl-check` — new prepush gate catching `cfg(target_os = "linux")` build
   failures against the musl target before CI (1ae7528e)
 - `cargo xtask ci-watch` — watch GHA run status with job-level detail
-- `nu scripts/promote.nu` — branch cascade (develop->next->staging->main)
+- `cargo xtask promote` — branch cascade (develop->staging->release->main)
 
 ## Recently completed
 - **Protocol drift expectation fix** — xtask's expected surface registry updated to track the
@@ -163,7 +163,7 @@
   (4ce6ce9f).
 - **miette diagnostics** — rich CLI error rendering via miette; plan doc at
   docs/plans/2026-07-07-structured-errors-miette.md (cf37b05a).
-- **PR-based auto-promote CI** — cascade develop->next->staging->main via PR
+- **PR-based auto-promote CI** — cascade develop->staging->release->main via PR
   workflow (c1a16d8e).
 - **Open PR merge pass + final verification** — #462, #460, #459, #464, and
   #324 merged; open PR list empty. `cargo xtask verify` passed for task `t12`
@@ -201,7 +201,7 @@
 - macOS exec/logs via VM adapters — container run + stdout streaming works
   (smolvm/krun). `exec_runtime: None` on both means exec-into-running is
   unsupported. No historical log retrieval.
-- Merge develop -> next (pending CI green on develop)
+- Promote develop -> staging (pending CI green on develop)
 
 ## Not started / backlog
 
@@ -240,9 +240,9 @@
 - **CRI compliance**:
     - zero protobuf/gRPC
     - no RuntimeService/ImageService
-- **Aggregate image size limit**:
+- **Image pull size limits**:
     - per-layer 10 GiB enforced
-    - no total budget across layers in a single pull (Issue #319)
+    - aggregate 50 GiB budget enforced across each pull
 - **ValidatedPath newtype**:
     - all validation is function-call based (`validate_layer_path()`)
     - no type-level guarantee

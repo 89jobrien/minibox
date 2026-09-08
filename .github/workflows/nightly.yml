@@ -209,6 +209,8 @@ jobs:
       - name: run turmoil tests
         run: cargo xtask test-turmoil
 
+  # TODO(feature-idea-04): gate nightly tags on a required aggregate of the extended test jobs
+  # instead of depending only on the soft-failing geiger audit.
   tag-nightly:
     name: tag nightly release
     runs-on: ubuntu-latest

@@ -1,5 +1,5 @@
 ---
-source_sha: 4ed9fbb7edca65a6b792174218f20d83ab8a9171
+source_sha: b47bbe34922afd74ad8444bf7eeb064361dcdb64
 sources:
   - xtask/src/main.rs
   - xtask/schema/cli.schema.json
@@ -8,7 +8,7 @@ generated: 2026-09-06
 
 # xtask CLI Reference
 
-Last updated: 2026-09-06
+Last updated: 2026-09-08
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -74,7 +74,7 @@ Bare `cargo xtask docs` prints the action list.
 | Action | Flags | Notes |
 |---|---|---|
 | `audit` | `--full` `--strict` | Audit `docs/core/` facts against code. `--full` runs full mode; `--strict` only affects Quick mode (the default when `--full` is absent). |
-| `lint` | `--sarif <path>` | Validate frontmatter + status values across doc files. |
+| `lint` | `--sarif <path>` | Validate frontmatter + status values under the legacy `docs/superpowers/{plans,specs}/` paths. If those directories are absent, zero files are checked. |
 | `update-date` | — | Rewrite the Last-updated stamp in `FEATURE_MATRIX.mbx.md`. |
 
 Deprecated aliases: `docs-audit`, `lint-docs`, `update-feature-matrix-date`.
@@ -129,14 +129,16 @@ path. Task slices use stable IDs and explicit `depends_on` edges.
 
 | Command | Mutates files? | Description |
 |---|---|---|
-| `verify` | No | fmt --check, `cargo check --workspace`, clippy `-D warnings`, borrow-reasoning fixtures, docs lint. Checkpointed — skipped if the tree hash is unchanged since the last pass. |
-| `lint` | No | fmt --check + clippy `-D warnings` + `cargo check --workspace` across the full adapter matrix. Checkpointed. |
+| `verify` | No | fmt check, workspace check, targeted clippy, architecture guard, borrow fixtures, docs lint, and quick docs audit. Checkpointed. |
+| `lint` | No | fmt check, targeted clippy (`minibox`, domain, macros, CLI, core, macbox, miniboxd, winbox, ail), workspace check, and architecture guard. Checkpointed. |
 | `fix` | **Yes** | `cargo fmt --all`, re-stage, version bump, `clippy --fix --allow-dirty --allow-staged`, re-stage again. Only runs the mutating steps if Rust files are currently staged. |
-| `pre-commit` | Validation-only | The git pre-commit hook's gate: fmt+clippy on staged Rust files, agentlint on staged agent-config files, actionlint on staged workflow files, docs-lint, FEATURE_MATRIX date stamp refresh, repo-cleanliness warning. Never runs a release build or the conformance suite. |
-| `prepush` | No | Release build (`miniboxd`, `minibox-core`, `mbx`, `minibox`, `minibox-macros`) + nextest (release profile) + conformance suite. Skipped entirely if no Rust files are in the push range. Checkpointed. Set `SKIP_PHASE_2=1` (or `true`) to skip the conformance suite step locally — this is a local-dev convenience only; CI never sets it and always runs the full sequence. |
+| `pre-commit` | **Yes, conditionally** | With staged Rust, runs `cargo fmt --all`, re-stages tracked `.rs` changes, targeted clippy, and architecture. Also conditionally runs agentlint/actionlint, always lints docs, refreshes the FEATURE_MATRIX date, and warns on tracked generated artifacts. No release build or conformance. |
+| `prepush` | No | If Rust is in the push range: starts with `musl-check`, then release build (`miniboxd`, `minibox-core`, `minibox-cli`, `minibox`, `minibox-macros`), release library nextest, and conformance. `SKIP_PHASE_2=1` only skips conformance locally. |
+| `musl-check` | No | Cross-build `miniboxd` and `minibox-cli` for `x86_64-unknown-linux-musl`; warns/skips when prerequisites are absent unless `MINIBOX_REQUIRE_MUSL_CHECK=1`. |
 | `agentlint [--all]` | No | Lint agent config files (`.claude/`, `.codex/`, `.agents/`, `.cursor/`). Without `--all`, only staged files are linted. |
 | `coverage [--open] [--lcov-only] [--html-only]` | No | Generate a coverage report; `--open` opens the HTML report afterward. |
 | `coverage-check` | No | Handler module function coverage gate. |
+| `architecture` | No | Enforce dependency rings and canonical type ownership. |
 
 ---
 
@@ -167,7 +169,7 @@ path. Task slices use stable IDs and explicit `depends_on` edges.
 | `bump` | `[patch\|minor\|major]` (default `patch`) | Bump the workspace version. |
 | `preflight` | — | Verify required tools are on PATH (`cargo`, `cargo-nextest`, `gh`). |
 | `doctor` | — | Full preflight diagnostics — same underlying probe as `mbx doctor`. |
-| `promote` | `--from <tier>` `--to <tier>` `--dry-run` | Cascade-merge one stability tier into the next (`develop -> staging -> release -> main`), gated on CI green for the source branch. `--from`/`--to` infer sensible defaults if omitted. |
+| `promote` | `--from <tier>` `--to <tier>` `--dry-run` `--skip-ci-check` | Cascade-merge one stability tier into the next (`develop -> staging -> release -> main`), gated on CI green unless explicitly overridden. |
 | `ci-watch` | `--branch <name>` | Watch the most recent GitHub Actions run with job-level detail; defaults to the current branch. |
 | `daily-orchestration` | `--ci` `--dry-run` | Run the daily maintenance orchestration pass. Unlike most xtask parsers, unrecognized flags here cause a hard usage error rather than a warning. |
 | `council` | `--base <ref>` (default `main`) `--mode core\|extended` (default `core`) `--no-synthesis` `--prod` | Run devloop council analysis against a base ref. |
@@ -180,7 +182,7 @@ path. Task slices use stable IDs and explicit `depends_on` edges.
 |---|---|---|
 | `bench` | `--skip-bench` `--check` `--save-baseline` `--threshold <pct>` (default `15.0`) `--env <label>` (default `local`) | Run Criterion benchmarks, save results to `bench/results/`. `--check` compares against a saved baseline instead of running+saving. Unrecognized flags print a warning and are ignored (not a hard error). |
 | `fuzz` | — | Run libFuzzer protocol targets. |
-| `demo` | `--adapter <name>` (default `smolvm`) | Short end-to-end demonstration: pull + run against the named adapter. Advisory — exits 0 even if the underlying commands fail. |
+| `demo` | `--adapter <name>` (default `smolvm`) `--filter <name>` `--strict` | Run showcase scenarios, optionally filtered; strict mode propagates failures. |
 | `borrow-fixtures` | — | Run borrow-reasoning must-pass/must-fail fixtures. |
 | `clippy-sarif` | `[<path>]` (default `clippy.sarif`) | Run clippy and write results as a SARIF report. |
 | `run-cgroup-tests` | — | cgroup v2 integration tests (Linux, root). |

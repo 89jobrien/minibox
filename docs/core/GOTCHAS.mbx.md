@@ -1,5 +1,5 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox/src/lib.rs
   - crates/minibox-macros
@@ -10,12 +10,13 @@ sources:
   - crates/minibox/src/container/filesystem.rs
   - crates/minibox/src/adapters/limiter.rs
   - crates/macbox
-generated: 2026-08-22
+  - crates/smolbox
+generated: 2026-08-28
 ---
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-08-22
+Last updated: 2026-09-08
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -40,7 +41,7 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
   `::fixtures::*`, `::helpers::*`, and `::backend::*` (conformance descriptors). It is
   consumed today by in-crate integration tests, `minibox-testsuite`'s conformance harness,
   and `minibox-bench`'s dispatch/state benches (`minibox::testing::helpers::daemon`
-  builders). See `docs/core/TESTING.mbx.md` and `docs/core/TEST_INFRASTRUCTURE.mbx.md` for
+  builders). See `TESTING.md` and `docs/core/TEST_INFRASTRUCTURE.mbx.md` for
   the full helper inventory — this entry only documents the current, as-shipped behavior
   (feature-gated, workspace-internal consumers today) and takes no position on whether it
   should be promoted to documented public API for out-of-workspace downstream consumers.
@@ -71,14 +72,15 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
 - **Private fn doctests** — mark with ` ```ignore ` (not `no_run`); private functions are
   inaccessible in doctest context and will fail to compile.
 
-## Protocol (`protocol.rs` / `handler.rs`)
+## Protocol (`protocol.rs` / `daemon/handler/`)
 
 - **Single `DaemonRequest` definition** — canonical source is
   `crates/minibox-core/src/protocol.rs`. `minibox` re-exports it. Wire format snapshot tests
   pin serialization; add a snapshot test when adding a field.
-- **`HandlerDependencies` construction sites** — Adding fields requires updating all five
-  adapter suites in `crates/miniboxd/src/main.rs` (native, gke, colima, smolvm, krun). These are
-  `#[cfg(target_os = "linux")]` and won't fail on macOS `cargo check`.
+- **`HandlerDependencies` construction sites** — Adding fields requires updating the four normal
+  dependency builders counted by the architecture guard (native, gke, smolvm, krun) plus the
+  delegated Colima builder in `macbox`. The feature-gated VZ path is separate: it bypasses normal
+  handler dependency construction and starts before the Tokio runtime.
 - **`handle_run` param chain** — Adding a parameter requires updating in order:
   `daemon/server.rs` dispatch → `handle_run` → `handle_run_streaming` → `run_inner_capture` →
   `run_inner`. All five sites must change together.
@@ -100,8 +102,9 @@ Selection logic is centralized in `crates/miniboxd/src/adapter_registry.rs`; rea
 file's module doc for the authoritative flow. Summary, grounded in the current code:
 
 - **Valid values** (`adapter_registry::VALID_ADAPTERS`): `native`, `gke`, `colima`, `smolvm`,
-  `krun`. `native`/`gke` are compiled only on Linux (`cfg!(target_os = "linux")`); `colima`/
-  `smolvm` compile on any Unix; `krun` is always available. See per-adapter descriptions in
+  `krun`, and feature-gated `vz`. `native`/`gke` are compiled only on Linux; the normal Unix
+  VM adapters are available according to their platform gates; VZ requires macOS plus `vz` and
+  is currently nonfunctional because VM boot fails. See per-adapter descriptions in
   `adapter_registry::all_adapters()`.
 - **Unset `MINIBOX_ADAPTER`** — `adapter_from_env()` probes for the `smolvm` binary on PATH
   (`smolvm --version`). If found, uses `smolvm` (`DEFAULT_ADAPTER_SUITE`). If absent, silently
@@ -136,8 +139,8 @@ almost always the matching `docs/core/<NAME>.mbx.md` file. Start from the "Read 
 
 ## macbox
 
-- **Stale crate name** — the CLI binary crate was renamed from `minibox-cli` to `mbx`
-  (2026-04-21). The `macbox` crate was never named `mbx`. Any
+- **Package versus binary name** — the package is `minibox-cli` and its binary is `mbx`.
+  The `macbox` crate was never named `mbx`; references to an `mbx` package are stale.
 - **App Sandbox blocks fork** — see "macOS Notarization / App Sandbox Constraints" in CLAUDE.md
   for the full SBPL allowlist.
 
@@ -169,4 +172,4 @@ almost always the matching `docs/core/<NAME>.mbx.md` file. Start from the "Read 
 - PID 0 is silently accepted by kernel 6.8 but is never valid — validate before writing to
   `cgroup.procs`.
 - A cgroup cannot have both processes AND children (v2 "no internal process" rule). Tests run
-  inside `minibox-test-slice/runner-leaf` via `cargo xtask run-cgroup-tests`.
+  inside `minibox-test-slice/runner-leaf` via `cargo xtask test cgroup`.

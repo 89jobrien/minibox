@@ -1,7 +1,8 @@
 ---
-source_sha: 9da04a4b3b8fdc49254c873302d344de579e0375
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox-core
+  - crates/minibox-domain
   - crates/minibox
   - crates/miniboxd
   - crates/mbx
@@ -10,14 +11,16 @@ sources:
   - crates/minibox/src/adapters/colima.rs
   - crates/winbox
   - crates/minibox/src/adapters/docker_desktop.rs
-generated: 2026-08-22
+  - crates/minibox-cni
+  - crates/minibox-tui
+generated: 2026-09-04
 ---
 
 # Support Tiers
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-08-22
+Last updated: 2026-09-08
 
 See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
 (per-adapter capability breakdown), `docs/core/CRATE_TIERS.mbx.md` (architectural layer
@@ -47,7 +50,7 @@ PR and every push to `next`.
 Best-effort support. CI coverage is best-effort; gates may be partially met. Breaking changes may
 occur between any release without a prior deprecation cycle, but will be noted in CHANGELOG.md.
 Security issues are addressed on a best-effort basis. Promotion to Tier 1 requires meeting all
-7 mandatory gates plus a human reviewer sign-off (see Promotion section below).
+six mandatory gates plus the advisory review prompts and human sign-off (see Promotion below).
 
 ### Tier 3 — Stub
 
@@ -62,10 +65,11 @@ in any release. No security response commitment. Exists to document intent or re
 
 | Crate / Component | Type    | Notes                                              |
 | ----------------- | ------- | -------------------------------------------------- |
-| `minibox-core`    | Crate   | Domain types, protocol, ports — zero OS deps       |
-| `minibox`         | Crate   | Adapter implementations and domain port wiring     |
+| `minibox-domain`  | Crate   | Canonical domain values, policies, events, and ports |
+| `minibox-core`    | Crate   | Protocol/client/OCI infrastructure and compatibility re-exports |
+| `minibox`         | Crate   | Linux and shared runtime adapter implementations    |
 | `miniboxd`        | Binary  | Daemon process; socket server and handler dispatch |
-| `mbx` (CLI)       | Binary  | User-facing CLI (`mbx` crate)                      |
+| `minibox-cli`     | Package | User-facing `mbx` binary                           |
 | `native` adapter  | Adapter | Linux namespace/cgroup/overlay runtime             |
 | `gke` adapter     | Adapter | Unprivileged GKE pod runtime (proot-based)         |
 
@@ -73,10 +77,14 @@ in any release. No security response commitment. Exists to document intent or re
 
 | Crate / Component | Type    | Notes                                                   |
 | ----------------- | ------- | ------------------------------------------------------- |
-| `macbox`          | Crate   | macOS VM adapter crate (`krun` adapter lives here)      |
-| `smolvm` adapter  | Adapter | Default macOS adapter; subsecond-boot Linux VM          |
-| `krun` adapter    | Adapter | libkrun-based fallback; 31 conformance tests pass       |
+| `macbox`          | Crate   | Colima composition plus feature-gated VZ path           |
+| `smolbox`         | Crate   | Owns smolvm and krun implementations; depends on macbox |
+| `smolvm` adapter  | Adapter | Default macOS adapter; implementation owned by smolbox  |
+| `krun` adapter    | Adapter | Fallback VM adapter; implementation owned by smolbox    |
 | `colima` adapter  | Adapter | Delegates to `nerdctl`/`limactl`; exec/logs are limited |
+| `vz` adapter      | Adapter | Feature-gated and selectable, but VM boot is blocked    |
+| `minibox-tui`     | Crate   | Read-only dashboard used by optional `minibox-cli/tui`  |
+| `minibox-cni`     | Crate   | Opt-in native bridge networking behind the `cni` feature|
 
 ### Tier 3 — Stub
 
@@ -92,14 +100,13 @@ in any release. No security response commitment. Exists to document intent or re
 
 | Criterion                  | Tier 1 — Production                       | Tier 2 — Experimental              | Tier 3 — Stub           |
 | -------------------------- | ----------------------------------------- | ---------------------------------- | ----------------------- |
-| **Mandatory CI gates**     | All 7 gates must pass on every PR         | Best-effort; partial gate coverage | None required           |
+| **Mandatory CI gates**     | All 6 gates must pass on every PR         | Best-effort; partial gate coverage | None required           |
 | **Breaking change policy** | Deprecation cycle (min 1 minor release)   | May break without prior notice     | May be removed any time |
 | **Security response**      | Within 72 hours                           | Best-effort                        | No commitment           |
 | **Removal policy**         | Requires deprecation + major version bump | Noted in CHANGELOG                 | No notice required      |
 
-The 7 mandatory gates are defined in `docs/core/STABILITY_CHECKLIST.mbx.md`. Gates 1–6 are hard
-blockers enforced by CI; Gate 7 (in-memory mock double) is advisory but required for Tier 1
-promotion via human review.
+The six mandatory gates are defined in `docs/core/STABILITY_CHECKLIST.mbx.md`. In-memory mock
+doubles and the other qualitative checks are advisory review prompts, not a seventh hard gate.
 
 ---
 
@@ -107,10 +114,11 @@ promotion via human review.
 
 A Tier 2 adapter or crate may be promoted to Tier 1 when all of the following are satisfied:
 
-1. All six mandatory stability gates pass on the `next` branch, with CI evidence and maintainer sign-off.
+1. All six mandatory stability gates pass on the promotion branch, with CI evidence and maintainer sign-off.
 2. The adapter has at least one integration test that runs in CI (Gate 3).
 3. Handler coverage for any new handler code meets the >= 80% function coverage threshold (Gate 2).
-4. A PR is opened targeting `next` with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`
+4. A PR is opened on the current `develop` → `staging` → `release` → `main` promotion path
+   with a title prefixed `promote(<adapter>): Tier 2 → Tier 1`
    and a checklist confirming each gate.
 5. A maintainer reviews and approves. Approval constitutes the human sign-off.
 

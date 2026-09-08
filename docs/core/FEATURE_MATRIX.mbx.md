@@ -1,10 +1,11 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/limiter.rs
   - crates/minibox-domain/src/exec.rs
   - crates/minibox-core/src/events.rs
+  - crates/minibox-domain/src/events.rs
   - crates/minibox-core/src/image/registry.rs
   - crates/minibox/src/adapters/ghcr.rs
   - crates/minibox-core/src/image/gc.rs
@@ -21,18 +22,20 @@ sources:
   - crates/minibox/src/adapters/gke.rs
   - crates/minibox/src/adapters/colima.rs
   - crates/minibox/src/adapters/smolvm.rs
-  - crates/macbox/src/krun
+  - crates/smolbox/src/krun
   - crates/macbox/src/vz
   - crates/minibox/src/adapters/docker_desktop.rs
   - crates/mcp
-generated: 2026-08-26
+  - crates/minibox-tui
+  - crates/mbx
+generated: 2026-08-28
 ---
 
 # Feature Matrix
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-08-26
+Last updated: 2026-09-08
 
 ---
 
@@ -48,7 +51,8 @@ Last updated: 2026-08-26
 | `vz`     | macOS only, `vz` feature [^5]   | Non-functional | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
 | `winbox` | Windows                         | Stub         | winbox  | --                                |
 
-[^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
+[^1]: `native` requires root (UID 0) for runtime operations. Non-root startup emits a warning;
+      selection itself is not rejected. Linux only
       (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.
 [^2]: `gke` is Linux only (`cfg!(target_os = "linux")`). Unprivileged — no root required.
       Uses proot (ptrace) and copy-based filesystem instead of overlay.
@@ -75,57 +79,57 @@ Last updated: 2026-08-26
 | Feature                 | native | gke  | colima  | smolvm | krun | vz  | winbox |
 | ----------------------- | ------ | ---- | ------- | ------ | ---- | --- | ------ |
 | **Container lifecycle** |        |      |         |        |      |     |        |
-| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | pause/resume            | Yes    | No   | No      | No     | No   | No  | No     |
-| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | exec (-it)              | Yes    | No   | Limited | No     | No   | No  | No     |
 | logs                    | Yes    | No   | Limited | No     | No   | No  | No     |
 | events                  | Yes    | Yes  | No      | No     | No   | No  | No     |
 | **Image management**    |        |      |         |        |      |     |        |
-| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | prune / rmi             | Yes    | No   | No      | No     | No   | No  | No     |
 | push (exp)              | Yes    | Yes  | Yes     | No     | No   | No  | No     |
 | commit (exp)            | Yes    | No   | Yes     | No     | No   | No  | No     |
 | build (exp)             | Yes    | No   | Yes     | Yes    | No   | No  | No     |
 | **Isolation**           |        |      |         |        |      |     |        |
-| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | VM  | No     |
-| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Yes | No     |
-| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Yes | No     |
+| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
+| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
+| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
+| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
+| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
+| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Blocked | No     |
+| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Blocked | No     |
 | **Networking**          |        |      |         |        |      |     |        |
 | Bridge (exp)            | Yes    | No   | No      | No     | No   | No  | No     |
-| Port forwarding         | No     | No   | No      | No     | No   | No  | No     |
-| DNS                     | No     | No   | No      | No     | No   | No  | No     |
+| Port forwarding         | Yes    | No   | No      | No     | No   | Blocked | No     |
+| DNS                     | Yes    | No   | No      | No     | No   | Blocked | No     |
 | **Mounts & Privileges** |        |      |         |        |      |     |        |
 | Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No  | No     |
 | Privileged mode         | Yes    | No   | No      | No     | No   | No  | No     |
 | **Security**            |        |      |         |        |      |     |        |
-| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
-| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
-| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | Yes    |
-| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | Yes    |
+| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | Yes    |
+| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | Yes    |
+| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | **Execution integrity** |        |      |         |        |      |     |        |
-| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | **State persistence**   |        |      |         |        |      |     |        |
-| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 | PID reconciliation      | Yes    | No   | No      | No     | No   | No  | No     |
 | **Observability**       |        |      |         |        |      |     |        |
-| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
-| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | Yes | No     |
+| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
 
 ---
 
@@ -139,7 +143,7 @@ Key implementation sites backing the "Yes" entries above:
 | pause/resume (native, cgroup.freeze) | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
 | exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-domain/src/exec.rs:ExecRuntime` |
 | logs | `crates/minibox/src/daemon/handler/logs.rs` |
-| events | `crates/minibox-core/src/events.rs:EventSink`/`EventSource` |
+| events | `crates/minibox-domain/src/events.rs:EventSink`/`EventSource`; broker adapter in `minibox-core` |
 | Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image` |
 | Image pull (ghcr.io) | `crates/minibox/src/adapters/ghcr.rs` |
 | prune/rmi | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector` |
@@ -170,6 +174,8 @@ Key implementation sites backing the "Yes" entries above:
 - `mbx` is the primary CLI and connects directly to the daemon Unix socket.
 - `minibox-crux-plugin` exposes a JSON-RPC stdio bridge for Crux workflows.
 - `minibox-mcp` exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.
+- `minibox-cli` optionally exposes `mbx tui` with `cargo build -p minibox-cli --features tui`;
+  the read-only dashboard implementation lives in `minibox-tui`.
 
 ---
 
@@ -197,7 +203,7 @@ Key implementation sites backing the "Yes" entries above:
   (see `crates/minibox/src/adapters/colima.rs:ColimaRuntime`).
   Exec and logs are limited because they go through Lima's SSH
   tunnel. Push, commit, and build are wired via
-  `ColimaImagePusher`, `OverlayCommitAdapter`, and
+  `ColimaImagePusher`, `ColimaContainerCommitter`, and
   `MiniboxImageBuilder`.
 - **`smolvm` adapter** is the **default on Unix** when
   `MINIBOX_ADAPTER` is unset and the `smolvm` binary is present on
@@ -208,7 +214,7 @@ Key implementation sites backing the "Yes" entries above:
   (see `crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime`).
 - **`krun` adapter** uses libkrun to run containers in
   lightweight VMs
-  (see `crates/macbox/src/krun/runtime.rs:KrunRuntime`).
+  (see `crates/smolbox/src/krun/runtime.rs:KrunRuntime`).
   All four adapter ports (runtime, registry, filesystem, limiter)
   are wired into the daemon
   (see `crates/miniboxd/src/main.rs:build_krun_handler_dependencies`)

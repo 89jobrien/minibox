@@ -17,7 +17,7 @@ mbx                  CLI client (~3.2k LOC)
 minibox-crux-plugin  crux plugin host (JSON-RPC stdio)
 minibox-testsuite    conformance test harness
 minibox-bench        criterion benchmark crate
-minibox-cni          CNI plugin exec protocol + chain orchestration (not yet wired into miniboxd)
+minibox-cni          feature-gated CNI plugin execution for native bridge networking
 mcp (minibox-mcp)    MCP stdio server for agent-controlled minibox tools
 ail                  placeholder crate
 xtask                CI gates, test runners, bench (~5k LOC)
@@ -59,4 +59,4 @@ xtask                CI gates, test runners, bench (~5k LOC)
 
 ## Git workflow
 
-`develop` -> `next` -> `staging` -> `main` -> `v*` tag
+`develop` -> `staging` -> `release` -> `main` -> `v*` tag

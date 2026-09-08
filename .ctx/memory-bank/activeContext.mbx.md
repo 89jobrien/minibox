@@ -80,9 +80,9 @@
       overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction
 - [ ] macOS exec/logs via VM adapters — run+stdout streaming works,
       exec-into-running unsupported
-- [ ] minibox-cni wiring into miniboxd adapter suites — crate exists, CNI protocol landed,
-      OTEL design plan drafted, but the daemon doesn't consume it yet
-- [ ] Merge develop -> next (pending CI green on develop)
+- [x] minibox-cni wiring into miniboxd — the native bridge path uses
+      `CniNetworkProvider` when miniboxd is built with the `cni` feature
+- [ ] Promote develop -> staging (pending CI green on develop)
 
 **Recently completed:**
 
@@ -120,7 +120,7 @@
 - fixture-consolidation (#355) blocked — duplicate test_fixtures.rs
 - CI coverage gaps for property tests, borrow fixtures, sandbox tests
 - `ACTIONS_RUNNER_READ_TOKEN` secret not yet set in GHA — bench runner preference inert
-- minibox-cni: crate exists and is tested but not yet wired into miniboxd's adapter suites —
-  scope of that wiring work not yet defined
+- minibox-cni is wired into native bridge networking behind the opt-in `cni` feature;
+  operational rollout and plugin packaging remain open
 
 _Update when the task or branch focus changes._

@@ -1,15 +1,15 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox/src/daemon/state.rs
-generated: 2026-08-22
+generated: 2026-08-28
 ---
 
 # State Persistence Model
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-08-22
+Last updated: 2026-09-08
 
 ---
 
@@ -31,7 +31,7 @@ readers never see a partial write.
 | --------------------------------------------------------------------- | --------- | ------------------------------------------------------ |
 | Container records (ID, image, command, creation time)                 | Yes       | Loaded from `state.json` on startup                    |
 | Container state (Created, Running, Paused, Stopped, Failed, Orphaned) | Yes       | Adjusted on load — see below                           |
-| Host PID                                                              | No        | PIDs are not valid across restarts                     |
+| Host PID                                                              | Conditional | Used only for immediate startup reconciliation      |
 | Overlay mount                                                         | No        | Mount namespace is gone after daemon exit              |
 | Cgroup tree                                                           | No        | Cgroup dirs may persist on disk but are not reattached |
 | Allocated bridge IPs                                                  | No        | `allocated_ips` map is in-memory only                  |
@@ -63,14 +63,14 @@ adjusts stale records:
 | Previous state        | Action on reload  | Rationale                                         |
 | --------------------- | ----------------- | ------------------------------------------------- |
 | `Created`             | Set to `Stopped`  | Process was never forked or fork did not complete |
-| `Paused`              | Set to `Stopped`  | Cgroup freeze is lost after daemon exit           |
-| `Running` (PID alive) | Left as `Running` | Process survived daemon restart                   |
-| `Running` (PID dead)  | Set to `Orphaned` | Process exited while daemon was down              |
+| `Paused` (PID alive, `cgroup.freeze=1`) | Keep `Paused` | Process remains frozen; daemon PID tracking is cleared |
+| `Paused` (otherwise)  | Set to `Orphaned` | Process or freezer state cannot be safely recovered |
+| `Running` (any PID state) | Set to `Orphaned` | A surviving process is unmonitored after restart |
 | `Stopped`             | Unchanged         | Already terminal                                  |
 | `Failed`              | Unchanged         | Already terminal                                  |
 | `Orphaned`            | Unchanged         | Already terminal                                  |
 
-The PID liveness check is performed by the `ProcessChecker` port
+Reconciliation runs immediately after loading state. PID liveness is checked through the `ProcessChecker` port
 (see `crates/minibox/src/daemon/state.rs:ProcessChecker`; default
 adapter uses `kill(pid, 0)`). Tests inject doubles that always
 return alive or dead.
@@ -85,7 +85,7 @@ Created ──► Running ──► Stopped
               ├──► Paused ──► Running  (resume)
               │           └──► Stopped
               │
-              └── (daemon restart, PID dead) ──► Orphaned
+              └── (daemon restart) ──► Orphaned
 ```
 
 Valid transitions are enforced by
@@ -117,10 +117,10 @@ migration).
 
 ## What Is NOT Persisted
 
-- **Running processes**: PIDs are recorded but processes are not reattached.
-  A container marked `Running` after reload may have its process still alive
-  (checked by `reconcile_on_startup`) but the daemon does not re-enter its
-  reaper loop. The container will appear as `Orphaned` if the PID dies later.
+- **Running processes**: PIDs are recorded but processes are not reattached. Startup
+  reconciliation marks every previously `Running` record `Orphaned`, including when the PID is
+  still alive, because the new daemon has no reaper attached. A previously `Paused` record alone
+  may retain its state when its PID is alive and `cgroup.freeze` still reads `1`.
 - **Network state**: Bridge IP allocations, veth pairs, and iptables rules
   are ephemeral. Containers lose network connectivity after a daemon restart.
 - **Mount state**: Overlay mounts are gone. The layer directories on disk

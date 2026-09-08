@@ -1,8 +1,9 @@
 ---
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox
   - crates/minibox-core
+  - crates/minibox-domain
   - crates/miniboxd
   - crates/mbx
   - crates/macbox
@@ -10,9 +11,15 @@ sources:
   - crates/smolbox
   - crates/winbox
   - crates/minibox-macros
+  - crates/minibox-crux-plugin
+  - crates/minibox-bench
+  - crates/minibox-cni
+  - crates/minibox-tui
+  - crates/mcp
+  - crates/ail
   - xtask/src/main.rs
   - .github/workflows
-generated: 2026-08-22
+generated: 2026-08-28
 ---
 
 # Test Infrastructure Report
@@ -31,13 +38,12 @@ generated: 2026-08-22
 
 | Location                                  | Tests (est.) |
 | ----------------------------------------- | ------------ |
-| Integration test files (crates/\*/tests/) | ~739         |
-| Inline (#[cfg(test)] in src/)             | ~728         |
-| **Grand total**                           | **~1,467**   |
+| Integration test files (`crates/*/tests/*.rs`) | 96 files / ~1,060 annotations |
+| Inline (`#[cfg(test)]` in `src/`)              | ~1,228 annotations            |
+| **Source annotations**                         | **more than 2,200**            |
 
-Note: `cargo nextest` on macOS reports 789 (as of 2026-06-14) — that's the cross-platform
-subset (lib tests + included integration files). Linux-only, feature-gated,
-and root-required tests add more on top.
+These are source-level annotations, not a single-platform executed-test count. Linux-only,
+feature-gated, ignored, and root-required tests are selected by dedicated suites.
 
 ---
 
@@ -48,12 +54,19 @@ and root-required tests add more on top.
 | minibox            | 56                | ~479              | ~255         |
 | minibox-core       | 10                | ~126              | ~285         |
 | miniboxd           | 13                | ~72               | ~24          |
-| mbx                | 3                 | ~32               | ~96          |
+| minibox-cli        | 3                 | ~32               | ~96          |
 | macbox             | 3                 | ~30               | ~63          |
 | minibox-testsuite  | 0                 | 0                 | ~24          |
 | smolbox            | 2                 | 0                 | ~3           |
 | winbox             | 1                 | 0                 | ~5           |
 | minibox-macros     | 0                 | 0                 | 0            |
+| minibox-domain     | inline            | —                 | included     |
+| minibox-crux-plugin| integration       | —                 | included     |
+| minibox-mcp        | integration       | —                 | included     |
+| minibox-bench      | benches           | —                 | fixture tests|
+| minibox-cni        | integration       | —                 | included     |
+| minibox-tui        | inline            | —                 | included     |
+| ail                | 0                 | 0                 | 0            |
 | xtask              | 0                 | 0                 | 0            |
 
 ---
@@ -62,37 +75,37 @@ and root-required tests add more on top.
 
 | Category                                     | Tests (est.) | Platform    | Root?  | In CI?      |
 | -------------------------------------------- | ------------ | ----------- | ------ | ----------- |
-| Unit (inline lib)                            | ~728         | any         | no     | yes         |
+| Unit (inline lib)                            | ~1,228 annotations | any    | no     | yes         |
 | Handler + daemon conformance                 | ~209         | any         | no     | partial     |
 | minibox-core conformance                     | 126          | any         | no     | yes         |
 | Adapter isolation (colima/gke/native/smolvm) | ~66          | varies      | varies | partial     |
-| Property tests (proptest)                    | ~46          | any         | no     | **no**      |
-| Borrow-reasoning fixtures                    | 19           | any         | no     | local       |
+| Property tests (proptest)                    | ~46          | any         | no     | yes         |
+| Borrow-reasoning fixtures                    | 19           | any         | no     | yes         |
 | Security regression                          | ~19          | any         | no     | yes         |
-| Cgroup integration                           | 16           | Linux       | yes    | next/stable |
-| E2E daemon+CLI                               | 15           | Linux       | yes    | next/stable |
+| Cgroup integration                           | 16           | Linux       | yes    | promotion branches |
+| E2E daemon+CLI                               | 15           | Linux       | yes    | promotion branches |
 | Sandbox                                      | ~17          | Linux       | yes    | **no**      |
 | CLI subprocess                               | 30           | any         | no     | **no**      |
-| krun conformance                             | ~29          | macOS/Linux | no     | **no**      |
+| krun conformance                             | ~29          | macOS/Linux | no     | yes         |
 | Protocol evolution                           | 11           | any         | no     | yes         |
 
 ---
 
 ## CI Workflows
 
-8 workflows in `.github/workflows/`:
+14 workflows in `.github/workflows/`:
 
 | Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
 | --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`              | PRs targeting main/next                          | lint+fmt, unit tests (macOS), protocol e2e (macOS)                                                                                                         |
-| `merge.yml`           | pushes to main/next/stable/feature/hotfix/chore  | lint+fmt, unit tests, protocol e2e (macOS + Linux); build-test-archive, test-archive, test-all-features, audit/deny/machete, e2e+integration (next/stable) |
-| `reviewdog.yml`       | PRs targeting main/next                          | clippy, rustfmt, cargo-deny inline PR annotations via reviewdog                                                                                            |
-| `stability-gates.yml` | all pushes + PRs                                 | doc-sync, adapter-integration-tests, no-unwrap-in-prod, stability-compile                                                                                  |
-| `conformance.yml`     | next/stable + dispatch                           | `cargo xtask test-conformance` on self-hosted Linux                                                                                                        |
-| `protocol-drift.yml`  | pushes touching protocol.rs/handler.rs/server.rs | variant count + handler coverage check                                                                                                                     |
-| `nightly.yml`         | daily cron                                       | `cargo geiger` unsafe audit (informational)                                                                                                                |
-| `release.yml`         | `v*` tag                                         | crates.io publish + musl cross-compile + GitHub release                                                                                                    |
-| `summary.yml`         | issue opened                                     | AI-generated one-paragraph summary posted as issue comment                                                                                                 |
+| `ci.yml`, `pr.yml`, `merge.yml` | Main CI, PR, and push/merge-group gates |
+| `macos.yml`, `rust-clippy.yml` | macOS formatting and clippy review |
+| `conformance.yml` | conformance, property, krun, CLI, borrow, quickcheck |
+| `stability-gates.yml` | docs, adapter/no-unwrap/compile, handler coverage |
+| `protocol-drift.yml`, `protocol-sites.yml` | protocol and construction-site drift |
+| `nightly.yml` | scheduled audits and coverage check |
+| `promote.yml` | branch promotion |
+| `release.yml`, `publish-mbx.yml` | release and CLI publishing |
+| `summary.yml` | issue summary automation |
 
 ---
 
@@ -102,22 +115,8 @@ and root-required tests add more on top.
 
 | Test category    | Command                             | Tests missed                     |
 | ---------------- | ----------------------------------- | -------------------------------- |
-| Property tests   | `cargo xtask test-property`         | ~46 proptest tests               |
-| Borrow fixtures  | `cargo xtask borrow-fixtures`       | 19 borrow reasoning fixtures     |
-| Sandbox tests    | `cargo xtask test-sandbox`          | ~17 sandbox tests                |
+| Sandbox tests    | `cargo xtask test sandbox`          | ~17 sandbox tests                |
 | CLI subprocess   | `just test-cli-subprocess`          | 30 CLI e2e tests                 |
-| krun conformance | `cargo xtask test-krun-conformance` | ~29 tests                        |
-| Coverage gate    | `cargo xtask coverage-check`        | handler.rs fn coverage threshold |
-
-### Scope mismatches
-
-- CI `test-unit` job runs `nextest --workspace --lib` (lib tests only).
-  `cargo xtask test-unit` also includes daemon_conformance_tests,
-  colima_conformance, gke_isolation, lifecycle_failure — these only run
-  in `test-archive` on Ubuntu, a different job and environment.
-
-- `test-all-features` CI job excludes `macbox` and `miniboxd`. macbox
-  inline tests (63 tests) only run on the self-hosted mac runner.
 
 ---
 
@@ -127,16 +126,18 @@ and root-required tests add more on top.
 | ----------------------- | -------------------------------------------------------- |
 | `verify`                | read-only fmt/check/clippy + borrow fixtures + docs-lint |
 | `borrow-fixtures`       | standalone Rust borrow must-pass/must-fail fixtures      |
-| `pre-commit`            | fmt-check + clippy + release build + docs-lint           |
-| `prepush`               | nextest + llvm-cov + ai-review (non-fatal)               |
-| `test-unit`             | lib + select integration tests + conformance             |
-| `test-conformance`      | commit/build/push/report conformance suite               |
-| `test-krun-conformance` | krun-specific conformance                                |
-| `test-property`         | proptest suites                                          |
-| `test-integration`      | cgroup tests (Linux+root)                                |
-| `test-e2e-suite`        | daemon+CLI e2e (Linux+root)                              |
-| `test-sandbox`          | sandbox tests (Linux+root)                               |
-| `coverage-check`        | handler.rs fn coverage >= 80% gate                       |
+| `pre-commit`            | conditional fmt/restage + clippy/architecture + docs/date checks |
+| `prepush`               | musl-check + release build/library tests + conformance   |
+| `test unit`             | workspace library tests                                  |
+| `test conformance`      | commit/build/push/report conformance suite               |
+| `test krun-conformance` | krun-specific conformance                                |
+| `test property`         | proptest suites                                          |
+| `test integration`      | cgroup tests (Linux+root)                                |
+| `test system-suite`     | daemon+CLI e2e (Linux+root)                              |
+| `test sandbox`          | sandbox tests (Linux+root)                               |
+| `coverage-check`        | handler module function coverage >= 80% gate             |
+| `architecture`          | dependency-ring and canonical-owner guard                |
+| `musl-check`            | release cross-build for Linux musl targets               |
 | `bench`                 | criterion benchmarks in crates/minibox-bench (8 targets) |
 | `check-stale-names`     | audit workspace for banned old crate/binary names        |
 | `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
@@ -157,6 +158,6 @@ and root-required tests add more on top.
 
 **`minibox-core::adapters`** (behind `test-utils`):
 
-- `mocks.rs` — cross-platform mock adapters (duplicates minibox mocks)
+- `mocks.rs` — canonical cross-platform mock adapters; `minibox::testing::mocks` re-exports them
 - `test_fixtures.rs` — shared fixtures
 - `conformance.rs` — conformance harness

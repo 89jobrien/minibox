@@ -1,5 +1,5 @@
-// TODO(#414): add multi-provider synthesis strategy — voting/ranking instead
-//   of first-success-wins (council report item #5)
+// TODO(feature-idea-07)(#414): register the existing Gemini and Anthropic providers in the
+// executable runner factory so the implemented cross-provider ranking receives real candidates.
 
 package main
 
@@ -98,7 +98,7 @@ func runCouncil(ctx context.Context, args []string) {
 	runID := time.Now().Format(time.RFC3339)
 	writer.WriteRun(ctx, domain.AgentRun{
 		RunID: runID, Script: "council",
-		Args: map[string]any{"base": *base, "mode": *mode, "providers": providerNames(runners)},
+		Args:   map[string]any{"base": *base, "mode": *mode, "providers": providerNames(runners)},
 		Status: "running",
 	})
 	start := time.Now()
@@ -204,8 +204,8 @@ func runCouncil(ctx context.Context, args []string) {
 	duration := time.Since(start).Seconds()
 	writer.WriteRun(ctx, domain.AgentRun{
 		RunID: runID, Script: "council",
-		Args:      map[string]any{"base": *base, "mode": *mode, "providers": providerNames(runners)},
-		Status:    "complete", DurationS: duration, Output: fullOutput,
+		Args:   map[string]any{"base": *base, "mode": *mode, "providers": providerNames(runners)},
+		Status: "complete", DurationS: duration, Output: fullOutput,
 	})
 	writer.WriteReport(ctx, domain.AgentReport{
 		SHA: sha, Script: fmt.Sprintf("council-%s", *mode), Content: fullOutput,
@@ -249,7 +249,7 @@ func runMetaAgent(ctx context.Context, args []string) {
 	runID := time.Now().Format(time.RFC3339)
 	writer.WriteRun(ctx, domain.AgentRun{
 		RunID: runID, Script: "meta-agent",
-		Args: map[string]any{"task": truncate(task, 120), "providers": providerNames(runners)},
+		Args:   map[string]any{"task": truncate(task, 120), "providers": providerNames(runners)},
 		Status: "running",
 	})
 	start := time.Now()
@@ -311,8 +311,8 @@ func runMetaAgent(ctx context.Context, args []string) {
 	duration := time.Since(start).Seconds()
 	writer.WriteRun(ctx, domain.AgentRun{
 		RunID: runID, Script: "meta-agent",
-		Args:      map[string]any{"task": truncate(task, 120), "providers": providerNames(runners)},
-		Status:    "complete", DurationS: duration, Output: fullOutput,
+		Args:   map[string]any{"task": truncate(task, 120), "providers": providerNames(runners)},
+		Status: "complete", DurationS: duration, Output: fullOutput,
 	})
 	writer.WriteReport(ctx, domain.AgentReport{
 		SHA: sha, Script: "meta-agent", Content: fullOutput,
