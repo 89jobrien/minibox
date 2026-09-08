@@ -53,7 +53,7 @@ pub async fn pull_image(
         },
     )?;
 
-    let result = client
+    let (result, _) = client
         .call_authorized(request, policy.max_output_bytes)
         .await?;
     let message = result

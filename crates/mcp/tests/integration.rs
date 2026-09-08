@@ -400,3 +400,49 @@ async fn client_server_boundary_preserves_error_kinds() {
         service.cancel().await.expect("cancel service");
     }
 }
+
+#[tokio::test]
+async fn minibox_run_returns_bounded_truncated_output() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    let (tx, _rx) = oneshot::channel();
+    tokio::spawn(mock_daemon_verify(
+        listener,
+        vec![
+            DaemonResponse::ContainerCreated {
+                id: "run123".to_string(),
+            },
+            DaemonResponse::ContainerOutput {
+                stream: OutputStreamKind::Stdout,
+                data: "aGVsbG8=".to_string(),
+            },
+            DaemonResponse::ContainerOutput {
+                stream: OutputStreamKind::Stderr,
+                data: "d29ybGQ=".to_string(),
+            },
+            DaemonResponse::ContainerStopped { exit_code: 0 },
+        ],
+        tx,
+    ));
+    let service =
+        spawn_client_with_env(&socket_path, &[("MINIBOX_MCP_MAX_OUTPUT_BYTES", "5")]).await;
+
+    let result = service
+        .call_tool(
+            CallToolRequestParams::new("minibox_run")
+                .with_arguments(json!({"image": "alpine"}).as_object().cloned().unwrap()),
+        )
+        .await
+        .expect("large run output should be truncated, not rejected");
+    let output = result
+        .into_typed::<RunContainerOutput>()
+        .expect("typed run output");
+
+    assert_eq!(output.stdout.len() + output.stderr.len(), 5);
+    assert_eq!(output.stdout, "hello");
+    assert!(output.stderr.is_empty());
+    assert!(output.truncated);
+    assert_eq!(output.exit_code, Some(0));
+
+    service.cancel().await.expect("cancel service");
+}

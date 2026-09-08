@@ -2,10 +2,13 @@
 
 use crate::error::{McpServerError, Result};
 use crate::policy::{Authorized, DEFAULT_MAX_OUTPUT_BYTES};
+use base64::Engine as _;
 use minibox_core::client::{ClientError, DaemonClient, default_socket_path};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use serde_json::Value;
 use std::path::PathBuf;
+
+const MAX_RUN_METADATA_BYTES: usize = 64 * 1024;
 
 /// Thin adapter over [`DaemonClient`] with terminal-aware response collection.
 #[derive(Clone, Debug)]
@@ -49,41 +52,81 @@ impl MiniboxDaemonClient {
         max_output_bytes: usize,
     ) -> Result<DaemonCallResult> {
         ensure_read_only(&request)?;
-        self.call_raw(request, max_output_bytes).await
+        Ok(self
+            .call_raw(request, max_output_bytes, OutputAccounting::Serialized)
+            .await?
+            .result)
     }
 
     pub(crate) async fn call_authorized(
         &self,
         request: Authorized<DaemonRequest>,
         max_output_bytes: usize,
-    ) -> Result<DaemonCallResult> {
-        self.call_raw(request.into_inner(), max_output_bytes).await
+    ) -> Result<(DaemonCallResult, bool)> {
+        let request = request.into_inner();
+        let accounting = if matches!(request, DaemonRequest::Run { .. }) {
+            OutputAccounting::TruncateContainerOutput
+        } else {
+            OutputAccounting::Serialized
+        };
+        let collected = self.call_raw(request, max_output_bytes, accounting).await?;
+        Ok((collected.result, collected.output_truncated))
     }
 
     async fn call_raw(
         &self,
         request: DaemonRequest,
         max_output_bytes: usize,
-    ) -> Result<DaemonCallResult> {
+        accounting: OutputAccounting,
+    ) -> Result<CollectedCallResult> {
         let client = DaemonClient::with_socket(&self.socket_path);
         let mut stream = client.call(request).await.map_err(map_client_error)?;
 
         let mut responses = Vec::new();
         let mut raw_responses = Vec::new();
         let mut total_bytes = 0usize;
+        let mut output_bytes = 0usize;
+        let mut output_truncated = false;
         let mut terminal_type = None;
 
-        while let Some(response) = stream.next().await.map_err(map_client_error)? {
+        while let Some(mut response) = stream.next().await.map_err(map_client_error)? {
+            let is_container_output = matches!(response, DaemonResponse::ContainerOutput { .. });
+            if accounting == OutputAccounting::TruncateContainerOutput {
+                if let DaemonResponse::ContainerOutput { data, .. } = &mut response {
+                    let decoded = base64::engine::general_purpose::STANDARD
+                        .decode(&*data)
+                        .map_err(|error| McpServerError::ProtocolError(error.to_string()))?;
+                    let remaining = max_output_bytes.saturating_sub(output_bytes);
+                    let take = decoded.len().min(remaining);
+                    output_bytes = output_bytes.saturating_add(take);
+                    if take < decoded.len() {
+                        output_truncated = true;
+                    }
+                    if take == 0 {
+                        continue;
+                    }
+                    *data = base64::engine::general_purpose::STANDARD.encode(&decoded[..take]);
+                }
+            }
+
             let is_terminal = response.is_terminal();
             let response_type = response_type(&response);
             let raw = serde_json::to_value(&response)?;
-            total_bytes = total_bytes.saturating_add(raw.to_string().len());
-            // TODO(review)(#477): this hard-errors on overflow, but normalize_run_output()
-            // (containers.rs) has its own graceful truncation path with a `truncated` flag.
-            // The hard error here fires first, so large-output runs fail instead of
-            // returning truncated stdout/stderr. Reconcile the two strategies.
-            if total_bytes > max_output_bytes {
-                return Err(McpServerError::OutputLimitExceeded);
+            let serialized_bytes = raw.to_string().len();
+            match accounting {
+                OutputAccounting::Serialized => {
+                    total_bytes = total_bytes.saturating_add(serialized_bytes);
+                    if total_bytes > max_output_bytes {
+                        return Err(McpServerError::OutputLimitExceeded);
+                    }
+                }
+                OutputAccounting::TruncateContainerOutput if !is_container_output => {
+                    total_bytes = total_bytes.saturating_add(serialized_bytes);
+                    if total_bytes > MAX_RUN_METADATA_BYTES {
+                        return Err(McpServerError::OutputLimitExceeded);
+                    }
+                }
+                OutputAccounting::TruncateContainerOutput => {}
             }
             if let DaemonResponse::Error { message } = &response {
                 return Err(McpServerError::Daemon(message.clone()));
@@ -96,12 +139,26 @@ impl MiniboxDaemonClient {
             }
         }
 
-        Ok(DaemonCallResult {
-            responses,
-            raw_responses,
-            terminal_type,
+        Ok(CollectedCallResult {
+            result: DaemonCallResult {
+                responses,
+                raw_responses,
+                terminal_type,
+            },
+            output_truncated,
         })
     }
+}
+
+struct CollectedCallResult {
+    result: DaemonCallResult,
+    output_truncated: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OutputAccounting {
+    Serialized,
+    TruncateContainerOutput,
 }
 
 fn ensure_read_only(request: &DaemonRequest) -> Result<()> {

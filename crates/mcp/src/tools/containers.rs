@@ -122,10 +122,10 @@ pub async fn run(
     let request = policy
         .authorize_run(input)?
         .try_map(|input| run_request(input, policy))?;
-    let result = client
+    let (result, output_truncated) = client
         .call_authorized(request, policy.max_output_bytes)
         .await?;
-    normalize_run_output(result.responses, policy.max_output_bytes)
+    normalize_run_output(result.responses, policy.max_output_bytes, output_truncated)
 }
 
 /// Stop a container.
@@ -234,12 +234,14 @@ fn validate_absolute_clean_path(path: &Path, field: &'static str) -> Result<()> 
 fn normalize_run_output(
     responses: Vec<DaemonResponse>,
     max_output_bytes: usize,
+    output_truncated: bool,
 ) -> Result<RunContainerOutput> {
     let mut container_id = None;
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut exit_code = None;
-    let mut truncated = false;
+    let mut truncated = output_truncated;
+    let mut remaining_output_bytes = max_output_bytes;
 
     for response in responses {
         match response {
@@ -256,7 +258,7 @@ fn normalize_run_output(
                         OutputStreamKind::Stderr => &mut stderr,
                     },
                     &decoded,
-                    max_output_bytes,
+                    &mut remaining_output_bytes,
                     &mut truncated,
                 );
             }
@@ -287,15 +289,15 @@ fn normalize_run_output(
     })
 }
 
-fn append_output(target: &mut String, bytes: &[u8], max_len: usize, truncated: &mut bool) {
-    if target.len() >= max_len {
-        *truncated = true;
-        return;
+fn append_output(target: &mut String, bytes: &[u8], remaining: &mut usize, truncated: &mut bool) {
+    let decoded = String::from_utf8_lossy(bytes);
+    let mut take = decoded.len().min(*remaining);
+    while take > 0 && !decoded.is_char_boundary(take) {
+        take -= 1;
     }
-    let remaining = max_len - target.len();
-    let take = bytes.len().min(remaining);
-    target.push_str(&String::from_utf8_lossy(&bytes[..take]));
-    if take < bytes.len() {
+    target.push_str(&decoded[..take]);
+    *remaining -= take;
+    if take < decoded.len() {
         *truncated = true;
     }
 }
@@ -306,7 +308,7 @@ async fn simple_id_request(
     request: Authorized<DaemonRequest>,
     tool: &'static str,
 ) -> Result<SimpleOutput> {
-    let result = client
+    let (result, _) = client
         .call_authorized(request, policy.max_output_bytes)
         .await?;
     let message = result
@@ -404,6 +406,7 @@ mod tests {
                 DaemonResponse::ContainerStopped { exit_code: 0 },
             ],
             1024,
+            false,
         )
         .expect("normalize output");
 
