@@ -2,7 +2,7 @@
 
 use crate::client::MiniboxDaemonClient;
 use crate::error::{McpServerError, Result};
-use crate::policy::AgentPolicy;
+use crate::policy::{AgentPolicy, Authorized};
 use crate::types::{
     ContainerIdInput, ContainerInfoOutput, ImagesOutput, LogEntry, LogsInput, LogsOutput,
     ManifestOutput, MountInput, PsOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
@@ -119,10 +119,11 @@ pub async fn run(
     // network-isolated runs are the core agent workflow and stay available by
     // default; everything that escalates (privileged, mounts, host network) or
     // mutates shared daemon state is gated. Documented in this crate's README.
-    policy.validate_run(&input)?;
-    let request = run_request(input, policy)?;
+    let request = policy
+        .authorize_run(input)?
+        .try_map(|input| run_request(input, policy))?;
     let result = client
-        .call_limited(request, policy.max_output_bytes)
+        .call_authorized(request, policy.max_output_bytes)
         .await?;
     normalize_run_output(result.responses, policy.max_output_bytes)
 }
@@ -137,11 +138,10 @@ pub async fn stop(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<SimpleOutput> {
-    policy.validate_mutation("minibox_stop")?;
-    simple_id_request(client, policy, input, "minibox_stop", |id| {
-        DaemonRequest::Stop { id }
-    })
-    .await
+    require_non_empty(&input.id, "id")?;
+    let request =
+        policy.authorize_mutation("minibox_stop", DaemonRequest::Stop { id: input.id })?;
+    simple_id_request(client, policy, request, "minibox_stop").await
 }
 
 /// Remove a stopped container.
@@ -154,11 +154,10 @@ pub async fn rm(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<SimpleOutput> {
-    policy.validate_mutation("minibox_rm")?;
-    simple_id_request(client, policy, input, "minibox_rm", |id| {
-        DaemonRequest::Remove { id }
-    })
-    .await
+    require_non_empty(&input.id, "id")?;
+    let request =
+        policy.authorize_mutation("minibox_rm", DaemonRequest::Remove { id: input.id })?;
+    simple_id_request(client, policy, request, "minibox_rm").await
 }
 
 /// Re-export image list output for docs/tests that group container and image tools together.
@@ -304,13 +303,11 @@ fn append_output(target: &mut String, bytes: &[u8], max_len: usize, truncated: &
 async fn simple_id_request(
     client: &MiniboxDaemonClient,
     policy: &AgentPolicy,
-    input: ContainerIdInput,
+    request: Authorized<DaemonRequest>,
     tool: &'static str,
-    request_builder: impl FnOnce(String) -> DaemonRequest,
 ) -> Result<SimpleOutput> {
-    require_non_empty(&input.id, "id")?;
     let result = client
-        .call_limited(request_builder(input.id), policy.max_output_bytes)
+        .call_authorized(request, policy.max_output_bytes)
         .await?;
     let message = result
         .responses

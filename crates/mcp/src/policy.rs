@@ -8,6 +8,26 @@ use minibox_core::domain::NetworkMode;
 /// unconfigured [`crate::client::MiniboxDaemonClient::call`] path.
 pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
+/// Proof that an agent policy authorized a daemon operation.
+///
+/// The inner value is private so callers cannot forge authorization.
+#[derive(Debug)]
+pub struct Authorized<T>(T);
+
+impl<T> Authorized<T> {
+    const fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    pub(crate) fn into_inner(self) -> T {
+        self.0
+    }
+
+    pub(crate) fn try_map<U>(self, map: impl FnOnce(T) -> Result<U>) -> Result<Authorized<U>> {
+        map(self.0).map(Authorized::new)
+    }
+}
+
 /// Runtime policy applied before MCP tools call the daemon.
 #[derive(Clone, Debug)]
 pub struct AgentPolicy {
@@ -62,6 +82,30 @@ impl AgentPolicy {
             }
         }
         policy
+    }
+
+    /// Authorize a safe run request and return unforgeable proof.
+    ///
+    /// # Errors
+    ///
+    /// Returns a policy denial or invalid-input error for unsafe run options.
+    pub fn authorize_run(&self, input: RunContainerInput) -> Result<Authorized<RunContainerInput>> {
+        self.validate_run(&input)?;
+        Ok(Authorized::new(input))
+    }
+
+    /// Authorize a daemon mutation and return unforgeable proof.
+    ///
+    /// # Errors
+    ///
+    /// Returns a policy denial when lifecycle mutation is disabled.
+    pub fn authorize_mutation<T>(
+        &self,
+        tool_name: &'static str,
+        operation: T,
+    ) -> Result<Authorized<T>> {
+        self.validate_mutation(tool_name)?;
+        Ok(Authorized::new(operation))
     }
 
     /// Validate a safe run request.
@@ -120,10 +164,6 @@ impl AgentPolicy {
     fn allows(&self, permission: AgentPermission) -> bool {
         self.permissions.contains(&permission)
     }
-    // TODO(review)(#476): enforcement is a plain runtime bool check callers can simply omit —
-    // pull_image (images.rs) does. Consider returning a marker type (e.g. Authorized<T>)
-    // from validate_run/validate_mutation that daemon-call functions require, so a future
-    // mutating tool can't compile without passing the gate.
 }
 
 fn env_bool(name: &str) -> bool {
@@ -279,5 +319,24 @@ mod tests {
         let policy = AgentPolicy::from_env();
 
         assert_eq!(policy.max_output_bytes, DEFAULT_MAX_OUTPUT_BYTES);
+    }
+}
+
+#[cfg(test)]
+mod authorization_capability_tests {
+    use super::*;
+
+    #[test]
+    fn safe_run_validation_returns_typed_authorization() {
+        let input = RunContainerInput {
+            image: "alpine".to_string(),
+            ..RunContainerInput::default()
+        };
+
+        let authorized: Authorized<RunContainerInput> = AgentPolicy::safe_default()
+            .authorize_run(input)
+            .expect("safe run should be authorized");
+
+        assert_eq!(authorized.into_inner().image, "alpine");
     }
 }

@@ -43,18 +43,18 @@ pub async fn pull_image(
 ) -> Result<PullImageOutput> {
     // Pull mutates daemon state (network fetch + disk write), so it sits
     // behind the same mutation gate as stop/rm.
-    policy.validate_mutation("minibox_pull")?;
     require_non_empty(&input.image, "image")?;
+    let request = policy.authorize_mutation(
+        "minibox_pull",
+        DaemonRequest::Pull {
+            image: input.image,
+            tag: input.tag,
+            platform: input.platform,
+        },
+    )?;
 
     let result = client
-        .call_limited(
-            DaemonRequest::Pull {
-                image: input.image,
-                tag: input.tag,
-                platform: input.platform,
-            },
-            policy.max_output_bytes,
-        )
+        .call_authorized(request, policy.max_output_bytes)
         .await?;
     let message = result
         .responses

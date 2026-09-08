@@ -1,7 +1,7 @@
 //! Typed minibox daemon client adapter for MCP tools.
 
 use crate::error::{McpServerError, Result};
-use crate::policy::DEFAULT_MAX_OUTPUT_BYTES;
+use crate::policy::{Authorized, DEFAULT_MAX_OUTPUT_BYTES};
 use minibox_core::client::{ClientError, DaemonClient, default_socket_path};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use serde_json::Value;
@@ -48,6 +48,23 @@ impl MiniboxDaemonClient {
         request: DaemonRequest,
         max_output_bytes: usize,
     ) -> Result<DaemonCallResult> {
+        ensure_read_only(&request)?;
+        self.call_raw(request, max_output_bytes).await
+    }
+
+    pub(crate) async fn call_authorized(
+        &self,
+        request: Authorized<DaemonRequest>,
+        max_output_bytes: usize,
+    ) -> Result<DaemonCallResult> {
+        self.call_raw(request.into_inner(), max_output_bytes).await
+    }
+
+    async fn call_raw(
+        &self,
+        request: DaemonRequest,
+        max_output_bytes: usize,
+    ) -> Result<DaemonCallResult> {
         let client = DaemonClient::with_socket(&self.socket_path);
         let mut stream = client.call(request).await.map_err(map_client_error)?;
 
@@ -83,6 +100,28 @@ impl MiniboxDaemonClient {
             responses,
             raw_responses,
             terminal_type,
+        })
+    }
+}
+
+fn ensure_read_only(request: &DaemonRequest) -> Result<()> {
+    if matches!(
+        request,
+        DaemonRequest::List
+            | DaemonRequest::SubscribeEvents
+            | DaemonRequest::ListImages
+            | DaemonRequest::ContainerLogs { .. }
+            | DaemonRequest::ListSnapshots { .. }
+            | DaemonRequest::GetManifest { .. }
+            | DaemonRequest::VerifyManifest { .. }
+            | DaemonRequest::ListPipelines { .. }
+            | DaemonRequest::ShowPipeline { .. }
+    ) {
+        Ok(())
+    } else {
+        Err(McpServerError::PolicyDenied {
+            tool: "daemon_call",
+            reason: format!("{} requires policy authorization", request.type_tag()),
         })
     }
 }
@@ -145,5 +184,32 @@ mod tests {
         };
 
         assert_eq!(response_type(&response), "Success");
+    }
+}
+
+#[cfg(test)]
+mod authorization_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn unrestricted_client_call_cannot_bypass_mutation_policy() {
+        let client = MiniboxDaemonClient::new("/nonexistent/minibox.sock".into());
+
+        let result = client
+            .call_limited(
+                DaemonRequest::Stop {
+                    id: "abc123".to_string(),
+                },
+                DEFAULT_MAX_OUTPUT_BYTES,
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(McpServerError::PolicyDenied {
+                tool: "daemon_call",
+                ..
+            })
+        ));
     }
 }
