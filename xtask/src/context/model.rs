@@ -1,5 +1,5 @@
 use anyhow::{Result, bail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Component, Path};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -223,6 +223,157 @@ pub(super) struct SourceMetrics {
     pub(super) includes_generated: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum AdapterMaturity {
+    Production,
+    Experimental,
+    Blocked,
+    Stub,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum CapabilitySupport {
+    Yes,
+    Limited,
+    Blocked,
+    No,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct AdapterSnapshot {
+    pub(super) id: String,
+    pub(super) maturity: Fact<AdapterMaturity>,
+    pub(super) platforms: Fact<Vec<String>>,
+    pub(super) default_roles: Fact<Vec<String>>,
+    pub(super) registry_presence: Fact<bool>,
+    pub(super) capabilities: std::collections::BTreeMap<String, Fact<CapabilitySupport>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TestDeclarationKind {
+    Function,
+    MacroInvocation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct SourceTestDeclaration {
+    pub(super) stable_id: String,
+    pub(super) package_id: String,
+    pub(super) path: RepositoryPath,
+    pub(super) module_path: Vec<String>,
+    pub(super) name: String,
+    pub(super) cfg_predicates: Vec<String>,
+    pub(super) kind: TestDeclarationKind,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct ExecutableTest {
+    pub(super) stable_id: String,
+    pub(super) package_id: String,
+    pub(super) binary_id: String,
+    pub(super) test_name: String,
+    pub(super) ignored: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum ProfileStatus {
+    Validated,
+    Failed,
+    Unavailable,
+    Stale,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct TestProfileResult {
+    pub(super) profile_id: String,
+    pub(super) target: String,
+    pub(super) features: Vec<String>,
+    pub(super) status: ProfileStatus,
+    pub(super) executable_tests: Vec<ExecutableTest>,
+    pub(super) unavailable_reason: Option<String>,
+    pub(super) evidence_ids: Vec<EvidenceId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct TestSnapshot {
+    pub(super) source_declarations: Vec<SourceTestDeclaration>,
+    pub(super) profiles: Vec<TestProfileResult>,
+    pub(super) validated_unique_tests: Vec<ExecutableTest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct ContextMap {
+    pub(super) crates: Vec<CrateOwnership>,
+    pub(super) files: Vec<FileOwnership>,
+    pub(super) changed_files: Vec<FileOwnership>,
+    pub(super) collector_tasks: Vec<CollectorTask>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct CrateOwnership {
+    pub(super) package_id: String,
+    pub(super) manifest_path: RepositoryPath,
+    pub(super) source_roots: Vec<RepositoryPath>,
+    pub(super) evidence_ids: Vec<EvidenceId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct FileOwnership {
+    pub(super) path: RepositoryPath,
+    pub(super) owner_package_id: Option<String>,
+    pub(super) role: FileRole,
+    pub(super) role_origin: RoleOrigin,
+    pub(super) evidence_ids: Vec<EvidenceId>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum FileRole {
+    CargoTarget,
+    RustSource,
+    Test,
+    Example,
+    Benchmark,
+    Manifest,
+    Documentation,
+    Workflow,
+    Configuration,
+    Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum RoleOrigin {
+    CargoMetadata,
+    DeclaredRule,
+    InferredPath,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(super) struct CollectorTask {
+    pub(super) id: String,
+    pub(super) depends_on: Vec<String>,
+    pub(super) status: EvidenceStatus,
+    pub(super) evidence_ids: Vec<EvidenceId>,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct ContextSnapshot {
+    pub(super) snapshot_version: u32,
+    pub(super) identity: RepositoryIdentity,
+    pub(super) environment: EnvironmentSnapshot,
+    pub(super) workspace: WorkspaceSnapshot,
+    pub(super) adapters: Vec<AdapterSnapshot>,
+    pub(super) tests: TestSnapshot,
+    pub(super) context_map: ContextMap,
+    pub(super) evidence: std::collections::BTreeMap<EvidenceId, Evidence>,
+    pub(super) diagnostics: Vec<ContextDiagnostic>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,5 +488,78 @@ mod tests {
         );
         assert!(value.pointer("/workspace/rust_version").is_none());
         assert!(value.pointer("/environment/msrv").is_none());
+    }
+
+    #[test]
+    fn snapshot_v3_has_no_ambiguous_test_total() {
+        let observed = |value: &str| {
+            Fact::new(
+                None,
+                Some(value.to_string()),
+                Validation {
+                    state: ValidationState::ObservedOnly,
+                    reason: None,
+                },
+                Vec::new(),
+            )
+        };
+        let snapshot = ContextSnapshot {
+            snapshot_version: 3,
+            identity: RepositoryIdentity {
+                commit: "abc123".to_string(),
+                branch: "develop".to_string(),
+                dirty: false,
+                changed_paths: Vec::new(),
+                worktree_fingerprint: "clean".to_string(),
+                evidence_ids: Vec::new(),
+            },
+            environment: EnvironmentSnapshot {
+                host: "aarch64-apple-darwin".to_string(),
+                target: "aarch64-apple-darwin".to_string(),
+                enabled_features: Vec::new(),
+                rustc_version: observed("1.98.0"),
+                cargo_version: observed("1.98.0"),
+                nextest_version: observed("0.9.100"),
+                generated_at: "2026-09-08T00:00:00Z".to_string(),
+            },
+            workspace: WorkspaceSnapshot {
+                version: observed("0.1.0"),
+                edition: observed("2024"),
+                msrv: observed("1.85"),
+                packages: Vec::new(),
+            },
+            adapters: Vec::new(),
+            tests: TestSnapshot {
+                source_declarations: Vec::new(),
+                profiles: Vec::new(),
+                validated_unique_tests: Vec::new(),
+            },
+            context_map: ContextMap {
+                crates: Vec::new(),
+                files: Vec::new(),
+                changed_files: Vec::new(),
+                collector_tasks: Vec::new(),
+            },
+            evidence: std::collections::BTreeMap::new(),
+            diagnostics: Vec::new(),
+        };
+        let value = serde_json::to_value(snapshot).expect("snapshot should serialize");
+
+        assert_eq!(value["snapshot_version"], 3);
+        for section in [
+            "identity",
+            "environment",
+            "workspace",
+            "adapters",
+            "tests",
+            "context_map",
+            "evidence",
+            "diagnostics",
+        ] {
+            assert!(value.get(section).is_some(), "missing {section}");
+        }
+        assert!(value.pointer("/tests/total").is_none());
+        assert!(value.pointer("/workspace/rust_version").is_none());
+        assert!(value.get("crates").is_none());
     }
 }
