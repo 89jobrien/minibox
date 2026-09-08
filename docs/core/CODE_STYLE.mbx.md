@@ -1,12 +1,24 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox-domain
   - crates/minibox-core
   - crates/minibox
   - crates/miniboxd
   - crates/minibox-macros
-generated: 2026-08-26
+  - crates/macbox
+  - crates/smolbox
+  - crates/winbox
+  - crates/mbx
+  - crates/minibox-crux-plugin
+  - crates/minibox-testsuite
+  - crates/minibox-bench
+  - crates/mcp
+  - crates/minibox-cni
+  - crates/minibox-tui
+  - crates/ail
+  - xtask
+generated: 2026-09-04
 ---
 
 # Code Style and Conventions
@@ -42,23 +54,36 @@ the codebase — follow them when adding or modifying code.
 
 ```text
 crates/
-  minibox-core/     # Cross-platform shared types, domain traits, protocol, image handling
+  minibox-domain/   # Pure inner ring: domain values, policies, events, and ports
+  minibox-core/     # Protocol, client transport, OCI/image services, compatibility facade
   minibox/          # Infrastructure adapters + container runtime (Linux-native + cross-platform)
   miniboxd/         # Daemon binary: socket listener, handler dispatch, adapter wiring
-  mbx/              # CLI binary: command implementations, terminal handling
-  minibox-macros/   # macro_rules! boilerplate reduction (as_any!, adapt!, etc.)
+  mbx/              # minibox-cli package; mbx binary and optional TUI command
+  minibox-macros/   # proc-macro adapter boilerplate reduction
   minibox-testsuite/   # Conformance test harness and runner
-  macbox/           # macOS adapter: krun/smolvm backends
+  macbox/           # Colima composition and feature-gated VZ path
+  smolbox/          # smolvm + krun implementations
   winbox/           # Windows adapter: HCS/WSL2 backends
   minibox-crux-plugin/ # crux runtime plugin
+  mcp/              # minibox-mcp stdio control surface
+  minibox-cni/      # feature-gated CNI implementation for native bridge networking
+  minibox-tui/      # read-only terminal dashboard
+  minibox-bench/    # Criterion benchmarks
+  ail/              # agent-improvement placeholder
 xtask/              # Cargo xtask: pre-commit, verify, prepush, cleanup gates
 ```
 
 Key conventions:
 
-- `minibox-core` has **zero infrastructure dependencies** — only `std`, `serde`, `tokio`, `anyhow`, `thiserror`, and `tracing`. Never add OS-specific imports here.
+- `minibox-domain` is the pure inner ring and canonical owner of ports. Never add HTTP,
+  process, socket, filesystem-adapter, or async-runtime dependencies there.
+- `minibox-core` owns shared cross-platform infrastructure and compatibility re-exports; keep
+  OS-specific runtime implementations outside it.
 - `minibox` re-exports everything from `minibox-core` that adapters or macros need. Do not remove these re-exports; macro expansion depends on them.
-- Platform-specific crates (`macbox`, `winbox`) implement domain traits from `minibox-core`.
+- Adapters implement canonical traits from `minibox-domain` (possibly imported through the
+  `minibox-core::domain` compatibility facade). Linux/shared adapters live in `minibox`, Colima
+  composition and VZ live in `macbox`, smolvm/krun live in `smolbox`, and Windows work lives in
+  `winbox`.
 
 ---
 
@@ -271,7 +296,10 @@ pub struct HandlerDependencies {
     pub lifecycle: LifecycleDeps, // filesystem, limiter, runtime, state
     pub exec:      ExecDeps,      // exec runtime, PTY registry
     pub build:     BuildDeps,     // image builder
-    pub event:     EventDeps,     // event sink, metrics recorder
+    pub events:    EventDeps,     // event sink/source, metrics recorder
+    pub policy:    ContainerPolicy,
+    pub execution_policy: Option<ExecutionPolicy>,
+    pub checkpoint: DynVmCheckpoint,
 }
 ```
 
@@ -523,7 +551,8 @@ The rule is `// ` followed by exactly 75 dashes, total line width 78 characters.
 
 ### Labeled divider — for large files with many named sections
 
-Used in long files (`handler.rs`, `main.rs`) where a table-of-contents mental model helps. Uses
+Used in long modules (such as the split `daemon/handler/` module and `main.rs`) where a
+table-of-contents mental model helps. Uses
 Unicode box-drawing em-dashes (`─`) and embeds the section name inline.
 
 ```rust,ignore
@@ -616,7 +645,8 @@ mod tests {
 | Integration | `tests/integration_tests.rs`      | Linux + root + network.        |
 | E2E         | `tests/system_tests.rs`           | Linux + root + running daemon. |
 
-Run with: `cargo xtask test-unit` (cross-platform), `just test-integration` (Linux+root).
+Run with: `cargo xtask test unit` (cross-platform), `cargo xtask test integration`
+(Linux+root).
 
 ### Test double usage
 

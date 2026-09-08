@@ -2,7 +2,8 @@
 
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-> **Status**: Stabilization freeze active — see [CONTRIBUTING.md](CONTRIBUTING.md) and
+> **Status**: The stabilization freeze was lifted on 2026-08-18. The standing promotion
+> gates remain in force; see [CONTRIBUTING.md](CONTRIBUTING.md) and
 > [docs/core/STABILITY_CHECKLIST.mbx.md](docs/core/STABILITY_CHECKLIST.mbx.md).
 
 An agent-controllable container runtime written in Rust. Daemon/CLI split, OCI image pulling,
@@ -11,7 +12,7 @@ architecture keeps adapter suites swappable at startup with no recompile. A buil
 server exposes policy-gated daemon operations directly to MCP clients so agents can drive container
 lifecycle without shelling out to the CLI.
 
-**Status:** Active development — `v0.32.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.33.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -52,8 +53,8 @@ Requires Linux, root, kernel 5.0+, cgroups v2, overlay FS.
 
 First-time contributors: run `just install-hooks` and `cargo xtask doctor` to verify your
 toolchain and environment before building — see
-[`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md). For per-environment usage
-workflows (systemd, GKE, WSL2, Colima) see [`docs/core/USAGE.mbx.md`](docs/core/USAGE.mbx.md).
+[`DEVELOPMENT.md`](DEVELOPMENT.md). For per-environment usage workflows (systemd, GKE,
+WSL2, and macOS adapters) see [`USAGE.md`](USAGE.md).
 
 ```bash
 # Build
@@ -96,7 +97,7 @@ breakdown.
 
 ## Architecture
 
-15 crates plus `xtask` (16 workspace members), Rust 2024 edition:
+16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
@@ -135,7 +136,8 @@ agent runtime used to develop minibox itself — not a minibox subcommand, but w
 if you're exploring the repo.
 
 **Hexagonal ports.** Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`,
-`ContainerRuntime`, `NetworkProvider`, …) live in `minibox-core`. Adapters implement them.
+`ContainerRuntime`, `NetworkProvider`, …) live in `minibox-domain`; `minibox-core` provides a
+compatibility facade. Adapters implement the domain traits.
 Tests use mock adapters — no real HTTP or filesystem required.
 
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
@@ -155,7 +157,7 @@ Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITE
 | Socket auth    | `SO_PEERCRED` — UID 0 only, socket mode `0600`                      |
 | Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction  |
 | Tar extraction | Rejects `..`, absolute symlinks, device nodes; strips setuid/setgid |
-| DoS limits     | 1 MB request, 10 MB manifest, 1 GB/layer, 5 GB total image          |
+| DoS limits     | 1 MiB request, 10 MiB manifest, 10 GiB/layer, 50 GiB total image    |
 | Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs              |
 | PID limit      | 1024 per container (default)                                        |
 
@@ -232,11 +234,12 @@ report that the repository password is correct. A newly initialized repository r
 cargo xtask test unit        # unit + conformance + property tests (any platform)
 cargo xtask test conformance # OCI adapter conformance matrix
 just test-integration        # cgroup tests (Linux + root)
-just test-e2e                # daemon + CLI end-to-end (Linux + root)
+just test-e2e                # protocol end-to-end tests (any platform)
+just test-system             # daemon + CLI full-stack tests (Linux + root)
 ```
 
 The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`docs/core/TESTING.mbx.md`](docs/core/TESTING.mbx.md) for the full test
+macOS without root. See [`TESTING.md`](TESTING.md) for the full test
 strategy and [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md) for how
 the harness is built.
 
@@ -251,7 +254,7 @@ just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 ```
 
-See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the full workflow.
+See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 
 ---
 

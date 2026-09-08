@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -17,7 +17,9 @@ sources:
   - xtask
   - crates/minibox-macros
   - crates/minibox-testsuite
-generated: 2026-08-26
+  - crates/minibox-cni
+  - crates/minibox-tui
+generated: 2026-09-04
 ---
 
 # Crate Support Tiers
@@ -26,7 +28,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-08-26
+Last updated: 2026-09-08
 
 See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
 Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
@@ -63,8 +65,11 @@ These crates are intended to resolve fully from crates.io and are treated as pub
 | Crate            | Publish intent | Why it is public                                                                 |
 | ---------------- | -------------- | --------------------------------------------------------------------------------- |
 | `minibox-macros` | Yes            | Reusable proc-macros consumed by public/shared runtime crates.                    |
+| `minibox-domain` | Yes            | Canonical pure domain values, policies, lifecycle events, and ports.              |
 | `minibox-core`   | Yes            | Stable shared domain/protocol library for clients and integrations.               |
 | `minibox-mcp`    | Yes            | MCP integration surface for agent/tooling workflows (experimental but published). |
+| `minibox-tui`    | Yes            | Reusable read-only terminal dashboard library.                                   |
+| `minibox-cli`    | Yes            | Package containing the user-facing `mbx` binary.                                 |
 
 ### Internal / non-publish crates
 
@@ -74,17 +79,17 @@ non-publish by policy until explicitly promoted.
 
 Rationale:
 
-- Runtime/operator binaries (`mbx`, `miniboxd`, adapter crates, test/tooling crates) are
+- Runtime/operator binaries other than the published `minibox-cli` package (`miniboxd`, adapter crates, test/tooling crates) are
   released through repository workflows and release artifacts, not crates.io.
 - Keeping these crates internal avoids accidental API/distribution commitments while the
   runtime surface continues stabilization.
 
 ### Current distribution model
 
-- crates.io: shared library surfaces (`minibox-core`, `minibox-macros`) plus MCP integration
-  crate (`minibox-mcp`).
-- Not yet crates.io: first-party runtime/operator binaries (`mbx`, `miniboxd`, `minibox-tui`,
-  `minibox-crux-plugin`) and platform adapter stacks.
+- crates.io: `minibox-domain`, `minibox-core`, `minibox-macros`, `minibox-mcp`,
+  `minibox-tui`, and the `minibox-cli` package (binary `mbx`).
+- Not yet crates.io: `miniboxd`, `minibox-crux-plugin`, platform adapter stacks,
+  CNI, tests, benchmarks, and internal tooling.
 
 Any change to this policy must update this document and release automation in the same PR.
 
@@ -101,7 +106,7 @@ that breaks callers outside the workspace is a semver-major event.
 | `minibox-core`        | `crates/minibox-core`        | Cross-platform shared infrastructure: protocol, client transport, OCI image storage/registry, preflight, tracing, and compatibility re-exports from `minibox-domain`.                                  |
 | `minibox`             | `crates/minibox`             | Linux container primitives (namespaces, cgroups v2, overlay FS, process init) + daemon handler/server/state. Re-exports `minibox-core` for macro compatibility.                                             |
 | `miniboxd`            | `crates/miniboxd`            | Async daemon entry point. Dispatches to the appropriate platform adapter suite at startup.                                                                                                                  |
-| `mbx`                 | `crates/mbx`                 | User-facing CLI binary. Command set and flag schema are the public UX contract.                                                                                                                             |
+| `minibox-cli`         | `crates/mbx`                 | Package containing the `mbx` binary. Command set and flag schema are the public UX contract.                                                                                                                |
 | `minibox-crux-plugin` | `crates/minibox-crux-plugin` | Crux plugin binary. Exposes minibox ops over JSON-RPC stdio for crux agent pipelines.                                                                                                                       |
 
 **Stability expectations for Core crates:**
@@ -121,7 +126,7 @@ the ports from `minibox-domain` through the compatibility paths in `minibox-core
 
 | Crate    | Path            | Role                                                                                                                                                        |
 | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `macbox` | `crates/macbox` | macOS adapter suite (Colima backend). Colima adapter lives in `minibox`; krun and smolvm adapters live in `smolbox`.                                        |
+| `macbox` | `crates/macbox` | Colima dependency composition plus the feature-gated VZ implementation path. Colima adapters live in `minibox`; krun and smolvm live in `smolbox`.          |
 | `smolbox` | `crates/smolbox` | macOS VM adapter suite: smolvm (default) and krun (fallback) adapter implementations.                                                                      |
 | `winbox` | `crates/winbox` | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
 
@@ -146,6 +151,8 @@ take a public dependency on these crates from outside the workspace.
 | Crate         | Path         | Role                                                                                 |
 | ------------- | ------------ | ------------------------------------------------------------------------------------ |
 | `minibox-mcp` | `crates/mcp` | MCP stdio server for agent-controlled minibox tools. First slice is implemented.     |
+| `minibox-tui` | `crates/minibox-tui` | Read-only terminal dashboard, consumed by optional `minibox-cli/tui`.       |
+| `minibox-cni` | `crates/minibox-cni` | Feature-gated CNI execution for native bridge networking.                    |
 | `ail`         | `crates/ail` | Placeholder binary for the agent-improvement loop. Minimal implementation today.     |
 
 Several former experimental crates (`minibox-agent`, `minibox-secrets`, `mbxctl`)
@@ -172,7 +179,6 @@ in release binaries.
 | Crate                 | Path                         | Role                                                                                                               |
 | --------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `xtask`               | `xtask`                      | Cargo xtask runner: `pre-commit`, `prepush`, `test unit`/`test conformance`, `bench`, `build-test-image`, and more. |
-| `minibox-macros`      | `crates/minibox-macros`      | Proc-macro crate: `as_any!` and `adapt!` derive macros used by `minibox`.                                          |
 | `minibox-testsuite` | `crates/minibox-testsuite` | Conformance test harness (`run-conformance`, `generate-report`). Not published.                                    |
 | `minibox-bench`       | `crates/minibox-bench`       | Criterion benchmark crate and benchmark fixtures. Not published.                                                   |
 
@@ -196,7 +202,7 @@ was removed during the v0.23.0 consolidation; only a pre-built binary artifact r
 
 ### No new Core or Platform crates until stabilization gates are met
 
-The workspace currently has 13 product/runtime crates under `crates/`, plus the
+The workspace currently has 16 product/runtime crates under `crates/`, plus the
 `xtask` workspace dev-tool member. Adding more crates before the core runtime is
 hardened increases maintenance surface without shipping value.
 
@@ -207,7 +213,7 @@ following gates in `docs/core/STABILITY_CHECKLIST.mbx.md` are green:**
 2. Handler coverage >= 80% function coverage in `crates/minibox/src/daemon/handler/`.
 3. All wired adapters have at least one integration test.
 4. `cargo xtask pre-commit` passes on macOS (staged fmt/clippy plus config/docs checks).
-5. `cargo xtask test-unit` passes (~506+ tests on macOS cross-platform subset).
+5. `cargo xtask test unit` passes on the supported cross-platform subset.
 6. `cargo deny check` passes (license + advisory audit).
 
 Until these gates are met:

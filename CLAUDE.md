@@ -67,7 +67,8 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask test unit` — cross-platform unit and conformance subset.
 - `cargo xtask test property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
-- `just test-e2e` — Linux+root daemon/CLI tests.
+- `just test-e2e` — cross-platform protocol end-to-end tests.
+- `just test-system` — Linux+root full-stack daemon/CLI tests.
 - `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.
 - `cargo xtask build-test-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults

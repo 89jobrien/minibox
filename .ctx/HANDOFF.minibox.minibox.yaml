@@ -1,69 +1,264 @@
 project: minibox
 id: minibox
-updated: 2026-08-22
+updated: 2026-09-06
 items:
 - id: uncommitted-work
-  doob_uuid: null
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (25 files)
+  title: Uncommitted changes (119 files)
   description: |-
     Working tree has uncommitted changes:
-    .ctx/HANDOFF.macbox.minibox.state.yaml
-    .ctx/HANDOFF.mbx.minibox.state.yaml
+    .cc-audit.yaml
+    .claude/agents/mbx-debugger.agent.md
+    .claude/skills/run-minibox/SKILL.md
+    .claude/skills/run-minibox/driver.nu
     .ctx/HANDOFF.md
-    .ctx/HANDOFF.minibox-core.minibox.state.yaml
-    .ctx/HANDOFF.minibox-macros.minibox.state.yaml
-    .ctx/HANDOFF.minibox.minibox.state.yaml
     .ctx/HANDOFF.minibox.minibox.yaml
-    .ctx/HANDOFF.miniboxd.minibox.state.yaml
-    .ctx/HANDOFF.tools.yaml
-    .ctx/HANDOFF.winbox.minibox.state.yaml
-    .ctx/HANDOFF.xtask.minibox.state.yaml
-    Cargo.lock
-    Cargo.toml
-    crates/mcp/src/main.rs
-    crates/mcp/src/server.rs
-    crates/minibox/src/adapters/colima.rs
-    crates/minibox/src/adapters/hcs.rs
-    crates/minibox/src/adapters/mod.rs
-    crates/minibox/src/adapters/smolvm.rs
-    crates/minibox/src/daemon/handler/exec.rs
-    crates/minibox/src/daemon/handler/update.rs
-    crates/minibox/src/daemon/server.rs
-    crates/minibox/src/daemon/state.rs
-    crates/minibox/src/lib.rs
-    kani.crux
+    .ctx/memory-bank/activeContext.mbx.md
+    .ctx/memory-bank/progress.mbx.md
+    .ctx/memory-bank/projectbrief.mbx.md
+    .ctx/memory-bank/systemPatterns.mbx.md
+    .github/workflows/nightly.yml
+    .github/workflows/pr.yml
+    .github/workflows/release.yml
+    .gitignore
+    .looprs/observability/runtime.jsonl
+    CLAUDE.md
+    CONTRIBUTING.md
+    DEVELOPMENT.md
+    HANDOFF.md
+    README.md
+    TESTING.md
+    USAGE.md
+    agentbox/cmd/agentbox/main.go
+    book/.nojekyll
+    book/404.html
+    book/ABOUT.mbx.html
+    book/ARCHITECTURE.mbx.html
+    book/CODE_STYLE.mbx.html
+    book/CRATE_INVENTORY.mbx.html
+    book/CRATE_TIERS.mbx.html
+    book/DOCS_AUDIT.mbx.html
+    book/FEATURE_MATRIX.mbx.html
+    book/GOTCHAS.mbx.html
+    book/MUTATION_AUDIT.mbx.html
+    book/PRERELEASE_CHANGELOG.mbx.html
+    book/ROADMAP.mbx.html
+    book/SECURITY_INVARIANTS.mbx.html
+    book/STABILITY_CHECKLIST.mbx.html
+    book/STATE_MODEL.mbx.html
+    book/SUPPORT_TIERS.mbx.html
+    book/TEST_INFRASTRUCTURE.mbx.html
+    book/ayu-highlight-3fdfc3ac.css
+    book/book-c22b7243.js
+    book/clipboard-1626706a.min.js
+    book/css/chrome-fc474251.css
+    book/css/general-0392ca55.css
+    book/css/print-9e4910d8.css
+    book/css/variables-8adf115d.css
+    book/elasticlunr-ef4e11c1.min.js
+    book/favicon-8114d1fc.png
+    book/favicon-de23e50b.svg
+    book/fonts/OPEN-SANS-LICENSE.txt
+    book/fonts/SOURCE-CODE-PRO-LICENSE.txt
+    book/fonts/fonts-9644e21d.css
+    book/fonts/open-sans-v17-all-charsets-300-7736aa35.woff2
+    book/fonts/open-sans-v17-all-charsets-300italic-2c7b95c0.woff2
+    book/fonts/open-sans-v17-all-charsets-600-486c6759.woff2
+    book/fonts/open-sans-v17-all-charsets-600italic-1a3e8659.woff2
+    book/fonts/open-sans-v17-all-charsets-700-c22fe8c7.woff2
+    book/fonts/open-sans-v17-all-charsets-700italic-238ae959.woff2
+    book/fonts/open-sans-v17-all-charsets-800-3d2c812a.woff2
+    book/fonts/open-sans-v17-all-charsets-800italic-ba1521ec.woff2
+    book/fonts/open-sans-v17-all-charsets-italic-6c9463f7.woff2
+    book/fonts/open-sans-v17-all-charsets-regular-2e3b1d34.woff2
+    book/fonts/source-code-pro-v11-all-charsets-500-2bdd9410.woff2
+    book/highlight-493f70e1.css
+    book/highlight-abc7f01d.js
+    book/index.html
+    book/mark-09e88c2c.min.js
+    book/print.html
+    book/searcher-09f2665d.js
+    book/searchindex-c1193201.js
+    book/toc-b1eea390.js
+    book/toc.html
+    book/tomorrow-night-4c0ae647.css
+    crates/macbox/src/lib.rs
+    crates/mbx/src/main.rs
+    crates/mcp/src/client.rs
+    crates/mcp/src/policy.rs
+    crates/mcp/tests/integration.rs
+    crates/minibox-cni/src/lib.rs
+    crates/minibox-crux-plugin/src/lib.rs
+    crates/minibox/src/container/process.rs
+    crates/minibox/src/daemon/handler/mod.rs
+    crates/miniboxd/src/main.rs
+    crates/winbox/src/lib.rs
+    docs/FEATURE_MATRIX.md
+    docs/PLATFORM_SUPPORT.md
+    docs/core/ABOUT.mbx.md
+    docs/core/ARCHITECTURE.mbx.md
+    docs/core/CODE_STYLE.mbx.md
+    docs/core/CRATE_INVENTORY.mbx.md
+    docs/core/CRATE_TIERS.mbx.md
+    docs/core/FEATURE_MATRIX.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/MUTATION_AUDIT.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/SECURITY_INVARIANTS.mbx.md
+    docs/core/STABILITY_CHECKLIST.mbx.md
+    docs/core/STATE_MODEL.mbx.md
+    docs/core/SUMMARY.md
+    docs/core/SUPPORT_TIERS.mbx.md
+    docs/core/TEST_INFRASTRUCTURE.mbx.md
+    docs/core/XTASK_CLI.mbx.md
+    docs/designs/2026-08-26-daemon-native-verified-execution-design.md
+    docs/docs.yaml
+    docs/notes/minibox-in-minibox.local.md
+    docs/plans/2026-08-25-xtask-info-context-enhancements.md
+    ingest_docs.nu
+    opencode.json
+    xtask/src/bump.rs
+    xtask/src/detect_changes.rs
+    xtask/src/fuzz.rs
+    xtask/src/gates.rs
+    xtask/src/main.rs
+    xtask/src/promote.rs
+    xtask/src/utils.rs
+    cliff.toml
+    xtask/src/changelog.rs
   files:
-  - .ctx/HANDOFF.macbox.minibox.state.yaml
-  - .ctx/HANDOFF.mbx.minibox.state.yaml
+  - .cc-audit.yaml
+  - .claude/agents/mbx-debugger.agent.md
+  - .claude/skills/run-minibox/SKILL.md
+  - .claude/skills/run-minibox/driver.nu
   - .ctx/HANDOFF.md
-  - .ctx/HANDOFF.minibox-core.minibox.state.yaml
-  - .ctx/HANDOFF.minibox-macros.minibox.state.yaml
-  - .ctx/HANDOFF.minibox.minibox.state.yaml
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .ctx/HANDOFF.miniboxd.minibox.state.yaml
-  - .ctx/HANDOFF.tools.yaml
-  - .ctx/HANDOFF.winbox.minibox.state.yaml
-  - .ctx/HANDOFF.xtask.minibox.state.yaml
-  - Cargo.lock
-  - Cargo.toml
-  - crates/mcp/src/main.rs
-  - crates/mcp/src/server.rs
-  - crates/minibox/src/adapters/colima.rs
-  - crates/minibox/src/adapters/hcs.rs
-  - crates/minibox/src/adapters/mod.rs
-  - crates/minibox/src/adapters/smolvm.rs
-  - crates/minibox/src/daemon/handler/exec.rs
-  - crates/minibox/src/daemon/handler/update.rs
-  - crates/minibox/src/daemon/server.rs
-  - crates/minibox/src/daemon/state.rs
-  - crates/minibox/src/lib.rs
-  - kani.crux
-  completed: null
-  extra: []
+  - .ctx/memory-bank/activeContext.mbx.md
+  - .ctx/memory-bank/progress.mbx.md
+  - .ctx/memory-bank/projectbrief.mbx.md
+  - .ctx/memory-bank/systemPatterns.mbx.md
+  - .github/workflows/nightly.yml
+  - .github/workflows/pr.yml
+  - .github/workflows/release.yml
+  - .gitignore
+  - .looprs/observability/runtime.jsonl
+  - CLAUDE.md
+  - CONTRIBUTING.md
+  - DEVELOPMENT.md
+  - HANDOFF.md
+  - README.md
+  - TESTING.md
+  - USAGE.md
+  - agentbox/cmd/agentbox/main.go
+  - book/.nojekyll
+  - book/404.html
+  - book/ABOUT.mbx.html
+  - book/ARCHITECTURE.mbx.html
+  - book/CODE_STYLE.mbx.html
+  - book/CRATE_INVENTORY.mbx.html
+  - book/CRATE_TIERS.mbx.html
+  - book/DOCS_AUDIT.mbx.html
+  - book/FEATURE_MATRIX.mbx.html
+  - book/GOTCHAS.mbx.html
+  - book/MUTATION_AUDIT.mbx.html
+  - book/PRERELEASE_CHANGELOG.mbx.html
+  - book/ROADMAP.mbx.html
+  - book/SECURITY_INVARIANTS.mbx.html
+  - book/STABILITY_CHECKLIST.mbx.html
+  - book/STATE_MODEL.mbx.html
+  - book/SUPPORT_TIERS.mbx.html
+  - book/TEST_INFRASTRUCTURE.mbx.html
+  - book/ayu-highlight-3fdfc3ac.css
+  - book/book-c22b7243.js
+  - book/clipboard-1626706a.min.js
+  - book/css/chrome-fc474251.css
+  - book/css/general-0392ca55.css
+  - book/css/print-9e4910d8.css
+  - book/css/variables-8adf115d.css
+  - book/elasticlunr-ef4e11c1.min.js
+  - book/favicon-8114d1fc.png
+  - book/favicon-de23e50b.svg
+  - book/fonts/OPEN-SANS-LICENSE.txt
+  - book/fonts/SOURCE-CODE-PRO-LICENSE.txt
+  - book/fonts/fonts-9644e21d.css
+  - book/fonts/open-sans-v17-all-charsets-300-7736aa35.woff2
+  - book/fonts/open-sans-v17-all-charsets-300italic-2c7b95c0.woff2
+  - book/fonts/open-sans-v17-all-charsets-600-486c6759.woff2
+  - book/fonts/open-sans-v17-all-charsets-600italic-1a3e8659.woff2
+  - book/fonts/open-sans-v17-all-charsets-700-c22fe8c7.woff2
+  - book/fonts/open-sans-v17-all-charsets-700italic-238ae959.woff2
+  - book/fonts/open-sans-v17-all-charsets-800-3d2c812a.woff2
+  - book/fonts/open-sans-v17-all-charsets-800italic-ba1521ec.woff2
+  - book/fonts/open-sans-v17-all-charsets-italic-6c9463f7.woff2
+  - book/fonts/open-sans-v17-all-charsets-regular-2e3b1d34.woff2
+  - book/fonts/source-code-pro-v11-all-charsets-500-2bdd9410.woff2
+  - book/highlight-493f70e1.css
+  - book/highlight-abc7f01d.js
+  - book/index.html
+  - book/mark-09e88c2c.min.js
+  - book/print.html
+  - book/searcher-09f2665d.js
+  - book/searchindex-c1193201.js
+  - book/toc-b1eea390.js
+  - book/toc.html
+  - book/tomorrow-night-4c0ae647.css
+  - crates/macbox/src/lib.rs
+  - crates/mbx/src/main.rs
+  - crates/mcp/src/client.rs
+  - crates/mcp/src/policy.rs
+  - crates/mcp/tests/integration.rs
+  - crates/minibox-cni/src/lib.rs
+  - crates/minibox-crux-plugin/src/lib.rs
+  - crates/minibox/src/container/process.rs
+  - crates/minibox/src/daemon/handler/mod.rs
+  - crates/miniboxd/src/main.rs
+  - crates/winbox/src/lib.rs
+  - docs/FEATURE_MATRIX.md
+  - docs/PLATFORM_SUPPORT.md
+  - docs/core/ABOUT.mbx.md
+  - docs/core/ARCHITECTURE.mbx.md
+  - docs/core/CODE_STYLE.mbx.md
+  - docs/core/CRATE_INVENTORY.mbx.md
+  - docs/core/CRATE_TIERS.mbx.md
+  - docs/core/FEATURE_MATRIX.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/MUTATION_AUDIT.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/SECURITY_INVARIANTS.mbx.md
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+  - docs/core/STATE_MODEL.mbx.md
+  - docs/core/SUMMARY.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/core/TEST_INFRASTRUCTURE.mbx.md
+  - docs/core/XTASK_CLI.mbx.md
+  - docs/designs/2026-08-26-daemon-native-verified-execution-design.md
+  - docs/docs.yaml
+  - docs/notes/minibox-in-minibox.local.md
+  - docs/plans/2026-08-25-xtask-info-context-enhancements.md
+  - ingest_docs.nu
+  - opencode.json
+  - xtask/src/bump.rs
+  - xtask/src/detect_changes.rs
+  - xtask/src/fuzz.rs
+  - xtask/src/gates.rs
+  - xtask/src/main.rs
+  - xtask/src/promote.rs
+  - xtask/src/utils.rs
+  - cliff.toml
+  - xtask/src/changelog.rs
 log:
-- date: '20260820.232101'
-  summary: done=163 running=0 pending=2 blocked=0
-  commits: []
+- date: '20260906.082527'
+  summary: done=16 running=0 pending=15 blocked=0
+  commits:
+  - 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+  - 796d026e12d249502b13466144a6c5a8b3e1ea9f
+  - 5a630538ce51a5fef74225bfcc0d7417623be1eb
+  - f72630f0b8d51f91aa56e3a67848f318e27f91c0
+  - def402738aea89f955dc4af7bd35fe3ab08e7d51
+  - c5fc7061dd39c242a1fcb980dd1fac19119e0f6d
+  - c1489e1897b3376441a64caccf14606314a5f3a8
+  - 1aafa0cb91e565cfe181356280b00d51cd1b1194
+  - 57a97904a8279eaa3f10cb0b92a2cba6f0a5594c
+  - f4d385694d75baae22c1b4d2ade295679314a502

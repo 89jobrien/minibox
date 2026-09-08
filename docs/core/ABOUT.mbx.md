@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -14,9 +14,11 @@ sources:
   - crates/mcp
   - crates/minibox-testsuite
   - crates/minibox-bench
+  - crates/minibox-cni
+  - crates/minibox-tui
   - crates/ail
   - xtask
-generated: 2026-08-26
+generated: 2026-09-04
 ---
 
 # About minibox
@@ -25,7 +27,7 @@ A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux 
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.
 
-**Status:** Active development — `v0.31.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.33.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -54,9 +56,10 @@ structured tracing, property testing.
 ### Experimental-ish
 
 - **Container exec** — `setns`-based exec with PTY support (`-it`); Linux (`native`) only
-- **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`); Linux only
+- **Bridge networking** — veth pairs, DNS configuration, and port-forwarding DNAT (`MINIBOX_NETWORK_MODE=bridge`); Linux only
 - **macOS adapters** — run/stop/ps via smolvm or krun (VM-backed); exec/logs not supported;
-  Colima available as an alternative via Lima VM
+  Colima available as an alternative via Lima VM; feature-gated VZ is restored but currently
+  blocked by a boot failure
 
 ---
 
@@ -94,7 +97,7 @@ sudo ./target/release/mbx rm <id>
 | Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay           |
 | Linux aarch64         | **Production** | `native`        | Same as x86_64                             |
 | Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS      |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed      |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ opt-in but blocked   |
 | macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                          |
 | Windows               | Planned        | `winbox` stub   | Returns error unconditionally              |
 
@@ -102,12 +105,14 @@ sudo ./target/release/mbx rm <id>
 
 ## Architecture
 
-13 crates plus `xtask` (14 workspace members), Rust 2024 edition:
+16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
 
 ```
 minibox-macros          proc macros (as_any!, adapt!)
     ^
-minibox-core            cross-platform types, domain traits, protocol, OCI ops
+minibox-domain          pure domain values, policies, events, and ports
+    ^
+minibox-core            protocol, client transport, OCI/image services, compatibility re-exports
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
     ^        ^        ^
@@ -115,11 +120,13 @@ macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
     ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
-mbx                     CLI client — connects via Unix socket
+minibox-cli             package containing the `mbx` CLI binary
 minibox-crux-plugin     crux agent bridge over JSON-RPC stdio
 minibox-mcp             MCP stdio server for agent-controlled minibox tools
 minibox-testsuite       conformance test harness for adapter trait contracts
 minibox-bench           benchmark crate
+minibox-cni             feature-gated CNI execution for native bridge networking
+minibox-tui             read-only terminal dashboard, used by feature-gated `mbx tui`
 ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
@@ -149,8 +156,9 @@ Full architecture reference: [`ARCHITECTURE`](ARCHITECTURE.mbx.md).
 | Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs              |
 | PID limit      | 1024 per container (default)                                        |
 
-**Not yet implemented:** capability dropping, seccomp filters, user namespace remapping,
-rootless support.
+**Not yet implemented:** default capability dropping, general-purpose seccomp profiles, user
+namespace remapping, and rootless support. A narrow seccomp filter does prevent widening mounts
+with `mount(MS_REMOUNT)` after container initialization.
 
 ---
 
@@ -190,10 +198,12 @@ max_image_size_mb = 2048
 ## Testing
 
 ```bash
-cargo xtask test-unit        # unit + conformance + property tests (any platform)
-cargo xtask test-conformance # OCI adapter conformance matrix
+cargo xtask test unit        # workspace library tests (any platform)
+cargo xtask test property    # property tests
+cargo xtask test conformance # OCI adapter conformance matrix
 just test-integration        # cgroup tests (Linux + root)
-just test-e2e                # daemon + CLI end-to-end (Linux + root)
+just test-e2e                # protocol end-to-end tests (any platform)
+just test-system             # daemon + CLI full-stack tests (Linux + root)
 ```
 
 The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
@@ -204,13 +214,13 @@ macOS without root. See [`TEST_INFRASTRUCTURE`](TEST_INFRASTRUCTURE.mbx.md).
 ## Developer Workflow
 
 ```bash
-cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
-cargo xtask prepush          # release build + release nextest + conformance
+cargo xtask pre-commit       # conditional fmt/restage + clippy/architecture + docs/date
+cargo xtask prepush          # musl-check + release build/tests + conformance
 just --list                  # all available recipes
 mbx doctor                   # preflight: show compiled adapters and capabilities
 ```
 
-See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
+See [`DEVELOPMENT.md`](../../DEVELOPMENT.md) for the full workflow.
 
 ---
 
@@ -234,12 +244,12 @@ Issues and PRs are welcome. A few things to know before contributing:
 | ---------------------- | ------------------------------------- |
 | Bridge networking      | Experimental                          |
 | OCI push/commit/build  | Experimental                          |
-| macOS VZ.framework     | Removed after Apple ARM64 bug         |
+| macOS VZ.framework     | Restored behind `vz`; boot blocked    |
 | Seccomp / capabilities | Planned                               |
 | Rootless support       | Planned                               |
-| Port forwarding / DNS  | Planned                               |
+| Port forwarding / DNS  | Implemented for native bridge mode    |
 | Windows (WSL2)         | Planned                               |
-| MCP control surface    | Initial MCP stdio server implemented  |
+| MCP control surface    | MCP stdio server implemented          |
 
 Full details: [`ROADMAP`](ROADMAP.mbx.md).
 

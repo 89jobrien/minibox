@@ -1,10 +1,10 @@
 ---
-source_sha: 7effd0d08a746ea597507440850849ba7b92d2d5
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - .github/workflows
   - xtask/src/main.rs
   - CONTRIBUTING.md
-generated: 2026-08-22
+generated: 2026-08-28
 ---
 
 # Stability Checklist
@@ -13,7 +13,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-08-22
+Last updated: 2026-09-08
 
 ---
 
@@ -50,9 +50,9 @@ These block promotion/merge. All six must be green simultaneously on the promoti
 | --- | ------------------------------------------------------------ | ------- | ------------------------------------------------------- |
 | 1   | Protocol types have a single source of truth                | Met     | `crates/minibox-core/src/protocol.rs` (#122/#128)        |
 | 2   | Handler coverage >= 80% function coverage                   | Met     | 92.41% (207/224 functions, 2026-08-10)                   |
-| 3   | All wired adapters have at least one integration test       | Met     | native, gke, colima, smolvm, krun all tested             |
+| 3   | All normally wired AdapterSuite adapters have integration tests | Met | native, gke, colima, smolvm, krun tested; feature-gated VZ is a separate blocked startup path |
 | 4   | `cargo xtask pre-commit` passes on macOS                    | Met     | staged fmt/clippy + config/docs checks                   |
-| 5   | `cargo xtask test-unit` passes                               | Met     | ~506 tests (macOS cross-platform subset)                 |
+| 5   | `cargo xtask test unit` passes                               | Met     | cross-platform workspace library suite                   |
 | 6   | `cargo deny check` passes                                    | Met     | License + advisory audit in CI                           |
 
 ## Advisory Items
@@ -88,7 +88,7 @@ just test-adapters     # Colima + handler adapter swap
 cargo xtask pre-commit
 
 # Gate 5: unit test suite
-cargo xtask test-unit
+cargo xtask test unit
 
 # Gate 6: deny + audit
 cargo deny check
@@ -133,21 +133,21 @@ The following jobs enforce checklist items in GitHub Actions (issue #133):
 
 | Enforces  | CI Job                                        | Command                                        | Workflow            |
 | --------- | --------------------------------------------- | ---------------------------------------------- | ------------------- |
-| Gate 1    | protocol-drift (core contract hash check)     | `cargo xtask check-protocol-drift`             | protocol-drift.yml  |
-| Gate 1    | check-protocol-sites                          | `cargo xtask check-protocol-sites`             | stability-gates.yml |
+| Gate 1    | protocol-drift (core contract hash check)     | `cargo xtask check protocol-drift`             | protocol-drift.yml  |
+| Gate 1    | check-protocol-sites                          | `cargo xtask check protocol-sites`             | stability-gates.yml |
 | Gate 2    | handler-coverage (>=80% function coverage)    | `cargo xtask coverage-check`                   | stability-gates.yml |
 | Gate 3    | adapter-integration-tests (all five adapters) | `cargo xtask check adapter-coverage`           | stability-gates.yml |
 | Gate 5    | test-unit                                     | `cargo xtask test unit`                        | pr.yml / merge.yml  |
 | Gate 6    | deny + audit                                  | `cargo deny check` / `cargo audit`             | pr.yml / merge.yml  |
-| A2        | no-unwrap-in-prod (enforced as hard job)      | `cargo xtask check-no-unwrap --strict`         | stability-gates.yml |
+| A2        | no-unwrap-in-prod (enforced as hard job)      | `cargo xtask check no-unwrap --strict`         | stability-gates.yml |
 | doc sync  | doc-sync (docs audit + FEATURE_MATRIX age)    | `cargo xtask docs audit --full --strict`       | stability-gates.yml |
-| doc names | check-stale-names                             | `cargo xtask check-stale-names`                | stability-gates.yml |
+| doc names | check-stale-names                             | `cargo xtask check stale-names`                | stability-gates.yml |
 | compile   | stability-compile (check + clippy)            | `cargo check --workspace` + targeted clippy    | stability-gates.yml |
 
 Known gaps (tracked, not yet CI-enforced):
 
-- Gate 4 (`cargo xtask pre-commit` on macOS) has no CI job — all stability jobs run on
-  `ubuntu-latest`. It remains a local gate.
+- Gate 4 (`cargo xtask pre-commit` on macOS) has no equivalent CI job. `macos.yml` runs only
+  `cargo fmt --all --check`, not the full pre-commit gate.
 - Gates 5 and 6 run in `pr.yml`/`merge.yml`, not in the `stability-gates.yml` fan-in, so the
   six gates are not verified green as a single unit.
 - Advisory items A1, A3, and A4 are review-time only; A2 is the only automated advisory.

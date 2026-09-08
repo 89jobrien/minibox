@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -16,8 +16,10 @@ sources:
   - crates/minibox-testsuite
   - crates/minibox-bench
   - crates/ail
+  - crates/minibox-cni
+  - crates/minibox-tui
   - xtask
-generated: 2026-08-26
+generated: 2026-09-04
 ---
 
 # Crate Inventory
@@ -34,12 +36,14 @@ generated: 2026-08-26
 | macbox              | lib        | ~3.6k  | 16           | 4                       | --                        |
 | smolbox             | lib        | ~148   | 4            | 2 integration           | --                        |
 | winbox              | lib        | ~280   | 5            | 1 integration           | --                        |
-| mbx                 | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests          |
+| minibox-cli         | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests, tui     |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
 | minibox-mcp         | lib+bin    | ~1.6k  | 11           | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
 | minibox-bench       | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                        |
 | ail                 | bin        | ~4     | 1            | 0                       | --                        |
+| minibox-cni         | lib        | —      | —            | integration + inline    | --                        |
+| minibox-tui         | lib        | —      | —            | inline                  | --                        |
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
 **Estimated total:** run `cargo xtask info metrics` for the current workspace
@@ -66,14 +70,15 @@ HTTP client, process runner, socket transport, or filesystem adapter.
 
 Cross-platform shared infrastructure. Single source of truth for protocol,
 shared errors, image management, registry clients, and the Unix socket client;
-`domain/` is a compatibility facade over `minibox-domain`.
+`domain/` is a compatibility facade over `minibox-domain`, the canonical owner of domain values,
+ports, policies, and lifecycle events.
 
 **Key modules:** `protocol.rs` (DaemonRequest /
 DaemonResponse), `domain/` (compatibility re-exports), `image/` (ImageStore,
 RegistryClient, layer
-extraction, GC, leases, dockerfile), `client/` (DaemonClient,
-DaemonResponseStream), `events.rs` (ContainerEvent, EventSink/Source,
-BroadcastEventBroker), `adapters/` (HostnameRegistryRouter, mocks,
+extraction, GC, leases, Dockerfile parser), `client/` (DaemonClient,
+DaemonResponseStream), `events.rs` (event-broker adapter and compatibility exports),
+`adapters/` (HostnameRegistryRouter, mocks,
 test_fixtures, conformance).
 
 **External deps:** serde, tokio, reqwest, anyhow, thiserror, tracing, sha2,
@@ -92,7 +97,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 - `container/` (Linux only): namespace.rs, cgroups.rs, filesystem.rs,
   process.rs
 - `adapters/`: native (overlay, cgroup, namespace, bridge network), gke
-  (copy FS, proot, noop limiter), colima (lima/nerdctl), smolvm, stubs
+  (copy FS, proot, noop limiter), colima (lima/nerdctl), and shared stubs
   (vf, hcs, wsl2, docker_desktop), mocks
 - `daemon/`: handler/ (HandlerDependencies, request routing), server.rs
   (Unix socket listener, SO_PEERCRED auth), state.rs (DaemonState),
@@ -127,7 +132,8 @@ Windows -> `winbox::start()`.
 **Key modules:** `adapter_registry.rs` (AdapterSuite enum, env-based
 selection), `listener.rs` (UnixServerListener).
 
-**Adapter suites:** native, gke, colima, smolvm (default), krun (fallback).
+**Adapter suites:** native, gke, colima, smolvm (default), krun (fallback), plus the
+feature-gated VZ startup path (currently blocked during VM boot).
 
 ---
 
@@ -166,14 +172,14 @@ path), `preflight.rs` (detection stubs).
 
 ---
 
-## mbx
+## minibox-cli (`mbx`)
 
 CLI client. Connects to daemon via Unix socket, sends JSON requests, streams
 responses.
 
 **Subcommands:** run, ps, stop, pause, resume, rm, pull, exec, logs, events,
 prune, rmi, sandbox, snapshot (save/restore/list), pipeline (run/list/show),
-load, doctor, manifest, verify, diagnose, update, upgrade.
+load, doctor, manifest, verify, diagnose, update, upgrade, completions, and feature-gated `tui`.
 
 ---
 
@@ -183,7 +189,7 @@ Crux plugin binary. Exposes minibox container operations (pull, run, ps, stop,
 rm, pause, resume, image-ls, image-rm) over JSON-RPC stdio for integration with
 the crux agentic DSL runtime.
 
-**Depends on:** minibox-core, crux-plugin (git dep).
+**Depends on:** minibox-core. The former `crux-plugin` dependency has been removed.
 
 ---
 
@@ -202,7 +208,7 @@ rm, with MCP-specific policy gates around mutating and higher-risk run options.
 ## minibox-testsuite
 
 Conformance test harness for adapter trait contracts. Not published; used
-internally by `cargo xtask test-conformance`.
+internally by `cargo xtask test conformance`.
 
 **Binaries:** `run-conformance`, `generate-report`.
 
@@ -228,6 +234,20 @@ place where the `test-utils` features of the lib crates are enabled. Run via `ju
 
 ---
 
+## minibox-cni
+
+CNI plugin exec protocol and chain orchestration. The native bridge path uses it when `miniboxd`
+is built with the opt-in `cni` feature.
+
+---
+
+## minibox-tui
+
+Read-only Ratatui dashboard for container status and lifecycle events. Published as a library and
+used by `minibox-cli` only when its `tui` feature is enabled.
+
+---
+
 ## ail
 
 Placeholder binary for the agent-improvement loop. No implementation yet.
@@ -238,7 +258,7 @@ Placeholder binary for the agent-improvement loop. No implementation yet.
 
 Development tool. All CI gate commands.
 
-**Key commands:** pre-commit, prepush, verify, lint, fix, coverage,
+**Key commands:** pre-commit, prepush, verify, lint, fix, architecture, musl-check, coverage,
 coverage-check, agentlint, build-test-image, setup-test-vm, test-in-vm,
 test-linux, bump, promote, preflight, doctor, ci-watch, daily-orchestration,
 council, bench, fuzz, borrow-fixtures, nuke-test-state, clean-artifacts,
@@ -250,3 +270,6 @@ sandbox, gke-profile, gke-adapter), `check <target>` (stale-names,
 protocol-drift, protocol-sites, adapter-coverage, no-unwrap, repo-clean),
 `docs <action>` (audit, lint, update-date), `info <target>` (metrics,
 context, changes).
+
+The tree currently contains 96 integration test files under `crates/*/tests/`; use grouped
+commands such as `cargo xtask test unit` rather than the deprecated `test-unit` aliases.
