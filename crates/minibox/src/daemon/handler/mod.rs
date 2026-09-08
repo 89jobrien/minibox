@@ -5,8 +5,9 @@
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
 //!
 // TODO(#116): raise coverage on handler and lifecycle/error paths
-// TODO(review-10)(#474): 15+ qual:allow(complexity) in handler modules — consider
-// raising the rustqual complexity threshold for handler/ instead of per-fn annotations.
+//! The minibox crate rustqual config permits up to nine parameters for daemon
+//! boundary signatures. Complexity analysis remains enabled at the crate
+//! thresholds, so handler complexity findings are not hidden by this policy.
 //!
 //! # Hexagonal Architecture
 //!

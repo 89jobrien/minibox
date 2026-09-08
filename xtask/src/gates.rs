@@ -980,6 +980,33 @@ mod tests {
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
+    fn rustqual_handler_parameter_policy_is_centralized() {
+        let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask manifest must be beneath workspace root");
+        let max_parameters = |path: &std::path::Path| {
+            let source = std::fs::read_to_string(path)
+                .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+            let config: toml::Value = toml::from_str(&source)
+                .unwrap_or_else(|error| panic!("parse {}: {error}", path.display()));
+            config["srp"]["max_parameters"]
+                .as_integer()
+                .unwrap_or_else(|| panic!("missing srp.max_parameters in {}", path.display()))
+        };
+
+        assert_eq!(
+            max_parameters(&workspace_root.join("rustqual.toml")),
+            5,
+            "workspace analysis must retain the strict global parameter threshold"
+        );
+        assert_eq!(
+            max_parameters(&workspace_root.join("crates/minibox/rustqual.toml")),
+            9,
+            "the minibox crate config must centralize its handler-boundary exception"
+        );
+    }
+
+    #[test]
     fn phase_2_skipped_true_values() {
         let _g = ENV_LOCK.lock().expect("env lock");
         for val in ["1", "true"] {

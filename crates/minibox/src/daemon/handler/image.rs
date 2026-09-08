@@ -92,7 +92,6 @@ pub(super) fn resolve_platform_registry(
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
-// qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 /// Pulls an image through the selected registry and returns its metadata.
 pub async fn handle_pull(
