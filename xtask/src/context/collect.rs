@@ -115,7 +115,7 @@ impl RepositoryReader for SystemRepositoryReader {
 
 pub(super) fn collect_workspace(
     runner: &impl CommandRunner,
-    _repository: &impl RepositoryReader,
+    repository: &impl RepositoryReader,
     root: &Path,
 ) -> Result<WorkspaceSnapshot> {
     let canonical_root = root
@@ -165,9 +165,28 @@ pub(super) fn collect_workspace(
             .iter()
             .map(|package| package.rust_version.as_ref().map(ToString::to_string)),
     );
+    let tracked_files = repository.tracked_files(&canonical_root)?;
+    let package_roots = workspace_packages
+        .iter()
+        .map(|package| {
+            package
+                .manifest_path
+                .parent()
+                .map(|path| path.as_std_path().to_path_buf())
+                .context("workspace package manifest has no parent")
+        })
+        .collect::<Result<Vec<_>>>()?;
     let mut packages = workspace_packages
         .into_iter()
-        .map(|package| package_snapshot(&canonical_root, package))
+        .map(|package| {
+            package_snapshot(
+                &canonical_root,
+                package,
+                repository,
+                &tracked_files,
+                &package_roots,
+            )
+        })
         .collect::<Result<Vec<_>>>()?;
     packages.sort_by(|left, right| left.package_id.cmp(&right.package_id));
 
@@ -179,7 +198,13 @@ pub(super) fn collect_workspace(
     })
 }
 
-fn package_snapshot(root: &Path, package: &cargo_metadata::Package) -> Result<PackageSnapshot> {
+fn package_snapshot(
+    root: &Path,
+    package: &cargo_metadata::Package,
+    repository: &impl RepositoryReader,
+    tracked_files: &[RepositoryPath],
+    package_roots: &[PathBuf],
+) -> Result<PackageSnapshot> {
     let mut targets = package
         .targets
         .iter()
@@ -249,14 +274,90 @@ fn package_snapshot(root: &Path, package: &cargo_metadata::Package) -> Result<Pa
         targets,
         features: package.features.keys().cloned().collect(),
         dependencies,
-        metrics: SourceMetrics {
-            rust_files: 0,
-            physical_lines: 0,
-            non_empty_lines: 0,
-            included_roots: Vec::new(),
-            includes_generated: false,
-        },
+        metrics: collect_source_metrics(root, package, repository, tracked_files, package_roots)?,
     })
+}
+
+fn collect_source_metrics(
+    root: &Path,
+    package: &cargo_metadata::Package,
+    repository: &impl RepositoryReader,
+    tracked_files: &[RepositoryPath],
+    package_roots: &[PathBuf],
+) -> Result<SourceMetrics> {
+    let package_root = package
+        .manifest_path
+        .parent()
+        .map(cargo_metadata::camino::Utf8Path::as_std_path)
+        .context("package manifest has no parent")?;
+    let mut scope_roots = ["src", "tests", "examples", "benches"]
+        .into_iter()
+        .map(|directory| package_root.join(directory))
+        .collect::<BTreeSet<_>>();
+    for target in &package.targets {
+        let source = target.src_path.as_std_path();
+        let in_conventional_root = ["src", "tests", "examples", "benches"]
+            .into_iter()
+            .any(|directory| source.starts_with(package_root.join(directory)));
+        if !in_conventional_root {
+            let scope = source
+                .parent()
+                .filter(|parent| *parent != package_root)
+                .map_or_else(|| source.to_path_buf(), Path::to_path_buf);
+            scope_roots.insert(scope);
+        }
+    }
+
+    let mut metrics = SourceMetrics {
+        rust_files: 0,
+        physical_lines: 0,
+        non_empty_lines: 0,
+        included_roots: Vec::new(),
+        includes_generated: false,
+    };
+    let mut included_roots = BTreeSet::new();
+    for tracked in tracked_files {
+        let path = root.join(tracked.as_str());
+        if path.extension().and_then(|extension| extension.to_str()) != Some("rs")
+            || path.strip_prefix(package_root).is_ok_and(|relative| {
+                relative
+                    .components()
+                    .any(|component| component.as_os_str() == "target")
+            })
+            || owning_package_root(&path, package_roots) != Some(package_root)
+        {
+            continue;
+        }
+        let Some(scope_root) = scope_roots.iter().find(|scope_root| {
+            if scope_root
+                .extension()
+                .and_then(|extension| extension.to_str())
+                == Some("rs")
+            {
+                path == **scope_root
+            } else {
+                path.starts_with(scope_root)
+            }
+        }) else {
+            continue;
+        };
+
+        let file = repository.file_metrics(&path)?;
+        metrics.rust_files += 1;
+        metrics.physical_lines += file.physical_lines;
+        metrics.non_empty_lines += file.non_empty_lines;
+        included_roots.insert(RepositoryPath::from_root(root, scope_root)?);
+    }
+    metrics.included_roots = included_roots.into_iter().collect();
+    Ok(metrics)
+}
+
+fn owning_package_root<'a>(path: &Path, package_roots: &'a [PathBuf]) -> Option<&'a Path> {
+    package_roots
+        .iter()
+        .filter(|package_root| path.starts_with(package_root))
+        .max_by_key(|package_root| package_root.components().count())
+        .map(PathBuf::as_path)
 }
 
 const fn dependency_kind_rank(kind: &DependencyKind) -> u8 {
@@ -446,6 +547,15 @@ rust-version.workspace = true
             .expect("dependency source should be written");
         }
 
+        for args in [vec!["init", "--quiet"], vec!["add", "--all"]] {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git fixture command should run");
+            assert!(status.success(), "git fixture command should succeed");
+        }
+
         let workspace = collect_workspace(&SystemCommandRunner, &SystemRepositoryReader, root)
             .expect("workspace metadata should be collected");
         let package = workspace
@@ -492,5 +602,104 @@ rust-version.workspace = true
         assert_eq!(dev.rename.as_deref(), Some("dev_alias"));
         assert_eq!(dev.kind, DependencyKind::Dev);
         assert!(!dev.optional);
+    }
+    #[test]
+    fn source_metrics_state_scope_and_line_semantics() {
+        let temp = tempfile::tempdir().expect("temporary workspace should be created");
+        let root = temp.path();
+        for directory in [
+            "metrics/src",
+            "metrics/tests",
+            "metrics/examples",
+            "metrics/benches",
+            "metrics/target",
+        ] {
+            std::fs::create_dir_all(root.join(directory))
+                .expect("fixture directory should be created");
+        }
+        std::fs::write(
+            root.join("Cargo.toml"),
+            r#"[workspace]
+resolver = "3"
+members = ["metrics"]
+"#,
+        )
+        .expect("workspace manifest should be written");
+        std::fs::write(
+            root.join("metrics/Cargo.toml"),
+            r#"[package]
+name = "metrics-package"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+"#,
+        )
+        .expect("package manifest should be written");
+        for (path, content) in [
+            ("metrics/src/lib.rs", "pub fn value() {}\n\n// comment\n"),
+            ("metrics/src/empty.rs", ""),
+            ("metrics/tests/integration.rs", "\n#[test]\nfn works() {}\n"),
+            ("metrics/examples/demo.rs", "fn main() {}\n"),
+            ("metrics/benches/bench.rs", "fn main() {\n\n}\n"),
+            ("metrics/build.rs", "fn main() {}\n"),
+        ] {
+            std::fs::write(root.join(path), content)
+                .expect("tracked Rust fixture should be written");
+        }
+        std::fs::write(root.join("metrics/target/generated.rs"), "generated\n")
+            .expect("target fixture should be written");
+        std::fs::write(root.join("metrics/src/generated.rs"), "untracked\n")
+            .expect("untracked source fixture should be written");
+
+        for args in [
+            vec!["init", "--quiet"],
+            vec![
+                "add",
+                "--",
+                "Cargo.toml",
+                "metrics/Cargo.toml",
+                "metrics/src/lib.rs",
+                "metrics/src/empty.rs",
+                "metrics/tests/integration.rs",
+                "metrics/examples/demo.rs",
+                "metrics/benches/bench.rs",
+                "metrics/build.rs",
+                "metrics/target/generated.rs",
+            ],
+        ] {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git fixture command should run");
+            assert!(status.success(), "git fixture command should succeed");
+        }
+
+        let workspace = collect_workspace(&SystemCommandRunner, &SystemRepositoryReader, root)
+            .expect("workspace metrics should be collected");
+        let metrics = &workspace
+            .packages
+            .iter()
+            .find(|package| package.name == "metrics-package")
+            .expect("fixture package should be present")
+            .metrics;
+        assert_eq!(metrics.rust_files, 6);
+        assert_eq!(metrics.physical_lines, 11);
+        assert_eq!(metrics.non_empty_lines, 8);
+        assert_eq!(
+            metrics
+                .included_roots
+                .iter()
+                .map(RepositoryPath::as_str)
+                .collect::<Vec<_>>(),
+            [
+                "metrics/benches",
+                "metrics/build.rs",
+                "metrics/examples",
+                "metrics/src",
+                "metrics/tests",
+            ]
+        );
+        assert!(!metrics.includes_generated);
     }
 }
