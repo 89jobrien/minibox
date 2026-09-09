@@ -1,6 +1,10 @@
 use super::collect::RepositoryReader;
-use super::model::{RepositoryPath, SourceTestDeclaration, TestDeclarationKind, WorkspaceSnapshot};
+use super::model::{
+    ExecutableTest, RepositoryPath, SourceTestDeclaration, TestDeclarationKind, WorkspaceSnapshot,
+};
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use syn::visit::Visit;
 
@@ -196,6 +200,98 @@ fn conformance_test_name(item: &syn::ItemMacro) -> Result<String> {
     Ok(name.value())
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct NextestListing {
+    rust_build_meta: BTreeMap<String, serde_json::Value>,
+    test_count: usize,
+    rust_suites: BTreeMap<String, NextestSuite>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct NextestSuite {
+    package_name: String,
+    binary_id: String,
+    binary_name: String,
+    package_id: String,
+    kind: String,
+    binary_path: String,
+    build_platform: String,
+    cwd: String,
+    status: String,
+    testcases: BTreeMap<String, NextestTestCase>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct NextestTestCase {
+    kind: String,
+    ignored: bool,
+    filter_match: NextestFilterMatch,
+}
+
+#[derive(Deserialize)]
+struct NextestFilterMatch {
+    status: String,
+}
+
+pub(super) fn parse_nextest_listing(json: &str) -> Result<Vec<ExecutableTest>> {
+    let listing: NextestListing =
+        serde_json::from_str(json).context("parse nextest full JSON listing")?;
+    let mut tests = Vec::with_capacity(listing.test_count);
+    let mut stable_ids = BTreeSet::new();
+
+    for (suite_key, suite) in listing.rust_suites {
+        if suite_key != suite.binary_id {
+            bail!(
+                "nextest suite key {suite_key:?} does not match binary id {:?}",
+                suite.binary_id
+            );
+        }
+        if [
+            suite.package_name.as_str(),
+            suite.binary_name.as_str(),
+            suite.kind.as_str(),
+            suite.binary_path.as_str(),
+            suite.build_platform.as_str(),
+            suite.cwd.as_str(),
+            suite.status.as_str(),
+        ]
+        .contains(&"")
+        {
+            bail!("nextest suite {suite_key:?} contains an empty required field");
+        }
+        for (test_name, testcase) in suite.testcases {
+            if testcase.kind != "test" || testcase.filter_match.status.is_empty() {
+                bail!(
+                    "nextest testcase {test_name:?} in {suite_key:?} has incompatible schema values"
+                );
+            }
+            let stable_id = format!("{}::{}::{test_name}", suite.package_id, suite.binary_id);
+            if !stable_ids.insert(stable_id.clone()) {
+                bail!("duplicate nextest test identity: {stable_id}");
+            }
+            tests.push(ExecutableTest {
+                stable_id,
+                package_id: suite.package_id.clone(),
+                binary_id: suite.binary_id.clone(),
+                test_name,
+                ignored: testcase.ignored,
+            });
+        }
+    }
+    if tests.len() != listing.test_count {
+        bail!(
+            "nextest test-count {} does not match {} listed testcases",
+            listing.test_count,
+            tests.len()
+        );
+    }
+    tests.sort_by(|left, right| left.stable_id.cmp(&right.stable_id));
+    Ok(tests)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -331,5 +427,129 @@ crate::conformance_test! {
                 .iter()
                 .all(|declaration| declaration.path.as_str() == "sample/src/lib.rs")
         );
+    }
+    #[test]
+    fn nextest_json_preserves_binary_and_test_identity() {
+        let fixture = r#"{
+          "rust-build-meta": {},
+          "test-count": 4,
+          "rust-suites": {
+            "sample::lib": {
+              "package-name": "sample",
+              "binary-id": "sample::lib",
+              "binary-name": "sample",
+              "package-id": "path+file:///workspace/sample#0.1.0",
+              "kind": "lib",
+              "binary-path": "/workspace/target/sample-lib",
+              "build-platform": "target",
+              "cwd": "/workspace/sample",
+              "status": "listed",
+              "testcases": {
+                "repeated_name": {
+                  "kind": "test",
+                  "ignored": false,
+                  "filter-match": { "status": "matches" }
+                },
+                "ignored_case": {
+                  "kind": "test",
+                  "ignored": true,
+                  "filter-match": { "status": "matches" }
+                }
+              }
+            },
+            "sample::bin/tool": {
+              "package-name": "sample",
+              "binary-id": "sample::bin/tool",
+              "binary-name": "tool",
+              "package-id": "path+file:///workspace/sample#0.1.0",
+              "kind": "bin",
+              "binary-path": "/workspace/target/tool",
+              "build-platform": "target",
+              "cwd": "/workspace/sample",
+              "status": "listed",
+              "testcases": {
+                "repeated_name": {
+                  "kind": "test",
+                  "ignored": false,
+                  "filter-match": { "status": "matches" }
+                }
+              }
+            },
+            "sample::test/integration": {
+              "package-name": "sample",
+              "binary-id": "sample::test/integration",
+              "binary-name": "integration",
+              "package-id": "path+file:///workspace/sample#0.1.0",
+              "kind": "test",
+              "binary-path": "/workspace/target/integration",
+              "build-platform": "target",
+              "cwd": "/workspace/sample",
+              "status": "listed",
+              "testcases": {
+                "test result: ok. 1 passed": {
+                  "kind": "test",
+                  "ignored": false,
+                  "filter-match": { "status": "matches" }
+                }
+              }
+            },
+            "sample::test/empty": {
+              "package-name": "sample",
+              "binary-id": "sample::test/empty",
+              "binary-name": "empty",
+              "package-id": "path+file:///workspace/sample#0.1.0",
+              "kind": "test",
+              "binary-path": "/workspace/target/empty",
+              "build-platform": "target",
+              "cwd": "/workspace/sample",
+              "status": "listed",
+              "testcases": {}
+            }
+          }
+        }"#;
+
+        let tests = parse_nextest_listing(fixture).expect("nextest JSON fixture should parse");
+        assert_eq!(tests.len(), 4);
+        assert!(
+            tests
+                .windows(2)
+                .all(|pair| pair[0].stable_id < pair[1].stable_id)
+        );
+
+        let repeated = tests
+            .iter()
+            .filter(|test| test.test_name == "repeated_name")
+            .collect::<Vec<_>>();
+        assert_eq!(repeated.len(), 2);
+        assert_eq!(
+            repeated[0].package_id,
+            "path+file:///workspace/sample#0.1.0"
+        );
+        assert_ne!(repeated[0].binary_id, repeated[1].binary_id);
+        assert_ne!(repeated[0].stable_id, repeated[1].stable_id);
+        for test in repeated {
+            assert_eq!(
+                test.stable_id,
+                format!(
+                    "{}::{}::{}",
+                    test.package_id, test.binary_id, test.test_name
+                )
+            );
+        }
+
+        let ignored = tests
+            .iter()
+            .find(|test| test.test_name == "ignored_case")
+            .expect("ignored test should be retained");
+        assert!(ignored.ignored);
+        assert!(
+            tests
+                .iter()
+                .any(|test| test.test_name == "test result: ok. 1 passed")
+        );
+        assert!(!tests.iter().any(|test| test.binary_id.ends_with("/empty")));
+
+        assert!(parse_nextest_listing("test result: ok. 4 passed").is_err());
+        assert!(parse_nextest_listing("{}").is_err());
     }
 }
