@@ -1,6 +1,7 @@
 use super::model::{
-    DependencyKind, DependencySnapshot, Fact, FileMetrics, PackageSnapshot, RepositoryPath,
-    SourceMetrics, TargetSnapshot, Validation, ValidationState, WorkspaceSnapshot,
+    DependencyKind, DependencySnapshot, EvidenceId, Fact, FileMetrics, PackageSnapshot,
+    RepositoryIdentity, RepositoryPath, SourceMetrics, TargetSnapshot, Validation, ValidationState,
+    WorkspaceSnapshot,
 };
 use anyhow::{Context, Result, bail};
 use cargo_metadata::{DependencyKind as CargoDependencyKind, MetadataCommand};
@@ -111,6 +112,149 @@ impl RepositoryReader for SystemRepositoryReader {
             content_sha256,
         })
     }
+}
+
+pub(super) fn collect_repository_identity(
+    runner: &impl CommandRunner,
+    root: &Path,
+) -> Result<RepositoryIdentity> {
+    let root = root
+        .canonicalize()
+        .with_context(|| format!("canonicalize repository root {}", root.display()))?;
+    let commit_output = run_git(runner, &root, &["rev-parse", "HEAD"])?;
+    let branch_output = run_git(runner, &root, &["branch", "--show-current"])?;
+    let status_output = run_git(
+        runner,
+        &root,
+        &["status", "--porcelain=v2", "-z", "--untracked-files=all"],
+    )?;
+
+    let commit = output_text(&commit_output.stdout, "git rev-parse")?
+        .trim()
+        .to_string();
+    let branch = match output_text(&branch_output.stdout, "git branch")?.trim() {
+        "" => "HEAD".to_string(),
+        branch => branch.to_string(),
+    };
+    let changed_paths = parse_porcelain_v2_paths(&root, &status_output.stdout)?;
+    let worktree_fingerprint = fingerprint_worktree(&root, &status_output.stdout, &changed_paths)?;
+
+    Ok(RepositoryIdentity {
+        commit,
+        branch,
+        dirty: !changed_paths.is_empty(),
+        changed_paths,
+        worktree_fingerprint,
+        evidence_ids: vec![
+            EvidenceId::from("git:branch"),
+            EvidenceId::from("git:head"),
+            EvidenceId::from("git:status"),
+        ],
+    })
+}
+
+fn run_git(runner: &impl CommandRunner, root: &Path, args: &[&str]) -> Result<CommandOutput> {
+    let output = runner.run(&CommandSpec {
+        program: "git".to_string(),
+        args: args.iter().map(ToString::to_string).collect(),
+        current_dir: root.to_path_buf(),
+    })?;
+    if output.exit_code != Some(0) {
+        bail!(
+            "git {} failed with status {:?}: {}",
+            args.join(" "),
+            output.exit_code,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    Ok(output)
+}
+
+fn output_text<'a>(bytes: &'a [u8], command: &str) -> Result<&'a str> {
+    std::str::from_utf8(bytes).with_context(|| format!("{command} output is not UTF-8"))
+}
+
+fn parse_porcelain_v2_paths(root: &Path, output: &[u8]) -> Result<Vec<RepositoryPath>> {
+    let mut records = output
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty());
+    let mut paths = Vec::new();
+    while let Some(record) = records.next() {
+        let (field_count, consumes_original) = match record.first() {
+            Some(b'1') => (9, false),
+            Some(b'2') => (10, true),
+            Some(b'u') => (11, false),
+            Some(b'?') => (2, false),
+            Some(prefix) => bail!(
+                "unsupported porcelain-v2 record type: {}",
+                char::from(*prefix)
+            ),
+            None => continue,
+        };
+        let path = record
+            .splitn(field_count, |byte| *byte == b' ')
+            .nth(field_count - 1)
+            .context("porcelain-v2 record is missing a path")?;
+        let path = std::str::from_utf8(path).context("Git changed path is not UTF-8")?;
+        paths.push(RepositoryPath::from_root(root, &root.join(path))?);
+        if consumes_original {
+            records
+                .next()
+                .context("porcelain-v2 rename record is missing its original path")?;
+        }
+    }
+    paths.sort();
+    paths.dedup();
+    Ok(paths)
+}
+
+fn fingerprint_worktree(
+    root: &Path,
+    status: &[u8],
+    changed_paths: &[RepositoryPath],
+) -> Result<String> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"git-status-porcelain-v2\0");
+    hasher.update(status);
+    for path in changed_paths {
+        hasher.update(path.as_str().as_bytes());
+        hasher.update(b"\0");
+        let absolute = root.join(path.as_str());
+        match std::fs::symlink_metadata(&absolute) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                hasher.update(b"symlink\0");
+                let target = std::fs::read_link(&absolute)
+                    .with_context(|| format!("read symlink {}", absolute.display()))?;
+                hasher.update(target.to_string_lossy().as_bytes());
+            }
+            Ok(metadata) if metadata.is_file() => {
+                let canonical = absolute
+                    .canonicalize()
+                    .with_context(|| format!("canonicalize changed file {}", absolute.display()))?;
+                if !canonical.starts_with(root) {
+                    bail!(
+                        "changed file resolves outside repository: {}",
+                        absolute.display()
+                    );
+                }
+                hasher.update(b"file\0");
+                hasher.update(
+                    std::fs::read(&canonical)
+                        .with_context(|| format!("read changed file {}", absolute.display()))?,
+                );
+            }
+            Ok(_) => hasher.update(b"other\0"),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                hasher.update(b"missing\0");
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("inspect changed path {}", absolute.display()));
+            }
+        }
+        hasher.update(b"\0");
+    }
+    Ok(hex::encode(hasher.finalize()))
 }
 
 pub(super) fn collect_workspace(
@@ -701,5 +845,109 @@ build = "build.rs"
             ]
         );
         assert!(!metrics.includes_generated);
+    }
+    #[test]
+    fn repository_identity_distinguishes_dirty_worktrees() {
+        let temp = tempfile::tempdir().expect("temporary repository root should be created");
+        let repository = temp.path().join("repository");
+        let worktree_a = temp.path().join("worktree-a");
+        let worktree_b = temp.path().join("worktree-b");
+        std::fs::create_dir(&repository).expect("repository directory should be created");
+        std::fs::write(repository.join("tracked.txt"), "base\n")
+            .expect("tracked fixture should be written");
+        std::fs::write(repository.join(".gitignore"), "ignored.txt\n")
+            .expect("ignore fixture should be written");
+
+        let run_git = |current_dir: &Path, args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(current_dir)
+                .status()
+                .expect("git fixture command should run");
+            assert!(
+                status.success(),
+                "git fixture command should succeed: {args:?}"
+            );
+        };
+        run_git(&repository, &["init", "--quiet"]);
+        run_git(&repository, &["add", "--all"]);
+        run_git(
+            &repository,
+            &[
+                "-c",
+                "user.name=Context Test",
+                "-c",
+                "user.email=context@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "fixture",
+            ],
+        );
+        for worktree in [&worktree_a, &worktree_b] {
+            let status = Command::new("git")
+                .args(["worktree", "add", "--quiet", "--detach"])
+                .arg(worktree)
+                .arg("HEAD")
+                .current_dir(&repository)
+                .status()
+                .expect("git worktree command should run");
+            assert!(status.success(), "git worktree command should succeed");
+        }
+
+        std::fs::write(worktree_a.join("tracked.txt"), "changed\n")
+            .expect("tracked worktree change should be written");
+        std::fs::write(worktree_b.join("untracked.txt"), "new\n")
+            .expect("untracked worktree change should be written");
+        std::fs::write(worktree_b.join("ignored.txt"), "ignored-one\n")
+            .expect("ignored worktree file should be written");
+
+        let identity_a = collect_repository_identity(&SystemCommandRunner, &worktree_a)
+            .expect("first worktree identity should be collected");
+        let identity_b = collect_repository_identity(&SystemCommandRunner, &worktree_b)
+            .expect("second worktree identity should be collected");
+        assert_eq!(identity_a.commit, identity_b.commit);
+        assert_eq!(identity_a.branch, identity_b.branch);
+        assert_eq!(
+            identity_a
+                .changed_paths
+                .iter()
+                .map(RepositoryPath::as_str)
+                .collect::<Vec<_>>(),
+            ["tracked.txt"]
+        );
+        assert_eq!(
+            identity_b
+                .changed_paths
+                .iter()
+                .map(RepositoryPath::as_str)
+                .collect::<Vec<_>>(),
+            ["untracked.txt"]
+        );
+        assert!(identity_a.dirty);
+        assert!(identity_b.dirty);
+        assert_ne!(
+            identity_a.worktree_fingerprint,
+            identity_b.worktree_fingerprint
+        );
+        assert_eq!(identity_a.worktree_fingerprint.len(), 64);
+        assert_eq!(
+            identity_a.evidence_ids,
+            [
+                EvidenceId::from("git:branch"),
+                EvidenceId::from("git:head"),
+                EvidenceId::from("git:status"),
+            ]
+        );
+
+        std::fs::write(worktree_b.join("ignored.txt"), "ignored-two\n")
+            .expect("ignored worktree file should be updated");
+        let identity_b_after_ignored_change =
+            collect_repository_identity(&SystemCommandRunner, &worktree_b)
+                .expect("updated worktree identity should be collected");
+        assert_eq!(
+            identity_b.worktree_fingerprint,
+            identity_b_after_ignored_change.worktree_fingerprint
+        );
     }
 }
