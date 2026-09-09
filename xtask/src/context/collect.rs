@@ -1,6 +1,11 @@
-use super::model::{FileMetrics, RepositoryPath};
+use super::model::{
+    DependencyKind, DependencySnapshot, Fact, FileMetrics, PackageSnapshot, RepositoryPath,
+    SourceMetrics, TargetSnapshot, Validation, ValidationState, WorkspaceSnapshot,
+};
 use anyhow::{Context, Result, bail};
+use cargo_metadata::{DependencyKind as CargoDependencyKind, MetadataCommand};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -108,6 +113,180 @@ impl RepositoryReader for SystemRepositoryReader {
     }
 }
 
+pub(super) fn collect_workspace(
+    runner: &impl CommandRunner,
+    _repository: &impl RepositoryReader,
+    root: &Path,
+) -> Result<WorkspaceSnapshot> {
+    let canonical_root = root
+        .canonicalize()
+        .with_context(|| format!("canonicalize workspace root {}", root.display()))?;
+    let output = runner.run(&CommandSpec {
+        program: "cargo".to_string(),
+        args: vec![
+            "metadata".to_string(),
+            "--format-version".to_string(),
+            "1".to_string(),
+        ],
+        current_dir: root.to_path_buf(),
+    })?;
+    if output.exit_code != Some(0) {
+        bail!(
+            "cargo metadata failed with status {:?}: {}",
+            output.exit_code,
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let stdout =
+        std::str::from_utf8(&output.stdout).context("cargo metadata output is not UTF-8")?;
+    let metadata = MetadataCommand::parse(stdout).context("parse cargo metadata output")?;
+    let workspace_members = metadata
+        .workspace_members
+        .iter()
+        .map(|id| id.repr.as_str())
+        .collect::<BTreeSet<_>>();
+    let workspace_packages = metadata
+        .packages
+        .iter()
+        .filter(|package| workspace_members.contains(package.id.repr.as_str()))
+        .collect::<Vec<_>>();
+    let version = common_value(
+        workspace_packages
+            .iter()
+            .map(|package| Some(package.version.to_string())),
+    );
+    let edition = common_value(
+        workspace_packages
+            .iter()
+            .map(|package| Some(package.edition.to_string())),
+    );
+    let msrv = common_value(
+        workspace_packages
+            .iter()
+            .map(|package| package.rust_version.as_ref().map(ToString::to_string)),
+    );
+    let mut packages = workspace_packages
+        .into_iter()
+        .map(|package| package_snapshot(&canonical_root, package))
+        .collect::<Result<Vec<_>>>()?;
+    packages.sort_by(|left, right| left.package_id.cmp(&right.package_id));
+
+    Ok(WorkspaceSnapshot {
+        version: observed_workspace_fact(version),
+        edition: observed_workspace_fact(edition),
+        msrv: observed_workspace_fact(msrv),
+        packages,
+    })
+}
+
+fn package_snapshot(root: &Path, package: &cargo_metadata::Package) -> Result<PackageSnapshot> {
+    let mut targets = package
+        .targets
+        .iter()
+        .map(|target| {
+            let mut kinds = target
+                .kind
+                .iter()
+                .map(|kind| {
+                    serde_json::to_value(kind)
+                        .context("serialize Cargo target kind")?
+                        .as_str()
+                        .map(str::to_string)
+                        .context("Cargo target kind was not a string")
+                })
+                .collect::<Result<Vec<_>>>()?;
+            kinds.sort();
+            let mut required_features = target.required_features.clone();
+            required_features.sort();
+            required_features.dedup();
+            Ok(TargetSnapshot {
+                name: target.name.clone(),
+                kinds,
+                source_path: RepositoryPath::from_root(root, target.src_path.as_std_path())?,
+                required_features,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    targets.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.source_path.cmp(&right.source_path))
+    });
+
+    let mut dependencies = package
+        .dependencies
+        .iter()
+        .map(|dependency| {
+            let kind = match dependency.kind {
+                CargoDependencyKind::Normal => DependencyKind::Normal,
+                CargoDependencyKind::Build => DependencyKind::Build,
+                CargoDependencyKind::Development => DependencyKind::Dev,
+                CargoDependencyKind::Unknown => {
+                    bail!("unknown Cargo dependency kind for {}", dependency.name)
+                }
+            };
+            Ok(DependencySnapshot {
+                package_name: dependency.name.clone(),
+                rename: dependency.rename.clone(),
+                kind,
+                target_predicate: dependency.target.as_ref().map(ToString::to_string),
+                optional: dependency.optional,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    dependencies.sort_by(|left, right| {
+        left.package_name
+            .cmp(&right.package_name)
+            .then_with(|| left.rename.cmp(&right.rename))
+            .then_with(|| dependency_kind_rank(&left.kind).cmp(&dependency_kind_rank(&right.kind)))
+            .then_with(|| left.target_predicate.cmp(&right.target_predicate))
+    });
+
+    Ok(PackageSnapshot {
+        package_id: package.id.repr.clone(),
+        name: package.name.to_string(),
+        manifest_path: RepositoryPath::from_root(root, package.manifest_path.as_std_path())?,
+        targets,
+        features: package.features.keys().cloned().collect(),
+        dependencies,
+        metrics: SourceMetrics {
+            rust_files: 0,
+            physical_lines: 0,
+            non_empty_lines: 0,
+            included_roots: Vec::new(),
+            includes_generated: false,
+        },
+    })
+}
+
+const fn dependency_kind_rank(kind: &DependencyKind) -> u8 {
+    match kind {
+        DependencyKind::Normal => 0,
+        DependencyKind::Build => 1,
+        DependencyKind::Dev => 2,
+    }
+}
+
+fn common_value(values: impl Iterator<Item = Option<String>>) -> Option<String> {
+    let mut values = values;
+    let first = values.next()??;
+    values
+        .all(|value| value.as_ref() == Some(&first))
+        .then_some(first)
+}
+
+fn observed_workspace_fact(value: Option<String>) -> Fact<String> {
+    let (state, reason) = if value.is_some() {
+        (ValidationState::ObservedOnly, None)
+    } else {
+        (
+            ValidationState::Unavailable,
+            Some("workspace packages do not share one value".to_string()),
+        )
+    };
+    Fact::new(None, value, Validation { state, reason }, Vec::new())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,5 +364,133 @@ mod tests {
             metrics.content_sha256,
             "0e937c34625ef864d694878f01fd96318893d29014a51536006dacd150d809ec"
         );
+    }
+    #[test]
+    fn cargo_metadata_preserves_renames_targets_and_dependency_kinds() {
+        let temp = tempfile::tempdir().expect("temporary workspace should be created");
+        let root = temp.path();
+        for directory in ["renamed/source", "helper/src", "dev-helper/src"] {
+            std::fs::create_dir_all(root.join(directory))
+                .expect("fixture directory should be created");
+        }
+        std::fs::write(
+            root.join("Cargo.toml"),
+            r#"[workspace]
+resolver = "3"
+members = ["renamed", "helper", "dev-helper"]
+
+[workspace.package]
+version = "1.2.3"
+edition = "2024"
+rust-version = "1.85"
+"#,
+        )
+        .expect("workspace manifest should be written");
+        std::fs::write(
+            root.join("renamed/Cargo.toml"),
+            r#"[package]
+name = "published-name"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "renamed_lib"
+path = "source/custom.rs"
+
+[[bin]]
+name = "gated-tool"
+path = "source/tool.rs"
+required-features = ["tooling"]
+
+[features]
+default = []
+tooling = []
+
+[dependencies]
+helper_alias = { package = "helper-package", path = "../helper", optional = true }
+
+[dev-dependencies]
+dev_alias = { package = "dev-helper-package", path = "../dev-helper" }
+"#,
+        )
+        .expect("renamed package manifest should be written");
+        std::fs::write(
+            root.join("renamed/source/custom.rs"),
+            "pub fn library() {}\n",
+        )
+        .expect("custom library source should be written");
+        std::fs::write(root.join("renamed/source/tool.rs"), "fn main() {}\n")
+            .expect("custom binary source should be written");
+
+        for (directory, name) in [
+            ("helper", "helper-package"),
+            ("dev-helper", "dev-helper-package"),
+        ] {
+            std::fs::write(
+                root.join(directory).join("Cargo.toml"),
+                format!(
+                    r#"[package]
+name = "{name}"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+"#
+                ),
+            )
+            .expect("dependency manifest should be written");
+            std::fs::write(
+                root.join(directory).join("src/lib.rs"),
+                "pub fn helper() {}\n",
+            )
+            .expect("dependency source should be written");
+        }
+
+        let workspace = collect_workspace(&SystemCommandRunner, &SystemRepositoryReader, root)
+            .expect("workspace metadata should be collected");
+        let package = workspace
+            .packages
+            .iter()
+            .find(|package| package.name == "published-name")
+            .expect("renamed package should be present");
+
+        assert!(package.package_id.ends_with("#published-name@1.2.3"));
+        assert_eq!(package.manifest_path.as_str(), "renamed/Cargo.toml");
+        assert_eq!(package.features, ["default", "helper_alias", "tooling"]);
+
+        let library = package
+            .targets
+            .iter()
+            .find(|target| target.name == "renamed_lib")
+            .expect("custom library target should be present");
+        assert_eq!(library.kinds, ["lib"]);
+        assert_eq!(library.source_path.as_str(), "renamed/source/custom.rs");
+
+        let binary = package
+            .targets
+            .iter()
+            .find(|target| target.name == "gated-tool")
+            .expect("required-features target should be present");
+        assert_eq!(binary.kinds, ["bin"]);
+        assert_eq!(binary.source_path.as_str(), "renamed/source/tool.rs");
+        assert_eq!(binary.required_features, ["tooling"]);
+
+        let normal = package
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.package_name == "helper-package")
+            .expect("renamed normal dependency should be present");
+        assert_eq!(normal.rename.as_deref(), Some("helper_alias"));
+        assert_eq!(normal.kind, DependencyKind::Normal);
+        assert!(normal.optional);
+
+        let dev = package
+            .dependencies
+            .iter()
+            .find(|dependency| dependency.package_name == "dev-helper-package")
+            .expect("renamed dev dependency should be present");
+        assert_eq!(dev.rename.as_deref(), Some("dev_alias"));
+        assert_eq!(dev.kind, DependencyKind::Dev);
+        assert!(!dev.optional);
     }
 }

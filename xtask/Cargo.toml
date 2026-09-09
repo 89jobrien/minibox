@@ -23,6 +23,7 @@ xshell = "0.2"
 miette = { workspace = true }
 thiserror = { workspace = true }
 minibox-testsuite = { workspace = true }
+cargo_metadata = "0.20.0"
 
 [dev-dependencies]
 tempfile = "3"
