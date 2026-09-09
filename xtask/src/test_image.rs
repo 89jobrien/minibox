@@ -15,7 +15,10 @@ use std::{
 use tempfile::TempDir;
 use xshell::{Shell, cmd};
 
-use crate::xconfig::XConfig;
+use crate::{
+    utils::{cargo_binary_path, cargo_target_dir, workspace_root},
+    xconfig::XConfig,
+};
 
 const ALPINE_IMAGE: &str = "alpine";
 const ALPINE_TAG: &str = "3.21";
@@ -35,11 +38,7 @@ pub fn default_test_image_dir() -> PathBuf {
 #[allow(dead_code)]
 pub fn test_linux(sh: &Shell) -> Result<()> {
     // Find the scripts dir relative to workspace root
-    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .context("xtask parent")?
-        .parent()
-        .context("workspace root")?;
+    let workspace_root = workspace_root();
     let build_script = workspace_root.join("scripts").join("build-test-image.nu");
 
     // 1. Build image inside Colima via Nu script
@@ -124,11 +123,7 @@ fn is_up_to_date(tar_path: &Path) -> Result<bool> {
         .context("mtime")?;
 
     // Walk workspace crates dir looking for .rs files
-    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .context("xtask parent")?
-        .parent()
-        .context("workspace root")?;
+    let workspace_root = workspace_root();
     let crates_dir = workspace_root.join("crates");
 
     let newest_src = find_newest_rs_mtime(&crates_dir)?;
@@ -163,15 +158,14 @@ fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
 // ---------------------------------------------------------------------------
 
 fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, PathBuf)>> {
-    let target_base =
-        std::env::var("CARGO_TARGET_DIR").map_or_else(|_| PathBuf::from("target"), PathBuf::from);
+    let target_base = cargo_target_dir();
 
     println!("[1/4] cross-compiling for {target} ...");
 
     let cc = "aarch64-linux-musl-gcc";
 
     // -- miniboxd binary --
-    let miniboxd_bin = target_base.join(target).join("debug").join("miniboxd");
+    let miniboxd_bin = cargo_binary_path(&target_base, Some(target), "debug", "miniboxd");
     if force || !miniboxd_bin.exists() {
         println!("  cargo build miniboxd ...");
         run_cross(&["build", "--target", target, "-p", "miniboxd"], cc, target)?;
@@ -180,7 +174,7 @@ fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, Path
     }
 
     // -- mbx (CLI) binary --
-    let cli_bin = target_base.join(target).join("debug").join("mbx");
+    let cli_bin = cargo_binary_path(&target_base, Some(target), "debug", "mbx");
     if force || !cli_bin.exists() {
         println!("  cargo build mbx ...");
         run_cross(

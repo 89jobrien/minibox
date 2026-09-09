@@ -67,12 +67,7 @@ fn main() -> Result<()> {
     let task = argv.get(1).cloned();
 
     let sh = Shell::new()?;
-    let root = sh.current_dir();
-    let root = root
-        .ancestors()
-        .find(|p| p.join("Cargo.lock").exists())
-        .unwrap_or(&root)
-        .to_path_buf();
+    let root = utils::workspace_root();
     let root = root.as_path();
     sh.change_dir(root);
 
@@ -124,8 +119,7 @@ fn main() -> Result<()> {
         }
         Some("test-linux") => {
             let cfg = xconfig::XConfig::load(root)?;
-            let target_base = std::env::var("CARGO_TARGET_DIR")
-                .map_or_else(|_| root.join("target"), std::path::PathBuf::from);
+            let target_base = utils::cargo_target_dir();
             let vm_dir = dirs::home_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                 .join(".minibox")
