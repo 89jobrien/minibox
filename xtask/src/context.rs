@@ -13,6 +13,8 @@ use xshell::{Shell, cmd};
 #[allow(dead_code)]
 mod collect;
 #[allow(dead_code)]
+mod manifest;
+#[allow(dead_code)]
 mod model;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
