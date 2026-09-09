@@ -331,4 +331,67 @@ required_in_ci = true
             "default role unix_default references undeclared adapter: smolvm",
         );
     }
+    #[test]
+    fn repository_manifest_declares_exact_adapters_and_profiles() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask should have a workspace root");
+        let manifest = load_manifest(root).expect("repository context manifest should load");
+        validate_manifest(&manifest).expect("repository context manifest should be valid");
+
+        let mut adapter_ids = manifest
+            .adapters
+            .iter()
+            .map(|adapter| adapter.id.as_str())
+            .collect::<Vec<_>>();
+        adapter_ids.sort_unstable();
+        assert_eq!(
+            adapter_ids,
+            ["colima", "gke", "krun", "native", "smolvm", "vz", "winbox"]
+        );
+
+        let mut profile_ids = manifest
+            .profiles
+            .iter()
+            .map(|profile| profile.id.as_str())
+            .collect::<Vec<_>>();
+        profile_ids.sort_unstable();
+        assert_eq!(
+            profile_ids,
+            [
+                "macos-vz",
+                "native-linux-gnu",
+                "native-linux-musl",
+                "native-macos",
+                "native-windows",
+            ]
+        );
+
+        let vz = manifest
+            .adapters
+            .iter()
+            .find(|adapter| adapter.id == "vz")
+            .expect("VZ declaration should exist");
+        assert_eq!(vz.maturity, AdapterMaturity::Blocked);
+        assert!(
+            vz.capabilities.values().all(|support| matches!(
+                support,
+                CapabilitySupport::Blocked | CapabilitySupport::No
+            ))
+        );
+
+        let default_roles = manifest
+            .adapters
+            .iter()
+            .flat_map(|adapter| {
+                adapter
+                    .default_roles
+                    .iter()
+                    .map(move |role| (role.as_str(), adapter.id.as_str()))
+            })
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(default_roles.get("unix_default"), Some(&"smolvm"));
+        assert_eq!(default_roles.get("linux_fallback"), Some(&"native"));
+        assert_eq!(default_roles.get("macos_fallback"), Some(&"krun"));
+    }
 }
