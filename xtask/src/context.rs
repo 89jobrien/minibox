@@ -16,6 +16,8 @@ mod collect;
 mod manifest;
 #[allow(dead_code)]
 mod model;
+#[allow(dead_code)]
+mod test_inventory;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ContextOptions {
