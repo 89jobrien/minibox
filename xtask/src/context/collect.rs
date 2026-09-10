@@ -10,6 +10,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[path = "output.rs"]
+pub(super) mod output;
+
 pub(super) trait CommandRunner {
     fn run(&self, command: &CommandSpec) -> Result<CommandOutput>;
 }
@@ -581,6 +584,7 @@ fn observed_workspace_fact(value: Option<String>) -> Fact<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::model::ProfileStatus;
     use std::process::Command;
 
     #[test]
@@ -995,5 +999,123 @@ build = "build.rs"
             identity_b.worktree_fingerprint,
             identity_b_after_ignored_change.worktree_fingerprint
         );
+    }
+    #[test]
+    fn profile_evidence_requires_an_exact_cache_key() {
+        use super::output::{
+            ProfileEvidenceCacheKey, profile_evidence_cache_key, read_profile_evidence,
+        };
+
+        let baseline = ProfileEvidenceCacheKey {
+            commit: "abc123".to_string(),
+            worktree_fingerprint: "dirty-a".to_string(),
+            manifest_sha256: "manifest-a".to_string(),
+            target: "x86_64-unknown-linux-gnu".to_string(),
+            features: vec!["zeta".to_string(), "alpha".to_string()],
+            no_default_features: false,
+            cargo_version: "cargo 1.85.0".to_string(),
+            rustc_version: "rustc 1.85.0".to_string(),
+            nextest_version: "cargo-nextest 0.9.100".to_string(),
+        };
+        let mut reordered = baseline.clone();
+        reordered.features.reverse();
+        assert_eq!(
+            profile_evidence_cache_key(&baseline),
+            profile_evidence_cache_key(&reordered)
+        );
+
+        let evidence_dir = tempfile::tempdir().expect("evidence directory should be created");
+        let artifact = |key: &ProfileEvidenceCacheKey| {
+            serde_json::json!({
+                "schema_version": 1,
+                "profile_id": "native-linux",
+                "cache_key": key,
+                "status": "validated",
+                "executable_tests": [{
+                    "stable_id": "pkg::bin::works",
+                    "package_id": "pkg",
+                    "binary_id": "bin",
+                    "test_name": "works",
+                    "ignored": false
+                }],
+                "unavailable_reason": null
+            })
+        };
+        std::fs::write(
+            evidence_dir.path().join("00-current.json"),
+            serde_json::to_vec(&artifact(&baseline)).expect("current artifact should serialize"),
+        )
+        .expect("current artifact should be written");
+
+        let mut mismatches = Vec::new();
+        let mut changed = baseline.clone();
+        changed.commit = "different".to_string();
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.worktree_fingerprint = "different".to_string();
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.manifest_sha256 = "different".to_string();
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.target = "aarch64-apple-darwin".to_string();
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.features.push("different".to_string());
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.no_default_features = true;
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.cargo_version = "different".to_string();
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.rustc_version = "different".to_string();
+        mismatches.push(changed);
+        let mut changed = baseline.clone();
+        changed.nextest_version = "different".to_string();
+        mismatches.push(changed);
+
+        for (index, mismatch) in mismatches.iter().enumerate() {
+            std::fs::write(
+                evidence_dir
+                    .path()
+                    .join(format!("{:02}-stale.json", index + 1)),
+                serde_json::to_vec(&artifact(mismatch)).expect("stale artifact should serialize"),
+            )
+            .expect("stale artifact should be written");
+        }
+
+        let expected =
+            std::collections::BTreeMap::from([("native-linux".to_string(), baseline.clone())]);
+        let imported = read_profile_evidence(evidence_dir.path(), &expected)
+            .expect("well-formed evidence should import");
+        assert_eq!(imported.len(), 10);
+        assert_eq!(
+            imported
+                .iter()
+                .filter(|record| record.status == ProfileStatus::Validated)
+                .count(),
+            1
+        );
+        assert_eq!(
+            imported
+                .iter()
+                .filter(|record| record.status == ProfileStatus::Stale)
+                .count(),
+            9
+        );
+        assert_eq!(
+            imported
+                .iter()
+                .flat_map(|record| &record.executable_tests)
+                .count(),
+            1
+        );
+
+        let malformed_dir = tempfile::tempdir().expect("malformed directory should be created");
+        std::fs::write(malformed_dir.path().join("broken.json"), b"{}")
+            .expect("malformed artifact should be written");
+        assert!(read_profile_evidence(malformed_dir.path(), &expected).is_err());
     }
 }
