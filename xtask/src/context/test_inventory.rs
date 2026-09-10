@@ -1,6 +1,8 @@
-use super::collect::RepositoryReader;
+use super::collect::{CommandRunner, CommandSpec, RepositoryReader, redact_diagnostic};
+use super::manifest::ValidationProfile;
 use super::model::{
-    ExecutableTest, RepositoryPath, SourceTestDeclaration, TestDeclarationKind, WorkspaceSnapshot,
+    EvidenceId, ExecutableTest, ProfileStatus, RepositoryPath, SourceTestDeclaration,
+    TestDeclarationKind, TestProfileResult, WorkspaceSnapshot,
 };
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;
@@ -200,6 +202,108 @@ fn conformance_test_name(item: &syn::ItemMacro) -> Result<String> {
     Ok(name.value())
 }
 
+pub(super) fn collect_test_profile(
+    runner: &impl CommandRunner,
+    root: &Path,
+    profile: &ValidationProfile,
+) -> TestProfileResult {
+    let mut features = profile.features.clone();
+    features.sort();
+    features.dedup();
+    let mut args = vec![
+        "nextest".to_string(),
+        "list".to_string(),
+        "--workspace".to_string(),
+        "--message-format".to_string(),
+        "json".to_string(),
+        "--target".to_string(),
+        profile.target.clone(),
+    ];
+    if !features.is_empty() {
+        args.extend(["--features".to_string(), features.join(",")]);
+    }
+    if profile.no_default_features {
+        args.push("--no-default-features".to_string());
+    }
+    if profile.all_targets {
+        args.push("--all-targets".to_string());
+    }
+
+    let command = CommandSpec {
+        program: "cargo".to_string(),
+        args,
+        current_dir: root.to_path_buf(),
+    };
+    let evidence_ids = vec![EvidenceId::from("nextest:list")];
+    let output = match runner.run(&command) {
+        Ok(output) => output,
+        Err(error) => {
+            return TestProfileResult {
+                profile_id: profile.id.clone(),
+                target: profile.target.clone(),
+                features,
+                status: ProfileStatus::Failed,
+                executable_tests: Vec::new(),
+                unavailable_reason: Some(redact_diagnostic(root, &format!("{error:#}"))),
+                evidence_ids,
+            };
+        }
+    };
+
+    if output.exit_code == Some(0) {
+        return match std::str::from_utf8(&output.stdout)
+            .context("nextest JSON output is not UTF-8")
+            .and_then(parse_nextest_listing)
+        {
+            Ok(executable_tests) => TestProfileResult {
+                profile_id: profile.id.clone(),
+                target: profile.target.clone(),
+                features,
+                status: ProfileStatus::Validated,
+                executable_tests,
+                unavailable_reason: None,
+                evidence_ids,
+            },
+            Err(error) => TestProfileResult {
+                profile_id: profile.id.clone(),
+                target: profile.target.clone(),
+                features,
+                status: ProfileStatus::Failed,
+                executable_tests: Vec::new(),
+                unavailable_reason: Some(redact_diagnostic(root, &format!("{error:#}"))),
+                evidence_ids,
+            },
+        };
+    }
+
+    let diagnostic = String::from_utf8_lossy(&output.stderr);
+    let status = if is_missing_target_or_toolchain(&diagnostic) {
+        ProfileStatus::Unavailable
+    } else {
+        ProfileStatus::Failed
+    };
+    TestProfileResult {
+        profile_id: profile.id.clone(),
+        target: profile.target.clone(),
+        features,
+        status,
+        executable_tests: Vec::new(),
+        unavailable_reason: Some(redact_diagnostic(root, &diagnostic)),
+        evidence_ids,
+    }
+}
+
+fn is_missing_target_or_toolchain(diagnostic: &str) -> bool {
+    let diagnostic = diagnostic.to_ascii_lowercase();
+    diagnostic.contains("target may not be installed")
+        || diagnostic.contains("could not find specification for target")
+        || diagnostic.contains("can't find crate for `std`")
+        || diagnostic.contains("can't find crate for 'std'")
+        || (diagnostic.contains("toolchain")
+            && (diagnostic.contains("not installed") || diagnostic.contains("not found")))
+        || (diagnostic.contains("component") && diagnostic.contains("unavailable for download"))
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct NextestListing {
@@ -295,8 +399,12 @@ pub(super) fn parse_nextest_listing(json: &str) -> Result<Vec<ExecutableTest>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::collect::{SystemCommandRunner, SystemRepositoryReader, collect_workspace};
-    use crate::context::model::TestDeclarationKind;
+    use crate::context::collect::{
+        CommandOutput, CommandRunner, CommandSpec, SystemCommandRunner, SystemRepositoryReader,
+        collect_workspace,
+    };
+    use crate::context::manifest::ValidationProfile;
+    use crate::context::model::{ProfileStatus, TestDeclarationKind};
     use std::process::Command;
 
     #[test]
@@ -551,5 +659,135 @@ crate::conformance_test! {
 
         assert!(parse_nextest_listing("test result: ok. 4 passed").is_err());
         assert!(parse_nextest_listing("{}").is_err());
+    }
+    struct FakeRunner {
+        output: CommandOutput,
+        seen: std::cell::RefCell<Vec<CommandSpec>>,
+    }
+
+    impl FakeRunner {
+        fn new(exit_code: i32, stdout: &str, stderr: &str) -> Self {
+            Self {
+                output: CommandOutput {
+                    exit_code: Some(exit_code),
+                    stdout: stdout.as_bytes().to_vec(),
+                    stderr: stderr.as_bytes().to_vec(),
+                },
+                seen: std::cell::RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl CommandRunner for FakeRunner {
+        fn run(&self, command: &CommandSpec) -> Result<CommandOutput> {
+            self.seen.borrow_mut().push(command.clone());
+            Ok(self.output.clone())
+        }
+    }
+
+    fn validation_profile() -> ValidationProfile {
+        ValidationProfile {
+            id: "linux-features".to_string(),
+            target: "x86_64-unknown-linux-gnu".to_string(),
+            features: vec!["zeta".to_string(), "alpha".to_string()],
+            no_default_features: true,
+            all_targets: true,
+            required_in_ci: true,
+        }
+    }
+
+    #[test]
+    fn profile_collection_distinguishes_failure_and_unavailable() {
+        let temp = tempfile::tempdir().expect("temporary profile root should be created");
+        let valid_json = r#"{
+          "rust-build-meta": {},
+          "test-count": 1,
+          "rust-suites": {
+            "sample::lib": {
+              "package-name": "sample",
+              "binary-id": "sample::lib",
+              "binary-name": "sample",
+              "package-id": "path+file:///workspace/sample#0.1.0",
+              "kind": "lib",
+              "binary-path": "/workspace/target/sample",
+              "build-platform": "target",
+              "cwd": "/workspace/sample",
+              "status": "listed",
+              "testcases": {
+                "works": {
+                  "kind": "test",
+                  "ignored": false,
+                  "filter-match": { "status": "matches" }
+                }
+              }
+            }
+          }
+        }"#;
+        let runner = FakeRunner::new(0, valid_json, "");
+        let validated = collect_test_profile(&runner, temp.path(), &validation_profile());
+        assert_eq!(validated.status, ProfileStatus::Validated);
+        assert_eq!(validated.executable_tests.len(), 1);
+        assert_eq!(validated.features, ["alpha", "zeta"]);
+        assert!(validated.unavailable_reason.is_none());
+        assert_eq!(
+            runner.seen.borrow()[0].args,
+            [
+                "nextest",
+                "list",
+                "--workspace",
+                "--message-format",
+                "json",
+                "--target",
+                "x86_64-unknown-linux-gnu",
+                "--features",
+                "alpha,zeta",
+                "--no-default-features",
+                "--all-targets",
+            ]
+        );
+
+        let missing_message = format!(
+            "error: target may not be installed; searched {}",
+            temp.path().display()
+        );
+        let unavailable = collect_test_profile(
+            &FakeRunner::new(101, "", &missing_message),
+            temp.path(),
+            &validation_profile(),
+        );
+        assert_eq!(unavailable.status, ProfileStatus::Unavailable);
+        let unavailable_reason = unavailable
+            .unavailable_reason
+            .expect("unavailable profile should explain why");
+        assert!(unavailable_reason.contains("<workspace>"));
+        assert!(!unavailable_reason.contains(&temp.path().display().to_string()));
+
+        let linker = collect_test_profile(
+            &FakeRunner::new(101, "", "error: linking with cc failed"),
+            temp.path(),
+            &validation_profile(),
+        );
+        assert_eq!(linker.status, ProfileStatus::Failed);
+
+        let malformed = collect_test_profile(
+            &FakeRunner::new(0, "{}", ""),
+            temp.path(),
+            &validation_profile(),
+        );
+        assert_eq!(malformed.status, ProfileStatus::Failed);
+        assert!(malformed.executable_tests.is_empty());
+
+        let nonzero = collect_test_profile(
+            &FakeRunner::new(2, "", "error: test listing failed"),
+            temp.path(),
+            &validation_profile(),
+        );
+        assert_eq!(nonzero.status, ProfileStatus::Failed);
+        assert!(
+            nonzero
+                .unavailable_reason
+                .expect("failed profile should retain diagnostics")
+                .contains("test listing failed")
+        );
     }
 }

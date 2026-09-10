@@ -34,6 +34,52 @@ pub(super) struct CommandOutput {
     pub(super) stderr: Vec<u8>,
 }
 
+pub(super) fn redact_diagnostic(root: &Path, diagnostic: &str) -> String {
+    let mut redacted = diagnostic.to_string();
+    let canonical_root = root.canonicalize().ok();
+    let mut paths = vec![root.to_path_buf()];
+    if let Some(canonical) = &canonical_root {
+        paths.push(canonical.clone());
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        paths.push(PathBuf::from(home));
+    }
+    paths.sort_by_key(|path| std::cmp::Reverse(path.as_os_str().len()));
+    paths.dedup();
+    for path in paths {
+        let value = path.to_string_lossy();
+        if !value.is_empty() && value != "/" {
+            let replacement = if path == root || canonical_root.as_ref() == Some(&path) {
+                "<workspace>"
+            } else {
+                "<home>"
+            };
+            redacted = redacted.replace(value.as_ref(), replacement);
+        }
+    }
+
+    let redacted = redacted
+        .split_inclusive(char::is_whitespace)
+        .map(|part| {
+            let token = part.trim_end_matches(char::is_whitespace);
+            let suffix = &part[token.len()..];
+            let Some((key, _)) = token.split_once('=') else {
+                return part.to_string();
+            };
+            let key_upper = key.to_ascii_uppercase();
+            if ["TOKEN", "PASSWORD", "SECRET", "API_KEY"]
+                .iter()
+                .any(|marker| key_upper.contains(marker))
+            {
+                format!("{key}=<redacted>{suffix}")
+            } else {
+                part.to_string()
+            }
+        })
+        .collect::<String>();
+    redacted.chars().take(4096).collect()
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub(super) struct SystemCommandRunner;
 
