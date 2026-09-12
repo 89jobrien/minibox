@@ -35,21 +35,23 @@ generated: 2026-08-28
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-09-08
+Last updated: 2026-09-12
 
 ---
 
 ## Adapter Suites
 
-| Adapter  | Platform                        | Status       | Crate   | Default?                          |
-| -------- | ------------------------------- | ------------ | ------- | --------------------------------- |
-| `native` | Linux only (x86_64/arm64) [^1]  | Production   | minibox | Fallback on Linux                 |
-| `gke`    | Linux only (GKE pods) [^2]      | Production   | minibox | --                                |
-| `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
-| `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
-| `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
-| `vz`     | macOS only, `vz` feature [^5]   | Non-functional | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
-| `winbox` | Windows                         | Stub         | winbox  | --                                |
+<!-- BEGIN GENERATED: adapter-suites -->
+| Adapter | Platforms | Maturity | Default roles |
+| --- | --- | --- | --- |
+| `colima` | `linux`, `macos` | Experimental | -- |
+| `gke` | `linux` | Production | -- |
+| `krun` | `linux`, `macos` | Experimental | `macos_fallback` |
+| `native` | `linux` | Production | `linux_fallback` |
+| `smolvm` | `linux`, `macos` | Experimental | `unix_default` |
+| `vz` | `macos` | Blocked | -- |
+| `winbox` | `windows` | Stub | -- |
+<!-- END GENERATED: adapter-suites -->
 
 [^1]: `native` requires root (UID 0) for runtime operations. Non-root startup emits a warning;
       selection itself is not rejected. Linux only
@@ -76,60 +78,53 @@ Last updated: 2026-09-08
 
 ## Capability Matrix
 
-| Feature                 | native | gke  | colima  | smolvm | krun | vz  | winbox |
-| ----------------------- | ------ | ---- | ------- | ------ | ---- | --- | ------ |
-| **Container lifecycle** |        |      |         |        |      |     |        |
-| pull                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| run                     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| stop                    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| rm                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| ps                      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| pause/resume            | Yes    | No   | No      | No     | No   | No  | No     |
-| restart                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| exec (-it)              | Yes    | No   | Limited | No     | No   | No  | No     |
-| logs                    | Yes    | No   | Limited | No     | No   | No  | No     |
-| events                  | Yes    | Yes  | No      | No     | No   | No  | No     |
-| **Image management**    |        |      |         |        |      |     |        |
-| Docker Hub v2           | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| ghcr.io                 | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Parallel layer pull     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| prune / rmi             | Yes    | No   | No      | No     | No   | No  | No     |
-| push (exp)              | Yes    | Yes  | Yes     | No     | No   | No  | No     |
-| commit (exp)            | Yes    | No   | Yes     | No     | No   | No  | No     |
-| build (exp)             | Yes    | No   | Yes     | Yes    | No   | No  | No     |
-| **Isolation**           |        |      |         |        |      |     |        |
-| PID namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| Mount namespace         | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| Network namespace       | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| UTS namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| IPC namespace           | Yes    | No   | Lima VM | VM     | VM   | Blocked | No     |
-| cgroups v2              | Yes    | No   | Lima VM | VM     | No   | Blocked | No     |
-| Overlay FS              | Yes    | Copy | nerdctl | No     | No   | Blocked | No     |
-| **Networking**          |        |      |         |        |      |     |        |
-| Bridge (exp)            | Yes    | No   | No      | No     | No   | No  | No     |
-| Port forwarding         | Yes    | No   | No      | No     | No   | Blocked | No     |
-| DNS                     | Yes    | No   | No      | No     | No   | Blocked | No     |
-| **Mounts & Privileges** |        |      |         |        |      |     |        |
-| Bind mounts (`-v`)      | Yes    | No   | No      | No     | No   | No  | No     |
-| Privileged mode         | Yes    | No   | No      | No     | No   | No  | No     |
-| **Security**            |        |      |         |        |      |     |        |
-| SO_PEERCRED auth        | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Tar path validation     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | Yes    |
-| Setuid stripping        | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | Yes    |
-| Device node rejection   | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | Yes    |
-| Layer digest verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Request frame limits    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Env redaction in logs   | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| **Execution integrity** |        |      |         |        |      |     |        |
-| Execution manifest      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| manifest get/verify     | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| Admission policy gate   | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| **State persistence**   |        |      |         |        |      |     |        |
-| Records survive restart | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| PID reconciliation      | Yes    | No   | No      | No     | No   | No  | No     |
-| **Observability**       |        |      |         |        |      |     |        |
-| Structured tracing      | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
-| OTLP export (opt-in)    | Yes    | Yes  | Yes     | Yes    | Yes  | Blocked | No     |
+<!-- BEGIN GENERATED: adapter-capabilities -->
+| Capability | `colima` | `gke` | `krun` | `native` | `smolvm` | `vz` | `winbox` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `admission_policy_gate` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `bind_mounts` | No | No | No | Yes | No | No | No |
+| `bridge_network` | No | No | No | Yes | No | No | No |
+| `build` | Yes | No | No | Yes | Yes | No | No |
+| `cgroups_v2` | Yes | No | No | Yes | Yes | Blocked | No |
+| `commit` | Yes | No | No | Yes | No | No | No |
+| `device_node_rejection` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
+| `dns` | No | No | No | Yes | No | Blocked | No |
+| `docker_hub_v2` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `environment_redaction` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `events` | No | Yes | No | Yes | No | No | No |
+| `exec` | Limited | No | No | Yes | No | No | No |
+| `execution_manifest` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `ghcr_io` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `ipc_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `layer_digest_verification` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `logs` | Limited | No | No | Yes | No | No | No |
+| `manifest_get_verify` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `mount_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `network_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `otlp_export` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `overlay_filesystem` | Yes | Limited | No | Yes | No | Blocked | No |
+| `parallel_layer_pull` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `pause_resume` | No | No | No | Yes | No | No | No |
+| `peer_credential_auth` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `pid_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `pid_reconciliation` | No | No | No | Yes | No | No | No |
+| `port_forwarding` | No | No | No | Yes | No | Blocked | No |
+| `privileged_mode` | No | No | No | Yes | No | No | No |
+| `prune_rmi` | No | No | No | Yes | No | No | No |
+| `ps` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `pull` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `push` | Yes | Yes | No | Yes | No | No | No |
+| `request_frame_limits` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `restart` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `rm` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `run` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `setuid_stripping` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
+| `state_persistence` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `stop` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `structured_tracing` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `tar_path_validation` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
+| `uts_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+<!-- END GENERATED: adapter-capabilities -->
 
 ---
 

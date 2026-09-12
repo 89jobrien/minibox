@@ -1,11 +1,165 @@
-use super::super::model::{EvidenceId, ExecutableTest, ProfileStatus, TestProfileResult};
+use super::super::manifest::ContextManifest;
+use super::super::model::{
+    AdapterMaturity, CapabilitySupport, EvidenceId, ExecutableTest, ProfileStatus,
+    TestProfileResult,
+};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+const ADAPTER_SUITES_BEGIN: &str = "<!-- BEGIN GENERATED: adapter-suites -->";
+const ADAPTER_SUITES_END: &str = "<!-- END GENERATED: adapter-suites -->";
+const ADAPTER_CAPABILITIES_BEGIN: &str = "<!-- BEGIN GENERATED: adapter-capabilities -->";
+const ADAPTER_CAPABILITIES_END: &str = "<!-- END GENERATED: adapter-capabilities -->";
+
+pub(super) fn sync_adapter_matrix(document: &str, manifest: &ContextManifest) -> Result<String> {
+    let suites = render_adapter_suites(manifest);
+    let capabilities = render_adapter_capabilities(manifest)?;
+    let document =
+        replace_generated_block(document, ADAPTER_SUITES_BEGIN, ADAPTER_SUITES_END, &suites)?;
+    replace_generated_block(
+        &document,
+        ADAPTER_CAPABILITIES_BEGIN,
+        ADAPTER_CAPABILITIES_END,
+        &capabilities,
+    )
+}
+
+fn replace_generated_block(
+    document: &str,
+    begin: &str,
+    end: &str,
+    generated: &str,
+) -> Result<String> {
+    let begins = document
+        .match_indices(begin)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let ends = document
+        .match_indices(end)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if begins.len() != 1 || ends.len() != 1 {
+        bail!("generated block must contain exactly one begin and end marker: {begin:?}, {end:?}");
+    }
+    let begin_index = begins[0];
+    let end_index = ends[0];
+    if begin_index >= end_index {
+        bail!("generated block markers are out of order: {begin:?}, {end:?}");
+    }
+    let replacement = format!("{begin}\n{generated}\n{end}");
+    Ok(format!(
+        "{}{}{}",
+        &document[..begin_index],
+        replacement,
+        &document[end_index + end.len()..]
+    ))
+}
+
+fn render_adapter_suites(manifest: &ContextManifest) -> String {
+    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    let mut lines = vec![
+        "| Adapter | Platforms | Maturity | Default roles |".to_string(),
+        "| --- | --- | --- | --- |".to_string(),
+    ];
+    for adapter in adapters {
+        let mut platforms = adapter.platforms.clone();
+        platforms.sort();
+        platforms.dedup();
+        let platforms = platforms
+            .iter()
+            .map(|platform| format!("`{platform}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut roles = adapter.default_roles.clone();
+        roles.sort();
+        roles.dedup();
+        let roles = if roles.is_empty() {
+            "--".to_string()
+        } else {
+            roles
+                .iter()
+                .map(|role| format!("`{role}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        lines.push(format!(
+            "| `{}` | {} | {} | {} |",
+            adapter.id,
+            platforms,
+            maturity_label(&adapter.maturity),
+            roles
+        ));
+    }
+    lines.join("\n")
+}
+
+fn render_adapter_capabilities(manifest: &ContextManifest) -> Result<String> {
+    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    let capabilities = adapters
+        .iter()
+        .flat_map(|adapter| adapter.capabilities.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    let mut lines = vec![format!(
+        "| Capability | {} |",
+        adapters
+            .iter()
+            .map(|adapter| format!("`{}`", adapter.id))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    )];
+    lines.push(format!(
+        "| --- | {} |",
+        adapters
+            .iter()
+            .map(|_| "---")
+            .collect::<Vec<_>>()
+            .join(" | ")
+    ));
+    for capability in capabilities {
+        let supports = adapters
+            .iter()
+            .map(|adapter| {
+                adapter
+                    .capabilities
+                    .get(&capability)
+                    .map(capability_label)
+                    .with_context(|| {
+                        format!(
+                            "adapter {:?} is missing capability {:?}",
+                            adapter.id, capability
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        lines.push(format!("| `{capability}` | {} |", supports.join(" | ")));
+    }
+    Ok(lines.join("\n"))
+}
+
+const fn maturity_label(maturity: &AdapterMaturity) -> &'static str {
+    match maturity {
+        AdapterMaturity::Production => "Production",
+        AdapterMaturity::Experimental => "Experimental",
+        AdapterMaturity::Stub => "Stub",
+        AdapterMaturity::Blocked => "Blocked",
+    }
+}
+
+const fn capability_label(capability: &CapabilitySupport) -> &'static str {
+    match capability {
+        CapabilitySupport::Yes => "Yes",
+        CapabilitySupport::Limited => "Limited",
+        CapabilitySupport::Blocked => "Blocked",
+        CapabilitySupport::No => "No",
+    }
+}
 
 static CONTEXT_VALIDATOR: OnceLock<std::result::Result<jsonschema::Validator, String>> =
     OnceLock::new();
@@ -728,5 +882,56 @@ mod tests {
                     .to_string_lossy()
                     .contains(".tmp"))
         );
+    }
+    #[test]
+    fn adapter_matrix_sync_is_scoped_and_idempotent() {
+        use crate::context::manifest::{AdapterDeclaration, ContextManifest};
+        use crate::context::model::{AdapterMaturity, CapabilitySupport};
+
+        let manifest = ContextManifest {
+            schema_version: 1,
+            adapters: vec![
+                AdapterDeclaration {
+                    id: "zeta".to_string(),
+                    maturity: AdapterMaturity::Blocked,
+                    platforms: vec!["windows".to_string()],
+                    default_roles: Vec::new(),
+                    capabilities: BTreeMap::from([
+                        ("run".to_string(), CapabilitySupport::Limited),
+                        ("build".to_string(), CapabilitySupport::Blocked),
+                    ]),
+                },
+                AdapterDeclaration {
+                    id: "alpha".to_string(),
+                    maturity: AdapterMaturity::Production,
+                    platforms: vec!["macos".to_string(), "linux".to_string()],
+                    default_roles: vec!["unix_default".to_string()],
+                    capabilities: BTreeMap::from([
+                        ("run".to_string(), CapabilitySupport::Yes),
+                        ("build".to_string(), CapabilitySupport::No),
+                    ]),
+                },
+            ],
+            profiles: Vec::new(),
+        };
+        let document = "before prose\n\n<!-- BEGIN GENERATED: adapter-suites -->\nold suites\n<!-- END GENERATED: adapter-suites -->\n\nmiddle prose\n\n<!-- BEGIN GENERATED: adapter-capabilities -->\nold capabilities\n<!-- END GENERATED: adapter-capabilities -->\n\nafter prose\n";
+        let expected = "before prose\n\n<!-- BEGIN GENERATED: adapter-suites -->\n| Adapter | Platforms | Maturity | Default roles |\n| --- | --- | --- | --- |\n| `alpha` | `linux`, `macos` | Production | `unix_default` |\n| `zeta` | `windows` | Blocked | -- |\n<!-- END GENERATED: adapter-suites -->\n\nmiddle prose\n\n<!-- BEGIN GENERATED: adapter-capabilities -->\n| Capability | `alpha` | `zeta` |\n| --- | --- | --- |\n| `build` | No | Blocked |\n| `run` | Yes | Limited |\n<!-- END GENERATED: adapter-capabilities -->\n\nafter prose\n";
+
+        let synced = sync_adapter_matrix(document, &manifest)
+            .expect("marked adapter blocks should synchronize");
+        assert_eq!(synced, expected);
+        assert_eq!(
+            sync_adapter_matrix(&synced, &manifest).expect("second synchronization should succeed"),
+            synced
+        );
+        assert!(synced.starts_with("before prose\n\n"));
+        assert!(synced.ends_with("\nafter prose\n"));
+        assert!(synced.contains("\n\nmiddle prose\n\n"));
+
+        assert!(sync_adapter_matrix("no generated markers\n", &manifest).is_err());
+        let duplicate = format!(
+            "{document}<!-- BEGIN GENERATED: adapter-suites -->\nduplicate\n<!-- END GENERATED: adapter-suites -->\n"
+        );
+        assert!(sync_adapter_matrix(&duplicate, &manifest).is_err());
     }
 }

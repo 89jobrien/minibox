@@ -20,7 +20,8 @@
 // TODO(feature-idea-08): define xtask commands in one typed registry and generate dispatcher
 // metadata, help, schema, documentation, and compatibility aliases from it.
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 use std::env;
 use xshell::Shell;
 
@@ -528,6 +529,7 @@ fn cmd_docs(sh: &Shell, root: &std::path::Path) -> Result<()> {
         eprintln!("  audit [--full] [--strict]   audit docs/core/ facts vs code");
         eprintln!("  lint [--sarif <path>]       validate frontmatter + status values");
         eprintln!("  update-date                 rewrite Last-updated stamp in FEATURE_MATRIX");
+        eprintln!("  sync-adapters               regenerate manifest-backed adapter tables");
         Ok(())
     }
 }
@@ -555,7 +557,179 @@ fn dispatch_docs(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
             docs_lint::lint_docs(root, sarif_path.as_deref())
         }
         "update-date" => feature_matrix_date::update_feature_matrix_date(root),
+        "sync-adapters" => sync_adapter_docs(root),
         other => bail!("unknown docs action: {other}"),
+    }
+}
+
+#[derive(Deserialize)]
+struct DocsAdapterManifest {
+    adapters: Vec<DocsAdapterDeclaration>,
+}
+
+#[derive(Deserialize)]
+struct DocsAdapterDeclaration {
+    id: String,
+    maturity: String,
+    platforms: Vec<String>,
+    default_roles: Vec<String>,
+    capabilities: std::collections::BTreeMap<String, String>,
+}
+
+fn sync_adapter_docs(root: &std::path::Path) -> Result<()> {
+    let manifest_path = root.join("xtask/context.toml");
+    let document_path = root.join("docs/core/FEATURE_MATRIX.mbx.md");
+    let manifest_source = std::fs::read_to_string(&manifest_path)
+        .with_context(|| format!("read {}", manifest_path.display()))?;
+    let manifest: DocsAdapterManifest =
+        toml::from_str(&manifest_source).context("parse xtask/context.toml for docs sync")?;
+    let document = std::fs::read_to_string(&document_path)
+        .with_context(|| format!("read {}", document_path.display()))?;
+    let synced = sync_adapter_docs_document(&document, &manifest)?;
+    if synced != document {
+        std::fs::write(&document_path, synced)
+            .with_context(|| format!("write {}", document_path.display()))?;
+    }
+    Ok(())
+}
+
+fn sync_adapter_docs_document(document: &str, manifest: &DocsAdapterManifest) -> Result<String> {
+    let suites = render_docs_adapter_suites(manifest);
+    let capabilities = render_docs_adapter_capabilities(manifest)?;
+    let document = replace_docs_generated_block(
+        document,
+        "<!-- BEGIN GENERATED: adapter-suites -->",
+        "<!-- END GENERATED: adapter-suites -->",
+        &suites,
+    )?;
+    replace_docs_generated_block(
+        &document,
+        "<!-- BEGIN GENERATED: adapter-capabilities -->",
+        "<!-- END GENERATED: adapter-capabilities -->",
+        &capabilities,
+    )
+}
+
+fn replace_docs_generated_block(
+    document: &str,
+    begin: &str,
+    end: &str,
+    generated: &str,
+) -> Result<String> {
+    let begins = document
+        .match_indices(begin)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let ends = document
+        .match_indices(end)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if begins.len() != 1 || ends.len() != 1 {
+        bail!("generated adapter block must contain exactly one marker pair");
+    }
+    let begin_index = begins[0];
+    let end_index = ends[0];
+    if begin_index >= end_index {
+        bail!("generated adapter block markers are out of order");
+    }
+    Ok(format!(
+        "{}{}\n{}\n{}{}",
+        &document[..begin_index],
+        begin,
+        generated,
+        end,
+        &document[end_index + end.len()..]
+    ))
+}
+
+fn render_docs_adapter_suites(manifest: &DocsAdapterManifest) -> String {
+    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    let mut lines = vec![
+        "| Adapter | Platforms | Maturity | Default roles |".to_string(),
+        "| --- | --- | --- | --- |".to_string(),
+    ];
+    for adapter in adapters {
+        let mut platforms = adapter.platforms.clone();
+        platforms.sort();
+        platforms.dedup();
+        let platforms = platforms
+            .iter()
+            .map(|platform| format!("`{platform}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut roles = adapter.default_roles.clone();
+        roles.sort();
+        roles.dedup();
+        let roles = if roles.is_empty() {
+            "--".to_string()
+        } else {
+            roles
+                .iter()
+                .map(|role| format!("`{role}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        lines.push(format!(
+            "| `{}` | {} | {} | {} |",
+            adapter.id,
+            platforms,
+            title_case_manifest_value(&adapter.maturity),
+            roles
+        ));
+    }
+    lines.join("\n")
+}
+
+fn render_docs_adapter_capabilities(manifest: &DocsAdapterManifest) -> Result<String> {
+    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    let capabilities = adapters
+        .iter()
+        .flat_map(|adapter| adapter.capabilities.keys().cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+    let mut lines = vec![format!(
+        "| Capability | {} |",
+        adapters
+            .iter()
+            .map(|adapter| format!("`{}`", adapter.id))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    )];
+    lines.push(format!(
+        "| --- | {} |",
+        adapters
+            .iter()
+            .map(|_| "---")
+            .collect::<Vec<_>>()
+            .join(" | ")
+    ));
+    for capability in capabilities {
+        let values = adapters
+            .iter()
+            .map(|adapter| {
+                adapter
+                    .capabilities
+                    .get(&capability)
+                    .map(|value| title_case_manifest_value(value))
+                    .with_context(|| {
+                        format!(
+                            "adapter {:?} is missing capability {:?}",
+                            adapter.id, capability
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        lines.push(format!("| `{capability}` | {} |", values.join(" | ")));
+    }
+    Ok(lines.join("\n"))
+}
+
+fn title_case_manifest_value(value: &str) -> String {
+    let mut characters = value.chars();
+    match characters.next() {
+        Some(first) => first.to_ascii_uppercase().to_string() + characters.as_str(),
+        None => String::new(),
     }
 }
 
