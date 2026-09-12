@@ -4,6 +4,61 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
+
+static CONTEXT_VALIDATOR: OnceLock<std::result::Result<jsonschema::Validator, String>> =
+    OnceLock::new();
+
+pub(super) fn validate_snapshot_json(snapshot: &serde_json::Value) -> Result<()> {
+    let validator = CONTEXT_VALIDATOR
+        .get_or_init(build_context_validator)
+        .as_ref()
+        .map_err(|message| anyhow::anyhow!("{message}"))?;
+    if validator.is_valid(snapshot) {
+        return Ok(());
+    }
+    let mut errors = validator
+        .iter_errors(snapshot)
+        .map(|error| error.to_string())
+        .collect::<Vec<_>>();
+    errors.sort();
+    bail!(
+        "context snapshot does not match v3 JSON schema: {}",
+        errors.join("; ")
+    )
+}
+
+fn build_context_validator() -> std::result::Result<jsonschema::Validator, String> {
+    let cli_schema: serde_json::Value =
+        serde_json::from_str(include_str!("../../schema/cli.schema.json"))
+            .map_err(|error| format!("parse embedded CLI schema: {error}"))?;
+    let defs_key = "\u{24}defs";
+    let schema_key = "\u{24}schema";
+    let ref_key = "\u{24}ref";
+    let mut context_schema = serde_json::Map::new();
+    context_schema.insert(
+        schema_key.to_string(),
+        cli_schema
+            .get(schema_key)
+            .cloned()
+            .ok_or_else(|| "embedded CLI schema is missing its draft".to_string())?,
+    );
+    context_schema.insert(
+        ref_key.to_string(),
+        serde_json::Value::String(format!("#/{defs_key}/contextSnapshot")),
+    );
+    context_schema.insert(
+        defs_key.to_string(),
+        cli_schema
+            .get(defs_key)
+            .cloned()
+            .ok_or_else(|| "embedded CLI schema is missing definitions".to_string())?,
+    );
+    jsonschema::options()
+        .with_draft(jsonschema::Draft::Draft202012)
+        .build(&serde_json::Value::Object(context_schema))
+        .map_err(|error| format!("compile embedded context schema: {error}"))
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub(super) struct ProfileEvidenceCacheKey {
@@ -148,4 +203,239 @@ pub(super) fn read_profile_evidence(
         });
     }
     Ok(imported)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fact(declared: serde_json::Value, observed: serde_json::Value) -> serde_json::Value {
+        serde_json::json!({
+            "declared": declared,
+            "observed": observed,
+            "validation": { "state": "match", "reason": null },
+            "evidence_ids": ["fixture"]
+        })
+    }
+
+    fn complete_v3_fixture() -> serde_json::Value {
+        serde_json::json!({
+            "snapshot_version": 3,
+            "identity": {
+                "commit": "abc123",
+                "branch": "develop",
+                "dirty": false,
+                "changed_paths": [],
+                "worktree_fingerprint": "fingerprint",
+                "evidence_ids": ["git:head"]
+            },
+            "environment": {
+                "host": "aarch64-apple-darwin",
+                "target": "aarch64-apple-darwin",
+                "enabled_features": [],
+                "rustc_version": fact(serde_json::Value::Null, serde_json::json!("rustc 1.85.0")),
+                "cargo_version": fact(serde_json::Value::Null, serde_json::json!("cargo 1.85.0")),
+                "nextest_version": fact(serde_json::Value::Null, serde_json::json!("cargo-nextest 0.9")),
+                "generated_at": "2026-09-12T00:00:00Z"
+            },
+            "workspace": {
+                "version": fact(serde_json::json!("0.1.0"), serde_json::json!("0.1.0")),
+                "edition": fact(serde_json::json!("2024"), serde_json::json!("2024")),
+                "msrv": fact(serde_json::json!("1.85"), serde_json::json!("1.85")),
+                "packages": [{
+                    "package_id": "path+file:///workspace/pkg#0.1.0",
+                    "name": "pkg",
+                    "manifest_path": "crates/pkg/Cargo.toml",
+                    "targets": [{
+                        "name": "pkg",
+                        "kinds": ["lib"],
+                        "source_path": "crates/pkg/src/lib.rs",
+                        "required_features": []
+                    }],
+                    "features": ["default"],
+                    "dependencies": [{
+                        "package_name": "serde",
+                        "rename": null,
+                        "kind": "normal",
+                        "target_predicate": null,
+                        "optional": false
+                    }],
+                    "metrics": {
+                        "rust_files": 1,
+                        "physical_lines": 10,
+                        "non_empty_lines": 8,
+                        "included_roots": ["crates/pkg/src"],
+                        "includes_generated": false
+                    }
+                }]
+            },
+            "adapters": [{
+                "id": "native",
+                "maturity": fact(serde_json::json!("production"), serde_json::Value::Null),
+                "platforms": fact(serde_json::json!(["linux"]), serde_json::json!(["linux"])),
+                "default_roles": fact(serde_json::json!(["linux_fallback"]), serde_json::json!(["linux_fallback"])),
+                "registry_presence": fact(serde_json::json!(true), serde_json::json!(true)),
+                "capabilities": {
+                    "run": fact(serde_json::json!("yes"), serde_json::json!("yes"))
+                }
+            }],
+            "tests": {
+                "source_declarations": [{
+                    "stable_id": "source-test",
+                    "package_id": "path+file:///workspace/pkg#0.1.0",
+                    "path": "crates/pkg/src/lib.rs",
+                    "module_path": ["tests"],
+                    "name": "works",
+                    "cfg_predicates": ["cfg(test)"],
+                    "kind": "function"
+                }],
+                "profiles": [{
+                    "profile_id": "native-macos",
+                    "target": "aarch64-apple-darwin",
+                    "features": [],
+                    "status": "validated",
+                    "executable_tests": [{
+                        "stable_id": "exec-test",
+                        "package_id": "path+file:///workspace/pkg#0.1.0",
+                        "binary_id": "pkg::lib",
+                        "test_name": "works",
+                        "ignored": false
+                    }],
+                    "unavailable_reason": null,
+                    "evidence_ids": ["nextest:native"]
+                }],
+                "validated_unique_tests": [{
+                    "stable_id": "exec-test",
+                    "package_id": "path+file:///workspace/pkg#0.1.0",
+                    "binary_id": "pkg::lib",
+                    "test_name": "works",
+                    "ignored": false
+                }]
+            },
+            "context_map": {
+                "crates": [{
+                    "package_id": "path+file:///workspace/pkg#0.1.0",
+                    "manifest_path": "crates/pkg/Cargo.toml",
+                    "source_roots": ["crates/pkg/src"],
+                    "evidence_ids": ["cargo:metadata"]
+                }],
+                "files": [{
+                    "path": "crates/pkg/src/lib.rs",
+                    "owner_package_id": "path+file:///workspace/pkg#0.1.0",
+                    "role": "cargo_target",
+                    "role_origin": "cargo_metadata",
+                    "evidence_ids": ["cargo:metadata"]
+                }],
+                "changed_files": [],
+                "collector_tasks": [{
+                    "id": "metadata",
+                    "depends_on": [],
+                    "status": "collected",
+                    "evidence_ids": ["cargo:metadata"]
+                }]
+            },
+            "evidence": {
+                "fixture": {
+                    "kind": "cargo_metadata",
+                    "locator": "cargo metadata --format-version 1",
+                    "collected_at": "2026-09-12T00:00:00Z",
+                    "content_sha256": null,
+                    "profile_id": null,
+                    "status": "collected"
+                }
+            },
+            "diagnostics": [{
+                "code": "fixture.info",
+                "severity": "info",
+                "message": "fixture",
+                "profile_id": null,
+                "evidence_ids": ["fixture"]
+            }]
+        })
+    }
+
+    #[test]
+    fn complete_v3_fixture_matches_json_schema() {
+        let fixture = complete_v3_fixture();
+        validate_snapshot_json(&fixture).expect("complete v3 fixture should validate");
+
+        for section in [
+            "snapshot_version",
+            "identity",
+            "environment",
+            "workspace",
+            "adapters",
+            "tests",
+            "context_map",
+            "evidence",
+            "diagnostics",
+        ] {
+            let mut missing = fixture.clone();
+            missing
+                .as_object_mut()
+                .expect("fixture should be an object")
+                .remove(section);
+            assert!(
+                validate_snapshot_json(&missing).is_err(),
+                "missing section {section:?} should be rejected"
+            );
+        }
+
+        for legacy in [
+            "commit",
+            "branch",
+            "timestamp",
+            "crates",
+            "ci_workflows",
+            "recent_commits",
+        ] {
+            let mut value = fixture.clone();
+            value
+                .as_object_mut()
+                .expect("fixture should be an object")
+                .insert(legacy.to_string(), serde_json::Value::Null);
+            assert!(
+                validate_snapshot_json(&value).is_err(),
+                "legacy field {legacy:?} should be rejected"
+            );
+        }
+
+        for legacy in ["rust_version", "deps", "test_count", "total"] {
+            let mut value = fixture.clone();
+            let object = match legacy {
+                "rust_version" => value["workspace"].as_object_mut(),
+                "deps" | "test_count" => value["workspace"]["packages"][0].as_object_mut(),
+                "total" => value["tests"].as_object_mut(),
+                _ => None,
+            }
+            .expect("legacy target should be an object");
+            object.insert(legacy.to_string(), serde_json::Value::Null);
+            assert!(
+                validate_snapshot_json(&value).is_err(),
+                "nested legacy field {legacy:?} should be rejected"
+            );
+        }
+        for legacy in ["crate_assignments", "file_assignments", "task_slices"] {
+            let mut value = fixture.clone();
+            value["context_map"]
+                .as_object_mut()
+                .expect("context map should be an object")
+                .insert(legacy.to_string(), serde_json::json!([]));
+            assert!(validate_snapshot_json(&value).is_err());
+        }
+
+        let mut unknown_enum = fixture.clone();
+        unknown_enum["adapters"][0]["maturity"]["declared"] = serde_json::json!("future");
+        assert!(validate_snapshot_json(&unknown_enum).is_err());
+        let mut unknown_role = fixture.clone();
+        unknown_role["context_map"]["files"][0]["role"] = serde_json::json!("future");
+        assert!(validate_snapshot_json(&unknown_role).is_err());
+
+        let mut unknown_property = fixture;
+        unknown_property["identity"]
+            .as_object_mut()
+            .expect("identity should be an object")
+            .insert("unexpected".to_string(), serde_json::json!(true));
+        assert!(validate_snapshot_json(&unknown_property).is_err());
+    }
 }

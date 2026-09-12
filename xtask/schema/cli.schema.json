@@ -457,54 +457,305 @@
     },
     "contextSnapshot": {
       "type": "object",
-      "description": "Output contract for `cargo xtask info context`.",
-      "required": ["snapshot_version", "context_map"],
+      "description": "Output contract for cargo xtask info context v3.",
+      "additionalProperties": false,
+      "required": ["snapshot_version", "identity", "environment", "workspace", "adapters", "tests", "context_map", "evidence", "diagnostics"],
       "properties": {
-        "snapshot_version": { "const": 2 },
-        "context_map": { "$ref": "#/$defs/contextMap" }
+        "snapshot_version": { "const": 3 },
+        "identity": { "$ref": "#/$defs/repositoryIdentity" },
+        "environment": { "$ref": "#/$defs/environmentSnapshot" },
+        "workspace": { "$ref": "#/$defs/workspaceSnapshot" },
+        "adapters": { "type": "array", "items": { "$ref": "#/$defs/adapterSnapshot" } },
+        "tests": { "$ref": "#/$defs/testSnapshot" },
+        "context_map": { "$ref": "#/$defs/contextMap" },
+        "evidence": { "type": "object", "additionalProperties": { "$ref": "#/$defs/evidence" } },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/contextDiagnostic" } }
+      }
+    },
+    "repositoryPath": { "type": "string", "minLength": 1 },
+    "evidenceIds": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason"],
+      "properties": {
+        "state": { "enum": ["match", "mismatch", "declared_only", "observed_only", "unavailable", "not_applicable"] },
+        "reason": { "type": ["string", "null"] }
+      }
+    },
+    "factString": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "observed", "validation", "evidence_ids"],
+      "properties": {
+        "declared": { "type": ["string", "null"] },
+        "observed": { "type": ["string", "null"] },
+        "validation": { "$ref": "#/$defs/validation" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "factStringArray": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "observed", "validation", "evidence_ids"],
+      "properties": {
+        "declared": { "anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }] },
+        "observed": { "anyOf": [{ "type": "array", "items": { "type": "string" } }, { "type": "null" }] },
+        "validation": { "$ref": "#/$defs/validation" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "factBoolean": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "observed", "validation", "evidence_ids"],
+      "properties": {
+        "declared": { "type": ["boolean", "null"] },
+        "observed": { "type": ["boolean", "null"] },
+        "validation": { "$ref": "#/$defs/validation" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "factMaturity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "observed", "validation", "evidence_ids"],
+      "properties": {
+        "declared": { "anyOf": [{ "enum": ["production", "experimental", "stub", "blocked"] }, { "type": "null" }] },
+        "observed": { "anyOf": [{ "enum": ["production", "experimental", "stub", "blocked"] }, { "type": "null" }] },
+        "validation": { "$ref": "#/$defs/validation" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "factCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["declared", "observed", "validation", "evidence_ids"],
+      "properties": {
+        "declared": { "anyOf": [{ "enum": ["yes", "limited", "blocked", "no"] }, { "type": "null" }] },
+        "observed": { "anyOf": [{ "enum": ["yes", "limited", "blocked", "no"] }, { "type": "null" }] },
+        "validation": { "$ref": "#/$defs/validation" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "repositoryIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "branch", "dirty", "changed_paths", "worktree_fingerprint", "evidence_ids"],
+      "properties": {
+        "commit": { "type": "string" },
+        "branch": { "type": "string" },
+        "dirty": { "type": "boolean" },
+        "changed_paths": { "type": "array", "items": { "$ref": "#/$defs/repositoryPath" } },
+        "worktree_fingerprint": { "type": "string" },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "environmentSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "target", "enabled_features", "rustc_version", "cargo_version", "nextest_version", "generated_at"],
+      "properties": {
+        "host": { "type": "string" },
+        "target": { "type": "string" },
+        "enabled_features": { "type": "array", "items": { "type": "string" } },
+        "rustc_version": { "$ref": "#/$defs/factString" },
+        "cargo_version": { "$ref": "#/$defs/factString" },
+        "nextest_version": { "$ref": "#/$defs/factString" },
+        "generated_at": { "type": "string" }
+      }
+    },
+    "workspaceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "edition", "msrv", "packages"],
+      "properties": {
+        "version": { "$ref": "#/$defs/factString" },
+        "edition": { "$ref": "#/$defs/factString" },
+        "msrv": { "$ref": "#/$defs/factString" },
+        "packages": { "type": "array", "items": { "$ref": "#/$defs/packageSnapshot" } }
+      }
+    },
+    "packageSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_id", "name", "manifest_path", "targets", "features", "dependencies", "metrics"],
+      "properties": {
+        "package_id": { "type": "string" },
+        "name": { "type": "string" },
+        "manifest_path": { "$ref": "#/$defs/repositoryPath" },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/targetSnapshot" } },
+        "features": { "type": "array", "items": { "type": "string" } },
+        "dependencies": { "type": "array", "items": { "$ref": "#/$defs/dependencySnapshot" } },
+        "metrics": { "$ref": "#/$defs/sourceMetrics" }
+      }
+    },
+    "targetSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kinds", "source_path", "required_features"],
+      "properties": {
+        "name": { "type": "string" },
+        "kinds": { "type": "array", "items": { "type": "string" } },
+        "source_path": { "$ref": "#/$defs/repositoryPath" },
+        "required_features": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "dependencySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_name", "rename", "kind", "target_predicate", "optional"],
+      "properties": {
+        "package_name": { "type": "string" },
+        "rename": { "type": ["string", "null"] },
+        "kind": { "enum": ["normal", "build", "dev"] },
+        "target_predicate": { "type": ["string", "null"] },
+        "optional": { "type": "boolean" }
+      }
+    },
+    "sourceMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rust_files", "physical_lines", "non_empty_lines", "included_roots", "includes_generated"],
+      "properties": {
+        "rust_files": { "type": "integer", "minimum": 0 },
+        "physical_lines": { "type": "integer", "minimum": 0 },
+        "non_empty_lines": { "type": "integer", "minimum": 0 },
+        "included_roots": { "type": "array", "items": { "$ref": "#/$defs/repositoryPath" } },
+        "includes_generated": { "type": "boolean" }
+      }
+    },
+    "adapterSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "maturity", "platforms", "default_roles", "registry_presence", "capabilities"],
+      "properties": {
+        "id": { "type": "string" },
+        "maturity": { "$ref": "#/$defs/factMaturity" },
+        "platforms": { "$ref": "#/$defs/factStringArray" },
+        "default_roles": { "$ref": "#/$defs/factStringArray" },
+        "registry_presence": { "$ref": "#/$defs/factBoolean" },
+        "capabilities": { "type": "object", "additionalProperties": { "$ref": "#/$defs/factCapability" } }
+      }
+    },
+    "testSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_declarations", "profiles", "validated_unique_tests"],
+      "properties": {
+        "source_declarations": { "type": "array", "items": { "$ref": "#/$defs/sourceTestDeclaration" } },
+        "profiles": { "type": "array", "items": { "$ref": "#/$defs/testProfileResult" } },
+        "validated_unique_tests": { "type": "array", "items": { "$ref": "#/$defs/executableTest" } }
+      }
+    },
+    "sourceTestDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stable_id", "package_id", "path", "module_path", "name", "cfg_predicates", "kind"],
+      "properties": {
+        "stable_id": { "type": "string" },
+        "package_id": { "type": "string" },
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "module_path": { "type": "array", "items": { "type": "string" } },
+        "name": { "type": "string" },
+        "cfg_predicates": { "type": "array", "items": { "type": "string" } },
+        "kind": { "enum": ["function", "macro_invocation"] }
+      }
+    },
+    "testProfileResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile_id", "target", "features", "status", "executable_tests", "unavailable_reason", "evidence_ids"],
+      "properties": {
+        "profile_id": { "type": "string" },
+        "target": { "type": "string" },
+        "features": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["validated", "failed", "unavailable", "stale"] },
+        "executable_tests": { "type": "array", "items": { "$ref": "#/$defs/executableTest" } },
+        "unavailable_reason": { "type": ["string", "null"] },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "executableTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stable_id", "package_id", "binary_id", "test_name", "ignored"],
+      "properties": {
+        "stable_id": { "type": "string" },
+        "package_id": { "type": "string" },
+        "binary_id": { "type": "string" },
+        "test_name": { "type": "string" },
+        "ignored": { "type": "boolean" }
       }
     },
     "contextMap": {
       "type": "object",
-      "required": ["crate_assignments", "file_assignments", "task_slices"],
+      "additionalProperties": false,
+      "required": ["crates", "files", "changed_files", "collector_tasks"],
       "properties": {
-        "crate_assignments": {
-          "type": "array",
-          "description": "Workspace crates ordered by source lines descending, then crate name ascending.",
-          "items": {
-            "type": "object",
-            "required": ["crate_name", "lines"],
-            "properties": {
-              "crate_name": { "type": "string" },
-              "lines": { "type": "integer", "minimum": 0 }
-            }
-          }
-        },
-        "file_assignments": {
-          "type": "array",
-          "description": "Files that own the info-context implementation and documentation surface, ordered by path.",
-          "items": {
-            "type": "object",
-            "required": ["path", "responsibility"],
-            "properties": {
-              "path": { "type": "string" },
-              "responsibility": { "type": "string" }
-            }
-          }
-        },
-        "task_slices": {
-          "type": "array",
-          "description": "Deterministic dependency graph for collecting, deriving, and serializing context.",
-          "items": {
-            "type": "object",
-            "required": ["id", "title", "depends_on"],
-            "properties": {
-              "id": { "type": "string" },
-              "title": { "type": "string" },
-              "depends_on": { "type": "array", "items": { "type": "string" } }
-            }
-          }
-        }
+        "crates": { "type": "array", "items": { "$ref": "#/$defs/crateOwnership" } },
+        "files": { "type": "array", "items": { "$ref": "#/$defs/fileOwnership" } },
+        "changed_files": { "type": "array", "items": { "$ref": "#/$defs/fileOwnership" } },
+        "collector_tasks": { "type": "array", "items": { "$ref": "#/$defs/collectorTask" } }
+      }
+    },
+    "crateOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_id", "manifest_path", "source_roots", "evidence_ids"],
+      "properties": {
+        "package_id": { "type": "string" },
+        "manifest_path": { "$ref": "#/$defs/repositoryPath" },
+        "source_roots": { "type": "array", "items": { "$ref": "#/$defs/repositoryPath" } },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "fileOwnership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "owner_package_id", "role", "role_origin", "evidence_ids"],
+      "properties": {
+        "path": { "$ref": "#/$defs/repositoryPath" },
+        "owner_package_id": { "type": ["string", "null"] },
+        "role": { "enum": ["cargo_target", "rust_source", "test", "example", "benchmark", "manifest", "documentation", "workflow", "configuration", "other"] },
+        "role_origin": { "enum": ["cargo_metadata", "declared_rule", "inferred_path"] },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "collectorTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "depends_on", "status", "evidence_ids"],
+      "properties": {
+        "id": { "type": "string" },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "status": { "enum": ["collected", "failed", "stale", "unavailable"] },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator", "collected_at", "content_sha256", "profile_id", "status"],
+      "properties": {
+        "kind": { "enum": ["source", "cargo_metadata", "git", "manifest", "nextest", "toolchain", "generated"] },
+        "locator": { "type": "string" },
+        "collected_at": { "type": "string" },
+        "content_sha256": { "type": ["string", "null"] },
+        "profile_id": { "type": ["string", "null"] },
+        "status": { "enum": ["collected", "failed", "stale", "unavailable"] }
+      }
+    },
+    "contextDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message", "profile_id", "evidence_ids"],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "message": { "type": "string" },
+        "profile_id": { "type": ["string", "null"] },
+        "evidence_ids": { "$ref": "#/$defs/evidenceIds" }
       }
     }
   }
