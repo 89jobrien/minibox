@@ -3,10 +3,26 @@
 use crate::error::{McpServerError, Result};
 use crate::types::{RunContainerInput, parse_network_mode, require_non_empty};
 use minibox_core::domain::NetworkMode;
+use minibox_core::protocol::DaemonRequest;
 
 /// Default cap on collected daemon response bytes, shared with the client's
 /// unconfigured [`crate::client::MiniboxDaemonClient::call`] path.
 pub const DEFAULT_MAX_OUTPUT_BYTES: usize = 1024 * 1024;
+
+/// A daemon request that has passed the policy gate appropriate to its operation.
+///
+/// The fields are private so only [`AgentPolicy`] can create authorized calls.
+#[derive(Debug)]
+pub struct AuthorizedDaemonCall {
+    request: DaemonRequest,
+    max_output_bytes: usize,
+}
+
+impl AuthorizedDaemonCall {
+    pub(crate) fn into_parts(self) -> (DaemonRequest, usize) {
+        (self.request, self.max_output_bytes)
+    }
+}
 
 /// Runtime policy applied before MCP tools call the daemon.
 #[derive(Clone, Debug)]
@@ -69,7 +85,11 @@ impl AgentPolicy {
     /// # Errors
     ///
     /// Returns a policy denial or invalid-input error for unsafe run options.
-    pub fn validate_run(&self, input: &RunContainerInput) -> Result<()> {
+    pub fn authorize_run(
+        &self,
+        input: &RunContainerInput,
+        request: DaemonRequest,
+    ) -> Result<AuthorizedDaemonCall> {
         if input.privileged.unwrap_or(false) && !self.allows(AgentPermission::Privileged) {
             return Err(McpServerError::PolicyDenied {
                 tool: "minibox_run",
@@ -92,7 +112,7 @@ impl AgentPolicy {
             });
         }
         require_non_empty(&input.image, "image")?;
-        Ok(())
+        Ok(self.authorized(request))
     }
 
     /// Validate a lifecycle mutation tool.
@@ -100,14 +120,40 @@ impl AgentPolicy {
     /// # Errors
     ///
     /// Returns a policy denial when lifecycle mutation is disabled.
-    pub fn validate_mutation(&self, tool_name: &'static str) -> Result<()> {
+    pub fn authorize_mutation(
+        &self,
+        tool_name: &'static str,
+        request: DaemonRequest,
+    ) -> Result<AuthorizedDaemonCall> {
         if self.allows(AgentPermission::MutatingTools) {
-            Ok(())
+            Ok(self.authorized(request))
         } else {
             Err(McpServerError::PolicyDenied {
                 tool: tool_name,
                 reason: "set MINIBOX_MCP_ALLOW_MUTATION=true to enable this tool".to_string(),
             })
+        }
+    }
+
+    /// Authorize a request that cannot mutate daemon state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-input error if a caller attempts to classify a
+    /// mutating request as read-only.
+    pub fn authorize_read(&self, request: DaemonRequest) -> Result<AuthorizedDaemonCall> {
+        if matches!(
+            request,
+            DaemonRequest::List
+                | DaemonRequest::ListImages
+                | DaemonRequest::ContainerLogs { .. }
+                | DaemonRequest::GetManifest { .. }
+        ) {
+            Ok(self.authorized(request))
+        } else {
+            Err(McpServerError::InvalidInput(
+                "daemon request is not read-only".to_string(),
+            ))
         }
     }
 
@@ -120,10 +166,13 @@ impl AgentPolicy {
     fn allows(&self, permission: AgentPermission) -> bool {
         self.permissions.contains(&permission)
     }
-    // TODO(review): enforcement is a plain runtime bool check callers can simply omit —
-    // pull_image (images.rs) does. Consider returning a marker type (e.g. Authorized<T>)
-    // from validate_run/validate_mutation that daemon-call functions require, so a future
-    // mutating tool can't compile without passing the gate.
+
+    const fn authorized(&self, request: DaemonRequest) -> AuthorizedDaemonCall {
+        AuthorizedDaemonCall {
+            request,
+            max_output_bytes: self.max_output_bytes,
+        }
+    }
 }
 
 fn env_bool(name: &str) -> bool {
@@ -182,7 +231,7 @@ mod tests {
         };
 
         assert!(matches!(
-            policy.validate_run(&input),
+            policy.authorize_run(&input, DaemonRequest::List),
             Err(McpServerError::PolicyDenied {
                 tool: "minibox_run",
                 ..
@@ -202,14 +251,32 @@ mod tests {
             ..run_input()
         };
 
-        assert!(policy.validate_run(&input).is_err());
+        assert!(policy.authorize_run(&input, DaemonRequest::List).is_err());
     }
 
     #[test]
     fn safe_default_denies_stop_rm_mutations() {
         let policy = AgentPolicy::safe_default();
 
-        assert!(policy.validate_mutation("minibox_rm").is_err());
+        assert!(
+            policy
+                .authorize_mutation("minibox_rm", DaemonRequest::Remove { id: "id".into() })
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn read_authorization_rejects_mutating_request() {
+        let policy = AgentPolicy::safe_default();
+
+        assert!(matches!(
+            policy.authorize_read(DaemonRequest::Pull {
+                image: "alpine".to_string(),
+                tag: None,
+                platform: None,
+            }),
+            Err(McpServerError::InvalidInput(_))
+        ));
     }
 
     #[test]
@@ -221,7 +288,7 @@ mod tests {
         };
 
         assert!(matches!(
-            policy.validate_run(&input),
+            policy.authorize_run(&input, DaemonRequest::List),
             Err(McpServerError::InvalidInput(_))
         ));
     }
@@ -231,12 +298,16 @@ mod tests {
         let _lock = ENV_LOCK.lock().expect("env lock");
         let policy = AgentPolicy::from_env();
 
-        assert!(policy.validate_mutation("minibox_rm").is_err());
+        assert!(
+            policy
+                .authorize_mutation("minibox_rm", DaemonRequest::Remove { id: "id".into() })
+                .is_err()
+        );
         let input = RunContainerInput {
             privileged: Some(true),
             ..run_input()
         };
-        assert!(policy.validate_run(&input).is_err());
+        assert!(policy.authorize_run(&input, DaemonRequest::List).is_err());
     }
 
     #[test]
@@ -245,7 +316,11 @@ mod tests {
         let _guard = EnvVarGuard::set("MINIBOX_MCP_ALLOW_MUTATION", "true");
         let policy = AgentPolicy::from_env();
 
-        assert!(policy.validate_mutation("minibox_rm").is_ok());
+        assert!(
+            policy
+                .authorize_mutation("minibox_rm", DaemonRequest::Remove { id: "id".into() })
+                .is_ok()
+        );
     }
 
     #[test]
@@ -260,7 +335,7 @@ mod tests {
             ..run_input()
         };
 
-        assert!(policy.validate_run(&input).is_ok());
+        assert!(policy.authorize_run(&input, DaemonRequest::List).is_ok());
     }
 
     #[test]
