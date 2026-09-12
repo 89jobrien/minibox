@@ -1,8 +1,10 @@
 use super::model::{AdapterMaturity, CapabilitySupport};
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
+use syn::parse::Parser;
+use syn::visit::Visit;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 pub(super) struct ContextManifest {
@@ -28,6 +30,221 @@ pub(super) struct ValidationProfile {
     pub(super) no_default_features: bool,
     pub(super) all_targets: bool,
     pub(super) required_in_ci: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct AdapterRegistryObservation {
+    pub(super) adapter_ids: BTreeSet<String>,
+    pub(super) platforms: BTreeMap<String, String>,
+    pub(super) default_roles: BTreeMap<String, String>,
+}
+
+pub(super) fn parse_adapter_registry(source: &str) -> Result<AdapterRegistryObservation> {
+    let syntax = syn::parse_file(source).context("parse adapter_registry.rs")?;
+    let mut suite_variants = BTreeSet::new();
+    let mut suite_ids = BTreeMap::new();
+    let mut valid_ids = BTreeSet::new();
+    let mut default_adapter = None;
+    let mut fallback_adapters = Vec::new();
+    let mut adapters = AdapterInfoVisitor::default();
+
+    for item in &syntax.items {
+        match item {
+            syn::Item::Enum(item) if item.ident == "AdapterSuite" => {
+                suite_variants.extend(
+                    item.variants
+                        .iter()
+                        .map(|variant| variant.ident.to_string()),
+                );
+            }
+            syn::Item::Impl(item) if impl_type_name(item).as_deref() == Some("AdapterSuite") => {
+                for impl_item in &item.items {
+                    if let syn::ImplItem::Fn(method) = impl_item
+                        && method.sig.ident == "as_str"
+                    {
+                        let mut visitor = AdapterSuiteStringVisitor::default();
+                        visitor.visit_block(&method.block);
+                        suite_ids.extend(visitor.ids);
+                    }
+                }
+            }
+            syn::Item::Const(item) if item.ident == "VALID_ADAPTERS" => {
+                valid_ids.extend(string_literals(&item.expr));
+            }
+            syn::Item::Const(item) if item.ident == "DEFAULT_ADAPTER_SUITE" => {
+                default_adapter = string_literals(&item.expr).into_iter().next();
+            }
+            syn::Item::Const(item) if item.ident == "FALLBACK_ADAPTER_SUITE" => {
+                fallback_adapters = fallback_adapter_ids(&item.expr)?;
+            }
+            syn::Item::Fn(item) if item.sig.ident == "all_adapters" => {
+                adapters.visit_item_fn(item);
+            }
+            _ => {}
+        }
+    }
+
+    let mapped_variants = suite_variants
+        .iter()
+        .map(|variant| {
+            suite_ids
+                .get(variant)
+                .cloned()
+                .with_context(|| format!("AdapterSuite::{variant} is missing from as_str"))
+        })
+        .collect::<Result<BTreeSet<_>>>()?;
+    let observed_ids = adapters.platforms.keys().cloned().collect::<BTreeSet<_>>();
+    if mapped_variants != valid_ids || valid_ids != observed_ids {
+        bail!(
+            "adapter registry declarations disagree: suite={mapped_variants:?}, valid={valid_ids:?}, all={observed_ids:?}"
+        );
+    }
+    let default_adapter = default_adapter.context("DEFAULT_ADAPTER_SUITE is missing")?;
+    if fallback_adapters.len() != 2 {
+        bail!("FALLBACK_ADAPTER_SUITE must declare Linux and non-Linux adapters");
+    }
+    Ok(AdapterRegistryObservation {
+        adapter_ids: observed_ids,
+        platforms: adapters.platforms,
+        default_roles: BTreeMap::from([
+            ("unix_default".to_string(), default_adapter),
+            ("linux_fallback".to_string(), fallback_adapters[0].clone()),
+            ("macos_fallback".to_string(), fallback_adapters[1].clone()),
+        ]),
+    })
+}
+
+fn impl_type_name(item: &syn::ItemImpl) -> Option<String> {
+    let syn::Type::Path(path) = item.self_ty.as_ref() else {
+        return None;
+    };
+    path.path
+        .segments
+        .last()
+        .map(|segment| segment.ident.to_string())
+}
+
+#[derive(Default)]
+struct AdapterSuiteStringVisitor {
+    ids: BTreeMap<String, String>,
+}
+
+impl<'ast> Visit<'ast> for AdapterSuiteStringVisitor {
+    fn visit_expr_match(&mut self, expression: &'ast syn::ExprMatch) {
+        for arm in &expression.arms {
+            let syn::Pat::Path(path) = &arm.pat else {
+                continue;
+            };
+            let Some(variant) = path.path.segments.last() else {
+                continue;
+            };
+            if let Some(id) = expression_string(&arm.body) {
+                self.ids.insert(variant.ident.to_string(), id);
+            }
+        }
+        syn::visit::visit_expr_match(self, expression);
+    }
+}
+
+#[derive(Default)]
+struct AdapterInfoVisitor {
+    platforms: BTreeMap<String, String>,
+}
+
+impl<'ast> Visit<'ast> for AdapterInfoVisitor {
+    fn visit_expr_macro(&mut self, expression: &'ast syn::ExprMacro) {
+        if expression
+            .mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "vec")
+            && let Ok(items) =
+                syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated
+                    .parse2(expression.mac.tokens.clone())
+        {
+            for item in &items {
+                self.visit_expr(item);
+            }
+        }
+        syn::visit::visit_expr_macro(self, expression);
+    }
+
+    fn visit_expr_struct(&mut self, expression: &'ast syn::ExprStruct) {
+        if expression
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "AdapterInfo")
+        {
+            let mut name = None;
+            let mut platform = None;
+            for field in &expression.fields {
+                let syn::Member::Named(member) = &field.member else {
+                    continue;
+                };
+                match member.to_string().as_str() {
+                    "name" => name = expression_string(&field.expr),
+                    "platform" => platform = expression_string(&field.expr),
+                    _ => {}
+                }
+            }
+            if let (Some(name), Some(platform)) = (name, platform) {
+                self.platforms.insert(name, platform);
+            }
+        }
+        syn::visit::visit_expr_struct(self, expression);
+    }
+}
+
+fn fallback_adapter_ids(expression: &syn::Expr) -> Result<Vec<String>> {
+    let syn::Expr::If(expression) = expression else {
+        bail!("FALLBACK_ADAPTER_SUITE must be an if expression");
+    };
+    let linux = block_string(&expression.then_branch)
+        .context("FALLBACK_ADAPTER_SUITE Linux branch is missing an adapter")?;
+    let (_, alternative) = expression
+        .else_branch
+        .as_ref()
+        .context("FALLBACK_ADAPTER_SUITE is missing a non-Linux branch")?;
+    let other = match alternative.as_ref() {
+        syn::Expr::Block(block) => block_string(&block.block),
+        expression => expression_string(expression),
+    }
+    .context("FALLBACK_ADAPTER_SUITE non-Linux branch is missing an adapter")?;
+    Ok(vec![linux, other])
+}
+
+fn block_string(block: &syn::Block) -> Option<String> {
+    let syn::Stmt::Expr(expression, _) = block.stmts.last()? else {
+        return None;
+    };
+    expression_string(expression)
+}
+
+fn expression_string(expression: &syn::Expr) -> Option<String> {
+    let syn::Expr::Lit(literal) = expression else {
+        return None;
+    };
+    let syn::Lit::Str(value) = &literal.lit else {
+        return None;
+    };
+    Some(value.value())
+}
+
+fn string_literals(expression: &syn::Expr) -> Vec<String> {
+    #[derive(Default)]
+    struct StringVisitor(Vec<String>);
+
+    impl<'ast> Visit<'ast> for StringVisitor {
+        fn visit_lit_str(&mut self, value: &'ast syn::LitStr) {
+            self.0.push(value.value());
+        }
+    }
+
+    let mut visitor = StringVisitor::default();
+    visitor.visit_expr(expression);
+    visitor.0
 }
 
 pub(super) fn load_manifest(root: &Path) -> Result<ContextManifest> {
@@ -169,6 +386,8 @@ fn validate_capability_keys(adapters: &[AdapterDeclaration], diagnostics: &mut V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::collect::reconcile_adapters;
+    use crate::context::model::ValidationState;
 
     const VALID_MANIFEST: &str = r#"
 schema_version = 1
@@ -393,5 +612,162 @@ required_in_ci = true
         assert_eq!(default_roles.get("unix_default"), Some(&"smolvm"));
         assert_eq!(default_roles.get("linux_fallback"), Some(&"native"));
         assert_eq!(default_roles.get("macos_fallback"), Some(&"krun"));
+    }
+    #[test]
+    fn adapter_reconciliation_reports_registry_drift() {
+        let source = r#"
+pub enum AdapterSuite { Native, Krun }
+impl AdapterSuite {
+    pub const fn as_str(&self) -> &str {
+        match self { Self::Native => "native", Self::Krun => "krun" }
+    }
+}
+pub const VALID_ADAPTERS: &[&str] = &["native", "krun"];
+pub const DEFAULT_ADAPTER_SUITE: &str = "native";
+pub const FALLBACK_ADAPTER_SUITE: &str = if cfg!(target_os = "linux") { "native" } else { "krun" };
+pub fn all_adapters() -> Vec<AdapterInfo> {
+    vec![
+        AdapterInfo { name: "native", available: true, platform: "linux" },
+        AdapterInfo { name: "krun", available: true, platform: "macos" },
+    ]
+}
+"#;
+        let registry = parse_adapter_registry(source).expect("registry fixture should parse");
+        assert_eq!(
+            registry
+                .adapter_ids
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["krun", "native"]
+        );
+
+        let adapter = |id: &str, platform: &str, roles: &[&str]| AdapterDeclaration {
+            id: id.to_string(),
+            maturity: AdapterMaturity::Production,
+            platforms: vec![platform.to_string()],
+            default_roles: roles.iter().map(ToString::to_string).collect(),
+            capabilities: BTreeMap::from([("run".to_string(), CapabilitySupport::Yes)]),
+        };
+        let manifest = ContextManifest {
+            schema_version: 1,
+            adapters: vec![
+                adapter("native", "linux", &["unix_default", "linux_fallback"]),
+                adapter("krun", "macos", &["macos_fallback"]),
+            ],
+            profiles: Vec::new(),
+        };
+        let tested_capabilities = BTreeMap::from([
+            (
+                "native".to_string(),
+                BTreeMap::from([("run".to_string(), CapabilitySupport::Yes)]),
+            ),
+            (
+                "krun".to_string(),
+                BTreeMap::from([("run".to_string(), CapabilitySupport::Yes)]),
+            ),
+        ]);
+        let exact = reconcile_adapters(&manifest, &registry, &tested_capabilities);
+        assert!(exact.diagnostics.is_empty());
+        assert!(exact.adapters.iter().all(|adapter| {
+            adapter.maturity.observed.is_none()
+                && adapter.maturity.validation.state == ValidationState::DeclaredOnly
+        }));
+
+        let mut missing = registry.clone();
+        missing.adapter_ids.remove("krun");
+        missing.platforms.remove("krun");
+        let missing = reconcile_adapters(&manifest, &missing, &tested_capabilities);
+        assert!(
+            missing
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.registry_missing")
+        );
+
+        let mut stub_manifest = manifest.clone();
+        stub_manifest.adapters.push(AdapterDeclaration {
+            id: "winbox".to_string(),
+            maturity: AdapterMaturity::Stub,
+            platforms: vec!["windows".to_string()],
+            default_roles: Vec::new(),
+            capabilities: BTreeMap::from([("run".to_string(), CapabilitySupport::No)]),
+        });
+        let stub = reconcile_adapters(&stub_manifest, &registry, &tested_capabilities);
+        assert!(!stub.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "adapter.registry_missing" && diagnostic.message.contains("winbox")
+        }));
+
+        let mut extra = registry.clone();
+        extra.adapter_ids.insert("extra".to_string());
+        extra
+            .platforms
+            .insert("extra".to_string(), "linux".to_string());
+        let extra = reconcile_adapters(&manifest, &extra, &tested_capabilities);
+        assert!(
+            extra
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.registry_extra")
+        );
+
+        let mut platform = registry.clone();
+        platform
+            .platforms
+            .insert("native".to_string(), "macos".to_string());
+        let platform = reconcile_adapters(&manifest, &platform, &tested_capabilities);
+        assert!(
+            platform
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.platform_mismatch")
+        );
+
+        let mut defaults = registry.clone();
+        defaults
+            .default_roles
+            .insert("unix_default".to_string(), "krun".to_string());
+        let defaults = reconcile_adapters(&manifest, &defaults, &tested_capabilities);
+        assert!(
+            defaults
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.default_mismatch")
+        );
+
+        let unsupported = reconcile_adapters(&manifest, &registry, &BTreeMap::new());
+        assert!(
+            unsupported
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.capability_unvalidated")
+        );
+        assert!(unsupported.adapters.iter().all(|adapter| {
+            adapter.capabilities["run"].observed.is_none()
+                && adapter.capabilities["run"].validation.state == ValidationState::DeclaredOnly
+        }));
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask should have a workspace root");
+        let live_source =
+            std::fs::read_to_string(root.join("crates/miniboxd/src/adapter_registry.rs"))
+                .expect("live adapter registry should be readable");
+        let live_registry =
+            parse_adapter_registry(&live_source).expect("live adapter registry should parse");
+        let live_manifest = load_manifest(root).expect("live manifest should load");
+        let live = reconcile_adapters(&live_manifest, &live_registry, &BTreeMap::new());
+        let vz = live
+            .adapters
+            .iter()
+            .find(|adapter| adapter.id == "vz")
+            .expect("VZ should remain declared");
+        assert_eq!(vz.maturity.declared, Some(AdapterMaturity::Blocked));
+        assert_eq!(vz.registry_presence.observed, Some(true));
+        assert!(
+            vz.capabilities
+                .values()
+                .all(|capability| capability.observed.is_none())
+        );
     }
 }

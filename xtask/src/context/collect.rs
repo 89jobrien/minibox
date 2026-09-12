@@ -1,12 +1,14 @@
+use super::manifest::{AdapterRegistryObservation, ContextManifest};
 use super::model::{
-    DependencyKind, DependencySnapshot, EvidenceId, Fact, FileMetrics, PackageSnapshot,
+    AdapterMaturity, AdapterSnapshot, CapabilitySupport, ContextDiagnostic, DependencyKind,
+    DependencySnapshot, DiagnosticSeverity, EvidenceId, Fact, FileMetrics, PackageSnapshot,
     RepositoryIdentity, RepositoryPath, SourceMetrics, TargetSnapshot, Validation, ValidationState,
     WorkspaceSnapshot,
 };
 use anyhow::{Context, Result, bail};
 use cargo_metadata::{DependencyKind as CargoDependencyKind, MetadataCommand};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -160,6 +162,259 @@ impl RepositoryReader for SystemRepositoryReader {
             non_empty_lines,
             content_sha256,
         })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct AdapterReconciliation {
+    pub(super) adapters: Vec<AdapterSnapshot>,
+    pub(super) diagnostics: Vec<ContextDiagnostic>,
+}
+
+pub(super) fn reconcile_adapters(
+    manifest: &ContextManifest,
+    registry: &AdapterRegistryObservation,
+    tested_capabilities: &BTreeMap<String, BTreeMap<String, CapabilitySupport>>,
+) -> AdapterReconciliation {
+    let manifest_ids = manifest
+        .adapters
+        .iter()
+        .map(|adapter| adapter.id.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut diagnostics = Vec::new();
+    let mut adapters = manifest
+        .adapters
+        .iter()
+        .map(|adapter| {
+            reconcile_adapter(
+                adapter,
+                registry,
+                tested_capabilities.get(&adapter.id),
+                &mut diagnostics,
+            )
+        })
+        .collect::<Vec<_>>();
+    for extra in registry
+        .adapter_ids
+        .iter()
+        .filter(|adapter| !manifest_ids.contains(adapter.as_str()))
+    {
+        diagnostics.push(adapter_diagnostic(
+            "adapter.registry_extra",
+            DiagnosticSeverity::Error,
+            format!("adapter {extra:?} is observed in adapter_registry.rs but not declared"),
+        ));
+    }
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    diagnostics.sort_by(|left, right| {
+        left.code
+            .cmp(&right.code)
+            .then_with(|| left.message.cmp(&right.message))
+    });
+    AdapterReconciliation {
+        adapters,
+        diagnostics,
+    }
+}
+
+fn reconcile_adapter(
+    declaration: &super::manifest::AdapterDeclaration,
+    registry: &AdapterRegistryObservation,
+    tested_capabilities: Option<&BTreeMap<String, CapabilitySupport>>,
+    diagnostics: &mut Vec<ContextDiagnostic>,
+) -> AdapterSnapshot {
+    let registry_present = registry.adapter_ids.contains(&declaration.id);
+    let registry_validation = if registry_present {
+        Validation {
+            state: ValidationState::Match,
+            reason: None,
+        }
+    } else if declaration.maturity == AdapterMaturity::Stub {
+        Validation {
+            state: ValidationState::DeclaredOnly,
+            reason: Some("stub adapters may be absent from the executable registry".to_string()),
+        }
+    } else {
+        diagnostics.push(adapter_diagnostic(
+            "adapter.registry_missing",
+            DiagnosticSeverity::Error,
+            format!(
+                "declared adapter {:?} is missing from adapter_registry.rs",
+                declaration.id
+            ),
+        ));
+        Validation {
+            state: ValidationState::Mismatch,
+            reason: Some("declared non-stub adapter is absent from registry".to_string()),
+        }
+    };
+
+    let observed_platforms = registry
+        .platforms
+        .get(&declaration.id)
+        .map(|platform| vec![platform.clone()]);
+    let platform_validation = match &observed_platforms {
+        Some(observed) if observed == &declaration.platforms => Validation {
+            state: ValidationState::Match,
+            reason: None,
+        },
+        Some(observed) => {
+            diagnostics.push(adapter_diagnostic(
+                "adapter.platform_mismatch",
+                DiagnosticSeverity::Error,
+                format!(
+                    "adapter {:?} declares platforms {:?} but registry reports {:?}",
+                    declaration.id, declaration.platforms, observed
+                ),
+            ));
+            Validation {
+                state: ValidationState::Mismatch,
+                reason: Some("manifest and registry platforms differ".to_string()),
+            }
+        }
+        None => Validation {
+            state: ValidationState::DeclaredOnly,
+            reason: Some("adapter has no registry platform observation".to_string()),
+        },
+    };
+
+    let mut observed_roles = registry
+        .default_roles
+        .iter()
+        .filter_map(|(role, adapter)| (adapter == &declaration.id).then_some(role.clone()))
+        .collect::<Vec<_>>();
+    observed_roles.sort();
+    let mut declared_roles = declaration.default_roles.clone();
+    declared_roles.sort();
+    let roles_match = observed_roles == declared_roles;
+    if !roles_match {
+        diagnostics.push(adapter_diagnostic(
+            "adapter.default_mismatch",
+            DiagnosticSeverity::Error,
+            format!(
+                "adapter {:?} declares default roles {:?} but registry reports {:?}",
+                declaration.id, declared_roles, observed_roles
+            ),
+        ));
+    }
+
+    let capabilities = declaration
+        .capabilities
+        .iter()
+        .map(|(name, declared)| {
+            let observed = tested_capabilities.and_then(|tested| tested.get(name)).cloned();
+            let validation = match &observed {
+                Some(observed) if *observed == *declared => Validation {
+                    state: ValidationState::Match,
+                    reason: None,
+                },
+                Some(observed) => {
+                    diagnostics.push(adapter_diagnostic(
+                        "adapter.capability_mismatch",
+                        DiagnosticSeverity::Error,
+                        format!(
+                            "adapter {:?} capability {name:?} declares {declared:?} but current evidence reports {observed:?}",
+                            declaration.id
+                        ),
+                    ));
+                    Validation {
+                        state: ValidationState::Mismatch,
+                        reason: Some("declaration and current profile evidence differ".to_string()),
+                    }
+                }
+                None => {
+                    if matches!(declared, CapabilitySupport::Yes | CapabilitySupport::Limited) {
+                        diagnostics.push(adapter_diagnostic(
+                            "adapter.capability_unvalidated",
+                            DiagnosticSeverity::Warning,
+                            format!(
+                                "adapter {:?} capability {name:?} has no current profile evidence",
+                                declaration.id
+                            ),
+                        ));
+                    }
+                    Validation {
+                        state: ValidationState::DeclaredOnly,
+                        reason: Some("no current profile evidence".to_string()),
+                    }
+                }
+            };
+            (
+                name.clone(),
+                Fact::new(
+                    Some(declared.clone()),
+                    observed,
+                    validation,
+                    vec![EvidenceId::from("manifest:adapter"), EvidenceId::from("profile:test")],
+                ),
+            )
+        })
+        .collect();
+
+    AdapterSnapshot {
+        id: declaration.id.clone(),
+        maturity: Fact::new(
+            Some(declaration.maturity.clone()),
+            None,
+            Validation {
+                state: ValidationState::DeclaredOnly,
+                reason: Some("maturity is declared policy".to_string()),
+            },
+            vec![EvidenceId::from("manifest:adapter")],
+        ),
+        platforms: Fact::new(
+            Some(declaration.platforms.clone()),
+            observed_platforms,
+            platform_validation,
+            vec![
+                EvidenceId::from("manifest:adapter"),
+                EvidenceId::from("source:adapter_registry"),
+            ],
+        ),
+        default_roles: Fact::new(
+            Some(declaration.default_roles.clone()),
+            Some(observed_roles),
+            Validation {
+                state: if roles_match {
+                    ValidationState::Match
+                } else {
+                    ValidationState::Mismatch
+                },
+                reason: (!roles_match)
+                    .then(|| "manifest and registry default roles differ".to_string()),
+            },
+            vec![
+                EvidenceId::from("manifest:adapter"),
+                EvidenceId::from("source:adapter_registry"),
+            ],
+        ),
+        registry_presence: Fact::new(
+            Some(true),
+            Some(registry_present),
+            registry_validation,
+            vec![
+                EvidenceId::from("manifest:adapter"),
+                EvidenceId::from("source:adapter_registry"),
+            ],
+        ),
+        capabilities,
+    }
+}
+
+fn adapter_diagnostic(
+    code: &str,
+    severity: DiagnosticSeverity,
+    message: String,
+) -> ContextDiagnostic {
+    ContextDiagnostic {
+        code: code.to_string(),
+        severity,
+        message,
+        profile_id: None,
+        evidence_ids: vec![
+            EvidenceId::from("manifest:adapter"),
+            EvidenceId::from("source:adapter_registry"),
+        ],
     }
 }
 
