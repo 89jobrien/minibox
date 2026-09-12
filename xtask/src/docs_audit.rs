@@ -7,7 +7,7 @@
 //!   detection + agentlint. Produces a JSON report.
 
 use anyhow::{Context, Result, bail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use xshell::{Shell, cmd};
@@ -496,11 +496,302 @@ fn run_agentlint(sh: &Shell, root: &Path, json: bool) -> Result<AgentlintResult>
     })
 }
 
+#[derive(Deserialize)]
+struct AdapterDocsManifest {
+    schema_version: u32,
+    adapters: Vec<AdapterDocsDeclaration>,
+    profiles: Vec<AdapterDocsProfile>,
+}
+
+#[derive(Deserialize)]
+struct AdapterDocsDeclaration {
+    id: String,
+    maturity: AdapterDocsMaturity,
+    platforms: Vec<String>,
+    default_roles: Vec<String>,
+    capabilities: BTreeMap<String, AdapterDocsCapability>,
+}
+
+#[derive(Deserialize)]
+struct AdapterDocsProfile {
+    id: String,
+    target: String,
+    features: Vec<String>,
+    no_default_features: bool,
+    #[serde(rename = "all_targets")]
+    _all_targets: bool,
+    #[serde(rename = "required_in_ci")]
+    _required_in_ci: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AdapterDocsMaturity {
+    Production,
+    Experimental,
+    Stub,
+    Blocked,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AdapterDocsCapability {
+    Yes,
+    Limited,
+    Blocked,
+    No,
+}
+
+fn check_adapter_manifest_drift(root: &Path) -> Result<()> {
+    let manifest_path = root.join("xtask/context.toml");
+    let matrix_path = root.join("docs/core/FEATURE_MATRIX.mbx.md");
+    let result = (|| {
+        let manifest_source = std::fs::read_to_string(&manifest_path)
+            .with_context(|| format!("read {}", manifest_path.display()))?;
+        let manifest: AdapterDocsManifest =
+            toml::from_str(&manifest_source).context("parse adapter context manifest")?;
+        validate_adapter_docs_manifest(&manifest)?;
+        let document = std::fs::read_to_string(&matrix_path)
+            .with_context(|| format!("read {}", matrix_path.display()))?;
+        let expected_suites = format!(
+            "<!-- BEGIN GENERATED: adapter-suites -->\n{}\n<!-- END GENERATED: adapter-suites -->",
+            render_adapter_docs_suites(&manifest)
+        );
+        let expected_capabilities = format!(
+            "<!-- BEGIN GENERATED: adapter-capabilities -->\n{}\n<!-- END GENERATED: adapter-capabilities -->",
+            render_adapter_docs_capabilities(&manifest)?
+        );
+        compare_generated_adapter_block(
+            &document,
+            "<!-- BEGIN GENERATED: adapter-suites -->",
+            "<!-- END GENERATED: adapter-suites -->",
+            &expected_suites,
+        )?;
+        compare_generated_adapter_block(
+            &document,
+            "<!-- BEGIN GENERATED: adapter-capabilities -->",
+            "<!-- END GENERATED: adapter-capabilities -->",
+            &expected_capabilities,
+        )
+    })();
+    result.with_context(|| {
+        "adapter documentation drift between xtask/context.toml and docs/core/FEATURE_MATRIX.mbx.md"
+            .to_string()
+    })
+}
+
+fn validate_adapter_docs_manifest(manifest: &AdapterDocsManifest) -> Result<()> {
+    if manifest.schema_version != 1 {
+        bail!(
+            "unsupported context manifest schema version {}",
+            manifest.schema_version
+        );
+    }
+    let mut adapter_ids = BTreeSet::new();
+    let mut capability_keys = None;
+    for adapter in &manifest.adapters {
+        if adapter.id.is_empty() || !adapter_ids.insert(adapter.id.as_str()) {
+            bail!("duplicate or empty adapter id: {:?}", adapter.id);
+        }
+        let keys = adapter
+            .capabilities
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        match &capability_keys {
+            Some(expected) if expected != &keys => {
+                bail!("adapter capability key sets differ in xtask/context.toml")
+            }
+            None => capability_keys = Some(keys),
+            _ => {}
+        }
+    }
+    let mut profile_ids = BTreeSet::new();
+    let mut profile_keys = BTreeSet::new();
+    for profile in &manifest.profiles {
+        if profile.id.is_empty() || !profile_ids.insert(profile.id.as_str()) {
+            bail!("duplicate or empty profile id: {:?}", profile.id);
+        }
+        let mut features = profile.features.clone();
+        features.sort();
+        features.dedup();
+        if !profile_keys.insert((profile.target.as_str(), features)) {
+            bail!("duplicate target/feature profile: {:?}", profile.target);
+        }
+    }
+    for target in [
+        "aarch64-apple-darwin",
+        "x86_64-unknown-linux-gnu",
+        "x86_64-unknown-linux-musl",
+        "x86_64-pc-windows-msvc",
+    ] {
+        if !manifest.profiles.iter().any(|profile| {
+            profile.target == target && profile.features.is_empty() && !profile.no_default_features
+        }) {
+            bail!("missing native profile: {target}");
+        }
+    }
+    for adapter in &manifest.adapters {
+        for role in &adapter.default_roles {
+            let target = match role.as_str() {
+                "unix_default" => Some("smolvm"),
+                "linux_fallback" => Some("native"),
+                "macos_fallback" => Some("krun"),
+                _ => None,
+            };
+            if let Some(target) = target {
+                if !adapter_ids.contains(target) {
+                    bail!("default role {role:?} references undeclared adapter {target:?}");
+                }
+                if adapter.id != target {
+                    bail!("default role {role:?} must be declared by adapter {target:?}");
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn compare_generated_adapter_block(
+    document: &str,
+    begin: &str,
+    end: &str,
+    expected: &str,
+) -> Result<()> {
+    let document = document.replace("\r\n", "\n");
+    let begins = document
+        .match_indices(begin)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let ends = document
+        .match_indices(end)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    if begins.len() != 1 || ends.len() != 1 || begins[0] >= ends[0] {
+        bail!("generated adapter marker pair is missing, duplicated, or out of order");
+    }
+    let actual = &document[begins[0]..ends[0] + end.len()];
+    if normalize_adapter_block(actual) != normalize_adapter_block(expected) {
+        bail!("generated adapter block differs from manifest: {begin}");
+    }
+    Ok(())
+}
+
+fn normalize_adapter_block(block: &str) -> String {
+    block
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_adapter_docs_suites(manifest: &AdapterDocsManifest) -> String {
+    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    let mut lines = vec![
+        "| Adapter | Platforms | Maturity | Default roles |".to_string(),
+        "| --- | --- | --- | --- |".to_string(),
+    ];
+    for adapter in adapters {
+        let mut platforms = adapter.platforms.clone();
+        platforms.sort();
+        platforms.dedup();
+        let platforms = platforms
+            .iter()
+            .map(|platform| format!("`{platform}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut roles = adapter.default_roles.clone();
+        roles.sort();
+        roles.dedup();
+        let roles = if roles.is_empty() {
+            "--".to_string()
+        } else {
+            roles
+                .iter()
+                .map(|role| format!("`{role}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        lines.push(format!(
+            "| `{}` | {} | {} | {} |",
+            adapter.id,
+            platforms,
+            adapter_docs_maturity_label(&adapter.maturity),
+            roles
+        ));
+    }
+    lines.join("\n")
+}
+
+fn render_adapter_docs_capabilities(manifest: &AdapterDocsManifest) -> Result<String> {
+    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+    let capabilities = adapters
+        .iter()
+        .flat_map(|adapter| adapter.capabilities.keys().cloned())
+        .collect::<BTreeSet<_>>();
+    let mut lines = vec![format!(
+        "| Capability | {} |",
+        adapters
+            .iter()
+            .map(|adapter| format!("`{}`", adapter.id))
+            .collect::<Vec<_>>()
+            .join(" | ")
+    )];
+    lines.push(format!(
+        "| --- | {} |",
+        adapters
+            .iter()
+            .map(|_| "---")
+            .collect::<Vec<_>>()
+            .join(" | ")
+    ));
+    for capability in capabilities {
+        let values = adapters
+            .iter()
+            .map(|adapter| {
+                adapter
+                    .capabilities
+                    .get(&capability)
+                    .map(adapter_docs_capability_label)
+                    .with_context(|| {
+                        format!(
+                            "adapter {:?} is missing capability {:?}",
+                            adapter.id, capability
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        lines.push(format!("| `{capability}` | {} |", values.join(" | ")));
+    }
+    Ok(lines.join("\n"))
+}
+
+const fn adapter_docs_maturity_label(maturity: &AdapterDocsMaturity) -> &'static str {
+    match maturity {
+        AdapterDocsMaturity::Production => "Production",
+        AdapterDocsMaturity::Experimental => "Experimental",
+        AdapterDocsMaturity::Stub => "Stub",
+        AdapterDocsMaturity::Blocked => "Blocked",
+    }
+}
+
+const fn adapter_docs_capability_label(capability: &AdapterDocsCapability) -> &'static str {
+    match capability {
+        AdapterDocsCapability::Yes => "Yes",
+        AdapterDocsCapability::Limited => "Limited",
+        AdapterDocsCapability::Blocked => "Blocked",
+        AdapterDocsCapability::No => "No",
+    }
+}
+
 // ── Public entry point ───────────────────────────────────────────────────
 
 pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     eprintln!("--- docs-audit ---");
 
+    check_adapter_manifest_drift(root)?;
     let code = code_facts(root)?;
     let docs = doc_facts(root)?;
 
@@ -600,4 +891,134 @@ pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MANIFEST: &str = r#"schema_version = 1
+[[adapters]]
+id = "zeta"
+maturity = "blocked"
+platforms = ["windows"]
+default_roles = []
+[adapters.capabilities]
+build = "blocked"
+run = "limited"
+[[adapters]]
+id = "alpha"
+maturity = "production"
+platforms = ["linux", "macos"]
+default_roles = []
+[adapters.capabilities]
+build = "no"
+run = "yes"
+[[profiles]]
+id = "native-macos"
+target = "aarch64-apple-darwin"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-linux-gnu"
+target = "x86_64-unknown-linux-gnu"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-linux-musl"
+target = "x86_64-unknown-linux-musl"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-windows"
+target = "x86_64-pc-windows-msvc"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+"#;
+
+    const DOCUMENT: &str = "before\n<!-- BEGIN GENERATED: adapter-suites -->\n| Adapter | Platforms | Maturity | Default roles |\n| --- | --- | --- | --- |\n| `alpha` | `linux`, `macos` | Production | -- |\n| `zeta` | `windows` | Blocked | -- |\n<!-- END GENERATED: adapter-suites -->\nmiddle\n<!-- BEGIN GENERATED: adapter-capabilities -->\n| Capability | `alpha` | `zeta` |\n| --- | --- | --- |\n| `build` | No | Blocked |\n| `run` | Yes | Limited |\n<!-- END GENERATED: adapter-capabilities -->\nafter\n";
+
+    fn write_fixture(root: &Path, manifest: &str, document: &str) {
+        std::fs::create_dir_all(root.join("xtask")).expect("xtask fixture should be created");
+        std::fs::create_dir_all(root.join("docs/core")).expect("docs fixture should be created");
+        std::fs::write(root.join("xtask/context.toml"), manifest)
+            .expect("manifest fixture should be written");
+        std::fs::write(root.join("docs/core/FEATURE_MATRIX.mbx.md"), document)
+            .expect("matrix fixture should be written");
+    }
+
+    fn assert_drift(root: &Path, manifest: &str, document: &str) {
+        write_fixture(root, manifest, document);
+        let first = check_adapter_manifest_drift(root)
+            .expect_err("drift should fail the docs audit")
+            .to_string();
+        let second = check_adapter_manifest_drift(root)
+            .expect_err("repeated drift should fail identically")
+            .to_string();
+        assert_eq!(first, second);
+        assert!(first.contains("xtask/context.toml"), "{first}");
+        assert!(first.contains("docs/core/FEATURE_MATRIX.mbx.md"), "{first}");
+    }
+
+    #[test]
+    fn docs_audit_rejects_adapter_manifest_drift() {
+        let temp = tempfile::tempdir().expect("temporary docs root should be created");
+        write_fixture(temp.path(), MANIFEST, DOCUMENT);
+        check_adapter_manifest_drift(temp.path()).expect("exact generated blocks should pass");
+
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen(
+                "maturity = \"production\"",
+                "maturity = \"experimental\"",
+                1,
+            ),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen("build = \"no\"", "build = \"yes\"", 1),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen("id = \"alpha\"", "id = \"beta\"", 1),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen(
+                "platforms = [\"linux\", \"macos\"]",
+                "platforms = [\"linux\"]",
+                1,
+            ),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen("default_roles = []", "default_roles = [\"custom\"]", 1),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            MANIFEST,
+            &DOCUMENT.replace("| `alpha` | `linux`, `macos` | Production | -- |\n", ""),
+        );
+        assert_drift(
+            temp.path(),
+            MANIFEST,
+            &DOCUMENT.replace(
+                "<!-- END GENERATED: adapter-suites -->",
+                "| `extra` | `linux` | Stub | -- |\n<!-- END GENERATED: adapter-suites -->",
+            ),
+        );
+    }
 }
