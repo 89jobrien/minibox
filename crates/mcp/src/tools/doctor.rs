@@ -11,14 +11,19 @@ pub async fn doctor(
     policy: &AgentPolicy,
     _input: DoctorInput,
 ) -> DoctorOutput {
-    match client
-        .call_limited(DaemonRequest::List, policy.max_output_bytes)
-        .await
-    {
-        Ok(_) => DoctorOutput {
-            socket_path: client.socket_path.display().to_string(),
-            connected: true,
-            error: None,
+    let authorization = policy.authorize_read(DaemonRequest::List);
+    match authorization {
+        Ok(call) => match client.call(call).await {
+            Ok(_) => DoctorOutput {
+                socket_path: client.socket_path.display().to_string(),
+                connected: true,
+                error: None,
+            },
+            Err(error) => DoctorOutput {
+                socket_path: client.socket_path.display().to_string(),
+                connected: false,
+                error: Some(error.to_string()),
+            },
         },
         Err(error) => DoctorOutput {
             socket_path: client.socket_path.display().to_string(),

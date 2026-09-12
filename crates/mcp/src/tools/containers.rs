@@ -19,9 +19,8 @@ use std::path::{Component, Path, PathBuf};
 ///
 /// Returns an error if the daemon call fails or returns an unexpected response.
 pub async fn ps(client: &MiniboxDaemonClient, policy: &AgentPolicy) -> Result<PsOutput> {
-    let result = client
-        .call_limited(DaemonRequest::List, policy.max_output_bytes)
-        .await?;
+    let call = policy.authorize_read(DaemonRequest::List)?;
+    let result = client.call(call).await?;
     result
         .responses
         .into_iter()
@@ -51,15 +50,12 @@ pub async fn logs(
     input: LogsInput,
 ) -> Result<LogsOutput> {
     require_non_empty(&input.id, "id")?;
-    let result = client
-        .call_limited(
-            DaemonRequest::ContainerLogs {
-                container_id: input.id,
-                follow: false,
-            },
-            policy.max_output_bytes,
-        )
-        .await?;
+    let request = DaemonRequest::ContainerLogs {
+        container_id: input.id,
+        follow: false,
+    };
+    let call = policy.authorize_read(request)?;
+    let result = client.call(call).await?;
     let lines = result
         .responses
         .iter()
@@ -86,12 +82,8 @@ pub async fn manifest(
     input: ContainerIdInput,
 ) -> Result<ManifestOutput> {
     require_non_empty(&input.id, "id")?;
-    let result = client
-        .call_limited(
-            DaemonRequest::GetManifest { id: input.id },
-            policy.max_output_bytes,
-        )
-        .await?;
+    let call = policy.authorize_read(DaemonRequest::GetManifest { id: input.id })?;
+    let result = client.call(call).await?;
     result
         .responses
         .into_iter()
@@ -119,12 +111,14 @@ pub async fn run(
     // network-isolated runs are the core agent workflow and stay available by
     // default; everything that escalates (privileged, mounts, host network) or
     // mutates shared daemon state is gated. Documented in this crate's README.
-    policy.validate_run(&input)?;
-    let request = run_request(input, policy)?;
-    let result = client
-        .call_limited(request, policy.max_output_bytes)
-        .await?;
-    normalize_run_output(result.responses, policy.max_output_bytes)
+    let request = run_request(&input, policy)?;
+    let call = policy.authorize_run(&input, request)?;
+    let result = client.call(call).await?;
+    normalize_run_output(
+        result.responses,
+        policy.max_output_bytes,
+        result.output_truncated,
+    )
 }
 
 /// Stop a container.
@@ -137,7 +131,6 @@ pub async fn stop(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<SimpleOutput> {
-    policy.validate_mutation("minibox_stop")?;
     simple_id_request(client, policy, input, "minibox_stop", |id| {
         DaemonRequest::Stop { id }
     })
@@ -154,7 +147,6 @@ pub async fn rm(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<SimpleOutput> {
-    policy.validate_mutation("minibox_rm")?;
     simple_id_request(client, policy, input, "minibox_rm", |id| {
         DaemonRequest::Remove { id }
     })
@@ -167,31 +159,32 @@ pub const fn empty_images_output() -> ImagesOutput {
     ImagesOutput { images: Vec::new() }
 }
 
-fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonRequest> {
+fn run_request(input: &RunContainerInput, policy: &AgentPolicy) -> Result<DaemonRequest> {
     // policy.validate_run() has already parsed and gated the same network
     // string; this re-parse cannot disagree with the gate's decision.
     let network_mode = parse_network_mode(input.network.as_deref())?;
     let mounts = input
         .mounts
-        .into_iter()
+        .iter()
+        .cloned()
         .map(parse_mount)
         .collect::<Result<Vec<_>>>()?;
 
     Ok(DaemonRequest::Run {
-        image: input.image,
-        tag: input.tag,
-        command: input.command,
+        image: input.image.clone(),
+        tag: input.tag.clone(),
+        command: input.command.clone(),
         memory_limit_bytes: input
             .memory_limit_bytes
             .or(policy.default_memory_limit_bytes),
         cpu_weight: input.cpu_weight.or(policy.default_cpu_weight),
         ephemeral: true,
         network: Some(network_mode),
-        env: input.env,
+        env: input.env.clone(),
         mounts,
         privileged: input.privileged.unwrap_or(false),
         shared_uid_range: false,
-        name: input.name,
+        name: input.name.clone(),
         tty: false,
         entrypoint: None,
         user: None,
@@ -199,7 +192,7 @@ fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonR
         priority: None,
         urgency: None,
         execution_context: None,
-        platform: input.platform,
+        platform: input.platform.clone(),
         cgroup_parent: None,
     })
 }
@@ -236,12 +229,14 @@ fn validate_absolute_clean_path(path: &Path, field: &'static str) -> Result<()> 
 fn normalize_run_output(
     responses: Vec<DaemonResponse>,
     max_output_bytes: usize,
+    output_truncated: bool,
 ) -> Result<RunContainerOutput> {
     let mut container_id = None;
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut exit_code = None;
-    let mut truncated = false;
+    let mut truncated = output_truncated;
+    let mut remaining_output_bytes = max_output_bytes;
 
     for response in responses {
         match response {
@@ -258,7 +253,7 @@ fn normalize_run_output(
                         OutputStreamKind::Stderr => &mut stderr,
                     },
                     &decoded,
-                    max_output_bytes,
+                    &mut remaining_output_bytes,
                     &mut truncated,
                 );
             }
@@ -289,14 +284,14 @@ fn normalize_run_output(
     })
 }
 
-fn append_output(target: &mut String, bytes: &[u8], max_len: usize, truncated: &mut bool) {
-    if target.len() >= max_len {
+fn append_output(target: &mut String, bytes: &[u8], remaining: &mut usize, truncated: &mut bool) {
+    if *remaining == 0 {
         *truncated = true;
         return;
     }
-    let remaining = max_len - target.len();
-    let take = bytes.len().min(remaining);
+    let take = bytes.len().min(*remaining);
     target.push_str(&String::from_utf8_lossy(&bytes[..take]));
+    *remaining -= take;
     if take < bytes.len() {
         *truncated = true;
     }
@@ -310,9 +305,9 @@ async fn simple_id_request(
     request_builder: impl FnOnce(String) -> DaemonRequest,
 ) -> Result<SimpleOutput> {
     require_non_empty(&input.id, "id")?;
-    let result = client
-        .call_limited(request_builder(input.id), policy.max_output_bytes)
-        .await?;
+    let request = request_builder(input.id);
+    let call = policy.authorize_mutation(tool, request)?;
+    let result = client.call(call).await?;
     let message = result
         .responses
         .iter()
@@ -349,7 +344,7 @@ mod tests {
     fn run_request_defaults_to_ephemeral_auto_remove_and_no_network() {
         let policy = AgentPolicy::safe_default();
         let request = run_request(
-            RunContainerInput {
+            &RunContainerInput {
                 image: "alpine".to_string(),
                 command: vec!["/bin/true".to_string()],
                 ..RunContainerInput::default()
@@ -408,6 +403,7 @@ mod tests {
                 DaemonResponse::ContainerStopped { exit_code: 0 },
             ],
             1024,
+            false,
         )
         .expect("normalize output");
 
