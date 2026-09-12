@@ -1,9 +1,10 @@
 use super::manifest::{AdapterRegistryObservation, ContextManifest};
 use super::model::{
-    AdapterMaturity, AdapterSnapshot, CapabilitySupport, ContextDiagnostic, ContextMap,
-    CrateOwnership, DependencyKind, DependencySnapshot, DiagnosticSeverity, EvidenceId, Fact,
-    FileMetrics, FileOwnership, FileRole, PackageSnapshot, RepositoryIdentity, RepositoryPath,
-    RoleOrigin, SourceMetrics, TargetSnapshot, Validation, ValidationState, WorkspaceSnapshot,
+    AdapterMaturity, AdapterSnapshot, CapabilitySupport, CollectorTask, ContextDiagnostic,
+    ContextMap, CrateOwnership, DependencyKind, DependencySnapshot, DiagnosticSeverity, EvidenceId,
+    EvidenceStatus, Fact, FileMetrics, FileOwnership, FileRole, PackageSnapshot, ProfileStatus,
+    RepositoryIdentity, RepositoryPath, RoleOrigin, SourceMetrics, TargetSnapshot,
+    TestProfileResult, Validation, ValidationState, WorkspaceSnapshot,
 };
 use anyhow::{Context, Result, bail};
 use cargo_metadata::{DependencyKind as CargoDependencyKind, MetadataCommand};
@@ -416,6 +417,219 @@ fn adapter_diagnostic(
             EvidenceId::from("source:adapter_registry"),
         ],
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct CollectorExecution {
+    pub(super) native_profile: TestProfileResult,
+    pub(super) validate_all_profiles: Vec<TestProfileResult>,
+    pub(super) imported_profiles: Vec<TestProfileResult>,
+    pub(super) outcomes: BTreeMap<String, EvidenceStatus>,
+}
+
+pub(super) fn derive_collector_tasks(execution: &CollectorExecution) -> Result<Vec<CollectorTask>> {
+    let mut tasks = BTreeMap::new();
+    for (id, depends_on, evidence_ids) in [
+        (
+            "identity",
+            Vec::new(),
+            vec![EvidenceId::from("git:head"), EvidenceId::from("git:status")],
+        ),
+        (
+            "manifest",
+            Vec::new(),
+            vec![EvidenceId::from("manifest:adapter")],
+        ),
+        (
+            "metadata",
+            Vec::new(),
+            vec![EvidenceId::from("cargo:metadata")],
+        ),
+        (
+            "tracked-files",
+            vec!["identity".to_string()],
+            vec![EvidenceId::from("git:tracked-files")],
+        ),
+        (
+            "source-tests",
+            vec!["metadata".to_string(), "tracked-files".to_string()],
+            vec![EvidenceId::from("source:tests")],
+        ),
+    ] {
+        insert_collector_task(
+            &mut tasks,
+            CollectorTask {
+                id: id.to_string(),
+                depends_on,
+                status: collector_outcome(execution, id),
+                evidence_ids,
+            },
+        )?;
+    }
+
+    let mut profile_task_ids = Vec::new();
+    let native_id = format!("profile:{}", execution.native_profile.profile_id);
+    profile_task_ids.push(native_id.clone());
+    insert_collector_task(
+        &mut tasks,
+        profile_collector_task(native_id, &execution.native_profile),
+    )?;
+    for profile in &execution.validate_all_profiles {
+        let id = format!("profile:{}", profile.profile_id);
+        profile_task_ids.push(id.clone());
+        insert_collector_task(&mut tasks, profile_collector_task(id, profile))?;
+    }
+
+    let mut import_task_ids = Vec::new();
+    let mut import_counts = BTreeMap::<&str, usize>::new();
+    for profile in &execution.imported_profiles {
+        let count = import_counts.entry(&profile.profile_id).or_default();
+        *count += 1;
+        let id = if *count == 1 {
+            format!("import:{}", profile.profile_id)
+        } else {
+            format!("import:{}:{}", profile.profile_id, count)
+        };
+        import_task_ids.push(id.clone());
+        insert_collector_task(
+            &mut tasks,
+            CollectorTask {
+                id,
+                depends_on: vec!["identity".to_string(), "manifest".to_string()],
+                status: profile_evidence_status(&profile.status),
+                evidence_ids: normalized_evidence_ids(&profile.evidence_ids),
+            },
+        )?;
+    }
+
+    let mut reconciliation_dependencies = vec!["manifest".to_string()];
+    reconciliation_dependencies.extend(profile_task_ids);
+    reconciliation_dependencies.extend(import_task_ids);
+    reconciliation_dependencies.sort();
+    reconciliation_dependencies.dedup();
+    insert_collector_task(
+        &mut tasks,
+        CollectorTask {
+            id: "reconciliation".to_string(),
+            depends_on: reconciliation_dependencies,
+            status: collector_outcome(execution, "reconciliation"),
+            evidence_ids: vec![
+                EvidenceId::from("manifest:adapter"),
+                EvidenceId::from("source:adapter_registry"),
+            ],
+        },
+    )?;
+    insert_collector_task(
+        &mut tasks,
+        CollectorTask {
+            id: "schema".to_string(),
+            depends_on: vec![
+                "identity".to_string(),
+                "manifest".to_string(),
+                "metadata".to_string(),
+                "reconciliation".to_string(),
+                "source-tests".to_string(),
+                "tracked-files".to_string(),
+            ],
+            status: collector_outcome(execution, "schema"),
+            evidence_ids: vec![EvidenceId::from("schema:context-v3")],
+        },
+    )?;
+    insert_collector_task(
+        &mut tasks,
+        CollectorTask {
+            id: "output".to_string(),
+            depends_on: vec!["schema".to_string()],
+            status: collector_outcome(execution, "output"),
+            evidence_ids: vec![EvidenceId::from("output:context")],
+        },
+    )?;
+
+    topologically_sort_collector_tasks(tasks)
+}
+
+fn profile_collector_task(id: String, profile: &TestProfileResult) -> CollectorTask {
+    CollectorTask {
+        id,
+        depends_on: vec!["manifest".to_string(), "metadata".to_string()],
+        status: profile_evidence_status(&profile.status),
+        evidence_ids: normalized_evidence_ids(&profile.evidence_ids),
+    }
+}
+
+fn collector_outcome(execution: &CollectorExecution, id: &str) -> EvidenceStatus {
+    execution
+        .outcomes
+        .get(id)
+        .cloned()
+        .unwrap_or(EvidenceStatus::Collected)
+}
+
+const fn profile_evidence_status(status: &ProfileStatus) -> EvidenceStatus {
+    match status {
+        ProfileStatus::Validated => EvidenceStatus::Collected,
+        ProfileStatus::Failed => EvidenceStatus::Failed,
+        ProfileStatus::Unavailable => EvidenceStatus::Unavailable,
+        ProfileStatus::Stale => EvidenceStatus::Stale,
+    }
+}
+
+fn normalized_evidence_ids(evidence_ids: &[EvidenceId]) -> Vec<EvidenceId> {
+    let mut evidence_ids = evidence_ids.to_vec();
+    evidence_ids.sort();
+    evidence_ids.dedup();
+    evidence_ids
+}
+
+fn insert_collector_task(
+    tasks: &mut BTreeMap<String, CollectorTask>,
+    task: CollectorTask,
+) -> Result<()> {
+    if tasks.insert(task.id.clone(), task).is_some() {
+        bail!("duplicate collector task id");
+    }
+    Ok(())
+}
+
+fn topologically_sort_collector_tasks(
+    mut tasks: BTreeMap<String, CollectorTask>,
+) -> Result<Vec<CollectorTask>> {
+    let task_ids = tasks.keys().cloned().collect::<BTreeSet<_>>();
+    for task in tasks.values() {
+        for dependency in &task.depends_on {
+            if !task_ids.contains(dependency) {
+                bail!(
+                    "collector task {:?} references missing dependency {dependency:?}",
+                    task.id
+                );
+            }
+        }
+    }
+
+    let mut completed = BTreeSet::new();
+    let mut ordered = Vec::with_capacity(tasks.len());
+    while !tasks.is_empty() {
+        let ready = tasks
+            .iter()
+            .filter(|(_, task)| {
+                task.depends_on
+                    .iter()
+                    .all(|dependency| completed.contains(dependency))
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        if ready.is_empty() {
+            bail!("collector task graph contains a dependency cycle");
+        }
+        for id in ready {
+            let task = tasks
+                .remove(&id)
+                .context("ready collector task disappeared")?;
+            completed.insert(id);
+            ordered.push(task);
+        }
+    }
+    Ok(ordered)
 }
 
 pub(super) fn derive_context_map(
@@ -977,7 +1191,6 @@ fn observed_workspace_fact(value: Option<String>) -> Fact<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::model::ProfileStatus;
     use std::process::Command;
 
     #[test]
@@ -1701,5 +1914,136 @@ edition = "2024"
             );
         }
         assert!(context_map.collector_tasks.is_empty());
+    }
+    #[test]
+    fn collector_tasks_reflect_requested_execution() {
+        let profile = |id: &str, status: ProfileStatus, evidence: &'static str| TestProfileResult {
+            profile_id: id.to_string(),
+            target: "x86_64-unknown-linux-gnu".to_string(),
+            features: Vec::new(),
+            status,
+            executable_tests: Vec::new(),
+            unavailable_reason: None,
+            evidence_ids: vec![EvidenceId::from(evidence)],
+        };
+        let default_execution = CollectorExecution {
+            native_profile: profile("native", ProfileStatus::Unavailable, "nextest:native"),
+            validate_all_profiles: Vec::new(),
+            imported_profiles: Vec::new(),
+            outcomes: BTreeMap::from([("metadata".to_string(), EvidenceStatus::Failed)]),
+        };
+        let default_tasks = derive_collector_tasks(&default_execution)
+            .expect("default collector graph should be valid");
+        assert_eq!(
+            default_tasks
+                .iter()
+                .map(|task| task.id.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "identity",
+                "manifest",
+                "metadata",
+                "output",
+                "profile:native",
+                "reconciliation",
+                "schema",
+                "source-tests",
+                "tracked-files",
+            ])
+        );
+        assert_eq!(
+            default_tasks
+                .iter()
+                .find(|task| task.id == "metadata")
+                .expect("metadata task should exist")
+                .status,
+            EvidenceStatus::Failed
+        );
+        assert_eq!(
+            default_tasks
+                .iter()
+                .find(|task| task.id == "profile:native")
+                .expect("native profile task should exist")
+                .status,
+            EvidenceStatus::Unavailable
+        );
+
+        let expanded = CollectorExecution {
+            native_profile: profile("native", ProfileStatus::Validated, "nextest:native"),
+            validate_all_profiles: vec![profile(
+                "windows",
+                ProfileStatus::Failed,
+                "nextest:windows",
+            )],
+            imported_profiles: vec![profile(
+                "macos",
+                ProfileStatus::Stale,
+                "profile-evidence:macos",
+            )],
+            outcomes: BTreeMap::new(),
+        };
+        let expanded_tasks =
+            derive_collector_tasks(&expanded).expect("expanded collector graph should be valid");
+        let profile_task = expanded_tasks
+            .iter()
+            .find(|task| task.id == "profile:windows")
+            .expect("validate-all profile task should exist");
+        assert_eq!(profile_task.status, EvidenceStatus::Failed);
+        assert_eq!(
+            profile_task.evidence_ids,
+            [EvidenceId::from("nextest:windows")]
+        );
+        let import_task = expanded_tasks
+            .iter()
+            .find(|task| task.id == "import:macos")
+            .expect("evidence import task should exist");
+        assert_eq!(import_task.status, EvidenceStatus::Stale);
+        assert_eq!(
+            import_task.depends_on,
+            ["identity".to_string(), "manifest".to_string()]
+        );
+        let reconciliation = expanded_tasks
+            .iter()
+            .find(|task| task.id == "reconciliation")
+            .expect("reconciliation task should exist");
+        assert!(
+            reconciliation
+                .depends_on
+                .contains(&"profile:native".to_string())
+        );
+        assert!(
+            reconciliation
+                .depends_on
+                .contains(&"profile:windows".to_string())
+        );
+        assert!(
+            reconciliation
+                .depends_on
+                .contains(&"import:macos".to_string())
+        );
+
+        let task_ids = expanded_tasks
+            .iter()
+            .map(|task| task.id.as_str())
+            .collect::<BTreeSet<_>>();
+        for (index, task) in expanded_tasks.iter().enumerate() {
+            for dependency in &task.depends_on {
+                assert!(task_ids.contains(dependency.as_str()));
+                let dependency_index = expanded_tasks
+                    .iter()
+                    .position(|candidate| candidate.id == *dependency)
+                    .expect("dependency should exist");
+                assert!(
+                    dependency_index < index,
+                    "tasks should be topologically ordered"
+                );
+            }
+        }
+        let independent = expanded_tasks
+            .iter()
+            .filter(|task| task.depends_on.is_empty())
+            .map(|task| task.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(independent.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }
