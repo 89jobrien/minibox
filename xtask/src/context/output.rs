@@ -3,6 +3,7 @@ use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -88,7 +89,176 @@ pub(super) fn profile_evidence_cache_key(key: &ProfileEvidenceCacheKey) -> Strin
     hex::encode(Sha256::digest(canonical))
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct PendingProfileEvidence {
+    pub(super) expected_key: ProfileEvidenceCacheKey,
+    pub(super) actual_key: ProfileEvidenceCacheKey,
+    pub(super) result: TestProfileResult,
+}
+
+struct PreparedProfileEvidence {
+    profile_id: String,
+    cache_key: String,
+    bytes: Vec<u8>,
+}
+
+pub(super) fn persist_snapshot(
+    root: &Path,
+    snapshot: &serde_json::Value,
+    save: bool,
+    profile_evidence: &[PendingProfileEvidence],
+) -> Result<Option<PathBuf>> {
+    if !save {
+        return Ok(None);
+    }
+
+    validate_snapshot_json(snapshot)?;
+    let mut pretty = serde_json::to_vec_pretty(snapshot).context("serialize context snapshot")?;
+    pretty.push(b'\n');
+    let compact = serde_json::to_vec(snapshot).context("serialize context history record")?;
+    let prepared_evidence = profile_evidence
+        .iter()
+        .filter_map(prepare_profile_evidence)
+        .collect::<Result<Vec<_>>>()?;
+
+    let context_dir = root.join("artifacts/context");
+    std::fs::create_dir_all(&context_dir)
+        .with_context(|| format!("create context output directory {}", context_dir.display()))?;
+    let snapshot_path = context_dir.join("snapshot.json");
+    atomic_write(&snapshot_path, &pretty)?;
+
+    let history_path = context_dir.join("history.jsonl");
+    let mut history = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&history_path)
+        .with_context(|| format!("open context history {}", history_path.display()))?;
+    history
+        .write_all(&compact)
+        .and_then(|()| history.write_all(b"\n"))
+        .and_then(|()| history.flush())
+        .with_context(|| format!("append context history {}", history_path.display()))?;
+    history
+        .sync_all()
+        .with_context(|| format!("sync context history {}", history_path.display()))?;
+
+    for evidence in prepared_evidence {
+        let evidence_dir = context_dir.join("evidence").join(&evidence.profile_id);
+        std::fs::create_dir_all(&evidence_dir).with_context(|| {
+            format!(
+                "create profile evidence directory {}",
+                evidence_dir.display()
+            )
+        })?;
+        atomic_write(
+            &evidence_dir.join(format!("{}.json", evidence.cache_key)),
+            &evidence.bytes,
+        )?;
+    }
+    Ok(Some(snapshot_path))
+}
+
+fn prepare_profile_evidence(
+    pending: &PendingProfileEvidence,
+) -> Option<Result<PreparedProfileEvidence>> {
+    if pending.actual_key.normalized() != pending.expected_key.normalized()
+        || pending.result.status == ProfileStatus::Stale
+    {
+        return None;
+    }
+    Some((|| {
+        validate_profile_id(&pending.result.profile_id)?;
+        let actual_key = pending.actual_key.normalized();
+        let mut result_features = pending.result.features.clone();
+        result_features.sort();
+        result_features.dedup();
+        if pending.result.target != actual_key.target || result_features != actual_key.features {
+            bail!(
+                "profile result {:?} does not match its current evidence key",
+                pending.result.profile_id
+            );
+        }
+        if pending.result.status != ProfileStatus::Validated
+            && !pending.result.executable_tests.is_empty()
+        {
+            bail!(
+                "non-validated profile evidence contains executable tests: {:?}",
+                pending.result.profile_id
+            );
+        }
+        let status = match pending.result.status {
+            ProfileStatus::Validated => ArtifactProfileStatus::Validated,
+            ProfileStatus::Failed => ArtifactProfileStatus::Failed,
+            ProfileStatus::Unavailable => ArtifactProfileStatus::Unavailable,
+            ProfileStatus::Stale => unreachable!("stale evidence is filtered before preparation"),
+        };
+        let mut executable_tests = pending
+            .result
+            .executable_tests
+            .iter()
+            .map(|test| ArtifactExecutableTest {
+                stable_id: test.stable_id.clone(),
+                package_id: test.package_id.clone(),
+                binary_id: test.binary_id.clone(),
+                test_name: test.test_name.clone(),
+                ignored: test.ignored,
+            })
+            .collect::<Vec<_>>();
+        executable_tests.sort_by(|left, right| left.stable_id.cmp(&right.stable_id));
+        let artifact = ProfileEvidenceArtifact {
+            schema_version: 1,
+            profile_id: pending.result.profile_id.clone(),
+            cache_key: actual_key,
+            status,
+            executable_tests,
+            unavailable_reason: pending.result.unavailable_reason.clone(),
+        };
+        let mut bytes =
+            serde_json::to_vec_pretty(&artifact).context("serialize current profile evidence")?;
+        bytes.push(b'\n');
+        Ok(PreparedProfileEvidence {
+            profile_id: pending.result.profile_id.clone(),
+            cache_key: profile_evidence_cache_key(&pending.actual_key),
+            bytes,
+        })
+    })())
+}
+
+fn validate_profile_id(profile_id: &str) -> Result<()> {
+    if profile_id.is_empty()
+        || profile_id == "."
+        || profile_id == ".."
+        || !profile_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
+    {
+        bail!("profile id is not safe for evidence persistence: {profile_id:?}");
+    }
+    Ok(())
+}
+
+fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .with_context(|| format!("output path has no parent: {}", path.display()))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .with_context(|| format!("create atomic output beside {}", path.display()))?;
+    temporary
+        .write_all(bytes)
+        .and_then(|()| temporary.flush())
+        .with_context(|| format!("write atomic output for {}", path.display()))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .with_context(|| format!("sync atomic output for {}", path.display()))?;
+    temporary
+        .persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("replace output atomically at {}", path.display()))?;
+    Ok(())
+}
+
+#[derive(Deserialize, Serialize)]
 struct ProfileEvidenceArtifact {
     schema_version: u32,
     profile_id: String,
@@ -98,7 +268,7 @@ struct ProfileEvidenceArtifact {
     unavailable_reason: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum ArtifactProfileStatus {
     Validated,
@@ -106,7 +276,7 @@ enum ArtifactProfileStatus {
     Unavailable,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct ArtifactExecutableTest {
     stable_id: String,
     package_id: String,
@@ -437,5 +607,126 @@ mod tests {
             .expect("identity should be an object")
             .insert("unexpected".to_string(), serde_json::json!(true));
         assert!(validate_snapshot_json(&unknown_property).is_err());
+    }
+    fn evidence_key() -> ProfileEvidenceCacheKey {
+        ProfileEvidenceCacheKey {
+            commit: "abc123".to_string(),
+            worktree_fingerprint: "clean".to_string(),
+            manifest_sha256: "manifest".to_string(),
+            target: "aarch64-apple-darwin".to_string(),
+            features: Vec::new(),
+            no_default_features: false,
+            cargo_version: "cargo 1.85.0".to_string(),
+            rustc_version: "rustc 1.85.0".to_string(),
+            nextest_version: "cargo-nextest 0.9".to_string(),
+        }
+    }
+
+    fn evidence_result(status: ProfileStatus) -> TestProfileResult {
+        TestProfileResult {
+            profile_id: "native-macos".to_string(),
+            target: "aarch64-apple-darwin".to_string(),
+            features: Vec::new(),
+            status,
+            executable_tests: vec![ExecutableTest {
+                stable_id: "pkg::bin::works".to_string(),
+                package_id: "pkg".to_string(),
+                binary_id: "bin".to_string(),
+                test_name: "works".to_string(),
+                ignored: false,
+            }],
+            unavailable_reason: None,
+            evidence_ids: vec![EvidenceId::from("nextest:native-macos")],
+        }
+    }
+
+    #[test]
+    fn persistence_writes_only_valid_current_evidence() {
+        let invalid_root = tempfile::tempdir().expect("invalid root should be created");
+        let mut invalid = complete_v3_fixture();
+        invalid
+            .as_object_mut()
+            .expect("fixture should be an object")
+            .remove("identity");
+        assert!(persist_snapshot(invalid_root.path(), &invalid, true, &[]).is_err());
+        assert!(!invalid_root.path().join("artifacts").exists());
+
+        let readonly_root = tempfile::tempdir().expect("read-only root should be created");
+        let key = evidence_key();
+        let current = PendingProfileEvidence {
+            expected_key: key.clone(),
+            actual_key: key.clone(),
+            result: evidence_result(ProfileStatus::Validated),
+        };
+        assert_eq!(
+            persist_snapshot(
+                readonly_root.path(),
+                &complete_v3_fixture(),
+                false,
+                std::slice::from_ref(&current),
+            )
+            .expect("read-only persistence should be a no-op"),
+            None
+        );
+        assert!(!readonly_root.path().join("artifacts").exists());
+
+        let root = tempfile::tempdir().expect("persistence root should be created");
+        let context_dir = root.path().join("artifacts/context");
+        std::fs::create_dir_all(&context_dir)
+            .expect("existing context directory should be created");
+        std::fs::write(context_dir.join("snapshot.json"), b"old snapshot\n")
+            .expect("old snapshot should be written");
+        let mut stale_key = key.clone();
+        stale_key.commit = "different".to_string();
+        let stale = PendingProfileEvidence {
+            expected_key: key.clone(),
+            actual_key: stale_key,
+            result: evidence_result(ProfileStatus::Validated),
+        };
+        let stale_status = PendingProfileEvidence {
+            expected_key: key.clone(),
+            actual_key: key.clone(),
+            result: evidence_result(ProfileStatus::Stale),
+        };
+        let fixture = complete_v3_fixture();
+        let saved = persist_snapshot(root.path(), &fixture, true, &[current, stale, stale_status])
+            .expect("valid snapshot should persist");
+        assert_eq!(saved, Some(context_dir.join("snapshot.json")));
+
+        let snapshot = std::fs::read_to_string(context_dir.join("snapshot.json"))
+            .expect("snapshot should be readable");
+        assert_eq!(
+            snapshot,
+            format!(
+                "{}\n",
+                serde_json::to_string_pretty(&fixture).expect("fixture should serialize")
+            )
+        );
+        let history = std::fs::read_to_string(context_dir.join("history.jsonl"))
+            .expect("history should be readable");
+        let lines = history.lines().collect::<Vec<_>>();
+        assert_eq!(lines.len(), 1);
+        let history_value: serde_json::Value =
+            serde_json::from_str(lines[0]).expect("history line should be JSON");
+        assert_eq!(history_value["snapshot_version"], 3);
+
+        let evidence_path = context_dir
+            .join("evidence/native-macos")
+            .join(format!("{}.json", profile_evidence_cache_key(&key)));
+        assert!(evidence_path.is_file());
+        let evidence_files = std::fs::read_dir(context_dir.join("evidence/native-macos"))
+            .expect("evidence directory should be readable")
+            .collect::<std::io::Result<Vec<_>>>()
+            .expect("evidence entries should be readable");
+        assert_eq!(evidence_files.len(), 1);
+        assert!(
+            std::fs::read_dir(&context_dir)
+                .expect("context directory should be readable")
+                .all(|entry| !entry
+                    .expect("context entry should be readable")
+                    .file_name()
+                    .to_string_lossy()
+                    .contains(".tmp"))
+        );
     }
 }
