@@ -18,7 +18,7 @@ use model::{
     Validation, ValidationState,
 };
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -109,16 +109,15 @@ fn run_context(
     let source_declarations = test_inventory::collect_source_tests(repository, &root, &workspace)?;
 
     let native_profile = select_native_profile(&manifest, &environment.target)?;
-    let native_result = test_inventory::collect_test_profile(runner, &root, native_profile);
-    let mut validate_all_results = Vec::new();
-    if options.validate_all {
-        for profile in &manifest.profiles {
-            if profile.id != native_profile.id {
-                validate_all_results
-                    .push(test_inventory::collect_test_profile(runner, &root, profile));
-            }
-        }
-    }
+    let scheduled_profiles =
+        profiles_to_collect(&manifest, &native_profile.id, options.validate_all)?;
+    let mut scheduled_results = scheduled_profiles
+        .into_iter()
+        .map(|profile| test_inventory::collect_test_profile(runner, &root, profile));
+    let native_result = scheduled_results
+        .next()
+        .context("native validation profile was not scheduled")?;
+    let validate_all_results = scheduled_results.collect::<Vec<_>>();
 
     let expected_keys = manifest
         .profiles
@@ -158,6 +157,7 @@ fn run_context(
     let mut profiles = vec![native_result.clone()];
     profiles.extend(validate_all_results.iter().cloned());
     profiles.extend(imported_profiles.iter().cloned());
+    sort_profile_results(&mut profiles);
     let validated_unique_tests = validated_unique_tests(&profiles);
     let tests = TestSnapshot {
         source_declarations,
@@ -195,7 +195,15 @@ fn run_context(
     validate_snapshot_json(&value)?;
     let mut document = serde_json::to_vec_pretty(&value).context("format context JSON")?;
     document.push(b'\n');
-    output.write_document(&document)?;
+    emit_document_then_enforce(
+        output,
+        &document,
+        options,
+        &manifest,
+        &native_profile.id,
+        &snapshot.tests.profiles,
+        &snapshot.diagnostics,
+    )?;
 
     let mut pending_evidence = Vec::new();
     for result in std::iter::once(&native_result).chain(validate_all_results.iter()) {
@@ -298,6 +306,112 @@ fn select_native_profile<'a>(
         [profile] => Ok(profile),
         [] => bail!("no native validation profile is configured for host {host:?}"),
         _ => bail!("multiple native validation profiles are configured for host {host:?}"),
+    }
+}
+
+fn profiles_to_collect<'a>(
+    manifest: &'a ContextManifest,
+    native_profile_id: &str,
+    validate_all: bool,
+) -> Result<Vec<&'a ValidationProfile>> {
+    let native = manifest
+        .profiles
+        .iter()
+        .find(|profile| profile.id == native_profile_id)
+        .with_context(|| format!("native profile {native_profile_id:?} is not configured"))?;
+    let mut profiles = vec![native];
+    if validate_all {
+        let mut additional = manifest
+            .profiles
+            .iter()
+            .filter(|profile| profile.id != native_profile_id)
+            .collect::<Vec<_>>();
+        additional.sort_by(|left, right| left.id.cmp(&right.id));
+        profiles.extend(additional);
+    }
+    Ok(profiles)
+}
+
+fn emit_document_then_enforce(
+    output: &impl SnapshotOutput,
+    document: &[u8],
+    options: &ContextOptions,
+    manifest: &ContextManifest,
+    native_profile_id: &str,
+    profiles: &[TestProfileResult],
+    diagnostics: &[ContextDiagnostic],
+) -> Result<()> {
+    output.write_document(document)?;
+    enforce_validation_mode(options, manifest, native_profile_id, profiles, diagnostics)
+}
+
+fn enforce_validation_mode(
+    options: &ContextOptions,
+    manifest: &ContextManifest,
+    native_profile_id: &str,
+    profiles: &[TestProfileResult],
+    diagnostics: &[ContextDiagnostic],
+) -> Result<()> {
+    if !options.strict {
+        return Ok(());
+    }
+    let required_profiles = if options.validate_all {
+        manifest
+            .profiles
+            .iter()
+            .filter(|profile| profile.required_in_ci)
+            .map(|profile| profile.id.as_str())
+            .collect::<BTreeSet<_>>()
+    } else {
+        BTreeSet::from([native_profile_id])
+    };
+    let validated_profiles = profiles
+        .iter()
+        .filter(|profile| profile.status == ProfileStatus::Validated)
+        .map(|profile| profile.profile_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let missing_profiles = required_profiles
+        .difference(&validated_profiles)
+        .copied()
+        .collect::<Vec<_>>();
+    let blocking_diagnostics = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+        .filter(|diagnostic| match diagnostic.profile_id.as_deref() {
+            None => true,
+            Some(profile_id) => {
+                required_profiles.contains(profile_id) && !validated_profiles.contains(profile_id)
+            }
+        })
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    if missing_profiles.is_empty() && blocking_diagnostics.is_empty() {
+        Ok(())
+    } else {
+        bail!(
+            "strict context validation failed; missing validated profiles={missing_profiles:?}; diagnostics={blocking_diagnostics:?}"
+        )
+    }
+}
+
+fn sort_profile_results(profiles: &mut [TestProfileResult]) {
+    profiles.sort_by(|left, right| {
+        left.profile_id
+            .cmp(&right.profile_id)
+            .then_with(|| {
+                profile_status_rank(&left.status).cmp(&profile_status_rank(&right.status))
+            })
+            .then_with(|| left.target.cmp(&right.target))
+            .then_with(|| left.features.cmp(&right.features))
+    });
+}
+
+const fn profile_status_rank(status: &ProfileStatus) -> u8 {
+    match status {
+        ProfileStatus::Validated => 0,
+        ProfileStatus::Failed => 1,
+        ProfileStatus::Unavailable => 2,
+        ProfileStatus::Stale => 3,
     }
 }
 
@@ -823,5 +937,221 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
                 ),
             ]
         );
+    }
+    #[test]
+    fn strict_modes_enforce_their_required_profiles() {
+        use model::{ExecutableTest, ProfileStatus};
+        use std::cell::RefCell;
+
+        #[derive(Default)]
+        struct TestOutput(RefCell<Vec<Vec<u8>>>);
+
+        impl SnapshotOutput for TestOutput {
+            fn write_document(&self, document: &[u8]) -> Result<()> {
+                self.0.borrow_mut().push(document.to_vec());
+                Ok(())
+            }
+        }
+
+        let profile = |id: &str, required_in_ci: bool| ValidationProfile {
+            id: id.to_string(),
+            target: format!("target-{id}"),
+            features: Vec::new(),
+            no_default_features: false,
+            all_targets: true,
+            required_in_ci,
+        };
+        let manifest = ContextManifest {
+            schema_version: 1,
+            adapters: Vec::new(),
+            profiles: vec![
+                profile("native", true),
+                profile("windows", true),
+                profile("optional", false),
+            ],
+        };
+        let executable = ExecutableTest {
+            stable_id: "pkg::bin::works".to_string(),
+            package_id: "pkg".to_string(),
+            binary_id: "bin".to_string(),
+            test_name: "works".to_string(),
+            ignored: false,
+        };
+        let result =
+            |id: &str, status: ProfileStatus, tests: Vec<ExecutableTest>| TestProfileResult {
+                profile_id: id.to_string(),
+                target: format!("target-{id}"),
+                features: Vec::new(),
+                status: status.clone(),
+                executable_tests: tests,
+                unavailable_reason: (status == ProfileStatus::Unavailable)
+                    .then(|| "target toolchain is unavailable".to_string()),
+                evidence_ids: vec![EvidenceId::from("nextest:list")],
+            };
+        let native_failed = result("native", ProfileStatus::Failed, Vec::new());
+        let diagnostics = vec![ContextDiagnostic {
+            code: "native.mismatch".to_string(),
+            severity: DiagnosticSeverity::Error,
+            message: "native evidence mismatch".to_string(),
+            profile_id: Some("native".to_string()),
+            evidence_ids: vec![EvidenceId::from("nextest:list")],
+        }];
+        let output = TestOutput::default();
+        emit_document_then_enforce(
+            &output,
+            b"{\"snapshot_version\":3}\n",
+            &ContextOptions::default(),
+            &manifest,
+            "native",
+            std::slice::from_ref(&native_failed),
+            &diagnostics,
+        )
+        .expect("default mode should represent errors without failing");
+        assert_eq!(output.0.borrow().len(), 1);
+
+        let strict = ContextOptions {
+            strict: true,
+            ..ContextOptions::default()
+        };
+        assert!(
+            emit_document_then_enforce(
+                &output,
+                b"{\"snapshot_version\":3}\n",
+                &strict,
+                &manifest,
+                "native",
+                std::slice::from_ref(&native_failed),
+                &diagnostics,
+            )
+            .is_err()
+        );
+        assert_eq!(
+            output.0.borrow().len(),
+            2,
+            "JSON must be emitted before strict failure"
+        );
+
+        let native_zero = result("native", ProfileStatus::Validated, Vec::new());
+        emit_document_then_enforce(
+            &output,
+            b"{\"snapshot_version\":3}\n",
+            &strict,
+            &manifest,
+            "native",
+            std::slice::from_ref(&native_zero),
+            &[],
+        )
+        .expect("a validated empty target is distinct from an unavailable target");
+        let unavailable = result("native", ProfileStatus::Unavailable, Vec::new());
+        assert_eq!(unavailable.status, ProfileStatus::Unavailable);
+        assert!(unavailable.unavailable_reason.is_some());
+        assert!(
+            enforce_validation_mode(
+                &strict,
+                &manifest,
+                "native",
+                std::slice::from_ref(&unavailable),
+                &[],
+            )
+            .is_err()
+        );
+
+        assert_eq!(
+            profiles_to_collect(&manifest, "native", false)
+                .expect("default schedule should resolve")
+                .iter()
+                .map(|profile| profile.id.as_str())
+                .collect::<Vec<_>>(),
+            ["native"]
+        );
+        assert_eq!(
+            profiles_to_collect(&manifest, "native", true)
+                .expect("full schedule should resolve")
+                .iter()
+                .map(|profile| profile.id.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["native", "optional", "windows"])
+        );
+
+        let key = ProfileEvidenceCacheKey {
+            commit: "abc123".to_string(),
+            worktree_fingerprint: "clean".to_string(),
+            manifest_sha256: "manifest".to_string(),
+            target: "target-windows".to_string(),
+            features: Vec::new(),
+            no_default_features: false,
+            cargo_version: "cargo 1.85.0".to_string(),
+            rustc_version: "rustc 1.85.0".to_string(),
+            nextest_version: "cargo-nextest 0.9".to_string(),
+        };
+        let artifact = |cache_key: &ProfileEvidenceCacheKey| {
+            serde_json::json!({
+                "schema_version": 1,
+                "profile_id": "windows",
+                "cache_key": cache_key,
+                "status": "validated",
+                "executable_tests": [{
+                    "stable_id": executable.stable_id,
+                    "package_id": executable.package_id,
+                    "binary_id": executable.binary_id,
+                    "test_name": executable.test_name,
+                    "ignored": executable.ignored
+                }],
+                "unavailable_reason": null
+            })
+        };
+        let expected = BTreeMap::from([("windows".to_string(), key.clone())]);
+        let current_dir = tempfile::tempdir().expect("current evidence directory should exist");
+        std::fs::write(
+            current_dir.path().join("windows.json"),
+            serde_json::to_vec(&artifact(&key)).expect("current artifact should serialize"),
+        )
+        .expect("current artifact should be written");
+        let current = read_profile_evidence(current_dir.path(), &expected)
+            .expect("exact-key evidence should import");
+        assert_eq!(current[0].status, ProfileStatus::Validated);
+
+        let stale_dir = tempfile::tempdir().expect("stale evidence directory should exist");
+        let mut stale_key = key.clone();
+        stale_key.commit = "different".to_string();
+        std::fs::write(
+            stale_dir.path().join("windows.json"),
+            serde_json::to_vec(&artifact(&stale_key)).expect("stale artifact should serialize"),
+        )
+        .expect("stale artifact should be written");
+        let stale = read_profile_evidence(stale_dir.path(), &expected)
+            .expect("stale evidence should remain diagnostic data");
+        assert_eq!(stale[0].status, ProfileStatus::Stale);
+        assert!(stale[0].executable_tests.is_empty());
+
+        let validate_all_strict = ContextOptions {
+            strict: true,
+            validate_all: true,
+            ..ContextOptions::default()
+        };
+        let local_results = vec![
+            result("native", ProfileStatus::Validated, vec![executable.clone()]),
+            result("windows", ProfileStatus::Unavailable, Vec::new()),
+            result("optional", ProfileStatus::Unavailable, Vec::new()),
+        ];
+        let mut with_current = local_results.clone();
+        with_current.extend(current);
+        enforce_validation_mode(
+            &validate_all_strict,
+            &manifest,
+            "native",
+            &with_current,
+            &[],
+        )
+        .expect("exact-key CI evidence should satisfy a required profile");
+        let mut with_stale = local_results;
+        with_stale.extend(stale);
+        assert!(
+            enforce_validation_mode(&validate_all_strict, &manifest, "native", &with_stale, &[],)
+                .is_err()
+        );
+
+        let deduplicated = validated_unique_tests(&with_current);
+        assert_eq!(deduplicated, [executable]);
     }
 }
