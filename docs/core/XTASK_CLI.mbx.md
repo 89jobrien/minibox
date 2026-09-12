@@ -1,14 +1,21 @@
 ---
-source_sha: b47bbe34922afd74ad8444bf7eeb064361dcdb64
+source_sha: f0fd2661aa36411f42a73ed1f44ce49455acd7d1
 sources:
   - xtask/src/main.rs
   - xtask/schema/cli.schema.json
-generated: 2026-09-06
+  - xtask/src/context.rs
+  - xtask/src/context/model.rs
+  - xtask/src/context/collect.rs
+  - xtask/src/context/manifest.rs
+  - xtask/src/context/test_inventory.rs
+  - xtask/src/context/output.rs
+  - xtask/context.toml
+generated: 2026-09-12
 ---
 
 # xtask CLI Reference
 
-Last updated: 2026-09-08
+Last updated: 2026-09-12
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -76,6 +83,7 @@ Bare `cargo xtask docs` prints the action list.
 | `audit` | `--full` `--strict` | Audit `docs/core/` facts against code. `--full` runs full mode; `--strict` only affects Quick mode (the default when `--full` is absent). |
 | `lint` | `--sarif <path>` | Validate frontmatter + status values under the legacy `docs/superpowers/{plans,specs}/` paths. If those directories are absent, zero files are checked. |
 | `update-date` | — | Rewrite the Last-updated stamp in `FEATURE_MATRIX.mbx.md`. |
+| `sync-adapters` | — | Idempotently regenerate only the marked adapter-suite and capability blocks from `xtask/context.toml`. |
 
 Deprecated aliases: `docs-audit`, `lint-docs`, `update-feature-matrix-date`.
 
@@ -86,42 +94,50 @@ Bare `cargo xtask info` prints the target list.
 | Target | Flags | Notes |
 |---|---|---|
 | `metrics` | `--save` | Aggregate crate count, test count, source lines. `--save` persists the snapshot to disk. |
-| `context` | `--save` | Machine-readable repo context snapshot. |
+| `context` | `--save` `--strict` `--validate-all` `--evidence-dir <path>` | Emit the evidence-ledger context snapshot v3; persistence and validation policy are explicit. |
 | `changes` | `[<base-ref>]` | Classify changed paths; emits GitHub Actions step outputs. Default base ref: `HEAD^`. |
 
 Deprecated aliases: `collect-metrics`, `context`, `detect-changes`.
 
-#### Context snapshot v2
+#### Context snapshot v3
 
-`cargo xtask info context` prints the snapshot as formatted JSON. Passing `--save` also writes
-`artifacts/context/snapshot.json` and appends a compact record to
-`artifacts/context/history.jsonl`. No other arguments are accepted.
+`cargo xtask info context` emits one formatted JSON document on stdout. Snapshot v3 replaces snapshot v2 rather than extending its ambiguous summary fields. The top-level sections are `identity`, `environment`, `workspace`, `adapters`, `tests`, `context_map`, `evidence`, and `diagnostics`.
 
-Snapshot version 2 adds a deterministic `context_map` block:
+Options:
 
-```json
-{
-  "snapshot_version": 2,
-  "context_map": {
-    "crate_assignments": [
-      { "crate_name": "minibox", "lines": 123 }
-    ],
-    "file_assignments": [
-      {
-        "path": "xtask/src/context.rs",
-        "responsibility": "context snapshot schema and derivation"
-      }
-    ],
-    "task_slices": [
-      { "id": "t1", "title": "Collect repository context", "depends_on": [] }
-    ]
-  }
-}
-```
+- `--save` validates first, then atomically replaces `artifacts/context/snapshot.json`, appends one compact v3 record to `history.jsonl`, and persists only exact-key current profile evidence. Without this flag the command is read-only.
+- `--strict` applies the required native-profile threshold. JSON is emitted before a strict validation error produces a nonzero exit.
+- `--validate-all` attempts every profile declared in `xtask/context.toml`. By itself it reports failures in JSON and exits zero.
+- `--validate-all --strict` requires current validated evidence for every profile marked `required_in_ci`; optional profile failures remain diagnostics.
+- `--evidence-dir <path>` imports CI profile evidence. Exact-key records can satisfy required profiles; stale records remain visible for diagnostics but contribute no executable tests.
 
-The values above illustrate the shape; source-line totals are measured from the current checkout.
-Crate assignments sort by lines descending and crate name ascending. File assignments sort by
-path. Task slices use stable IDs and explicit `depends_on` edges.
+`cargo xtask docs sync-adapters` idempotently rewrites only the explicitly marked adapter-suite and capability tables in `docs/core/FEATURE_MATRIX.mbx.md` from `xtask/context.toml`.
+
+##### Evidence and validation semantics
+
+Facts carry separate `declared`, `observed`, and `validation` values. `declared` records policy or manifest intent, `observed` records runtime or source evidence, and `validation.state` distinguishes `match`, `mismatch`, `declared_only`, `observed_only`, `unavailable`, and `not_applicable`. Missing observations are never silently converted to empty strings, zero tests, or successful validation.
+
+The repository identity includes the full commit, branch, changed paths, and a dirty-worktree fingerprint. The fingerprint covers tracked and untracked changed-path state and changed content while excluding ignored files and content outside the repository.
+
+Profile cache freshness requires an exact match across commit, dirty-worktree fingerprint, manifest SHA-256, target triple, sorted feature set, default-feature mode, Cargo version, rustc version, and cargo-nextest version. A complete match is current evidence. Any mismatch is stale evidence. A profile with `unavailable` status is not equivalent to a validated profile containing zero tests.
+
+Executable tests are listed per named target/profile from cargo-nextest JSON. Cross-profile counts deduplicate stable package/binary/test identities. Static Rust declarations remain separate because `#[cfg]`, target selection, required features, and macro expansion can change executable inventory.
+
+##### Migration from v2
+
+Machine consumers must branch on `snapshot_version` and replace their v2 field access:
+
+| Removed v2 field | v3 replacement |
+|---|---|
+| top-level `commit`, `branch`, `timestamp` | `identity` plus `environment.generated_at` |
+| `crates` and `crates[].deps` | `workspace.packages` and typed `dependencies` |
+| `tests.total` and per-crate `test_count` | `tests.profiles` plus `validated_unique_tests` |
+| `ci_workflows` and `recent_commits` | Removed; they were not validated context evidence |
+| `context_map.crate_assignments` | `context_map.crates` |
+| `context_map.file_assignments` | `context_map.files` and `changed_files` |
+| `context_map.task_slices` | `context_map.collector_tasks` with executed statuses and evidence IDs |
+
+The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `task_slices` fields and unknown object properties.
 
 ---
 

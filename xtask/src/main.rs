@@ -1040,4 +1040,62 @@ mod dispatch_args_tests {
         assert!(is_check_alias("check-protocol-sites"));
         assert_eq!(check_alias_to_sub("check-protocol-sites"), "protocol-sites");
     }
+    #[test]
+    fn context_cli_contract_documents_v3_flags() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../schema/cli.schema.json"))
+                .expect("CLI schema should parse");
+        let info_args =
+            &schema["\u{24}defs"]["commands"]["info"]["properties"]["args"]["properties"];
+        for flag in ["save", "strict", "validate_all", "evidence_dir"] {
+            assert!(info_args.get(flag).is_some(), "schema omits {flag:?}");
+        }
+        let docs_actions =
+            schema["\u{24}defs"]["commands"]["docs"]["properties"]["args"]["properties"]["action"]
+                ["enum"]
+                .as_array()
+                .expect("docs actions should be an enum");
+        assert!(docs_actions.iter().any(|action| action == "sync-adapters"));
+
+        let context_schema = &schema["\u{24}defs"]["contextSnapshot"];
+        assert_eq!(context_schema["properties"]["snapshot_version"]["const"], 3);
+        let context_schema_text =
+            serde_json::to_string(context_schema).expect("context schema should serialize");
+        for removed in [
+            "crate_assignments",
+            "file_assignments",
+            "task_slices",
+            "ci_workflows",
+            "recent_commits",
+        ] {
+            assert!(
+                !context_schema_text.contains(removed),
+                "v3 schema retains removed field {removed:?}"
+            );
+        }
+
+        let docs = include_str!("../../docs/core/XTASK_CLI.mbx.md");
+        for required in [
+            "--save",
+            "--strict",
+            "--validate-all",
+            "--evidence-dir",
+            "docs sync-adapters",
+            "Context snapshot v3",
+            "replaces snapshot v2",
+            "declared",
+            "observed",
+            "validation",
+            "current evidence",
+            "stale evidence",
+            "dirty-worktree fingerprint",
+            "JSON is emitted before",
+            "crate_assignments",
+            "file_assignments",
+            "task_slices",
+        ] {
+            assert!(docs.contains(required), "context v3 docs omit {required:?}");
+        }
+        assert!(docs.contains("--strict") && docs.contains("--validate-all --strict"));
+    }
 }

@@ -116,7 +116,7 @@
           "args": {
             "type": "object",
             "properties": {
-              "action": { "enum": ["audit", "lint", "update-date"] },
+              "action": { "enum": ["audit", "lint", "update-date", "sync-adapters"] },
               "full": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Full audit mode instead of Quick." },
               "strict": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Only meaningful in Quick mode (ignored when --full is set)." },
               "sarif": { "type": "string", "format": "path", "appliesTo": ["lint"], "description": "Write a SARIF report of frontmatter/status violations." }
@@ -136,7 +136,10 @@
             "type": "object",
             "properties": {
               "target": { "enum": ["metrics", "context", "changes"] },
-              "save": { "type": "boolean", "default": false, "appliesTo": ["metrics", "context"], "description": "Persist the snapshot to disk in addition to printing it." },
+              "save": { "type": "boolean", "default": false, "appliesTo": ["metrics", "context"], "description": "Persist the validated snapshot; context JSON is always printed first." },
+              "strict": { "type": "boolean", "default": false, "appliesTo": ["context"], "description": "After emitting JSON, exit non-zero when required validation evidence or blocking diagnostics are missing." },
+              "validate_all": { "type": "boolean", "default": false, "appliesTo": ["context"], "description": "Attempt every configured validation profile instead of only the native host profile." },
+              "evidence_dir": { "type": "string", "format": "path", "appliesTo": ["context"], "description": "Import exact-cache-key profile evidence; stale evidence remains diagnostic-only." },
               "base_ref": { "type": "string", "default": "HEAD^", "appliesTo": ["changes"], "description": "Git ref to diff against. Emits GitHub Actions step outputs classifying changed paths." }
             }
           }
