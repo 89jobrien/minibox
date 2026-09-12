@@ -1,9 +1,9 @@
 use super::manifest::{AdapterRegistryObservation, ContextManifest};
 use super::model::{
-    AdapterMaturity, AdapterSnapshot, CapabilitySupport, ContextDiagnostic, DependencyKind,
-    DependencySnapshot, DiagnosticSeverity, EvidenceId, Fact, FileMetrics, PackageSnapshot,
-    RepositoryIdentity, RepositoryPath, SourceMetrics, TargetSnapshot, Validation, ValidationState,
-    WorkspaceSnapshot,
+    AdapterMaturity, AdapterSnapshot, CapabilitySupport, ContextDiagnostic, ContextMap,
+    CrateOwnership, DependencyKind, DependencySnapshot, DiagnosticSeverity, EvidenceId, Fact,
+    FileMetrics, FileOwnership, FileRole, PackageSnapshot, RepositoryIdentity, RepositoryPath,
+    RoleOrigin, SourceMetrics, TargetSnapshot, Validation, ValidationState, WorkspaceSnapshot,
 };
 use anyhow::{Context, Result, bail};
 use cargo_metadata::{DependencyKind as CargoDependencyKind, MetadataCommand};
@@ -415,6 +415,144 @@ fn adapter_diagnostic(
             EvidenceId::from("manifest:adapter"),
             EvidenceId::from("source:adapter_registry"),
         ],
+    }
+}
+
+pub(super) fn derive_context_map(
+    repository: &impl RepositoryReader,
+    root: &Path,
+    workspace: &WorkspaceSnapshot,
+    changed_paths: &[RepositoryPath],
+) -> Result<ContextMap> {
+    let root = root
+        .canonicalize()
+        .with_context(|| format!("canonicalize workspace root {}", root.display()))?;
+    let tracked_files = repository.tracked_files(&root)?;
+    let mut packages = workspace.packages.iter().collect::<Vec<_>>();
+    packages.sort_by(|left, right| left.package_id.cmp(&right.package_id));
+
+    let mut crates = packages
+        .iter()
+        .map(|package| {
+            let mut source_roots = package.metrics.included_roots.clone();
+            source_roots.sort();
+            source_roots.dedup();
+            CrateOwnership {
+                package_id: package.package_id.clone(),
+                manifest_path: package.manifest_path.clone(),
+                source_roots,
+                evidence_ids: vec![EvidenceId::from("cargo:metadata")],
+            }
+        })
+        .collect::<Vec<_>>();
+    crates.sort_by(|left, right| left.package_id.cmp(&right.package_id));
+
+    let cargo_targets = packages
+        .iter()
+        .flat_map(|package| {
+            package
+                .targets
+                .iter()
+                .map(|target| target.source_path.clone())
+        })
+        .collect::<BTreeSet<_>>();
+    let mut files = tracked_files
+        .into_iter()
+        .map(|path| {
+            let owner = owning_workspace_package(&path, &packages);
+            let owner_package_id = owner.map(|package| package.package_id.clone());
+            let owner_root = owner.and_then(|package| {
+                Path::new(package.manifest_path.as_str())
+                    .parent()
+                    .map(Path::to_path_buf)
+            });
+            let (role, role_origin) = if cargo_targets.contains(&path) {
+                (FileRole::CargoTarget, RoleOrigin::CargoMetadata)
+            } else {
+                classify_file_role(&path, owner_root.as_deref())
+            };
+            let mut evidence_ids = vec![EvidenceId::from("git:tracked-files")];
+            if owner_package_id.is_some() || cargo_targets.contains(&path) {
+                evidence_ids.push(EvidenceId::from("cargo:metadata"));
+            }
+            evidence_ids.sort();
+            evidence_ids.dedup();
+            FileOwnership {
+                path,
+                owner_package_id,
+                role,
+                role_origin,
+                evidence_ids,
+            }
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+
+    let changed = changed_paths.iter().collect::<BTreeSet<_>>();
+    let changed_files = files
+        .iter()
+        .filter(|file| changed.contains(&file.path))
+        .cloned()
+        .collect();
+    Ok(ContextMap {
+        crates,
+        files,
+        changed_files,
+        collector_tasks: Vec::new(),
+    })
+}
+
+fn owning_workspace_package<'a>(
+    path: &RepositoryPath,
+    packages: &[&'a PackageSnapshot],
+) -> Option<&'a PackageSnapshot> {
+    let path = Path::new(path.as_str());
+    packages
+        .iter()
+        .filter_map(|package| {
+            let root = Path::new(package.manifest_path.as_str()).parent()?;
+            path.starts_with(root)
+                .then_some((*package, root.components().count()))
+        })
+        .max_by_key(|(_, depth)| *depth)
+        .map(|(package, _)| package)
+}
+
+fn classify_file_role(path: &RepositoryPath, owner_root: Option<&Path>) -> (FileRole, RoleOrigin) {
+    let path = Path::new(path.as_str());
+    if path.file_name().and_then(|name| name.to_str()) == Some("Cargo.toml") {
+        return (FileRole::Manifest, RoleOrigin::InferredPath);
+    }
+    let relative = owner_root
+        .and_then(|root| path.strip_prefix(root).ok())
+        .unwrap_or(path);
+    let components = relative
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .collect::<Vec<_>>();
+    if components.starts_with(&[".github", "workflows"]) || components.first() == Some(&"workflows")
+    {
+        return (FileRole::Workflow, RoleOrigin::DeclaredRule);
+    }
+    let directory_role = match components.first().copied() {
+        Some("src") => Some(FileRole::RustSource),
+        Some("tests") => Some(FileRole::Test),
+        Some("examples") => Some(FileRole::Example),
+        Some("benches") => Some(FileRole::Benchmark),
+        Some("docs" | "doc") => Some(FileRole::Documentation),
+        Some("config" | ".config") => Some(FileRole::Configuration),
+        _ => None,
+    };
+    if let Some(role) = directory_role {
+        return (role, RoleOrigin::DeclaredRule);
+    }
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("rs") => (FileRole::RustSource, RoleOrigin::InferredPath),
+        Some("md") => (FileRole::Documentation, RoleOrigin::InferredPath),
+        Some("toml" | "json" | "yaml" | "yml") => {
+            (FileRole::Configuration, RoleOrigin::InferredPath)
+        }
+        _ => (FileRole::Other, RoleOrigin::InferredPath),
     }
 }
 
@@ -1372,5 +1510,196 @@ build = "build.rs"
         std::fs::write(malformed_dir.path().join("broken.json"), b"{}")
             .expect("malformed artifact should be written");
         assert!(read_profile_evidence(malformed_dir.path(), &expected).is_err());
+    }
+    #[test]
+    fn context_map_uses_exact_package_roots() {
+        use crate::context::model::{FileRole, RoleOrigin};
+
+        let temp = tempfile::tempdir().expect("temporary workspace should be created");
+        let root = temp.path();
+        for directory in [
+            "crates/foo/src",
+            "crates/foo/tests/support",
+            "crates/foo/examples/support",
+            "crates/foo/benches/support",
+            "crates/foo/nested/src",
+            "crates/foo-tools/src",
+            "docs",
+            "config",
+            ".github/workflows",
+            "misc",
+        ] {
+            std::fs::create_dir_all(root.join(directory))
+                .expect("fixture directory should be created");
+        }
+        std::fs::write(
+            root.join("Cargo.toml"),
+            r#"[workspace]
+resolver = "3"
+members = ["crates/foo", "crates/foo/nested", "crates/foo-tools"]
+"#,
+        )
+        .expect("workspace manifest should be written");
+        std::fs::write(
+            root.join("crates/foo/Cargo.toml"),
+            r#"[package]
+name = "foo"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+"#,
+        )
+        .expect("foo manifest should be written");
+        for (path, name) in [
+            ("crates/foo/nested/Cargo.toml", "foo-nested"),
+            ("crates/foo-tools/Cargo.toml", "foo-tools"),
+        ] {
+            std::fs::write(
+                root.join(path),
+                format!(
+                    r#"[package]
+name = "{name}"
+version = "0.1.0"
+edition = "2024"
+"#
+                ),
+            )
+            .expect("nested fixture manifest should be written");
+        }
+        for (path, contents) in [
+            ("crates/foo/src/lib.rs", "pub mod helper;\n"),
+            ("crates/foo/src/helper.rs", "pub fn helper() {}\n"),
+            (
+                "crates/foo/tests/integration.rs",
+                "#[test] fn integration() {}\n",
+            ),
+            (
+                "crates/foo/tests/support/helper.rs",
+                "pub fn test_support() {}\n",
+            ),
+            ("crates/foo/examples/demo.rs", "fn main() {}\n"),
+            (
+                "crates/foo/examples/support/helper.rs",
+                "pub fn example_support() {}\n",
+            ),
+            ("crates/foo/benches/bench.rs", "fn main() {}\n"),
+            (
+                "crates/foo/benches/support/helper.rs",
+                "pub fn bench_support() {}\n",
+            ),
+            ("crates/foo/build.rs", "fn main() {}\n"),
+            ("crates/foo/nested/src/lib.rs", "pub fn nested() {}\n"),
+            ("crates/foo-tools/src/lib.rs", "pub fn tools() {}\n"),
+            ("docs/guide.md", "# Guide\n"),
+            ("config/settings.toml", "enabled = true\n"),
+            (".github/workflows/ci.yml", "name: ci\n"),
+            ("misc/data.bin", "data\n"),
+        ] {
+            std::fs::write(root.join(path), contents).expect("fixture file should be written");
+        }
+        for args in [vec!["init", "--quiet"], vec!["add", "--all"]] {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git fixture command should run");
+            assert!(status.success(), "git fixture command should succeed");
+        }
+
+        let repository = SystemRepositoryReader;
+        let workspace = collect_workspace(&SystemCommandRunner, &repository, root)
+            .expect("workspace metadata should be collected");
+        let changed_paths = [
+            RepositoryPath::from_root(root, &root.join("crates/foo/src/helper.rs"))
+                .expect("changed package path should normalize"),
+            RepositoryPath::from_root(root, &root.join("docs/guide.md"))
+                .expect("changed workspace path should normalize"),
+        ];
+        let context_map = derive_context_map(&repository, root, &workspace, &changed_paths)
+            .expect("context ownership should be derived");
+
+        assert!(
+            context_map
+                .files
+                .windows(2)
+                .all(|pair| pair[0].path < pair[1].path)
+        );
+        assert!(
+            context_map
+                .crates
+                .windows(2)
+                .all(|pair| pair[0].package_id < pair[1].package_id)
+        );
+        let package_id = |name: &str| {
+            workspace
+                .packages
+                .iter()
+                .find(|package| package.name == name)
+                .expect("named package should exist")
+                .package_id
+                .as_str()
+        };
+        let file = |path: &str| {
+            context_map
+                .files
+                .iter()
+                .find(|file| file.path.as_str() == path)
+                .expect("owned file should exist")
+        };
+
+        assert_eq!(
+            file("crates/foo/src/helper.rs").owner_package_id.as_deref(),
+            Some(package_id("foo"))
+        );
+        assert_eq!(
+            file("crates/foo/nested/src/lib.rs")
+                .owner_package_id
+                .as_deref(),
+            Some(package_id("foo-nested"))
+        );
+        assert_eq!(
+            file("crates/foo-tools/src/lib.rs")
+                .owner_package_id
+                .as_deref(),
+            Some(package_id("foo-tools"))
+        );
+        assert_eq!(file("crates/foo/src/lib.rs").role, FileRole::CargoTarget);
+        assert_eq!(
+            file("crates/foo/src/lib.rs").role_origin,
+            RoleOrigin::CargoMetadata
+        );
+        assert_eq!(
+            file("crates/foo/tests/support/helper.rs").role,
+            FileRole::Test
+        );
+        assert_eq!(
+            file("crates/foo/tests/support/helper.rs").role_origin,
+            RoleOrigin::DeclaredRule
+        );
+        assert_eq!(file("docs/guide.md").owner_package_id, None);
+        assert_eq!(file("docs/guide.md").role, FileRole::Documentation);
+        assert_eq!(file("config/settings.toml").role, FileRole::Configuration);
+        assert_eq!(file(".github/workflows/ci.yml").role, FileRole::Workflow);
+        assert_eq!(file("misc/data.bin").role, FileRole::Other);
+        assert_eq!(file("misc/data.bin").role_origin, RoleOrigin::InferredPath);
+
+        assert_eq!(context_map.crates.len(), 3);
+        assert!(context_map.crates.iter().all(|owned| {
+            workspace.packages.iter().any(|package| {
+                package.package_id == owned.package_id
+                    && package.manifest_path == owned.manifest_path
+            })
+        }));
+        assert_eq!(context_map.changed_files.len(), 2);
+        for changed in &context_map.changed_files {
+            assert_eq!(
+                Some(changed),
+                context_map
+                    .files
+                    .iter()
+                    .find(|file| file.path == changed.path)
+            );
+        }
+        assert!(context_map.collector_tasks.is_empty());
     }
 }
