@@ -738,7 +738,7 @@
       "additionalProperties": false,
       "required": ["kind", "locator", "collected_at", "content_sha256", "profile_id", "status"],
       "properties": {
-        "kind": { "enum": ["source", "cargo_metadata", "git", "manifest", "nextest", "toolchain", "generated"] },
+        "kind": { "enum": ["cargo_metadata", "git", "manifest", "nextest", "rust_source", "tool_version", "tracked_file", "ci_artifact"] },
         "locator": { "type": "string" },
         "collected_at": { "type": "string" },
         "content_sha256": { "type": ["string", "null"] },

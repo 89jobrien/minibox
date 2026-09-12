@@ -1,14 +1,26 @@
-//! `cargo xtask context` — machine-readable repo context snapshot.
-//!
-//! Outputs a single JSON document describing workspace shape: crate graph,
-//! adapter wiring, test counts, recent commits. Designed for cold-start
-//! LLM sessions that need project context without reading every file.
+//! `cargo xtask info context` — evidence-backed repository context.
 
-use anyhow::{Context, Result};
-use serde::Serialize;
+use anyhow::{Context, Result, bail};
+use chrono::{SecondsFormat, Utc};
+use collect::output::{
+    PendingProfileEvidence, ProfileEvidenceCacheKey, persist_snapshot, read_profile_evidence,
+    validate_snapshot_json,
+};
+use collect::{
+    CollectorExecution, CommandOutput, CommandRunner, CommandSpec, RepositoryReader,
+    SystemCommandRunner, SystemRepositoryReader, collect_repository_identity, collect_workspace,
+    derive_collector_tasks, derive_context_map, reconcile_adapters,
+};
+use manifest::{ContextManifest, ValidationProfile, parse_adapter_registry, validate_manifest};
+use model::{
+    ContextDiagnostic, ContextSnapshot, DiagnosticSeverity, EnvironmentSnapshot, Evidence,
+    EvidenceId, EvidenceKind, EvidenceStatus, Fact, ProfileStatus, TestProfileResult, TestSnapshot,
+    Validation, ValidationState,
+};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use xshell::{Shell, cmd};
 
 #[allow(dead_code)]
 mod collect;
@@ -27,607 +39,789 @@ pub struct ContextOptions {
     pub evidence_dir: Option<PathBuf>,
 }
 
-// ─── Output schema ───────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-struct ContextSnapshot {
-    snapshot_version: u32,
-    commit: String,
-    branch: String,
-    timestamp: String,
-    workspace: WorkspaceInfo,
-    crates: Vec<CrateInfo>,
-    adapters: BTreeMap<String, AdapterInfo>,
-    tests: TestSummary,
-    ci_workflows: Vec<String>,
-    recent_commits: Vec<CommitInfo>,
-    context_map: ContextMap,
+trait SnapshotOutput {
+    fn write_document(&self, document: &[u8]) -> Result<()>;
 }
 
-#[derive(Debug, Default, Serialize)]
-struct ContextMap {
-    crate_assignments: Vec<CrateAssignment>,
-    file_assignments: Vec<FileAssignment>,
-    task_slices: Vec<TaskSlice>,
+trait Clock {
+    fn now(&self) -> String;
 }
 
-#[derive(Debug, Serialize)]
-struct CrateAssignment {
-    crate_name: String,
-    lines: usize,
-}
+struct StdoutOutput;
 
-#[derive(Debug, Serialize)]
-struct FileAssignment {
-    path: String,
-    responsibility: String,
-}
-
-#[derive(Debug, Serialize)]
-struct TaskSlice {
-    id: String,
-    title: String,
-    depends_on: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct WorkspaceInfo {
-    version: String,
-    edition: String,
-    rust_version: String,
-}
-
-#[derive(Serialize)]
-struct CrateInfo {
-    name: String,
-    kind: Vec<String>,
-    deps: Vec<String>,
-    test_count: usize,
-    src_files: usize,
-    lines: usize,
-}
-
-#[derive(Serialize)]
-struct AdapterInfo {
-    platform: String,
-    status: String,
-}
-
-#[derive(Serialize)]
-struct TestSummary {
-    total: usize,
-    by_crate: BTreeMap<String, usize>,
-}
-
-#[derive(Serialize)]
-struct CommitInfo {
-    hash: String,
-    subject: String,
-}
-
-// ─── Data collection ─────────────────────────────────────────────────────────
-
-fn git_info(sh: &Shell) -> Result<(String, String, String)> {
-    let commit = cmd!(sh, "git rev-parse --short HEAD").read()?;
-    let branch = cmd!(sh, "git branch --show-current").read()?;
-    let timestamp = cmd!(sh, "date -u +%Y-%m-%dT%H:%M:%SZ").read()?;
-    Ok((
-        commit.trim().to_string(),
-        branch.trim().to_string(),
-        timestamp.trim().to_string(),
-    ))
-}
-
-fn recent_commits(sh: &Shell) -> Result<Vec<CommitInfo>> {
-    let log = cmd!(sh, "git log --oneline -10").read()?;
-    Ok(log
-        .lines()
-        .filter(|l| !l.is_empty())
-        .map(|line| {
-            let (hash, subject) = line.split_once(' ').unwrap_or((line, ""));
-            CommitInfo {
-                hash: hash.to_string(),
-                subject: subject.to_string(),
-            }
-        })
-        .collect())
-}
-
-/// Parse `cargo metadata --no-deps` for crate graph.
-fn crate_graph(sh: &Shell) -> Result<Vec<CrateInfo>> {
-    let raw = cmd!(sh, "cargo metadata --no-deps --format-version 1")
-        .read()
-        .context("cargo metadata")?;
-    let meta: serde_json::Value = serde_json::from_str(&raw).context("parse cargo metadata")?;
-
-    let workspace_members: Vec<&str> = meta["workspace_members"]
-        .as_array()
-        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
-
-    let packages = meta["packages"]
-        .as_array()
-        .context("no packages in metadata")?;
-
-    let mut crates = Vec::new();
-    for pkg in packages {
-        let name = pkg["name"].as_str().unwrap_or("").to_string();
-        let pkg_id = pkg["id"].as_str().unwrap_or("");
-        if !workspace_members.iter().any(|m| m.contains(&name)) {
-            continue;
-        }
-
-        let targets = pkg["targets"].as_array();
-        let empty_vec = vec![];
-        let kind: Vec<String> = targets
-            .map(|ts| {
-                ts.iter()
-                    .flat_map(|t| {
-                        t["kind"]
-                            .as_array()
-                            .unwrap_or(&empty_vec)
-                            .iter()
-                            .filter_map(|k| k.as_str().map(String::from))
-                    })
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .into_iter()
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let deps: Vec<String> = pkg["dependencies"]
-            .as_array()
-            .map(|ds| {
-                ds.iter()
-                    .filter_map(|d| d["name"].as_str().map(String::from))
-                    .filter(|n| workspace_members.iter().any(|m| m.contains(n.as_str())))
-                    .collect()
-            })
-            .unwrap_or_default();
-
-        let manifest_path = pkg["manifest_path"].as_str().unwrap_or("");
-        let crate_dir = std::path::Path::new(manifest_path)
-            .parent()
-            .unwrap_or_else(|| Path::new("."));
-
-        let (src_files, lines) = count_source(crate_dir);
-
-        crates.push(CrateInfo {
-            name,
-            kind,
-            deps,
-            test_count: 0, // filled in later
-            src_files,
-            lines,
-        });
-
-        // suppress unused variable warning
-        let _ = pkg_id;
+impl SnapshotOutput for StdoutOutput {
+    fn write_document(&self, document: &[u8]) -> Result<()> {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        stdout
+            .write_all(document)
+            .context("write context JSON to stdout")?;
+        stdout.flush().context("flush context JSON stdout")
     }
-    Ok(crates)
 }
 
-fn derive_crate_assignments(crates: &[CrateInfo]) -> Vec<CrateAssignment> {
-    let mut assignments: Vec<_> = crates
+struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> String {
+        Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
+    }
+}
+
+pub fn context(root: &Path, options: &ContextOptions) -> Result<()> {
+    run_context(
+        &SystemCommandRunner,
+        &SystemRepositoryReader,
+        &StdoutOutput,
+        &SystemClock,
+        root,
+        options,
+    )?;
+    Ok(())
+}
+
+fn run_context(
+    runner: &impl CommandRunner,
+    repository: &impl RepositoryReader,
+    output: &impl SnapshotOutput,
+    clock: &impl Clock,
+    root: &Path,
+    options: &ContextOptions,
+) -> Result<ContextSnapshot> {
+    let root = root
+        .canonicalize()
+        .with_context(|| format!("canonicalize workspace root {}", root.display()))?;
+    let generated_at = clock.now();
+    let identity = collect_repository_identity(runner, &root)?;
+    let environment = collect_environment(runner, &root, &generated_at)?;
+
+    let manifest_path = root.join("xtask/context.toml");
+    let manifest_source = repository.read_utf8(&manifest_path)?;
+    let manifest: ContextManifest =
+        toml::from_str(&manifest_source).context("parse xtask/context.toml")?;
+    validate_manifest(&manifest)?;
+    let manifest_sha256 = hex::encode(Sha256::digest(manifest_source.as_bytes()));
+
+    let registry_source =
+        repository.read_utf8(&root.join("crates/miniboxd/src/adapter_registry.rs"))?;
+    let registry = parse_adapter_registry(&registry_source)?;
+    let workspace = collect_workspace(runner, repository, &root)?;
+    let source_declarations = test_inventory::collect_source_tests(repository, &root, &workspace)?;
+
+    let native_profile = select_native_profile(&manifest, &environment.target)?;
+    let native_result = test_inventory::collect_test_profile(runner, &root, native_profile);
+    let mut validate_all_results = Vec::new();
+    if options.validate_all {
+        for profile in &manifest.profiles {
+            if profile.id != native_profile.id {
+                validate_all_results
+                    .push(test_inventory::collect_test_profile(runner, &root, profile));
+            }
+        }
+    }
+
+    let expected_keys = manifest
+        .profiles
         .iter()
-        .map(|crate_info| CrateAssignment {
-            crate_name: crate_info.name.clone(),
-            lines: crate_info.lines,
+        .map(|profile| {
+            Ok((
+                profile.id.clone(),
+                profile_cache_key(profile, &identity, &environment, &manifest_sha256)?,
+            ))
         })
-        .collect();
-    assignments.sort_by(|left, right| {
-        right
-            .lines
-            .cmp(&left.lines)
-            .then_with(|| left.crate_name.cmp(&right.crate_name))
-    });
-    assignments
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let imported_profiles = match &options.evidence_dir {
+        Some(directory) => {
+            let directory = if directory.is_absolute() {
+                directory.clone()
+            } else {
+                root.join(directory)
+            };
+            read_profile_evidence(&directory, &expected_keys)?
+        }
+        None => Vec::new(),
+    };
+
+    let tested_capabilities = BTreeMap::new();
+    let reconciliation = reconcile_adapters(&manifest, &registry, &tested_capabilities);
+    let mut diagnostics = reconciliation.diagnostics;
+    for profile in std::iter::once(&native_result)
+        .chain(validate_all_results.iter())
+        .chain(imported_profiles.iter())
+    {
+        if profile.status != ProfileStatus::Validated {
+            diagnostics.push(profile_diagnostic(profile));
+        }
+    }
+    sort_diagnostics(&mut diagnostics);
+
+    let mut profiles = vec![native_result.clone()];
+    profiles.extend(validate_all_results.iter().cloned());
+    profiles.extend(imported_profiles.iter().cloned());
+    let validated_unique_tests = validated_unique_tests(&profiles);
+    let tests = TestSnapshot {
+        source_declarations,
+        profiles,
+        validated_unique_tests,
+    };
+
+    let mut context_map =
+        derive_context_map(repository, &root, &workspace, &identity.changed_paths)?;
+    context_map.collector_tasks = derive_collector_tasks(&CollectorExecution {
+        native_profile: native_result.clone(),
+        validate_all_profiles: validate_all_results.clone(),
+        imported_profiles: imported_profiles.clone(),
+        outcomes: BTreeMap::new(),
+    })?;
+
+    let evidence = build_evidence(
+        &generated_at,
+        &manifest_sha256,
+        &native_result,
+        &environment,
+    );
+    let snapshot = ContextSnapshot {
+        snapshot_version: 3,
+        identity,
+        environment,
+        workspace,
+        adapters: reconciliation.adapters,
+        tests,
+        context_map,
+        evidence,
+        diagnostics,
+    };
+    let value = serde_json::to_value(&snapshot).context("serialize context snapshot")?;
+    validate_snapshot_json(&value)?;
+    let mut document = serde_json::to_vec_pretty(&value).context("format context JSON")?;
+    document.push(b'\n');
+    output.write_document(&document)?;
+
+    let mut pending_evidence = Vec::new();
+    for result in std::iter::once(&native_result).chain(validate_all_results.iter()) {
+        let key = expected_keys
+            .get(&result.profile_id)
+            .with_context(|| format!("profile {:?} has no evidence key", result.profile_id))?;
+        pending_evidence.push(PendingProfileEvidence {
+            expected_key: key.clone(),
+            actual_key: key.clone(),
+            result: result.clone(),
+        });
+    }
+    persist_snapshot(&root, &value, options.save, &pending_evidence)?;
+    Ok(snapshot)
 }
 
-fn derive_file_assignments() -> Vec<FileAssignment> {
-    let mut assignments = [
+fn collect_environment(
+    runner: &impl CommandRunner,
+    root: &Path,
+    generated_at: &str,
+) -> Result<EnvironmentSnapshot> {
+    let rustc = run_text_command(runner, root, "rustc", &["-vV"])?;
+    let rustc_version = rustc
+        .lines()
+        .next()
+        .filter(|line| !line.is_empty())
+        .context("rustc -vV omitted its version")?
+        .to_string();
+    let host = rustc
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .filter(|host| !host.is_empty())
+        .context("rustc -vV omitted its host target")?
+        .to_string();
+    let cargo_version = run_text_command(runner, root, "cargo", &["--version"])?;
+    let nextest_version = run_text_command(runner, root, "cargo", &["nextest", "--version"])?;
+    Ok(EnvironmentSnapshot {
+        host: host.clone(),
+        target: host,
+        enabled_features: Vec::new(),
+        rustc_version: observed_fact(rustc_version, "tool:rustc"),
+        cargo_version: observed_fact(cargo_version.trim().to_string(), "tool:cargo"),
+        nextest_version: observed_fact(nextest_version.trim().to_string(), "tool:nextest"),
+        generated_at: generated_at.to_string(),
+    })
+}
+
+fn run_text_command(
+    runner: &impl CommandRunner,
+    root: &Path,
+    program: &str,
+    args: &[&str],
+) -> Result<String> {
+    let output = runner.run(&CommandSpec {
+        program: program.to_string(),
+        args: args.iter().map(ToString::to_string).collect(),
+        current_dir: root.to_path_buf(),
+    })?;
+    require_success(program, args, &output)?;
+    String::from_utf8(output.stdout)
+        .with_context(|| format!("{program} {} output is not UTF-8", args.join(" ")))
+}
+
+fn require_success(program: &str, args: &[&str], output: &CommandOutput) -> Result<()> {
+    if output.exit_code == Some(0) {
+        return Ok(());
+    }
+    bail!(
+        "{program} {} failed with status {:?}: {}",
+        args.join(" "),
+        output.exit_code,
+        String::from_utf8_lossy(&output.stderr).trim()
+    )
+}
+
+fn observed_fact(value: String, evidence_id: &'static str) -> Fact<String> {
+    Fact::new(
+        None,
+        Some(value),
+        Validation {
+            state: ValidationState::ObservedOnly,
+            reason: None,
+        },
+        vec![EvidenceId::from(evidence_id)],
+    )
+}
+
+fn select_native_profile<'a>(
+    manifest: &'a ContextManifest,
+    host: &str,
+) -> Result<&'a ValidationProfile> {
+    let profiles = manifest
+        .profiles
+        .iter()
+        .filter(|profile| {
+            profile.target == host && profile.features.is_empty() && !profile.no_default_features
+        })
+        .collect::<Vec<_>>();
+    match profiles.as_slice() {
+        [profile] => Ok(profile),
+        [] => bail!("no native validation profile is configured for host {host:?}"),
+        _ => bail!("multiple native validation profiles are configured for host {host:?}"),
+    }
+}
+
+fn profile_cache_key(
+    profile: &ValidationProfile,
+    identity: &model::RepositoryIdentity,
+    environment: &EnvironmentSnapshot,
+    manifest_sha256: &str,
+) -> Result<ProfileEvidenceCacheKey> {
+    Ok(ProfileEvidenceCacheKey {
+        commit: identity.commit.clone(),
+        worktree_fingerprint: identity.worktree_fingerprint.clone(),
+        manifest_sha256: manifest_sha256.to_string(),
+        target: profile.target.clone(),
+        features: profile.features.clone(),
+        no_default_features: profile.no_default_features,
+        cargo_version: observed_value(&environment.cargo_version, "cargo version")?,
+        rustc_version: observed_value(&environment.rustc_version, "rustc version")?,
+        nextest_version: observed_value(&environment.nextest_version, "nextest version")?,
+    })
+}
+
+fn observed_value(fact: &Fact<String>, name: &str) -> Result<String> {
+    fact.observed
+        .clone()
+        .with_context(|| format!("{name} was not observed"))
+}
+
+fn validated_unique_tests(profiles: &[TestProfileResult]) -> Vec<model::ExecutableTest> {
+    let mut tests = profiles
+        .iter()
+        .filter(|profile| profile.status == ProfileStatus::Validated)
+        .flat_map(|profile| profile.executable_tests.iter().cloned())
+        .collect::<Vec<_>>();
+    tests.sort_by(|left, right| left.stable_id.cmp(&right.stable_id));
+    tests.dedup_by(|left, right| left.stable_id == right.stable_id);
+    tests
+}
+
+fn profile_diagnostic(profile: &TestProfileResult) -> ContextDiagnostic {
+    let severity = match profile.status {
+        ProfileStatus::Validated => DiagnosticSeverity::Info,
+        ProfileStatus::Failed => DiagnosticSeverity::Error,
+        ProfileStatus::Unavailable | ProfileStatus::Stale => DiagnosticSeverity::Warning,
+    };
+    ContextDiagnostic {
+        code: format!("profile.{:?}", profile.status).to_ascii_lowercase(),
+        severity,
+        message: profile
+            .unavailable_reason
+            .clone()
+            .unwrap_or_else(|| format!("profile {:?} is {:?}", profile.profile_id, profile.status)),
+        profile_id: Some(profile.profile_id.clone()),
+        evidence_ids: profile.evidence_ids.clone(),
+    }
+}
+
+fn sort_diagnostics(diagnostics: &mut [ContextDiagnostic]) {
+    diagnostics.sort_by(|left, right| {
+        left.code
+            .cmp(&right.code)
+            .then_with(|| left.profile_id.cmp(&right.profile_id))
+            .then_with(|| left.message.cmp(&right.message))
+    });
+}
+
+fn build_evidence(
+    generated_at: &str,
+    manifest_sha256: &str,
+    native_profile: &TestProfileResult,
+    environment: &EnvironmentSnapshot,
+) -> BTreeMap<EvidenceId, Evidence> {
+    let profile_status = match native_profile.status {
+        ProfileStatus::Validated => EvidenceStatus::Collected,
+        ProfileStatus::Failed => EvidenceStatus::Failed,
+        ProfileStatus::Unavailable => EvidenceStatus::Unavailable,
+        ProfileStatus::Stale => EvidenceStatus::Stale,
+    };
+    [
         (
-            "xtask/src/context.rs",
-            "context snapshot schema and derivation",
+            "git:branch",
+            EvidenceKind::Git,
+            "git branch --show-current",
+            EvidenceStatus::Collected,
+            None,
         ),
-        ("xtask/src/main.rs", "info context command dispatch"),
         (
-            "xtask/schema/cli.schema.json",
-            "machine-readable command contract",
+            "git:head",
+            EvidenceKind::Git,
+            "git rev-parse HEAD",
+            EvidenceStatus::Collected,
+            None,
         ),
         (
-            "docs/core/XTASK_CLI.mbx.md",
-            "human-readable context output contract",
+            "git:status",
+            EvidenceKind::Git,
+            "git status --porcelain=v2 -z --untracked-files=all",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "git:tracked-files",
+            EvidenceKind::Git,
+            "git ls-files -z",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "manifest:adapter",
+            EvidenceKind::Manifest,
+            "xtask/context.toml",
+            EvidenceStatus::Collected,
+            Some(manifest_sha256.to_string()),
+        ),
+        (
+            "cargo:metadata",
+            EvidenceKind::CargoMetadata,
+            "cargo metadata --format-version 1",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "source:adapter_registry",
+            EvidenceKind::RustSource,
+            "crates/miniboxd/src/adapter_registry.rs",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "source:tests",
+            EvidenceKind::RustSource,
+            "tracked Rust test declarations",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "nextest:list",
+            EvidenceKind::Nextest,
+            "cargo nextest list --message-format json",
+            profile_status,
+            None,
+        ),
+        (
+            "tool:rustc",
+            EvidenceKind::ToolVersion,
+            environment
+                .rustc_version
+                .observed
+                .as_deref()
+                .expect("observed rustc fact is constructed above"),
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "tool:cargo",
+            EvidenceKind::ToolVersion,
+            environment
+                .cargo_version
+                .observed
+                .as_deref()
+                .expect("observed cargo fact is constructed above"),
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "tool:nextest",
+            EvidenceKind::ToolVersion,
+            environment
+                .nextest_version
+                .observed
+                .as_deref()
+                .expect("observed nextest fact is constructed above"),
+            EvidenceStatus::Collected,
+            None,
         ),
     ]
     .into_iter()
-    .map(|(path, responsibility)| FileAssignment {
-        path: path.to_string(),
-        responsibility: responsibility.to_string(),
-    })
-    .collect::<Vec<_>>();
-    assignments.sort_by(|left, right| left.path.cmp(&right.path));
-    assignments
-}
-
-fn derive_task_slices() -> Vec<TaskSlice> {
-    vec![
-        TaskSlice {
-            id: "t1".to_string(),
-            title: "Collect repository context".to_string(),
-            depends_on: Vec::new(),
-        },
-        TaskSlice {
-            id: "t2".to_string(),
-            title: "Derive crate assignments".to_string(),
-            depends_on: vec!["t1".to_string()],
-        },
-        TaskSlice {
-            id: "t3".to_string(),
-            title: "Derive file assignments".to_string(),
-            depends_on: vec!["t1".to_string()],
-        },
-        TaskSlice {
-            id: "t4".to_string(),
-            title: "Serialize and save context snapshot".to_string(),
-            depends_on: vec!["t2".to_string(), "t3".to_string()],
-        },
-    ]
-}
-
-/// Count .rs files and total lines under a crate directory.
-fn count_source(crate_dir: &Path) -> (usize, usize) {
-    let src_dir = crate_dir.join("src");
-    let dir = if src_dir.is_dir() {
-        &src_dir
-    } else {
-        crate_dir
-    };
-    let mut files = 0usize;
-    let mut lines = 0usize;
-    if let Ok(entries) = walkdir(dir) {
-        for path in entries {
-            if path.extension().is_some_and(|e| e == "rs") {
-                files += 1;
-                if let Ok(content) = std::fs::read_to_string(&path) {
-                    lines += content.lines().count();
-                }
-            }
-        }
-    }
-    (files, lines)
-}
-
-/// Simple recursive file listing (avoids adding walkdir dep).
-fn walkdir(dir: &Path) -> Result<Vec<std::path::PathBuf>> {
-    let mut out = Vec::new();
-    walkdir_inner(dir, &mut out)?;
-    Ok(out)
-}
-
-// qual:allow(iosp) reason: "recursive fs traversal"
-fn walkdir_inner(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
-    let entries = std::fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
-    for entry in entries {
-        let entry = entry?;
-        let ft = entry.file_type()?;
-        if ft.is_dir() {
-            walkdir_inner(&entry.path(), out)?;
-        } else if ft.is_file() {
-            out.push(entry.path());
-        }
-    }
-    Ok(())
-}
-
-/// Parse `cargo nextest list` output for test counts per crate.
-fn test_counts(sh: &Shell) -> BTreeMap<String, usize> {
-    let mut counts = BTreeMap::new();
-    // nextest list outputs lines like: "minibox-core protocol::tests::test_name"
-    // (space-separated: crate_name test_path)
-    let output = cmd!(sh, "cargo nextest list --workspace")
-        .read()
-        .unwrap_or_default();
-    for line in output.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        // First word is the crate name
-        if let Some(crate_name) = line.split_whitespace().next() {
-            *counts.entry(crate_name.to_string()).or_default() += 1;
-        }
-    }
-    counts
-}
-
-fn workspace_version(sh: &Shell) -> Result<WorkspaceInfo> {
-    let raw = cmd!(sh, "cargo metadata --no-deps --format-version 1")
-        .read()
-        .context("cargo metadata for version")?;
-    let meta: serde_json::Value = serde_json::from_str(&raw)?;
-
-    // workspace version from first workspace package
-    let version = meta["packages"]
-        .as_array()
-        .and_then(|ps| {
-            ps.iter()
-                .find(|p| p["name"].as_str() == Some("minibox"))
-                .and_then(|p| p["version"].as_str().map(String::from))
-        })
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let edition = meta["packages"]
-        .as_array()
-        .and_then(|ps| {
-            ps.iter()
-                .find(|p| p["name"].as_str() == Some("minibox"))
-                .and_then(|p| p["edition"].as_str().map(String::from))
-        })
-        .unwrap_or_else(|| "2024".to_string());
-
-    let rust_version = cmd!(sh, "rustc --version")
-        .read()
-        .unwrap_or_default()
-        .split_whitespace()
-        .nth(1)
-        .unwrap_or("unknown")
-        .to_string();
-
-    Ok(WorkspaceInfo {
-        version,
-        edition,
-        rust_version,
-    })
-}
-
-fn ci_workflows(root: &Path) -> Vec<String> {
-    let wf_dir = root.join(".github/workflows");
-    let mut names = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(wf_dir) {
-        for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str()
-                && (name.to_ascii_lowercase().ends_with(".yml")
-                    || name.to_ascii_lowercase().ends_with(".yaml"))
-            {
-                names.push(name.to_string());
-            }
-        }
-    }
-    names.sort();
-    names
-}
-
-fn adapter_table() -> BTreeMap<String, AdapterInfo> {
-    let mut m = BTreeMap::new();
-    let entries = [
-        ("native", "linux", "production"),
-        ("gke", "linux", "production"),
-        ("smolvm", "any", "production"),
-        ("krun", "macos", "production"),
-        ("colima", "macos", "experimental"),
-        ("vz", "macos", "blocked"),
-        ("wsl2", "windows", "stub"),
-        ("hcs", "windows", "stub"),
-        ("docker_desktop", "macos", "stub"),
-    ];
-    for (name, platform, status) in entries {
-        m.insert(
-            name.to_string(),
-            AdapterInfo {
-                platform: platform.to_string(),
-                status: status.to_string(),
+    .map(|(id, kind, locator, status, content_sha256)| {
+        (
+            EvidenceId::from(id),
+            Evidence {
+                kind,
+                locator: locator.to_string(),
+                collected_at: generated_at.to_string(),
+                content_sha256,
+                profile_id: (id == "nextest:list").then(|| native_profile.profile_id.clone()),
+                status,
             },
-        );
-    }
-    m
-}
-
-fn persist_snapshot(root: &Path, snapshot: &ContextSnapshot) -> Result<std::path::PathBuf> {
-    let dir = root.join("artifacts/context");
-    std::fs::create_dir_all(&dir).context("create artifacts/context")?;
-
-    let latest = dir.join("snapshot.json");
-    let json = serde_json::to_string_pretty(snapshot).context("serialize snapshot")?;
-    std::fs::write(&latest, json).context("write snapshot.json")?;
-
-    let jsonl = dir.join("history.jsonl");
-    use std::io::Write;
-    let compact = serde_json::to_string(snapshot).context("serialize history record")?;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&jsonl)
-        .context("open history.jsonl")?;
-    writeln!(file, "{compact}").context("append history.jsonl")?;
-
-    Ok(latest)
-}
-
-// ─── Entry point ─────────────────────────────────────────────────────────────
-
-// qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
-pub fn context(sh: &Shell, root: &Path, options: &ContextOptions) -> Result<()> {
-    let (commit, branch, timestamp) = git_info(sh)?;
-    let workspace = workspace_version(sh)?;
-    let mut crates = crate_graph(sh)?;
-    let counts = test_counts(sh);
-
-    let mut total_tests = 0usize;
-    for c in &mut crates {
-        if let Some(&n) = counts.get(&c.name) {
-            c.test_count = n;
-            total_tests += n;
-        }
-    }
-
-    let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
-    let context_map = ContextMap {
-        crate_assignments: derive_crate_assignments(&crates),
-        file_assignments: derive_file_assignments(),
-        task_slices: derive_task_slices(),
-    };
-
-    let snapshot = ContextSnapshot {
-        snapshot_version: 2,
-        commit,
-        branch,
-        timestamp,
-        workspace,
-        crates,
-        adapters: adapter_table(),
-        tests: TestSummary {
-            total: total_tests,
-            by_crate,
-        },
-        ci_workflows: ci_workflows(root),
-        recent_commits: recent_commits(sh)?,
-        context_map,
-    };
-
-    if options.save {
-        let latest = persist_snapshot(root, &snapshot)?;
-        eprintln!("Context snapshot saved to {}", latest.display());
-    } else {
-        let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
-        println!("{json}");
-    }
-
-    Ok(())
+        )
+    })
+    .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn crate_info(name: &str, lines: usize) -> CrateInfo {
-        CrateInfo {
-            name: name.to_string(),
-            kind: vec!["lib".to_string()],
-            deps: Vec::new(),
-            test_count: 0,
-            src_files: 1,
-            lines,
+    #[test]
+    fn default_context_collects_native_evidence() {
+        use collect::{
+            CommandOutput, CommandRunner, CommandSpec, RepositoryReader, SystemRepositoryReader,
+        };
+        use model::{FileMetrics, RepositoryPath};
+        use std::cell::RefCell;
+
+        struct FakeRunner {
+            metadata: Vec<u8>,
+            nextest: Vec<u8>,
+            commands: RefCell<Vec<(String, Vec<String>)>>,
         }
-    }
 
-    fn snapshot_fixture() -> ContextSnapshot {
-        ContextSnapshot {
-            snapshot_version: 2,
-            commit: "abc1234".to_string(),
-            branch: "develop".to_string(),
-            timestamp: "2026-09-06T00:00:00Z".to_string(),
-            workspace: WorkspaceInfo {
-                version: "0.33.0".to_string(),
-                edition: "2024".to_string(),
-                rust_version: "1.89.0".to_string(),
-            },
-            crates: Vec::new(),
-            adapters: BTreeMap::new(),
-            tests: TestSummary {
-                total: 0,
-                by_crate: BTreeMap::new(),
-            },
-            ci_workflows: Vec::new(),
-            recent_commits: Vec::new(),
-            context_map: ContextMap::default(),
+        impl CommandRunner for FakeRunner {
+            fn run(&self, command: &CommandSpec) -> Result<CommandOutput> {
+                self.commands
+                    .borrow_mut()
+                    .push((command.program.clone(), command.args.clone()));
+                let stdout = match (command.program.as_str(), command.args.as_slice()) {
+                    ("git", args) if args == ["rev-parse", "HEAD"] => b"abc123\n".to_vec(),
+                    ("git", args) if args == ["branch", "--show-current"] => b"develop\n".to_vec(),
+                    ("git", args) if args.first().map(String::as_str) == Some("status") => {
+                        Vec::new()
+                    }
+                    ("rustc", args) if args == ["-vV"] => {
+                        b"rustc 1.85.0\nhost: aarch64-apple-darwin\n".to_vec()
+                    }
+                    ("cargo", args) if args == ["--version"] => b"cargo 1.85.0\n".to_vec(),
+                    ("cargo", args) if args == ["nextest", "--version"] => {
+                        b"cargo-nextest 0.9.100\n".to_vec()
+                    }
+                    ("cargo", args) if args.first().map(String::as_str) == Some("metadata") => {
+                        self.metadata.clone()
+                    }
+                    ("cargo", args)
+                        if args.starts_with(&["nextest".to_string(), "list".to_string()]) =>
+                    {
+                        self.nextest.clone()
+                    }
+                    other => panic!("unexpected command: {other:?}"),
+                };
+                Ok(CommandOutput {
+                    exit_code: Some(0),
+                    stdout,
+                    stderr: Vec::new(),
+                })
+            }
         }
-    }
 
-    #[test]
-    fn context_snapshot_includes_context_map() {
-        let value = serde_json::to_value(snapshot_fixture()).expect("snapshot should serialize");
-        assert_eq!(value["snapshot_version"], 2);
-        let context_map = value
-            .get("context_map")
-            .expect("snapshot v2 should include context_map");
-        assert!(context_map.get("crate_assignments").is_some());
-        assert!(context_map.get("file_assignments").is_some());
-        assert!(context_map.get("task_slices").is_some());
-    }
+        struct CountingRepository {
+            inner: SystemRepositoryReader,
+            reads: RefCell<BTreeMap<String, usize>>,
+        }
 
-    #[test]
-    fn crate_assignments_are_sorted_and_stable() {
-        let crates = vec![
-            crate_info("zeta", 100),
-            crate_info("middle", 50),
-            crate_info("alpha", 100),
-        ];
+        impl RepositoryReader for CountingRepository {
+            fn read_utf8(&self, path: &Path) -> Result<String> {
+                *self
+                    .reads
+                    .borrow_mut()
+                    .entry(path.to_string_lossy().into_owned())
+                    .or_default() += 1;
+                self.inner.read_utf8(path)
+            }
 
-        let assignments = derive_crate_assignments(&crates);
-        let names: Vec<&str> = assignments
-            .iter()
-            .map(|assignment| assignment.crate_name.as_str())
-            .collect();
+            fn tracked_files(&self, root: &Path) -> Result<Vec<RepositoryPath>> {
+                self.inner.tracked_files(root)
+            }
 
-        assert_eq!(names, vec!["alpha", "zeta", "middle"]);
-        assert_eq!(assignments[0].lines, 100);
-        assert_eq!(assignments[2].lines, 50);
-    }
+            fn file_metrics(&self, path: &Path) -> Result<FileMetrics> {
+                self.inner.file_metrics(path)
+            }
+        }
 
-    #[test]
-    fn file_assignments_cover_xtask_info_context_surface() {
-        let assignments = derive_file_assignments();
-        let paths: Vec<&str> = assignments
-            .iter()
-            .map(|assignment| assignment.path.as_str())
-            .collect();
+        #[derive(Default)]
+        struct BufferOutput(RefCell<Vec<Vec<u8>>>);
+
+        impl SnapshotOutput for BufferOutput {
+            fn write_document(&self, document: &[u8]) -> Result<()> {
+                self.0.borrow_mut().push(document.to_vec());
+                Ok(())
+            }
+        }
+
+        struct FixedClock;
+
+        impl Clock for FixedClock {
+            fn now(&self) -> String {
+                "2026-09-12T00:00:00Z".to_string()
+            }
+        }
+
+        let temp = tempfile::tempdir().expect("temporary workspace should be created");
+        let root = temp.path();
+        for directory in ["sample/src", "xtask", "crates/miniboxd/src"] {
+            std::fs::create_dir_all(root.join(directory))
+                .expect("fixture directory should be created");
+        }
+        std::fs::write(
+            root.join("Cargo.toml"),
+            r#"[workspace]
+resolver = "3"
+members = ["sample"]
+"#,
+        )
+        .expect("workspace manifest should be written");
+        std::fs::write(
+            root.join("sample/Cargo.toml"),
+            r#"[package]
+name = "sample"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+"#,
+        )
+        .expect("sample manifest should be written");
+        std::fs::write(
+            root.join("sample/src/lib.rs"),
+            "#[cfg(test)] mod tests { #[test] fn works() {} }\n",
+        )
+        .expect("sample source should be written");
+        std::fs::write(
+            root.join("xtask/context.toml"),
+            r#"schema_version = 1
+[[adapters]]
+id = "native"
+maturity = "production"
+platforms = ["linux"]
+default_roles = ["linux_fallback"]
+[adapters.capabilities]
+run = "yes"
+[[adapters]]
+id = "smolvm"
+maturity = "experimental"
+platforms = ["macos"]
+default_roles = ["unix_default"]
+[adapters.capabilities]
+run = "yes"
+[[adapters]]
+id = "krun"
+maturity = "experimental"
+platforms = ["macos"]
+default_roles = ["macos_fallback"]
+[adapters.capabilities]
+run = "yes"
+[[profiles]]
+id = "native-macos"
+target = "aarch64-apple-darwin"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-linux-gnu"
+target = "x86_64-unknown-linux-gnu"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-linux-musl"
+target = "x86_64-unknown-linux-musl"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-windows"
+target = "x86_64-pc-windows-msvc"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+"#,
+        )
+        .expect("context manifest should be written");
+        std::fs::write(
+            root.join("crates/miniboxd/src/adapter_registry.rs"),
+            r#"pub enum AdapterSuite { Native, SmolVm, Krun }
+impl AdapterSuite { pub const fn as_str(&self) -> &str { match self { Self::Native => "native", Self::SmolVm => "smolvm", Self::Krun => "krun" } } }
+pub const VALID_ADAPTERS: &[&str] = &["native", "smolvm", "krun"];
+pub const DEFAULT_ADAPTER_SUITE: &str = "smolvm";
+pub const FALLBACK_ADAPTER_SUITE: &str = if cfg!(target_os = "linux") { "native" } else { "krun" };
+pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", available: true, platform: "linux" }, AdapterInfo { name: "smolvm", available: true, platform: "macos" }, AdapterInfo { name: "krun", available: true, platform: "macos" }] }
+"#,
+        )
+        .expect("adapter registry should be written");
+        for args in [vec!["init", "--quiet"], vec!["add", "--all"]] {
+            let status = std::process::Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git fixture command should run");
+            assert!(status.success(), "git fixture command should succeed");
+        }
+        let metadata = std::process::Command::new("cargo")
+            .args(["metadata", "--format-version", "1"])
+            .current_dir(root)
+            .output()
+            .expect("fixture cargo metadata should run");
+        assert!(metadata.status.success());
+        let metadata_value: serde_json::Value =
+            serde_json::from_slice(&metadata.stdout).expect("metadata should be JSON");
+        let package_id = metadata_value["workspace_members"][0]
+            .as_str()
+            .expect("workspace package id should be present");
+        let nextest = serde_json::to_vec(&serde_json::json!({
+            "rust-build-meta": {},
+            "test-count": 1,
+            "rust-suites": {
+                "sample::lib": {
+                    "package-name": "sample",
+                    "binary-id": "sample::lib",
+                    "binary-name": "sample",
+                    "package-id": package_id,
+                    "kind": "lib",
+                    "binary-path": "/target/sample",
+                    "build-platform": "target",
+                    "cwd": "/workspace/sample",
+                    "status": "listed",
+                    "testcases": {
+                        "tests::works": {
+                            "kind": "test",
+                            "ignored": false,
+                            "filter-match": { "status": "matches" }
+                        }
+                    }
+                }
+            }
+        }))
+        .expect("nextest fixture should serialize");
+        let runner = FakeRunner {
+            metadata: metadata.stdout,
+            nextest,
+            commands: RefCell::new(Vec::new()),
+        };
+        let repository = CountingRepository {
+            inner: SystemRepositoryReader,
+            reads: RefCell::new(BTreeMap::new()),
+        };
+        let output = BufferOutput::default();
+        let canonical_root = root
+            .canonicalize()
+            .expect("fixture workspace root should canonicalize");
+        let snapshot = run_context(
+            &runner,
+            &repository,
+            &output,
+            &FixedClock,
+            root,
+            &ContextOptions::default(),
+        )
+        .expect("default v3 context should collect");
+
+        assert_eq!(snapshot.snapshot_version, 3);
+        assert_eq!(snapshot.environment.generated_at, "2026-09-12T00:00:00Z");
+        assert_eq!(snapshot.tests.source_declarations.len(), 1);
+        assert_eq!(snapshot.tests.profiles.len(), 1);
+        assert_eq!(snapshot.tests.profiles[0].profile_id, "native-macos");
+        assert_eq!(snapshot.tests.validated_unique_tests.len(), 1);
+        assert!(!snapshot.context_map.files.is_empty());
+        assert!(!snapshot.context_map.collector_tasks.is_empty());
+        assert!(!snapshot.adapters.is_empty());
+        assert_eq!(
+            repository.reads.borrow().get(
+                &canonical_root
+                    .join("xtask/context.toml")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            Some(&1)
+        );
+        let documents = output.0.borrow();
+        assert_eq!(documents.len(), 1);
+        let emitted: serde_json::Value =
+            serde_json::from_slice(&documents[0]).expect("stdout should be one JSON document");
+        assert_eq!(emitted["snapshot_version"], 3);
+        assert!(!root.join("artifacts/context").exists());
 
         assert_eq!(
-            paths,
-            vec![
-                "docs/core/XTASK_CLI.mbx.md",
-                "xtask/schema/cli.schema.json",
-                "xtask/src/context.rs",
-                "xtask/src/main.rs",
+            runner.commands.borrow().as_slice(),
+            [
+                (
+                    "git".to_string(),
+                    vec!["rev-parse".to_string(), "HEAD".to_string()]
+                ),
+                (
+                    "git".to_string(),
+                    vec!["branch".to_string(), "--show-current".to_string()]
+                ),
+                (
+                    "git".to_string(),
+                    vec![
+                        "status".to_string(),
+                        "--porcelain=v2".to_string(),
+                        "-z".to_string(),
+                        "--untracked-files=all".to_string(),
+                    ],
+                ),
+                ("rustc".to_string(), vec!["-vV".to_string()]),
+                ("cargo".to_string(), vec!["--version".to_string()]),
+                (
+                    "cargo".to_string(),
+                    vec!["nextest".to_string(), "--version".to_string()],
+                ),
+                (
+                    "cargo".to_string(),
+                    vec![
+                        "metadata".to_string(),
+                        "--format-version".to_string(),
+                        "1".to_string(),
+                    ],
+                ),
+                (
+                    "cargo".to_string(),
+                    vec![
+                        "nextest".to_string(),
+                        "list".to_string(),
+                        "--workspace".to_string(),
+                        "--message-format".to_string(),
+                        "json".to_string(),
+                        "--target".to_string(),
+                        "aarch64-apple-darwin".to_string(),
+                        "--all-targets".to_string(),
+                    ],
+                ),
             ]
         );
-        assert!(
-            assignments
-                .iter()
-                .all(|assignment| !assignment.responsibility.is_empty())
-        );
-    }
-
-    #[test]
-    fn task_slices_define_expected_dependency_graph() {
-        let slices = derive_task_slices();
-        let dependencies: BTreeMap<&str, Vec<&str>> = slices
-            .iter()
-            .map(|slice| {
-                (
-                    slice.id.as_str(),
-                    slice.depends_on.iter().map(String::as_str).collect(),
-                )
-            })
-            .collect();
-
-        assert_eq!(dependencies["t1"], Vec::<&str>::new());
-        assert_eq!(dependencies["t2"], vec!["t1"]);
-        assert_eq!(dependencies["t3"], vec!["t1"]);
-        assert_eq!(dependencies["t4"], vec!["t2", "t3"]);
-        assert!(slices.iter().all(|slice| !slice.title.is_empty()));
-    }
-
-    #[test]
-    fn save_mode_persists_context_map_in_snapshot_and_history() {
-        let temp = tempfile::tempdir().expect("temporary output root should be created");
-        let snapshot = snapshot_fixture();
-
-        let saved = persist_snapshot(temp.path(), &snapshot)
-            .expect("snapshot and history should be persisted");
-        assert_eq!(saved, temp.path().join("artifacts/context/snapshot.json"));
-
-        let latest = std::fs::read_to_string(&saved).expect("snapshot.json should be readable");
-        let latest: serde_json::Value =
-            serde_json::from_str(&latest).expect("snapshot.json should contain valid JSON");
-        assert_eq!(latest["snapshot_version"], 2);
-        assert!(latest["context_map"].is_object());
-
-        let history = std::fs::read_to_string(temp.path().join("artifacts/context/history.jsonl"))
-            .expect("history.jsonl should be readable");
-        let record: serde_json::Value =
-            serde_json::from_str(history.trim()).expect("history line should contain valid JSON");
-        assert_eq!(record["context_map"], latest["context_map"]);
     }
 }

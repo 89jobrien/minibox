@@ -591,7 +591,7 @@ fn cmd_info(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> {
     }
 }
 
-fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]) -> Result<()> {
+fn dispatch_info(_sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]) -> Result<()> {
     match sub {
         "metrics" => {
             let save = rest.iter().any(|a| a == "--save");
@@ -599,7 +599,7 @@ fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String])
         }
         "context" => {
             let options = parse_info_context_args(rest)?;
-            context::context(sh, root, &options)
+            context::context(root, &options)
         }
         "changes" => {
             let base_ref = changes_base_ref(rest);

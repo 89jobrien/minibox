@@ -10,7 +10,7 @@ use std::sync::OnceLock;
 static CONTEXT_VALIDATOR: OnceLock<std::result::Result<jsonschema::Validator, String>> =
     OnceLock::new();
 
-pub(super) fn validate_snapshot_json(snapshot: &serde_json::Value) -> Result<()> {
+pub(in crate::context) fn validate_snapshot_json(snapshot: &serde_json::Value) -> Result<()> {
     let validator = CONTEXT_VALIDATOR
         .get_or_init(build_context_validator)
         .as_ref()
@@ -62,16 +62,16 @@ fn build_context_validator() -> std::result::Result<jsonschema::Validator, Strin
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub(super) struct ProfileEvidenceCacheKey {
-    pub(super) commit: String,
-    pub(super) worktree_fingerprint: String,
-    pub(super) manifest_sha256: String,
-    pub(super) target: String,
-    pub(super) features: Vec<String>,
-    pub(super) no_default_features: bool,
-    pub(super) cargo_version: String,
-    pub(super) rustc_version: String,
-    pub(super) nextest_version: String,
+pub(in crate::context) struct ProfileEvidenceCacheKey {
+    pub(in crate::context) commit: String,
+    pub(in crate::context) worktree_fingerprint: String,
+    pub(in crate::context) manifest_sha256: String,
+    pub(in crate::context) target: String,
+    pub(in crate::context) features: Vec<String>,
+    pub(in crate::context) no_default_features: bool,
+    pub(in crate::context) cargo_version: String,
+    pub(in crate::context) rustc_version: String,
+    pub(in crate::context) nextest_version: String,
 }
 
 impl ProfileEvidenceCacheKey {
@@ -90,10 +90,10 @@ pub(super) fn profile_evidence_cache_key(key: &ProfileEvidenceCacheKey) -> Strin
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct PendingProfileEvidence {
-    pub(super) expected_key: ProfileEvidenceCacheKey,
-    pub(super) actual_key: ProfileEvidenceCacheKey,
-    pub(super) result: TestProfileResult,
+pub(in crate::context) struct PendingProfileEvidence {
+    pub(in crate::context) expected_key: ProfileEvidenceCacheKey,
+    pub(in crate::context) actual_key: ProfileEvidenceCacheKey,
+    pub(in crate::context) result: TestProfileResult,
 }
 
 struct PreparedProfileEvidence {
@@ -102,7 +102,7 @@ struct PreparedProfileEvidence {
     bytes: Vec<u8>,
 }
 
-pub(super) fn persist_snapshot(
+pub(in crate::context) fn persist_snapshot(
     root: &Path,
     snapshot: &serde_json::Value,
     save: bool,
@@ -285,7 +285,7 @@ struct ArtifactExecutableTest {
     ignored: bool,
 }
 
-pub(super) fn read_profile_evidence(
+pub(in crate::context) fn read_profile_evidence(
     evidence_dir: &Path,
     expected_keys: &BTreeMap<String, ProfileEvidenceCacheKey>,
 ) -> Result<Vec<TestProfileResult>> {
