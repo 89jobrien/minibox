@@ -934,4 +934,77 @@ mod tests {
         );
         assert!(sync_adapter_matrix(&duplicate, &manifest).is_err());
     }
+    #[test]
+    fn context_workflow_covers_required_native_profiles() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask should have a workspace root");
+        let workflow = std::fs::read_to_string(root.join(".github/workflows/context-snapshot.yml"))
+            .expect("context snapshot workflow should exist");
+        let manifest: ContextManifest = toml::from_str(
+            &std::fs::read_to_string(root.join("xtask/context.toml"))
+                .expect("context manifest should be readable"),
+        )
+        .expect("context manifest should parse");
+        let required_profiles = manifest
+            .profiles
+            .iter()
+            .filter(|profile| profile.required_in_ci)
+            .map(|profile| profile.id.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            required_profiles,
+            BTreeSet::from([
+                "native-linux-gnu",
+                "native-linux-musl",
+                "native-macos",
+                "native-windows",
+            ])
+        );
+        for profile in required_profiles {
+            assert!(
+                workflow.contains(profile),
+                "workflow omits profile {profile:?}"
+            );
+        }
+        for runner in ["ubuntu-latest", "macos-14-xlarge", "windows-latest"] {
+            assert!(
+                workflow.contains(runner),
+                "workflow omits runner {runner:?}"
+            );
+        }
+        assert!(workflow.contains("cargo-nextest@"));
+        assert!(workflow.contains("cargo xtask info context --validate-all --save"));
+        assert!(workflow.contains("path: artifacts/context/evidence/"));
+        assert!(!workflow.contains("snapshot.json"));
+        assert!(!workflow.contains("history.jsonl"));
+        assert!(workflow.contains("context-evidence-${{ github.sha }}"));
+        assert!(workflow.contains("actions/download-artifact@"));
+        assert!(workflow.contains("merge-multiple: true"));
+        assert!(workflow.contains(
+            "cargo xtask info context --validate-all --strict --evidence-dir artifacts/context/evidence"
+        ));
+        assert!(workflow.contains("needs: collect"));
+        assert!(workflow.contains("vz-advisory:"));
+        assert!(workflow.contains("continue-on-error: true"));
+        assert!(workflow.contains("--features miniboxd/vz"));
+
+        for line in workflow.lines().map(str::trim) {
+            let Some(reference) = line.strip_prefix("uses: ") else {
+                continue;
+            };
+            let revision = reference
+                .rsplit_once('@')
+                .map(|(_, revision)| revision)
+                .expect("action reference should contain a revision")
+                .split_whitespace()
+                .next()
+                .expect("action revision should be present");
+            assert_eq!(revision.len(), 40, "action is not SHA-pinned: {reference}");
+            assert!(
+                revision.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "action is not SHA-pinned: {reference}"
+            );
+        }
+    }
 }
