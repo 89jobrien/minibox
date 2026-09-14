@@ -105,7 +105,8 @@ fn run_context(
     let registry_source =
         repository.read_utf8(&root.join("crates/miniboxd/src/adapter_registry.rs"))?;
     let registry = parse_adapter_registry(&registry_source)?;
-    let workspace = collect_workspace(runner, repository, &root)?;
+    let mut workspace = collect_workspace(runner, repository, &root)?;
+    attach_workspace_fact_evidence(&mut workspace);
     let source_declarations = test_inventory::collect_source_tests(repository, &root, &workspace)?;
 
     let native_profile = select_native_profile(&manifest, &environment.target)?;
@@ -218,6 +219,20 @@ fn run_context(
     }
     persist_snapshot(&root, &value, options.save, &pending_evidence)?;
     Ok(snapshot)
+}
+
+fn attach_workspace_fact_evidence(workspace: &mut model::WorkspaceSnapshot) {
+    for fact in [
+        &mut workspace.version,
+        &mut workspace.edition,
+        &mut workspace.msrv,
+    ] {
+        if fact.evidence_ids.is_empty() {
+            fact.evidence_ids.push(EvidenceId::from("cargo:metadata"));
+        }
+        fact.evidence_ids.sort();
+        fact.evidence_ids.dedup();
+    }
 }
 
 fn collect_environment(
@@ -555,6 +570,27 @@ fn build_evidence(
             None,
         ),
         (
+            "profile:test",
+            EvidenceKind::Nextest,
+            "current profile capability observations",
+            EvidenceStatus::Unavailable,
+            None,
+        ),
+        (
+            "schema:context-v3",
+            EvidenceKind::CiArtifact,
+            "xtask/schema/cli.schema.json#/\u{24}defs/contextSnapshot",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
+            "output:context",
+            EvidenceKind::CiArtifact,
+            "stdout context snapshot",
+            EvidenceStatus::Collected,
+            None,
+        ),
+        (
             "tool:rustc",
             EvidenceKind::ToolVersion,
             environment
@@ -610,7 +646,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_context_collects_native_evidence() {
+    fn context_v3_regression_contract_is_non_deceptive() {
         use collect::{
             CommandOutput, CommandRunner, CommandSpec, RepositoryReader, SystemRepositoryReader,
         };
@@ -628,6 +664,21 @@ mod tests {
                 self.commands
                     .borrow_mut()
                     .push((command.program.clone(), command.args.clone()));
+                if command.program == "cargo"
+                    && command
+                        .args
+                        .starts_with(&["nextest".to_string(), "list".to_string()])
+                    && !command
+                        .args
+                        .iter()
+                        .any(|argument| argument == "aarch64-apple-darwin")
+                {
+                    return Ok(CommandOutput {
+                        exit_code: Some(101),
+                        stdout: Vec::new(),
+                        stderr: b"error: target may not be installed".to_vec(),
+                    });
+                }
                 let stdout = match (command.program.as_str(), command.args.as_slice()) {
                     ("git", args) if args == ["rev-parse", "HEAD"] => b"abc123\n".to_vec(),
                     ("git", args) if args == ["branch", "--show-current"] => b"develop\n".to_vec(),
@@ -722,6 +773,7 @@ name = "sample"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+
 "#,
         )
         .expect("sample manifest should be written");
@@ -810,8 +862,30 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             .output()
             .expect("fixture cargo metadata should run");
         assert!(metadata.status.success());
-        let metadata_value: serde_json::Value =
+        let mut metadata_value: serde_json::Value =
             serde_json::from_slice(&metadata.stdout).expect("metadata should be JSON");
+        let sample_package = metadata_value["packages"]
+            .as_array_mut()
+            .expect("metadata packages should be an array")
+            .iter_mut()
+            .find(|package| package["name"] == "sample")
+            .expect("sample metadata package should exist");
+        sample_package["dependencies"]
+            .as_array_mut()
+            .expect("sample dependencies should be an array")
+            .push(serde_json::json!({
+                "name": "sample",
+                "source": null,
+                "req": "*",
+                "kind": "dev",
+                "rename": "sample-self",
+                "optional": false,
+                "uses_default_features": true,
+                "features": [],
+                "target": null,
+                "registry": null,
+                "path": root.join("sample")
+            }));
         let package_id = metadata_value["workspace_members"][0]
             .as_str()
             .expect("workspace package id should be present");
@@ -841,7 +915,8 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
         }))
         .expect("nextest fixture should serialize");
         let runner = FakeRunner {
-            metadata: metadata.stdout,
+            metadata: serde_json::to_vec(&metadata_value)
+                .expect("captured metadata should serialize"),
             nextest,
             commands: RefCell::new(Vec::new()),
         };
@@ -859,19 +934,146 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             &output,
             &FixedClock,
             root,
-            &ContextOptions::default(),
+            &ContextOptions {
+                validate_all: true,
+                ..ContextOptions::default()
+            },
         )
         .expect("default v3 context should collect");
 
         assert_eq!(snapshot.snapshot_version, 3);
         assert_eq!(snapshot.environment.generated_at, "2026-09-12T00:00:00Z");
         assert_eq!(snapshot.tests.source_declarations.len(), 1);
-        assert_eq!(snapshot.tests.profiles.len(), 1);
-        assert_eq!(snapshot.tests.profiles[0].profile_id, "native-macos");
+        assert_eq!(snapshot.tests.profiles.len(), 4);
+        assert!(
+            snapshot
+                .tests
+                .profiles
+                .iter()
+                .any(|profile| profile.profile_id == "native-macos"
+                    && profile.status == ProfileStatus::Validated)
+        );
         assert_eq!(snapshot.tests.validated_unique_tests.len(), 1);
         assert!(!snapshot.context_map.files.is_empty());
         assert!(!snapshot.context_map.collector_tasks.is_empty());
         assert!(!snapshot.adapters.is_empty());
+        assert_ne!(
+            snapshot.environment.rustc_version.observed.as_deref(),
+            snapshot.workspace.msrv.observed.as_deref(),
+            "installed Rust and workspace MSRV must remain separate facts"
+        );
+        let sample = snapshot
+            .workspace
+            .packages
+            .iter()
+            .find(|package| package.name == "sample")
+            .expect("sample package should be present");
+        assert!(!sample.dependencies.is_empty());
+        let dependency_keys = sample
+            .dependencies
+            .iter()
+            .map(|dependency| {
+                format!(
+                    "{}|{:?}|{:?}|{:?}|{}",
+                    dependency.package_name,
+                    dependency.rename,
+                    dependency.kind,
+                    dependency.target_predicate,
+                    dependency.optional
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(dependency_keys.len(), sample.dependencies.len());
+        assert!(sample.dependencies.iter().any(|dependency| {
+            dependency.package_name == "sample" && dependency.kind == model::DependencyKind::Dev
+        }));
+        assert!(snapshot.adapters.iter().any(|adapter| {
+            adapter.id == "native"
+                && adapter.maturity.declared == Some(model::AdapterMaturity::Production)
+        }));
+        assert!(snapshot.adapters.iter().any(|adapter| {
+            adapter.id == "smolvm"
+                && adapter.maturity.declared == Some(model::AdapterMaturity::Experimental)
+        }));
+        assert!(
+            snapshot
+                .tests
+                .source_declarations
+                .iter()
+                .any(|declaration| declaration.name == "works")
+        );
+        assert!(snapshot.tests.profiles.iter().any(|profile| {
+            profile
+                .executable_tests
+                .iter()
+                .any(|test| test.test_name == "tests::works")
+        }));
+        let unavailable = snapshot
+            .tests
+            .profiles
+            .iter()
+            .find(|profile| profile.status == ProfileStatus::Unavailable)
+            .expect("foreign unavailable profile should be represented");
+        assert!(unavailable.executable_tests.is_empty());
+        assert!(unavailable.unavailable_reason.is_some());
+        assert!(snapshot.context_map.files.iter().any(|file| {
+            file.path.as_str() == "sample/src/lib.rs"
+                && file.owner_package_id.as_deref() == Some(sample.package_id.as_str())
+        }));
+
+        let serialized = serde_json::to_value(&snapshot).expect("snapshot should serialize");
+        let evidence = serialized["evidence"]
+            .as_object()
+            .expect("evidence should be an object");
+        fn assert_fact_evidence_exists(
+            value: &serde_json::Value,
+            evidence: &serde_json::Map<String, serde_json::Value>,
+        ) {
+            match value {
+                serde_json::Value::Object(object) => {
+                    if object.contains_key("declared")
+                        && object.contains_key("observed")
+                        && object.contains_key("validation")
+                    {
+                        let ids = object["evidence_ids"]
+                            .as_array()
+                            .expect("fact evidence IDs should be an array");
+                        assert!(!ids.is_empty(), "every fact must cite evidence");
+                        for id in ids {
+                            assert!(
+                                evidence.contains_key(
+                                    id.as_str().expect("evidence ID should be a string")
+                                ),
+                                "fact cites missing evidence ID {id}"
+                            );
+                        }
+                    }
+                    for nested in object.values() {
+                        assert_fact_evidence_exists(nested, evidence);
+                    }
+                }
+                serde_json::Value::Array(values) => {
+                    for nested in values {
+                        assert_fact_evidence_exists(nested, evidence);
+                    }
+                }
+                _ => {}
+            }
+        }
+        assert_fact_evidence_exists(&serialized, evidence);
+        assert!(snapshot.diagnostics.windows(2).all(|pair| {
+            (&pair[0].code, &pair[0].profile_id, &pair[0].message)
+                <= (&pair[1].code, &pair[1].profile_id, &pair[1].message)
+        }));
+        for removed in [
+            "crate_assignments",
+            "file_assignments",
+            "task_slices",
+            "ci_workflows",
+            "recent_commits",
+        ] {
+            assert!(!serialized.to_string().contains(removed));
+        }
         assert_eq!(
             repository.reads.borrow().get(
                 &canonical_root
@@ -888,54 +1090,14 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
         assert_eq!(emitted["snapshot_version"], 3);
         assert!(!root.join("artifacts/context").exists());
 
+        let commands = runner.commands.borrow();
         assert_eq!(
-            runner.commands.borrow().as_slice(),
-            [
-                (
-                    "git".to_string(),
-                    vec!["rev-parse".to_string(), "HEAD".to_string()]
-                ),
-                (
-                    "git".to_string(),
-                    vec!["branch".to_string(), "--show-current".to_string()]
-                ),
-                (
-                    "git".to_string(),
-                    vec![
-                        "status".to_string(),
-                        "--porcelain=v2".to_string(),
-                        "-z".to_string(),
-                        "--untracked-files=all".to_string(),
-                    ],
-                ),
-                ("rustc".to_string(), vec!["-vV".to_string()]),
-                ("cargo".to_string(), vec!["--version".to_string()]),
-                (
-                    "cargo".to_string(),
-                    vec!["nextest".to_string(), "--version".to_string()],
-                ),
-                (
-                    "cargo".to_string(),
-                    vec![
-                        "metadata".to_string(),
-                        "--format-version".to_string(),
-                        "1".to_string(),
-                    ],
-                ),
-                (
-                    "cargo".to_string(),
-                    vec![
-                        "nextest".to_string(),
-                        "list".to_string(),
-                        "--workspace".to_string(),
-                        "--message-format".to_string(),
-                        "json".to_string(),
-                        "--target".to_string(),
-                        "aarch64-apple-darwin".to_string(),
-                        "--all-targets".to_string(),
-                    ],
-                ),
-            ]
+            commands
+                .iter()
+                .filter(|(program, args)| program == "cargo"
+                    && args.starts_with(&["nextest".to_string(), "list".to_string()]))
+                .count(),
+            4
         );
     }
     #[test]
