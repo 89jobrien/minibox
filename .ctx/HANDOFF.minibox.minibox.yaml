@@ -16,20 +16,41 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (3 files)
+  title: Uncommitted changes (13 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
+    .ctx/rustqual-baseline.json
     .minibox/checkpoints/prepush.json
+    crates/macbox/src/vz/adapter.rs
+    crates/macbox/src/vz/vsock.rs
+    crates/mbx/src/main.rs
+    crates/mcp/src/policy.rs
+    crates/minibox/src/adapters/smolvm.rs
+    crates/minibox/src/daemon/handler/pipeline.rs
+    crates/minibox/src/daemon/handler/run.rs
+    rustqual.toml
+    crates/minibox/src/daemon/handler/run/
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
+  - .ctx/rustqual-baseline.json
   - .minibox/checkpoints/prepush.json
+  - crates/macbox/src/vz/adapter.rs
+  - crates/macbox/src/vz/vsock.rs
+  - crates/mbx/src/main.rs
+  - crates/mcp/src/policy.rs
+  - crates/minibox/src/adapters/smolvm.rs
+  - crates/minibox/src/daemon/handler/pipeline.rs
+  - crates/minibox/src/daemon/handler/run.rs
+  - rustqual.toml
+  - crates/minibox/src/daemon/handler/run/
 log:
-- date: '20260916.084406'
+- date: '20260916.092128'
   summary: done=60 running=0 pending=27 blocked=1
   commits:
+  - d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
   - 6bd3eb96bf86b591d9d543ed974a20b8e53dea38
   - 98dc14c01dc5e448f6d44d0d3933d5abc194ac2c
   - ff562fba87269344caee0f1c10d8f60227a97183
@@ -39,4 +60,3 @@ log:
   - f1ab017f8eb2b137d75dbc44614b45979d5c36a4
   - 32632a499083a0763fe5bc37f3939f70e3987fa3
   - 09902733a48219449a6569c01a3f8c5a67ba0c09
-  - 1b7eba5211ba4bd416d1a65afc198a0036b09db1

@@ -88,6 +88,7 @@ fn build_pipeline_mount(host_pipeline: std::path::PathBuf) -> BindMount {
 }
 
 /// Validates and launches a pipeline container, then reports its trace.
+// qual:allow(iosp) reason: "pipeline handler boundary: validates, launches, streams, and maps responses"
 pub async fn handle_pipeline(
     params: PipelineParams,
     state: Arc<DaemonState>,

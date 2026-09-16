@@ -56,6 +56,7 @@ mod imp {
     /// connection.  Despite the type name the fd is an `AF_VSOCK` socket, but
     /// Tokio treats it as an opaque async I/O source — reads/writes work
     /// correctly.
+    // qual:allow(iosp) reason: "vsock connection boundary: retry policy wraps asynchronous VM I/O"
     pub async fn connect_to_agent(vm: &Arc<VzVm>, max_attempts: u32) -> Result<UnixStream> {
         let mut last_err = anyhow::anyhow!("no attempts made");
 

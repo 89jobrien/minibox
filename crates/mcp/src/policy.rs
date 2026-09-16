@@ -62,6 +62,7 @@ impl AgentPolicy {
 
     /// Build policy from environment variables.
     #[must_use]
+    // qual:allow(iosp) reason: "environment policy boundary: reads and validates process configuration"
     pub fn from_env() -> Self {
         let mut policy = Self::safe_default();
         policy.enable_from_env("MINIBOX_MCP_ALLOW_MUTATION", AgentPermission::MutatingTools);

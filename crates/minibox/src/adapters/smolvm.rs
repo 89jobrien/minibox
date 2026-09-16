@@ -328,6 +328,7 @@ impl ImageLoader for SmolVmRegistry {
     /// The tarball directory is mounted into the VM, `docker load` imports the
     /// image, and the loaded image/image-id is tagged as `name:tag` so the same
     /// smolvm registry cache that `mbx run` checks can find it later.
+    // qual:allow(iosp) reason: "VM image-load boundary: filesystem staging and guest process orchestration"
     async fn load_image(&self, path: &Path, name: &str, tag: &str) -> Result<()> {
         let target = Self::target_ref(name, tag);
         let (tarball, parent, guest_path) = Self::load_paths(path)?;

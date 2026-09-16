@@ -679,6 +679,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
 
 /// Entry point. Initialises tracing, parses arguments, then delegates to
 /// [`run`] which owns all dispatch logic.
+// qual:allow(iosp) reason: "CLI bootstrap: completion output, tracing setup, argument parsing, and dispatch"
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     if std::env::args().nth(1).as_deref() == Some("completions") {
