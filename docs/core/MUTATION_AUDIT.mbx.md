@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox-core/src/image/layer.rs
   - crates/minibox/src/daemon/server.rs
@@ -9,10 +9,10 @@ sources:
   - crates/minibox-core/src/image/registry.rs
   - crates/minibox/src/adapters/ghcr.rs
   - crates/minibox/tests/security_regression.rs
-generated: 2026-08-26
+generated: 2026-08-28
 ---
 
-# Mutation Audit Checklist — Security-Critical Modules
+# Mutation Audit Checklist — Selected Security-Critical Modules
 
 Produced for issue #341. Each guard, sanitisation step, and error-return path is
 listed with a pass/fail verdict: **PASS** means at least one test exists that
@@ -20,7 +20,8 @@ would fail if the guard were deleted or inverted; **FAIL** means no such test
 was found.
 
 All tests referenced below are in the module's own `#[cfg(test)]` block unless
-otherwise noted.
+otherwise noted. Totals cover the seven modules listed below; the mount-remount seccomp filter
+is audited separately in `SECURITY_INVARIANTS.mbx.md` and is not included here.
 
 ---
 
@@ -28,14 +29,14 @@ otherwise noted.
 
 | Module                                       | Guards audited | PASS   | FAIL  |
 | -------------------------------------------- | -------------- | ------ | ----- |
-| `image/layer.rs`                             | 13             | 12     | 1     |
+| `image/layer.rs`                             | 13             | 13     | 0     |
 | `daemon/server.rs` (`is_authorized`, frames) | 6              | 6      | 0     |
 | `miniboxd/src/main.rs` (socket mode)         | 2              | 0      | 2     |
 | `domain/execution_manifest.rs`               | 5              | 5      | 0     |
 | `container/process.rs`                       | 5              | 4      | 1     |
 | `image/registry.rs`                          | 8              | 8      | 0     |
 | `adapters/ghcr.rs`                           | 6              | 5      | 1     |
-| **Totals**                                   | **45**         | **40** | **5** |
+| **Totals**                                   | **45**         | **41** | **4** |
 
 ---
 
@@ -71,7 +72,7 @@ otherwise noted.
 
 | Guard / step                                    | Test                                                                                                                                          | Verdict |
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `mode & 0o777` strips setuid/setgid/sticky bits | No test asserts that a file with mode `0o4755` (setuid) is extracted with mode `0o755`. The warn branch is exercised by code inspection only. | FAIL    |
+| `mode & 0o777` strips setuid/setgid/sticky bits | `regression_setuid_bits_stripped_on_extraction` | PASS |
 
 ### `verify_digest`
 
@@ -215,26 +216,22 @@ unlike `registry.rs` which has `get_manifest_errors_when_content_length_exceeds_
 
 ### Critical gaps (a guard removal would be silently undetected)
 
-1. **`layer.rs` — setuid/setgid mask** (`mode & 0o777`): no test verifies that a
-   file with setuid mode `0o4755` is extracted without setuid. Removing the mask
-   would leave no failing test.
-
-2. **`main.rs` — socket mode `0o600`**: no test verifies that the daemon socket
+1. **`main.rs` — socket mode `0o600`**: no test verifies that the daemon socket
    is created with restrictive permissions. Removing or widening the default would
    leave no failing test.
 
-3. **`ghcr.rs` — manifest and layer size limits**: the Content-Length guard and
+2. **`ghcr.rs` — manifest and layer size limits**: the Content-Length guard and
    the body-size guard in `get_manifest` and `pull_layer` have no wiremock tests
    that trigger them. Doubling `MAX_MANIFEST_SIZE` or removing the check would
    leave no failing test in the GHCR adapter.
 
 ### Low-risk gaps (covered by static or structural guarantees)
 
-4. **`process.rs` — `close_extra_fds`**: no unit test, but the function is
+3. **`process.rs` — `close_extra_fds`**: no unit test, but the function is
    best-effort (failures are silent) and the Linux `close_range` syscall path is
    the only realistic regression surface.
 
-5. **`layer.rs` — canonical-parent escape check**: the `..`-component pre-check
+4. **`layer.rs` — canonical-parent escape check**: the `..`-component pre-check
    catches all practical cases first; the canonicalize escape check has no
    dedicated test for the scenario it uniquely handles (symlink-induced escape
    without `..` components).

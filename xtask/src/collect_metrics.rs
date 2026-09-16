@@ -21,7 +21,7 @@ pub struct MetricsSnapshot {
     test_count: usize,
     /// Total non-empty lines across all `.rs` files under workspace crates.
     source_lines: usize,
-    /// Value of the `Last updated:` field in `docs/FEATURE_MATRIX.mbx.md`,
+    /// Value of the `Last updated:` field in `docs/core/FEATURE_MATRIX.mbx.md`,
     /// or `"unknown"` if the file is absent or the field is missing.
     feature_matrix_date: String,
 }
@@ -69,9 +69,9 @@ fn scan_rs_files(dir: &Path, lines: &mut usize, tests: &mut usize) -> Result<()>
         let path = entry.path();
         let ft = entry.file_type().context("file type")?;
         if ft.is_dir() {
-            // Skip build artifacts to avoid double-counting.
+            // Skip build artifacts and nested checkouts to avoid double-counting.
             let name = entry.file_name();
-            if name == "target" {
+            if name == "target" || name == ".worktrees" {
                 continue;
             }
             scan_rs_files(&path, lines, tests)?;
@@ -93,9 +93,9 @@ fn scan_rs_files(dir: &Path, lines: &mut usize, tests: &mut usize) -> Result<()>
     Ok(())
 }
 
-/// Read the `Last updated:` date from `docs/FEATURE_MATRIX.mbx.md`.
+/// Read the `Last updated:` date from `docs/core/FEATURE_MATRIX.mbx.md`.
 fn feature_matrix_date(root: &Path) -> String {
-    let path = root.join("docs/FEATURE_MATRIX.mbx.md");
+    let path = root.join("docs/core/FEATURE_MATRIX.mbx.md");
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(_) => return "unknown".to_string(),
@@ -180,6 +180,24 @@ mod tests {
     }
 
     #[test]
+    fn scan_skips_nested_worktrees() {
+        let dir = make_tmp().join("scan_worktrees");
+        let worktree = dir.join(".worktrees/issue-1");
+        fs::create_dir_all(&worktree).expect("create nested worktree");
+        fs::write(dir.join("lib.rs"), "#[test]\nfn current() {}\n").expect("write current source");
+        fs::write(worktree.join("lib.rs"), "#[test]\nfn duplicate() {}\n")
+            .expect("write worktree source");
+
+        let mut lines = 0;
+        let mut tests = 0;
+        scan_rs_files(&dir, &mut lines, &mut tests).expect("scan");
+
+        assert_eq!(lines, 2, "nested worktree source should be excluded");
+        assert_eq!(tests, 1, "nested worktree tests should be excluded");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
     fn feature_matrix_date_missing_returns_unknown() {
         let dir = make_tmp().join("no_docs");
         fs::create_dir_all(&dir).expect("create dir");
@@ -190,7 +208,7 @@ mod tests {
     #[test]
     fn feature_matrix_date_parsed_correctly() {
         let dir = make_tmp().join("docs_test");
-        let docs = dir.join("docs");
+        let docs = dir.join("docs/core");
         fs::create_dir_all(&docs).expect("create docs dir");
         fs::write(
             docs.join("FEATURE_MATRIX.mbx.md"),

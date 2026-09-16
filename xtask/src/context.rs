@@ -142,6 +142,20 @@ fn run_context(
         None => Vec::new(),
     };
 
+    // TODO(feature-idea-28): replace declared security and readiness claims with
+    // evidence collected from executable checks and validated test profiles.
+    // TODO(feature-idea-29): collect sustained concurrency evidence that proves
+    // blocking container operations cannot starve Tokio control-plane requests.
+    // TODO(feature-idea-30): make doctor evidence cover kernel, cgroups v2,
+    // OverlayFS, privileges, and selected-adapter operational prerequisites.
+    // TODO(feature-idea-31): benchmark GKE proot startup and copy-filesystem I/O
+    // against native overlay and process-spawn baselines.
+    // TODO(feature-idea-32): derive production prerequisites and unsupported
+    // multi-tenant use cases from executable checks into maintained docs.
+    // TODO(feature-idea-33): define evidence thresholds for support-tier
+    // graduation using conformance, security, capability, and benchmark results.
+    // TODO(feature-idea-34): validate architectural claims about adapter
+    // swappability, shared policy boundaries, and capability evidence.
     let tested_capabilities = BTreeMap::new();
     let reconciliation = reconcile_adapters(&manifest, &registry, &tested_capabilities);
     let mut diagnostics = reconciliation.diagnostics;

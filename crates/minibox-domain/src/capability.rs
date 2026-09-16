@@ -16,6 +16,25 @@ use std::sync::Arc;
 // Conformance boundary — commit / build / push capabilities
 // ---------------------------------------------------------------------------
 
+// TODO(feature-idea-19): expand adapter conformance to cover concrete security,
+// networking, lifecycle, and image-operation behavior on every backend.
+// TODO(feature-idea-20): unify compiled, configured, operational, and
+// conformance-validated support in one per-platform capability report.
+// TODO(feature-idea-21): complete the MCP control surface for the supported
+// container, image, event, snapshot, and verification operations.
+// TODO(feature-idea-22): enforce one policy model across MCP, Crux, CLI, and
+// daemon entry points for destructive and resource-intensive operations.
+// TODO(feature-idea-23): persist structured audit records for agent mutations,
+// including actor, surface, request ID, policy decision, target, and outcome.
+// TODO(feature-idea-24): graduate bridge and CNI networking through concrete
+// connectivity, teardown, DNS, NAT, and port-forward conformance tests.
+// TODO(feature-idea-25): stabilize OCI push, commit, and build by completing
+// control-surface exposure, policy coverage, and concrete adapter tests.
+// TODO(feature-idea-26): provide VM-backed exec-into-running and historical log
+// retrieval for supported macOS adapters.
+// TODO(feature-idea-27): consolidate the WSL2 implementations and wire a
+// conformant Windows daemon transport, helper, and lifecycle adapter.
+
 /// An individual capability that a backend adapter may or may not support.
 ///
 /// Used by [`BackendCapabilitySet`] to describe what a concrete backend can do.

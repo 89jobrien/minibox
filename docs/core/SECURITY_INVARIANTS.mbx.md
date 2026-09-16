@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox-core/src/image/layer.rs
   - crates/minibox/src/container/process.rs
@@ -12,7 +12,7 @@ sources:
   - crates/minibox/src/daemon/handler/run.rs
   - crates/minibox/tests/security_regression.rs
   - crates/minibox/tests/daemon_security_regression.rs
-generated: 2026-08-26
+generated: 2026-08-28
 ---
 
 # Security Invariants
@@ -23,7 +23,7 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
-Last updated: 2026-08-26
+Last updated: 2026-09-16
 
 ---
 
@@ -107,7 +107,7 @@ container image could allow privilege escalation to root once the container proc
 
 **Fixed in:** commit `2fc7036`
 
-**Regression test:**
+**Static source-shape regression:**
 | Test name | File |
 |-----------|------|
 | `regression_setuid_bits_stripped_on_extraction` | `crates/minibox/tests/security_regression.rs` |
@@ -132,6 +132,8 @@ daemon socket access.
 | Test name | File |
 |-----------|------|
 | `regression_close_extra_fds_uses_close_range_syscall` | `crates/minibox/tests/security_regression.rs` |
+
+This test inspects the source shape; it does not execute a child and prove the runtime FD table.
 
 ---
 
@@ -285,6 +287,23 @@ the same file.)_
 
 ---
 
+## 12. Execution Manifest Integrity
+
+**Invariant:** Every container run persists an `execution-manifest.json` before the container
+process is spawned. `minibox-domain` owns the manifest types and deterministic workload digest;
+environment values are represented only by SHA-256 digests.
+
+**Code path:**
+
+- `crates/minibox-domain/src/execution_manifest.rs` — manifest types, digest computation, `seal()`.
+- `crates/minibox/src/daemon/handler/run.rs` — `prepare_run()` persists it before spawn.
+
+**Regression tests:** `env_var_value_is_never_plaintext`, `equal_inputs_produce_equal_digest`,
+`volatile_fields_do_not_affect_digest`, `seal_sets_workload_digest`, and
+`manifest_roundtrips_through_json`.
+
+---
+
 ## 13. Mount Immutability Ratchet (Seccomp)
 
 **Invariant:** Once the container's init-time mounts are in place (overlay, bind mounts,
@@ -361,10 +380,10 @@ guard is present. Removing or weakening the guard causes the test to fail.
 | 9   | FIFO non-crash               | `minibox-core/.../layer.rs` fallthrough to `unpack_in`                                                               | `regression_fifo_entry_does_not_crash`                                                                                                                                 | minibox               |
 | 10  | Request size limit           | `minibox/.../server.rs` `MAX_REQUEST_SIZE` + `bounded_read_line`                                                     | `mutation_audit_request_size_limit_exists`, `test_handle_connection_oversized_request`                                                                                 | minibox               |
 | 11  | Image pull limits            | `minibox-core/.../registry.rs` `MAX_MANIFEST_SIZE`, `MAX_LAYER_SIZE`, `MAX_TOTAL_IMAGE_SIZE`, `LimitedStream`        | `mutation_audit_image_pull_size_limits_exist`, `test_constants_*`, `get_manifest_errors_when_content_length_exceeds_limit`                                             | minibox, minibox-core |
-| 12  | Execution manifest integrity | `minibox-core/.../execution_manifest.rs` `seal()`, SHA-256 env hashing; `minibox/.../handler/run.rs` `prepare_run()` | `mutation_audit_execution_manifest_env_hashing`, `env_var_value_is_never_plaintext`, `seal_sets_workload_digest`                                                       | minibox, minibox-core |
+| 12  | Execution manifest integrity | `minibox-domain/.../execution_manifest.rs` `seal()`, SHA-256 env hashing; `minibox/.../handler/run.rs` `prepare_run()` | `mutation_audit_execution_manifest_env_hashing`, `env_var_value_is_never_plaintext`, `seal_sets_workload_digest`                                                       | minibox, minibox-domain |
 | 13  | Mount immutability ratchet (seccomp) | `minibox/.../container/mount_seccomp.rs` `build_mount_immutability_program`, `install_mount_immutability_filter`; called from `minibox/.../container/process.rs` `child_init` | `program_denies_remount_without_rdonly`, `interpreter_matches_documented_policy`, `kernel_enforces_remount_rw_denial_after_filter_install` | minibox |
 
-Last audited: 2026-08-03 (issue #449)
+Last audited: 2026-08-28 (issue #449)
 
 ---
 
@@ -383,32 +402,3 @@ tar paths) and `crates/minibox/src/container/filesystem.rs` (for overlay paths),
 `TryFrom<&Path>` as the validated constructor.
 
 ---
-
-## 12. Execution Manifest Integrity
-
-**Invariant:** Every container run persists an `execution-manifest.json`
-before the container process is spawned. The manifest captures all
-measured inputs with a deterministic workload digest. Environment
-variable values are stored as SHA-256 digests, never plaintext.
-
-**Code path:**
-
-- `crates/minibox-domain/src/execution_manifest.rs` — manifest types,
-  digest computation, `seal()`.
-- `crates/minibox/src/daemon/handler/run.rs` — `prepare_run()` builds and persists
-  the manifest before returning.
-
-**Regression tests:**
-
-- `execution_manifest::tests::env_var_value_is_never_plaintext`
-- `execution_manifest::tests::equal_inputs_produce_equal_digest`
-- `execution_manifest::tests::volatile_fields_do_not_affect_digest`
-- `execution_manifest::tests::seal_sets_workload_digest`
-- `execution_manifest::tests::manifest_roundtrips_through_json`
-
-**What must not change:**
-
-- Env values must never appear in plaintext in the manifest.
-- The digest must exclude `created_at`, `manifest_path`, and
-  `workload_digest` so that volatile fields do not affect identity.
-- The manifest must be written before `spawn_process` is called.
