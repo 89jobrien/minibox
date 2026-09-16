@@ -16,42 +16,21 @@ items:
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (14 files)
+  title: Uncommitted changes (3 files)
   description: |-
     Working tree has uncommitted changes:
-    .claude/skills/run-minibox/SKILL.md
-    .claude/skills/run-minibox/driver.nu
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .github/workflows/pr.yml
-    .github/workflows/release.yml
-    DEVELOPMENT.md
-    HANDOFF.md
-    docs/core/MUTATION_AUDIT.mbx.md
-    docs/core/SECURITY_INVARIANTS.mbx.md
-    docs/designs/2026-09-08-accurate-context-snapshot-design.md
-    docs/designs/2026-09-12-guaranteed-security-profiles-design.md
-    docs/designs/2026-09-15-taskit-promotion-wrapper-design.md
-    docs/plans/2026-08-25-xtask-info-context-enhancements.md
+    .minibox/checkpoints/prepush.json
   files:
-  - .claude/skills/run-minibox/SKILL.md
-  - .claude/skills/run-minibox/driver.nu
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .github/workflows/pr.yml
-  - .github/workflows/release.yml
-  - DEVELOPMENT.md
-  - HANDOFF.md
-  - docs/core/MUTATION_AUDIT.mbx.md
-  - docs/core/SECURITY_INVARIANTS.mbx.md
-  - docs/designs/2026-09-08-accurate-context-snapshot-design.md
-  - docs/designs/2026-09-12-guaranteed-security-profiles-design.md
-  - docs/designs/2026-09-15-taskit-promotion-wrapper-design.md
-  - docs/plans/2026-08-25-xtask-info-context-enhancements.md
+  - .minibox/checkpoints/prepush.json
 log:
-- date: '20260916.040959'
-  summary: done=58 running=0 pending=0 blocked=1
+- date: '20260916.084406'
+  summary: done=60 running=0 pending=27 blocked=1
   commits:
+  - 6bd3eb96bf86b591d9d543ed974a20b8e53dea38
   - 98dc14c01dc5e448f6d44d0d3933d5abc194ac2c
   - ff562fba87269344caee0f1c10d8f60227a97183
   - b50d069b7e52eadf0ab4f0f760676cd3963e0bbb
@@ -61,4 +40,3 @@ log:
   - 32632a499083a0763fe5bc37f3939f70e3987fa3
   - 09902733a48219449a6569c01a3f8c5a67ba0c09
   - 1b7eba5211ba4bd416d1a65afc198a0036b09db1
-  - bd26057137e0735d992399d17608db67b4609dcc
