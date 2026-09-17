@@ -1,5 +1,5 @@
 ---
-source_sha: 583d795681594db0435e7fbc4d196e19edfef358
+source_sha: 98cfc0e94b126624f7c86c89e8edc86444ab63c4
 sources:
   - docs/designs/2026-08-26-minibox-crate-boundaries-design.md
   - crates/minibox-core/src/
