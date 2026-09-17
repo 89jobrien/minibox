@@ -1,6 +1,4 @@
 //! Exec, `SendInput`, and `ResizePty` handlers.
-// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
-#![allow(clippy::too_many_arguments)]
 
 use base64::Engine as _;
 use minibox_core::domain::{ExecOutput, ExecSession, SessionId};
@@ -53,6 +51,8 @@ async fn forward_exec_outputs(tx: &mpsc::Sender<DaemonResponse>, mut session: Ex
 /// Streams `ContainerOutput` messages and terminates with `ContainerStopped`.
 /// Returns `Error` immediately if the exec runtime is unavailable or the
 /// container is not running.
+// qual:allow(srp) reason: "daemon boundary mirrors the Exec protocol request"
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_exec(
     container_id: String,
     cmd: Vec<String>,

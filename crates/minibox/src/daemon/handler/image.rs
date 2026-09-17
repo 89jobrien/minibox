@@ -1,6 +1,4 @@
 //! Image handlers: pull, load, push, commit, build, prune, remove, list.
-// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
-#![allow(clippy::too_many_arguments)]
 
 use anyhow::Result;
 use minibox_core::events::EventSink;
@@ -317,6 +315,8 @@ pub async fn handle_push(
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
 /// Commits a container's writable layer and streams the terminal response.
+// qual:allow(srp) reason: "daemon boundary mirrors the Commit protocol request"
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_commit(
     container_id: String,
     target_image: String,
@@ -408,6 +408,8 @@ pub async fn handle_commit(
 /// sends exactly one terminal response: [`DaemonResponse::BuildComplete`] on
 /// success or [`DaemonResponse::Error`] on failure.
 // qual:allow(iosp) reason: "handler orchestration — parse, build steps, stream output"
+// qual:allow(srp) reason: "daemon boundary mirrors the Build protocol request"
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_build(
     dockerfile: String,
     context_path: String,

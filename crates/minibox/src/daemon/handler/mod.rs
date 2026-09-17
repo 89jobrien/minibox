@@ -5,9 +5,9 @@
 //! `DaemonResponse::Error` so the daemon never panics on bad input.
 //!
 // TODO(#116): raise coverage on handler and lifecycle/error paths
-//! The minibox crate rustqual config permits up to nine parameters for daemon
-//! boundary signatures. Complexity analysis remains enabled at the crate
-//! thresholds, so handler complexity findings are not hidden by this policy.
+//! Daemon boundary signatures that mirror protocol variants use narrow,
+//! per-handler parameter-count exceptions rather than weakening crate-wide
+//! quality thresholds.
 //!
 //! # Hexagonal Architecture
 //!

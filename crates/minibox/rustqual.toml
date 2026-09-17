@@ -24,10 +24,6 @@ max_cyclomatic = 11
 max_function_lines = 68
 
 [srp]
-# The only minibox functions above the workspace cap of 5 are daemon request
-# boundary functions (handle_exec, handle_commit, and handle_build). Their
-# dependency-injection/request signatures reach 9 parameters. Keep complexity
-# analysis active with the strict thresholds above.
-max_parameters = 9
+max_parameters = 5
 file_length_baseline = 300
 file_length_ceiling = 800
