@@ -2,34 +2,81 @@
 
 use anyhow::{Context, Result, bail};
 use std::fs;
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use xshell::{Shell, cmd};
 
 const UNRELEASED_HEADING: &str = "## [Unreleased]";
 
-pub fn prepare(root: &Path, version: &str) -> Result<Option<String>> {
-    validate_version(version)?;
-
-    let sh = Shell::new().context("creating shell for git-cliff")?;
-    sh.change_dir(root);
-    let config = root.join("cliff.toml");
-    let version_tag = format!("v{version}");
-    let fragment = cmd!(
-        sh,
-        "git cliff --config {config} --unreleased --tag {version_tag} --strip all --no-exec --offline --output /dev/stdout"
-    )
-    .read()
-    .context("rendering release notes with git-cliff; install git-cliff and retry")?;
-    let changelog_path = root.join("CHANGELOG.md");
-    let existing = fs::read_to_string(&changelog_path)
-        .with_context(|| format!("reading {}", changelog_path.display()))?;
-    prepare_update(&existing, version, &fragment)
+#[derive(Debug)]
+pub struct PreparedChangelog {
+    pub path: PathBuf,
+    pub original: String,
+    pub updated: String,
 }
 
-pub fn write(root: &Path, contents: &str) -> Result<()> {
+trait ChangelogSource {
+    fn render(&self, root: &Path, version: &str) -> Result<String>;
+    fn read(&self, path: &Path) -> Result<String>;
+}
+
+struct SystemChangelogSource;
+
+impl ChangelogSource for SystemChangelogSource {
+    fn render(&self, root: &Path, version: &str) -> Result<String> {
+        let sh = Shell::new().context("creating shell for git-cliff")?;
+        sh.change_dir(root);
+        let config = root.join("cliff.toml");
+        let version_tag = format!("v{version}");
+        cmd!(
+            sh,
+            "git cliff --config {config} --unreleased --tag {version_tag} --strip all --no-exec --offline --output /dev/stdout"
+        )
+        .read()
+        .context("rendering release notes with git-cliff; install git-cliff and retry")
+    }
+
+    fn read(&self, path: &Path) -> Result<String> {
+        fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))
+    }
+}
+
+pub fn prepare(root: &Path, version: &str) -> Result<Option<PreparedChangelog>> {
+    prepare_with(&SystemChangelogSource, root, version)
+}
+
+fn prepare_with(
+    source: &impl ChangelogSource,
+    root: &Path,
+    version: &str,
+) -> Result<Option<PreparedChangelog>> {
+    validate_version(version)?;
     let changelog_path = root.join("CHANGELOG.md");
-    fs::write(&changelog_path, contents)
-        .with_context(|| format!("writing {}", changelog_path.display()))?;
+    let fragment = source.render(root, version)?;
+    let existing = source.read(&changelog_path)?;
+    Ok(
+        prepare_update(&existing, version, &fragment)?.map(|updated| PreparedChangelog {
+            path: changelog_path,
+            original: existing,
+            updated,
+        }),
+    )
+}
+
+pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .with_context(|| format!("output path has no parent: {}", path.display()))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .with_context(|| format!("creating temporary file beside {}", path.display()))?;
+    temporary
+        .write_all(contents)
+        .and_then(|()| temporary.flush())
+        .with_context(|| format!("writing temporary file for {}", path.display()))?;
+    temporary
+        .persist(path)
+        .map_err(|error| error.error)
+        .with_context(|| format!("replacing {}", path.display()))?;
     Ok(())
 }
 
@@ -191,5 +238,46 @@ mod tests {
             .expect("an empty release should not fail");
 
         assert_eq!(updated, None);
+    }
+
+    struct FakeSource {
+        render: Result<String, &'static str>,
+        read: Result<String, &'static str>,
+    }
+
+    impl ChangelogSource for FakeSource {
+        fn render(&self, _root: &Path, _version: &str) -> Result<String> {
+            self.render.clone().map_err(anyhow::Error::msg)
+        }
+
+        fn read(&self, _path: &Path) -> Result<String> {
+            self.read.clone().map_err(anyhow::Error::msg)
+        }
+    }
+
+    #[test]
+    fn prepare_reports_command_and_io_errors() {
+        let root = Path::new("/workspace");
+        let command_error = prepare_with(
+            &FakeSource {
+                render: Err("git-cliff failed"),
+                read: Ok(EXISTING.to_string()),
+            },
+            root,
+            "0.34.0",
+        )
+        .expect_err("render errors must propagate");
+        assert!(command_error.to_string().contains("git-cliff failed"));
+
+        let io_error = prepare_with(
+            &FakeSource {
+                render: Ok(FRAGMENT.to_string()),
+                read: Err("read failed"),
+            },
+            root,
+            "0.34.0",
+        )
+        .expect_err("read errors must propagate");
+        assert!(io_error.to_string().contains("read failed"));
     }
 }

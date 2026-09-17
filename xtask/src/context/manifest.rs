@@ -258,6 +258,37 @@ pub(super) fn load_manifest(root: &Path) -> Result<ContextManifest> {
 pub(super) fn validate_manifest(manifest: &ContextManifest) -> Result<()> {
     let mut diagnostics = Vec::new();
 
+    if manifest.schema_version != 1 {
+        diagnostics.push(format!(
+            "unsupported context manifest schema version {}",
+            manifest.schema_version
+        ));
+    }
+    for adapter in &manifest.adapters {
+        if adapter.id.is_empty() {
+            diagnostics.push("empty adapter id".to_string());
+        }
+        if adapter.platforms.is_empty() {
+            diagnostics.push(format!("adapter {} has no platforms", adapter.id));
+        }
+        for role in &adapter.default_roles {
+            if !matches!(
+                role.as_str(),
+                "unix_default" | "linux_fallback" | "macos_fallback"
+            ) {
+                diagnostics.push(format!("unknown default role: {role}"));
+            }
+        }
+    }
+    for profile in &manifest.profiles {
+        if profile.id.is_empty() {
+            diagnostics.push("empty profile id".to_string());
+        }
+        if profile.target.is_empty() {
+            diagnostics.push(format!("profile {} has no target", profile.id));
+        }
+    }
+
     collect_duplicate_ids(
         manifest.adapters.iter().map(|adapter| adapter.id.as_str()),
         "adapter",
@@ -622,6 +653,7 @@ impl AdapterSuite {
         match self { Self::Native => "native", Self::Krun => "krun" }
     }
 }
+
 pub const VALID_ADAPTERS: &[&str] = &["native", "krun"];
 pub const DEFAULT_ADAPTER_SUITE: &str = "native";
 pub const FALLBACK_ADAPTER_SUITE: &str = if cfg!(target_os = "linux") { "native" } else { "krun" };
@@ -769,5 +801,83 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
                 .values()
                 .all(|capability| capability.observed.is_none())
         );
+    }
+
+    #[test]
+    fn adapter_reconciliation_normalizes_runtime_any_platform() {
+        let mut manifest = validation_fixture();
+        manifest.adapters = vec![AdapterDeclaration {
+            id: "portable".to_string(),
+            maturity: AdapterMaturity::Production,
+            platforms: vec!["linux".to_string(), "macos".to_string()],
+            default_roles: Vec::new(),
+            capabilities: BTreeMap::new(),
+        }];
+        let registry = AdapterRegistryObservation {
+            adapter_ids: BTreeSet::from(["portable".to_string()]),
+            platforms: BTreeMap::from([("portable".to_string(), "any".to_string())]),
+            default_roles: BTreeMap::new(),
+        };
+        let result = reconcile_adapters(&manifest, &registry, &BTreeMap::new());
+        assert!(
+            !result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.platform_mismatch")
+        );
+        assert_eq!(
+            result.adapters[0].platforms.observed,
+            Some(vec!["linux".to_string(), "macos".to_string()])
+        );
+    }
+
+    #[test]
+    fn adapter_registry_parser_rejects_incomplete_declarations() {
+        let valid = r#"
+pub enum AdapterSuite { Native, Krun }
+impl AdapterSuite { pub const fn as_str(&self) -> &str { match self { Self::Native => "native", Self::Krun => "krun" } } }
+pub const VALID_ADAPTERS: &[&str] = &["native", "krun"];
+pub const DEFAULT_ADAPTER_SUITE: &str = "native";
+pub const FALLBACK_ADAPTER_SUITE: &str = if cfg!(target_os = "linux") { "native" } else { "krun" };
+pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", platform: "linux" }, AdapterInfo { name: "krun", platform: "macos" }] }
+"#;
+        for (needle, replacement) in [
+            ("Self::Krun => \"krun\"", "Self::Krun => value"),
+            ("pub const DEFAULT_ADAPTER_SUITE: &str = \"native\";", ""),
+            (" else { \"krun\" }", ""),
+            ("[\"native\", \"krun\"]", "[\"native\"]"),
+            (
+                "name: \"krun\", platform: \"macos\"",
+                "name: \"other\", platform: \"macos\"",
+            ),
+        ] {
+            assert!(parse_adapter_registry(&valid.replacen(needle, replacement, 1)).is_err());
+        }
+        assert!(parse_adapter_registry("not rust }").is_err());
+    }
+
+    #[test]
+    fn manifest_validation_reports_docs_audit_errors() {
+        let mut manifest = validation_fixture();
+        manifest.schema_version = 2;
+        manifest.adapters[0].id.clear();
+        manifest.adapters[0].platforms.clear();
+        manifest.adapters[0].default_roles = vec!["unknown".to_string()];
+        manifest.profiles[0].target.clear();
+        let error = validate_manifest(&manifest)
+            .expect_err("invalid manifest should fail")
+            .to_string();
+        for expected in [
+            "unsupported context manifest schema version",
+            "empty adapter id",
+            "has no platforms",
+            "unknown default role",
+            "has no target",
+        ] {
+            assert!(
+                error.contains(expected),
+                "missing {expected:?} in {error:?}"
+            );
+        }
     }
 }

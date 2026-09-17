@@ -307,7 +307,8 @@ fn is_missing_target_or_toolchain(diagnostic: &str) -> bool {
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct NextestListing {
-    rust_build_meta: BTreeMap<String, serde_json::Value>,
+    #[serde(rename = "rust-build-meta")]
+    _rust_build_meta: BTreeMap<String, serde_json::Value>,
     test_count: usize,
     rust_suites: BTreeMap<String, NextestSuite>,
 }
@@ -318,7 +319,8 @@ struct NextestSuite {
     package_name: String,
     binary_id: String,
     binary_name: String,
-    package_id: String,
+    #[serde(rename = "package-id")]
+    _package_id: String,
     kind: String,
     binary_path: String,
     build_platform: String,
@@ -372,13 +374,14 @@ pub(super) fn parse_nextest_listing(json: &str) -> Result<Vec<ExecutableTest>> {
                     "nextest testcase {test_name:?} in {suite_key:?} has incompatible schema values"
                 );
             }
-            let stable_id = format!("{}::{}::{test_name}", suite.package_id, suite.binary_id);
+            let package_id = super::workspace::stable_package_identity(&suite.package_name);
+            let stable_id = format!("{package_id}::{}::{test_name}", suite.binary_id);
             if !stable_ids.insert(stable_id.clone()) {
                 bail!("duplicate nextest test identity: {stable_id}");
             }
             tests.push(ExecutableTest {
                 stable_id,
-                package_id: suite.package_id.clone(),
+                package_id,
                 binary_id: suite.binary_id.clone(),
                 test_name,
                 ignored: testcase.ignored,
@@ -536,6 +539,46 @@ crate::conformance_test! {
                 .all(|declaration| declaration.path.as_str() == "sample/src/lib.rs")
         );
     }
+
+    #[test]
+    fn source_inventory_rejects_malformed_rust_and_conformance_macros() {
+        let temp = tempfile::tempdir().expect("temporary workspace should be created");
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("sample/src"))
+            .expect("sample source directory should be created");
+        std::fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nresolver = \"3\"\nmembers = [\"sample\"]\n",
+        )
+        .expect("workspace manifest should be written");
+        std::fs::write(
+            root.join("sample/Cargo.toml"),
+            "[package]\nname = \"sample\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .expect("package manifest should be written");
+        std::fs::write(root.join("sample/src/lib.rs"), "pub fn initial() {}\n")
+            .expect("initial source should be written");
+        for args in [vec!["init", "--quiet"], vec!["add", "--all"]] {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .expect("git fixture command should run");
+            assert!(status.success());
+        }
+        let repository = SystemRepositoryReader;
+        let workspace = collect_workspace(&SystemCommandRunner, &repository, root)
+            .expect("workspace should collect");
+        std::fs::write(root.join("sample/src/lib.rs"), "fn broken( {")
+            .expect("malformed source should be written");
+        assert!(collect_source_tests(&repository, root, &workspace).is_err());
+        std::fs::write(
+            root.join("sample/src/lib.rs"),
+            "crate::conformance_test! { adapter: \"native\" }\n",
+        )
+        .expect("malformed macro should be written");
+        assert!(collect_source_tests(&repository, root, &workspace).is_err());
+    }
     #[test]
     fn nextest_json_preserves_binary_and_test_identity() {
         let fixture = r#"{
@@ -629,10 +672,7 @@ crate::conformance_test! {
             .filter(|test| test.test_name == "repeated_name")
             .collect::<Vec<_>>();
         assert_eq!(repeated.len(), 2);
-        assert_eq!(
-            repeated[0].package_id,
-            "path+file:///workspace/sample#0.1.0"
-        );
+        assert_eq!(repeated[0].package_id, "sample");
         assert_ne!(repeated[0].binary_id, repeated[1].binary_id);
         assert_ne!(repeated[0].stable_id, repeated[1].stable_id);
         for test in repeated {

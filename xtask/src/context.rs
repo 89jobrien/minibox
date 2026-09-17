@@ -22,14 +22,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-#[allow(dead_code)]
+mod adapter_docs;
 mod collect;
-#[allow(dead_code)]
+mod evidence;
+mod identity;
 mod manifest;
-#[allow(dead_code)]
 mod model;
-#[allow(dead_code)]
 mod test_inventory;
+mod workspace;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ContextOptions {
@@ -80,6 +80,14 @@ pub fn context(root: &Path, options: &ContextOptions) -> Result<()> {
     Ok(())
 }
 
+pub fn sync_adapter_docs(root: &Path) -> Result<()> {
+    adapter_docs::sync(root)
+}
+
+pub fn check_adapter_docs(root: &Path) -> Result<()> {
+    adapter_docs::check_drift(root)
+}
+
 fn run_context(
     runner: &impl CommandRunner,
     repository: &impl RepositoryReader,
@@ -92,7 +100,7 @@ fn run_context(
         .canonicalize()
         .with_context(|| format!("canonicalize workspace root {}", root.display()))?;
     let generated_at = clock.now();
-    let identity = collect_repository_identity(runner, &root)?;
+    let identity = collect_repository_identity(runner, repository, &root)?;
     let environment = collect_environment(runner, &root, &generated_at)?;
 
     let manifest_path = root.join("xtask/context.toml");
@@ -130,6 +138,7 @@ fn run_context(
             ))
         })
         .collect::<Result<BTreeMap<_, _>>>()?;
+    let workspace_package_names = evidence::workspace_package_identities(&workspace);
     let imported_profiles = match &options.evidence_dir {
         Some(directory) => {
             let directory = if directory.is_absolute() {
@@ -137,7 +146,7 @@ fn run_context(
             } else {
                 root.join(directory)
             };
-            read_profile_evidence(&directory, &expected_keys)?
+            read_profile_evidence(&directory, &expected_keys, &workspace_package_names)?
         }
         None => Vec::new(),
     };
@@ -173,7 +182,7 @@ fn run_context(
     profiles.extend(validate_all_results.iter().cloned());
     profiles.extend(imported_profiles.iter().cloned());
     sort_profile_results(&mut profiles);
-    let validated_unique_tests = validated_unique_tests(&profiles);
+    let validated_unique_tests = evidence::validated_unique_tests(&profiles);
     let tests = TestSnapshot {
         source_declarations,
         profiles,
@@ -469,17 +478,6 @@ fn observed_value(fact: &Fact<String>, name: &str) -> Result<String> {
         .with_context(|| format!("{name} was not observed"))
 }
 
-fn validated_unique_tests(profiles: &[TestProfileResult]) -> Vec<model::ExecutableTest> {
-    let mut tests = profiles
-        .iter()
-        .filter(|profile| profile.status == ProfileStatus::Validated)
-        .flat_map(|profile| profile.executable_tests.iter().cloned())
-        .collect::<Vec<_>>();
-    tests.sort_by(|left, right| left.stable_id.cmp(&right.stable_id));
-    tests.dedup_by(|left, right| left.stable_id == right.stable_id);
-    tests
-}
-
 fn profile_diagnostic(profile: &TestProfileResult) -> ContextDiagnostic {
     let severity = match profile.status {
         ProfileStatus::Validated => DiagnosticSeverity::Info,
@@ -660,7 +658,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn context_v3_regression_contract_is_non_deceptive() {
+    fn context_v3_collects_complete_snapshot() {
         use collect::{
             CommandOutput, CommandRunner, CommandSpec, RepositoryReader, SystemRepositoryReader,
         };
@@ -745,6 +743,14 @@ mod tests {
 
             fn file_metrics(&self, path: &Path) -> Result<FileMetrics> {
                 self.inner.file_metrics(path)
+            }
+
+            fn fingerprint_entry(
+                &self,
+                path: &Path,
+                root: &Path,
+            ) -> Result<collect::FingerprintEntry> {
+                self.inner.fingerprint_entry(path, root)
             }
         }
 
@@ -1283,7 +1289,8 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             serde_json::to_vec(&artifact(&key)).expect("current artifact should serialize"),
         )
         .expect("current artifact should be written");
-        let current = read_profile_evidence(current_dir.path(), &expected)
+        let packages = BTreeSet::from(["pkg".to_string()]);
+        let current = read_profile_evidence(current_dir.path(), &expected, &packages)
             .expect("exact-key evidence should import");
         assert_eq!(current[0].status, ProfileStatus::Validated);
 
@@ -1295,7 +1302,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             serde_json::to_vec(&artifact(&stale_key)).expect("stale artifact should serialize"),
         )
         .expect("stale artifact should be written");
-        let stale = read_profile_evidence(stale_dir.path(), &expected)
+        let stale = read_profile_evidence(stale_dir.path(), &expected, &packages)
             .expect("stale evidence should remain diagnostic data");
         assert_eq!(stale[0].status, ProfileStatus::Stale);
         assert!(stale[0].executable_tests.is_empty());
@@ -1327,7 +1334,40 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
                 .is_err()
         );
 
-        let deduplicated = validated_unique_tests(&with_current);
+        let deduplicated = evidence::validated_unique_tests(&with_current);
         assert_eq!(deduplicated, [executable]);
+    }
+
+    #[test]
+    fn required_tool_collectors_propagate_status_utf8_and_shape_failures() {
+        struct Runner(CommandOutput);
+        impl CommandRunner for Runner {
+            fn run(&self, _command: &CommandSpec) -> Result<CommandOutput> {
+                Ok(self.0.clone())
+            }
+        }
+        let root = Path::new(".");
+        let nonzero = Runner(CommandOutput {
+            exit_code: Some(1),
+            stdout: Vec::new(),
+            stderr: b"required tool failed".to_vec(),
+        });
+        let error = run_text_command(&nonzero, root, "cargo", &["--version"])
+            .expect_err("nonzero required collector must fail");
+        assert!(error.to_string().contains("required tool failed"));
+
+        let invalid_utf8 = Runner(CommandOutput {
+            exit_code: Some(0),
+            stdout: vec![0xff],
+            stderr: Vec::new(),
+        });
+        assert!(run_text_command(&invalid_utf8, root, "cargo", &["--version"]).is_err());
+
+        let missing_host = Runner(CommandOutput {
+            exit_code: Some(0),
+            stdout: b"rustc 1.85.0\n".to_vec(),
+            stderr: Vec::new(),
+        });
+        assert!(collect_environment(&missing_host, root, "now").is_err());
     }
 }

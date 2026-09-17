@@ -20,8 +20,7 @@
 // TODO(feature-idea-08): define xtask commands in one typed registry and generate dispatcher
 // metadata, help, schema, documentation, and compatibility aliases from it.
 
-use anyhow::{Context, Result, bail};
-use serde::Deserialize;
+use anyhow::{Result, bail};
 use std::env;
 use xshell::Shell;
 
@@ -33,7 +32,7 @@ mod cas;
 mod cgroup_tests;
 mod changelog;
 mod check_protocol_sites;
-pub mod checkpoint;
+mod checkpoint;
 mod ci_watch;
 mod cleanup;
 mod clippy_sarif;
@@ -155,20 +154,14 @@ fn main() -> Result<()> {
         Some("bump") => {
             let args: Vec<String> = env::args().skip(2).collect();
             let (level, with_changelog) = parse_bump_args(&args)?;
-            let prepared_changelog = if with_changelog {
-                let next = bump::next_version(root, level)?;
-                let Some(contents) = changelog::prepare(root, &next)? else {
+            if with_changelog {
+                let Some(version) = bump::bump_with_changelog(root, level)? else {
                     eprintln!("[minibox] no release entries; version and changelog unchanged");
                     return Ok(());
                 };
-                Some(contents)
-            } else {
-                None
-            };
-            let version = bump::bump(root, level)?;
-            if let Some(contents) = prepared_changelog {
-                changelog::write(root, &contents)?;
                 eprintln!("[minibox] changelog updated for v{version}");
+            } else {
+                bump::bump(root, level)?;
             }
             Ok(())
         }
@@ -557,179 +550,8 @@ fn dispatch_docs(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
             docs_lint::lint_docs(root, sarif_path.as_deref())
         }
         "update-date" => feature_matrix_date::update_feature_matrix_date(root),
-        "sync-adapters" => sync_adapter_docs(root),
+        "sync-adapters" => context::sync_adapter_docs(root),
         other => bail!("unknown docs action: {other}"),
-    }
-}
-
-#[derive(Deserialize)]
-struct DocsAdapterManifest {
-    adapters: Vec<DocsAdapterDeclaration>,
-}
-
-#[derive(Deserialize)]
-struct DocsAdapterDeclaration {
-    id: String,
-    maturity: String,
-    platforms: Vec<String>,
-    default_roles: Vec<String>,
-    capabilities: std::collections::BTreeMap<String, String>,
-}
-
-fn sync_adapter_docs(root: &std::path::Path) -> Result<()> {
-    let manifest_path = root.join("xtask/context.toml");
-    let document_path = root.join("docs/core/FEATURE_MATRIX.mbx.md");
-    let manifest_source = std::fs::read_to_string(&manifest_path)
-        .with_context(|| format!("read {}", manifest_path.display()))?;
-    let manifest: DocsAdapterManifest =
-        toml::from_str(&manifest_source).context("parse xtask/context.toml for docs sync")?;
-    let document = std::fs::read_to_string(&document_path)
-        .with_context(|| format!("read {}", document_path.display()))?;
-    let synced = sync_adapter_docs_document(&document, &manifest)?;
-    if synced != document {
-        std::fs::write(&document_path, synced)
-            .with_context(|| format!("write {}", document_path.display()))?;
-    }
-    Ok(())
-}
-
-fn sync_adapter_docs_document(document: &str, manifest: &DocsAdapterManifest) -> Result<String> {
-    let suites = render_docs_adapter_suites(manifest);
-    let capabilities = render_docs_adapter_capabilities(manifest)?;
-    let document = replace_docs_generated_block(
-        document,
-        "<!-- BEGIN GENERATED: adapter-suites -->",
-        "<!-- END GENERATED: adapter-suites -->",
-        &suites,
-    )?;
-    replace_docs_generated_block(
-        &document,
-        "<!-- BEGIN GENERATED: adapter-capabilities -->",
-        "<!-- END GENERATED: adapter-capabilities -->",
-        &capabilities,
-    )
-}
-
-fn replace_docs_generated_block(
-    document: &str,
-    begin: &str,
-    end: &str,
-    generated: &str,
-) -> Result<String> {
-    let begins = document
-        .match_indices(begin)
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
-    let ends = document
-        .match_indices(end)
-        .map(|(index, _)| index)
-        .collect::<Vec<_>>();
-    if begins.len() != 1 || ends.len() != 1 {
-        bail!("generated adapter block must contain exactly one marker pair");
-    }
-    let begin_index = begins[0];
-    let end_index = ends[0];
-    if begin_index >= end_index {
-        bail!("generated adapter block markers are out of order");
-    }
-    Ok(format!(
-        "{}{}\n{}\n{}{}",
-        &document[..begin_index],
-        begin,
-        generated,
-        end,
-        &document[end_index + end.len()..]
-    ))
-}
-
-fn render_docs_adapter_suites(manifest: &DocsAdapterManifest) -> String {
-    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
-    adapters.sort_by(|left, right| left.id.cmp(&right.id));
-    let mut lines = vec![
-        "| Adapter | Platforms | Maturity | Default roles |".to_string(),
-        "| --- | --- | --- | --- |".to_string(),
-    ];
-    for adapter in adapters {
-        let mut platforms = adapter.platforms.clone();
-        platforms.sort();
-        platforms.dedup();
-        let platforms = platforms
-            .iter()
-            .map(|platform| format!("`{platform}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let mut roles = adapter.default_roles.clone();
-        roles.sort();
-        roles.dedup();
-        let roles = if roles.is_empty() {
-            "--".to_string()
-        } else {
-            roles
-                .iter()
-                .map(|role| format!("`{role}`"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        };
-        lines.push(format!(
-            "| `{}` | {} | {} | {} |",
-            adapter.id,
-            platforms,
-            title_case_manifest_value(&adapter.maturity),
-            roles
-        ));
-    }
-    lines.join("\n")
-}
-
-fn render_docs_adapter_capabilities(manifest: &DocsAdapterManifest) -> Result<String> {
-    let mut adapters = manifest.adapters.iter().collect::<Vec<_>>();
-    adapters.sort_by(|left, right| left.id.cmp(&right.id));
-    let capabilities = adapters
-        .iter()
-        .flat_map(|adapter| adapter.capabilities.keys().cloned())
-        .collect::<std::collections::BTreeSet<_>>();
-    let mut lines = vec![format!(
-        "| Capability | {} |",
-        adapters
-            .iter()
-            .map(|adapter| format!("`{}`", adapter.id))
-            .collect::<Vec<_>>()
-            .join(" | ")
-    )];
-    lines.push(format!(
-        "| --- | {} |",
-        adapters
-            .iter()
-            .map(|_| "---")
-            .collect::<Vec<_>>()
-            .join(" | ")
-    ));
-    for capability in capabilities {
-        let values = adapters
-            .iter()
-            .map(|adapter| {
-                adapter
-                    .capabilities
-                    .get(&capability)
-                    .map(|value| title_case_manifest_value(value))
-                    .with_context(|| {
-                        format!(
-                            "adapter {:?} is missing capability {:?}",
-                            adapter.id, capability
-                        )
-                    })
-            })
-            .collect::<Result<Vec<_>>>()?;
-        lines.push(format!("| `{capability}` | {} |", values.join(" | ")));
-    }
-    Ok(lines.join("\n"))
-}
-
-fn title_case_manifest_value(value: &str) -> String {
-    let mut characters = value.chars();
-    match characters.next() {
-        Some(first) => first.to_ascii_uppercase().to_string() + characters.as_str(),
-        None => String::new(),
     }
 }
 
@@ -1097,5 +919,85 @@ mod dispatch_args_tests {
             assert!(docs.contains(required), "context v3 docs omit {required:?}");
         }
         assert!(docs.contains("--strict") && docs.contains("--validate-all --strict"));
+    }
+
+    #[test]
+    fn cli_schema_matches_promote_and_bump_contracts() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../schema/cli.schema.json"))
+                .expect("CLI schema should parse");
+        let commands = &schema["\u{24}defs"]["commands"];
+        let promote = commands["promote"]["properties"]["args"]["properties"].clone();
+        let tiers = promote["from"]["enum"]
+            .as_array()
+            .expect("promote tiers should be an enum");
+        assert_eq!(
+            tiers,
+            &promote::PIPELINE
+                .iter()
+                .map(|tier| serde_json::Value::String((*tier).to_string()))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(promote["to"]["enum"], promote["from"]["enum"]);
+        assert!(promote.get("skip_ci_check").is_some());
+        assert!(
+            commands["bump"]["properties"]["args"]["properties"]
+                .get("changelog")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn quality_gate_schema_declares_architecture_and_mutation_metadata() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../schema/cli.schema.json"))
+                .expect("CLI schema should parse");
+        let commands = &schema["\u{24}defs"]["commands"];
+        assert!(commands.get("architecture").is_some());
+        assert_eq!(commands["verify"]["mutatesWorkspace"], false);
+        assert_eq!(commands["lint"]["mutatesWorkspace"], false);
+        assert_eq!(commands["fix"]["mutatesWorkspace"], true);
+        assert_eq!(commands["pre-commit"]["mutatesWorkspace"], true);
+        assert_eq!(commands["prepush"]["mutatesWorkspace"], false);
+    }
+
+    #[test]
+    fn adapter_docs_have_one_owner_and_context_has_focused_children() {
+        let main = include_str!("main.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("main source should have a production section");
+        let audit = include_str!("docs_audit.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("audit source should have a production section");
+        for duplicate in ["DocsAdapterManifest", "render_docs_adapter_suites"] {
+            assert!(!main.contains(duplicate), "main retains {duplicate}");
+        }
+        assert!(
+            !audit.contains("AdapterDocsManifest"),
+            "docs audit retains a second manifest owner"
+        );
+        for child in [
+            "context/adapter_docs.rs",
+            "context/identity.rs",
+            "context/workspace.rs",
+            "context/evidence.rs",
+        ] {
+            assert!(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(child)
+                    .is_file(),
+                "missing focused context child {child}"
+            );
+        }
+    }
+
+    #[test]
+    fn xtask_sources_do_not_use_broad_dead_code_allows() {
+        for source in [include_str!("context.rs"), include_str!("xconfig.rs")] {
+            assert!(!source.contains("#![allow(dead_code)]"));
+        }
     }
 }

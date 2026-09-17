@@ -3,8 +3,8 @@ use super::model::{
     AdapterMaturity, AdapterSnapshot, CapabilitySupport, CollectorTask, ContextDiagnostic,
     ContextMap, CrateOwnership, DependencyKind, DependencySnapshot, DiagnosticSeverity, EvidenceId,
     EvidenceStatus, Fact, FileMetrics, FileOwnership, FileRole, PackageSnapshot, ProfileStatus,
-    RepositoryIdentity, RepositoryPath, RoleOrigin, SourceMetrics, TargetSnapshot,
-    TestProfileResult, Validation, ValidationState, WorkspaceSnapshot,
+    RepositoryPath, RoleOrigin, SourceMetrics, TargetSnapshot, TestProfileResult, Validation,
+    ValidationState, WorkspaceSnapshot,
 };
 use anyhow::{Context, Result, bail};
 use cargo_metadata::{DependencyKind as CargoDependencyKind, MetadataCommand};
@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[path = "output.rs"]
-pub(super) mod output;
+pub(in crate::context) mod output;
 
 pub(super) trait CommandRunner {
     fn run(&self, command: &CommandSpec) -> Result<CommandOutput>;
@@ -24,6 +24,15 @@ pub(super) trait RepositoryReader {
     fn read_utf8(&self, path: &Path) -> Result<String>;
     fn tracked_files(&self, root: &Path) -> Result<Vec<RepositoryPath>>;
     fn file_metrics(&self, path: &Path) -> Result<FileMetrics>;
+    fn fingerprint_entry(&self, path: &Path, root: &Path) -> Result<FingerprintEntry>;
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum FingerprintEntry {
+    File(Vec<u8>),
+    Symlink(PathBuf),
+    Other,
+    Missing,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -164,7 +173,38 @@ impl RepositoryReader for SystemRepositoryReader {
             content_sha256,
         })
     }
+
+    fn fingerprint_entry(&self, path: &Path, root: &Path) -> Result<FingerprintEntry> {
+        match std::fs::symlink_metadata(path) {
+            Ok(metadata) if metadata.file_type().is_symlink() => std::fs::read_link(path)
+                .map(FingerprintEntry::Symlink)
+                .with_context(|| format!("read symlink {}", path.display())),
+            Ok(metadata) if metadata.is_file() => {
+                let canonical = path
+                    .canonicalize()
+                    .with_context(|| format!("canonicalize changed file {}", path.display()))?;
+                if !canonical.starts_with(root) {
+                    bail!(
+                        "changed file resolves outside repository: {}",
+                        path.display()
+                    );
+                }
+                std::fs::read(&canonical)
+                    .map(FingerprintEntry::File)
+                    .with_context(|| format!("read changed file {}", path.display()))
+            }
+            Ok(_) => Ok(FingerprintEntry::Other),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                Ok(FingerprintEntry::Missing)
+            }
+            Err(error) => {
+                Err(error).with_context(|| format!("inspect changed path {}", path.display()))
+            }
+        }
+    }
 }
+
+pub(super) use super::identity::collect_repository_identity;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct AdapterReconciliation {
@@ -253,7 +293,7 @@ fn reconcile_adapter(
     let observed_platforms = registry
         .platforms
         .get(&declaration.id)
-        .map(|platform| vec![platform.clone()]);
+        .map(|platform| normalize_runtime_platforms(platform, &declaration.platforms));
     let platform_validation = match &observed_platforms {
         Some(observed) if observed == &declaration.platforms => Validation {
             state: ValidationState::Match,
@@ -400,6 +440,17 @@ fn reconcile_adapter(
         ),
         capabilities,
     }
+}
+
+fn normalize_runtime_platforms(runtime: &str, declared: &[String]) -> Vec<String> {
+    let mut platforms = if runtime == "any" {
+        declared.to_vec()
+    } else {
+        vec![runtime.to_string()]
+    };
+    platforms.sort();
+    platforms.dedup();
+    platforms
 }
 
 fn adapter_diagnostic(
@@ -768,149 +819,6 @@ fn classify_file_role(path: &RepositoryPath, owner_root: Option<&Path>) -> (File
         }
         _ => (FileRole::Other, RoleOrigin::InferredPath),
     }
-}
-
-pub(super) fn collect_repository_identity(
-    runner: &impl CommandRunner,
-    root: &Path,
-) -> Result<RepositoryIdentity> {
-    let root = root
-        .canonicalize()
-        .with_context(|| format!("canonicalize repository root {}", root.display()))?;
-    let commit_output = run_git(runner, &root, &["rev-parse", "HEAD"])?;
-    let branch_output = run_git(runner, &root, &["branch", "--show-current"])?;
-    let status_output = run_git(
-        runner,
-        &root,
-        &["status", "--porcelain=v2", "-z", "--untracked-files=all"],
-    )?;
-
-    let commit = output_text(&commit_output.stdout, "git rev-parse")?
-        .trim()
-        .to_string();
-    let branch = match output_text(&branch_output.stdout, "git branch")?.trim() {
-        "" => "HEAD".to_string(),
-        branch => branch.to_string(),
-    };
-    let changed_paths = parse_porcelain_v2_paths(&root, &status_output.stdout)?;
-    let worktree_fingerprint = fingerprint_worktree(&root, &status_output.stdout, &changed_paths)?;
-
-    Ok(RepositoryIdentity {
-        commit,
-        branch,
-        dirty: !changed_paths.is_empty(),
-        changed_paths,
-        worktree_fingerprint,
-        evidence_ids: vec![
-            EvidenceId::from("git:branch"),
-            EvidenceId::from("git:head"),
-            EvidenceId::from("git:status"),
-        ],
-    })
-}
-
-fn run_git(runner: &impl CommandRunner, root: &Path, args: &[&str]) -> Result<CommandOutput> {
-    let output = runner.run(&CommandSpec {
-        program: "git".to_string(),
-        args: args.iter().map(ToString::to_string).collect(),
-        current_dir: root.to_path_buf(),
-    })?;
-    if output.exit_code != Some(0) {
-        bail!(
-            "git {} failed with status {:?}: {}",
-            args.join(" "),
-            output.exit_code,
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-    Ok(output)
-}
-
-fn output_text<'a>(bytes: &'a [u8], command: &str) -> Result<&'a str> {
-    std::str::from_utf8(bytes).with_context(|| format!("{command} output is not UTF-8"))
-}
-
-fn parse_porcelain_v2_paths(root: &Path, output: &[u8]) -> Result<Vec<RepositoryPath>> {
-    let mut records = output
-        .split(|byte| *byte == 0)
-        .filter(|record| !record.is_empty());
-    let mut paths = Vec::new();
-    while let Some(record) = records.next() {
-        let (field_count, consumes_original) = match record.first() {
-            Some(b'1') => (9, false),
-            Some(b'2') => (10, true),
-            Some(b'u') => (11, false),
-            Some(b'?') => (2, false),
-            Some(prefix) => bail!(
-                "unsupported porcelain-v2 record type: {}",
-                char::from(*prefix)
-            ),
-            None => continue,
-        };
-        let path = record
-            .splitn(field_count, |byte| *byte == b' ')
-            .nth(field_count - 1)
-            .context("porcelain-v2 record is missing a path")?;
-        let path = std::str::from_utf8(path).context("Git changed path is not UTF-8")?;
-        paths.push(RepositoryPath::from_root(root, &root.join(path))?);
-        if consumes_original {
-            records
-                .next()
-                .context("porcelain-v2 rename record is missing its original path")?;
-        }
-    }
-    paths.sort();
-    paths.dedup();
-    Ok(paths)
-}
-
-fn fingerprint_worktree(
-    root: &Path,
-    status: &[u8],
-    changed_paths: &[RepositoryPath],
-) -> Result<String> {
-    let mut hasher = Sha256::new();
-    hasher.update(b"git-status-porcelain-v2\0");
-    hasher.update(status);
-    for path in changed_paths {
-        hasher.update(path.as_str().as_bytes());
-        hasher.update(b"\0");
-        let absolute = root.join(path.as_str());
-        match std::fs::symlink_metadata(&absolute) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                hasher.update(b"symlink\0");
-                let target = std::fs::read_link(&absolute)
-                    .with_context(|| format!("read symlink {}", absolute.display()))?;
-                hasher.update(target.to_string_lossy().as_bytes());
-            }
-            Ok(metadata) if metadata.is_file() => {
-                let canonical = absolute
-                    .canonicalize()
-                    .with_context(|| format!("canonicalize changed file {}", absolute.display()))?;
-                if !canonical.starts_with(root) {
-                    bail!(
-                        "changed file resolves outside repository: {}",
-                        absolute.display()
-                    );
-                }
-                hasher.update(b"file\0");
-                hasher.update(
-                    std::fs::read(&canonical)
-                        .with_context(|| format!("read changed file {}", absolute.display()))?,
-                );
-            }
-            Ok(_) => hasher.update(b"other\0"),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                hasher.update(b"missing\0");
-            }
-            Err(error) => {
-                return Err(error)
-                    .with_context(|| format!("inspect changed path {}", absolute.display()));
-            }
-        }
-        hasher.update(b"\0");
-    }
-    Ok(hex::encode(hasher.finalize()))
 }
 
 pub(super) fn collect_workspace(
@@ -1558,10 +1466,12 @@ build = "build.rs"
         std::fs::write(worktree_b.join("ignored.txt"), "ignored-one\n")
             .expect("ignored worktree file should be written");
 
-        let identity_a = collect_repository_identity(&SystemCommandRunner, &worktree_a)
-            .expect("first worktree identity should be collected");
-        let identity_b = collect_repository_identity(&SystemCommandRunner, &worktree_b)
-            .expect("second worktree identity should be collected");
+        let identity_a =
+            collect_repository_identity(&SystemCommandRunner, &SystemRepositoryReader, &worktree_a)
+                .expect("first worktree identity should be collected");
+        let identity_b =
+            collect_repository_identity(&SystemCommandRunner, &SystemRepositoryReader, &worktree_b)
+                .expect("second worktree identity should be collected");
         assert_eq!(identity_a.commit, identity_b.commit);
         assert_eq!(identity_a.branch, identity_b.branch);
         assert_eq!(
@@ -1599,7 +1509,7 @@ build = "build.rs"
         std::fs::write(worktree_b.join("ignored.txt"), "ignored-two\n")
             .expect("ignored worktree file should be updated");
         let identity_b_after_ignored_change =
-            collect_repository_identity(&SystemCommandRunner, &worktree_b)
+            collect_repository_identity(&SystemCommandRunner, &SystemRepositoryReader, &worktree_b)
                 .expect("updated worktree identity should be collected");
         assert_eq!(
             identity_b.worktree_fingerprint,
@@ -1694,7 +1604,8 @@ build = "build.rs"
 
         let expected =
             std::collections::BTreeMap::from([("native-linux".to_string(), baseline.clone())]);
-        let imported = read_profile_evidence(evidence_dir.path(), &expected)
+        let packages = BTreeSet::from(["pkg".to_string()]);
+        let imported = read_profile_evidence(evidence_dir.path(), &expected, &packages)
             .expect("well-formed evidence should import");
         assert_eq!(imported.len(), 10);
         assert_eq!(
@@ -1722,7 +1633,7 @@ build = "build.rs"
         let malformed_dir = tempfile::tempdir().expect("malformed directory should be created");
         std::fs::write(malformed_dir.path().join("broken.json"), b"{}")
             .expect("malformed artifact should be written");
-        assert!(read_profile_evidence(malformed_dir.path(), &expected).is_err());
+        assert!(read_profile_evidence(malformed_dir.path(), &expected, &packages).is_err());
     }
     #[test]
     fn context_map_uses_exact_package_roots() {

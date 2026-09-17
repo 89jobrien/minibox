@@ -13,7 +13,6 @@ use std::{
     process::Command,
 };
 use tempfile::TempDir;
-use xshell::{Shell, cmd};
 
 use crate::{
     utils::{cargo_binary_path, cargo_target_dir, workspace_root},
@@ -32,28 +31,6 @@ pub fn default_test_image_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join(".minibox")
         .join("test-image")
-}
-
-/// Full Linux dogfood flow: build test image inside Colima, run tests.
-#[allow(dead_code)]
-pub fn test_linux(sh: &Shell) -> Result<()> {
-    // Find the scripts dir relative to workspace root
-    let workspace_root = workspace_root();
-    let build_script = workspace_root.join("scripts").join("build-test-image.nu");
-
-    // 1. Build image inside Colima via Nu script
-    println!("$ nu {}", build_script.display());
-    cmd!(sh, "nu {build_script}").run()?;
-
-    // 2. Run — privileged, ephemeral, stream output
-    println!("$ minibox run --privileged minibox-tester -- /run-tests.sh");
-    cmd!(
-        sh,
-        "minibox run --privileged minibox-tester -- /run-tests.sh"
-    )
-    .run()?;
-
-    Ok(())
 }
 
 /// Entry point: build or refresh the test OCI tarball.
