@@ -66,7 +66,6 @@ pub(super) enum EvidenceKind {
     Nextest,
     RustSource,
     ToolVersion,
-    TrackedFile,
     CiArtifact,
 }
 
@@ -97,7 +96,6 @@ pub(super) enum ValidationState {
     DeclaredOnly,
     ObservedOnly,
     Unavailable,
-    NotApplicable,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]

@@ -18,7 +18,6 @@ struct RepoInfo {
 }
 
 #[derive(Deserialize)]
-#[allow(dead_code)]
 struct RunSummary {
     #[serde(rename = "databaseId")]
     database_id: u64,
@@ -28,8 +27,6 @@ struct RunSummary {
     head_sha: String,
     event: String,
     status: String,
-    #[serde(rename = "createdAt")]
-    created_at: String,
     #[serde(rename = "workflowName")]
     workflow_name: String,
 }

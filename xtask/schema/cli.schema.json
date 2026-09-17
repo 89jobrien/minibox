@@ -19,6 +19,7 @@
     { "$ref": "#/$defs/commands/agentlint" },
     { "$ref": "#/$defs/commands/coverage" },
     { "$ref": "#/$defs/commands/coverage-check" },
+    { "$ref": "#/$defs/commands/architecture" },
 
     { "$ref": "#/$defs/commands/build-test-image" },
     { "$ref": "#/$defs/commands/setup-test-vm" },
@@ -152,31 +153,36 @@
         "type": "object",
         "description": "Read-only local gate: fmt --check, cargo check --workspace, clippy -D warnings, borrow-reasoning fixtures, docs lint. Never mutates files. Checkpointed (skipped if tree hash unchanged since last pass).",
         "properties": { "command": { "const": "verify" } },
-        "required": ["command"]
+        "required": ["command"],
+        "mutatesWorkspace": false
       },
       "lint": {
         "type": "object",
         "description": "fmt --check + clippy -D warnings + cargo check --workspace across the full adapter matrix. Checkpointed.",
         "properties": { "command": { "const": "lint" } },
-        "required": ["command"]
+        "required": ["command"],
+        "mutatesWorkspace": false
       },
       "fix": {
         "type": "object",
         "description": "Mutating: cargo fmt --all, git add -u, version bump, clippy --fix --allow-dirty --allow-staged, git add -u again. Only runs if Rust files are staged.",
         "properties": { "command": { "const": "fix" } },
-        "required": ["command"]
+        "required": ["command"],
+        "mutatesWorkspace": true
       },
       "pre-commit": {
         "type": "object",
-        "description": "Validation-only pre-commit gate (invoked by the git pre-commit hook): fmt + clippy on staged Rust files, agentlint on staged agent config files, actionlint on staged workflow files, docs-lint, FEATURE_MATRIX date stamp update, repo-cleanliness warning. Never runs release build or conformance suite.",
+        "description": "Pre-commit gate: formats and re-stages staged Rust, runs clippy and architecture checks, validates agent/workflow/docs files, updates the FEATURE_MATRIX date stamp, and reports repository cleanliness. Never runs release build or conformance.",
         "properties": { "command": { "const": "pre-commit" } },
-        "required": ["command"]
+        "required": ["command"],
+        "mutatesWorkspace": true
       },
       "prepush": {
         "type": "object",
         "description": "Release build (miniboxd, minibox-core, mbx, minibox, minibox-macros) + nextest (release profile) + conformance suite. Skipped entirely if no Rust files are in the push range. Checkpointed.",
         "properties": { "command": { "const": "prepush" } },
-        "required": ["command"]
+        "required": ["command"],
+        "mutatesWorkspace": false
       },
       "agentlint": {
         "type": "object",
@@ -213,6 +219,13 @@
         "description": "Handler module function coverage gate.",
         "properties": { "command": { "const": "coverage-check" } },
         "required": ["command"]
+      },
+      "architecture": {
+        "type": "object",
+        "description": "Validate workspace dependency rings and canonical crate ownership without modifying files.",
+        "properties": { "command": { "const": "architecture" } },
+        "required": ["command"],
+        "mutatesWorkspace": false
       },
 
       "build-test-image": {
@@ -276,7 +289,10 @@
           "command": { "const": "bump" },
           "args": {
             "type": "object",
-            "properties": { "level": { "enum": ["patch", "minor", "major"], "default": "patch" } }
+            "properties": {
+              "level": { "enum": ["patch", "minor", "major"], "default": "patch" },
+              "changelog": { "type": "boolean", "default": false, "description": "Render release notes with git-cliff and update Cargo.toml and CHANGELOG.md transactionally." }
+            }
           }
         },
         "required": ["command"]
@@ -301,15 +317,16 @@
       },
       "promote": {
         "type": "object",
-        "description": "Cascade-merge one stability tier into the next (develop -> next -> staging -> main), gated on CI green for the source branch.",
+        "description": "Cascade-merge stability tiers (develop -> staging -> release -> main), gated on CI green for each source branch.",
         "properties": {
           "command": { "const": "promote" },
           "args": {
             "type": "object",
             "properties": {
-              "from": { "enum": ["develop", "next", "staging", "main"], "description": "Defaults to inferring from the current branch if omitted." },
-              "to": { "enum": ["develop", "next", "staging", "main"], "description": "Defaults to the next tier after --from if omitted." },
-              "dry_run": { "type": "boolean", "default": false, "description": "Print the cascade plan without merging." }
+              "from": { "enum": ["develop", "staging", "release", "main"], "default": "develop" },
+              "to": { "enum": ["develop", "staging", "release", "main"], "default": "main" },
+              "dry_run": { "type": "boolean", "default": false, "description": "Print the cascade plan without merging." },
+              "skip_ci_check": { "type": "boolean", "default": false, "description": "Skip source-branch GitHub Actions checks." }
             }
           }
         },
@@ -482,7 +499,7 @@
       "additionalProperties": false,
       "required": ["state", "reason"],
       "properties": {
-        "state": { "enum": ["match", "mismatch", "declared_only", "observed_only", "unavailable", "not_applicable"] },
+        "state": { "enum": ["match", "mismatch", "declared_only", "observed_only", "unavailable"] },
         "reason": { "type": ["string", "null"] }
       }
     },
@@ -741,7 +758,7 @@
       "additionalProperties": false,
       "required": ["kind", "locator", "collected_at", "content_sha256", "profile_id", "status"],
       "properties": {
-        "kind": { "enum": ["cargo_metadata", "git", "manifest", "nextest", "rust_source", "tool_version", "tracked_file", "ci_artifact"] },
+        "kind": { "enum": ["cargo_metadata", "git", "manifest", "nextest", "rust_source", "tool_version", "ci_artifact"] },
         "locator": { "type": "string" },
         "collected_at": { "type": "string" },
         "content_sha256": { "type": ["string", "null"] },

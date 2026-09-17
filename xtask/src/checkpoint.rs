@@ -115,10 +115,6 @@ pub trait CheckpointStore {
     fn load(&self, gate: GateId) -> Result<Option<CheckpointRecord>>;
     /// Persists a checkpoint record.
     fn save(&self, record: &CheckpointRecord) -> Result<()>;
-    /// Removes the checkpoint for `gate`.
-    fn clear(&self, gate: GateId) -> Result<()>;
-    /// Removes every stored checkpoint.
-    fn clear_all(&self) -> Result<()>;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,23 +204,6 @@ impl CheckpointStore for FileCheckpointStore {
         let json = serde_json::to_string_pretty(record).context("serializing checkpoint")?;
         std::fs::write(&path, json)
             .with_context(|| format!("writing checkpoint {}", path.display()))?;
-        Ok(())
-    }
-
-    fn clear(&self, gate: GateId) -> Result<()> {
-        let path = self.path_for(gate);
-        if path.exists() {
-            std::fs::remove_file(&path)
-                .with_context(|| format!("removing checkpoint {}", path.display()))?;
-        }
-        Ok(())
-    }
-
-    fn clear_all(&self) -> Result<()> {
-        if self.dir.exists() {
-            std::fs::remove_dir_all(&self.dir)
-                .with_context(|| format!("removing checkpoint dir {}", self.dir.display()))?;
-        }
         Ok(())
     }
 }
@@ -396,14 +375,6 @@ mod tests {
             self.records
                 .borrow_mut()
                 .insert(record.gate, record.clone());
-            Ok(())
-        }
-        fn clear(&self, gate: GateId) -> Result<()> {
-            self.records.borrow_mut().remove(&gate);
-            Ok(())
-        }
-        fn clear_all(&self) -> Result<()> {
-            self.records.borrow_mut().clear();
             Ok(())
         }
     }

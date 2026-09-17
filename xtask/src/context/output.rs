@@ -16,7 +16,10 @@ const ADAPTER_SUITES_END: &str = "<!-- END GENERATED: adapter-suites -->";
 const ADAPTER_CAPABILITIES_BEGIN: &str = "<!-- BEGIN GENERATED: adapter-capabilities -->";
 const ADAPTER_CAPABILITIES_END: &str = "<!-- END GENERATED: adapter-capabilities -->";
 
-pub(super) fn sync_adapter_matrix(document: &str, manifest: &ContextManifest) -> Result<String> {
+pub(in crate::context) fn sync_adapter_matrix(
+    document: &str,
+    manifest: &ContextManifest,
+) -> Result<String> {
     let suites = render_adapter_suites(manifest);
     let capabilities = render_adapter_capabilities(manifest)?;
     let document =
@@ -391,7 +394,7 @@ fn validate_profile_id(profile_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(in crate::context) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path
         .parent()
         .with_context(|| format!("output path has no parent: {}", path.display()))?;
@@ -442,6 +445,7 @@ struct ArtifactExecutableTest {
 pub(in crate::context) fn read_profile_evidence(
     evidence_dir: &Path,
     expected_keys: &BTreeMap<String, ProfileEvidenceCacheKey>,
+    workspace_packages: &BTreeSet<String>,
 ) -> Result<Vec<TestProfileResult>> {
     let mut paths = std::fs::read_dir(evidence_dir)
         .with_context(|| format!("read profile evidence directory {}", evidence_dir.display()))?
@@ -480,14 +484,35 @@ pub(in crate::context) fn read_profile_evidence(
         let mut executable_tests = artifact
             .executable_tests
             .into_iter()
-            .map(|test| ExecutableTest {
-                stable_id: test.stable_id,
-                package_id: test.package_id,
-                binary_id: test.binary_id,
-                test_name: test.test_name,
-                ignored: test.ignored,
+            .map(|test| {
+                if !workspace_packages.contains(&test.package_id) {
+                    bail!(
+                        "profile evidence {} references unknown workspace package {:?}",
+                        path.display(),
+                        test.package_id
+                    );
+                }
+                let stable_id = format!(
+                    "{}::{}::{}",
+                    test.package_id, test.binary_id, test.test_name
+                );
+                if test.stable_id != stable_id {
+                    bail!(
+                        "profile evidence {} has unstable test identity {:?}; expected {:?}",
+                        path.display(),
+                        test.stable_id,
+                        stable_id
+                    );
+                }
+                Ok(ExecutableTest {
+                    stable_id,
+                    package_id: test.package_id,
+                    binary_id: test.binary_id,
+                    test_name: test.test_name,
+                    ignored: test.ignored,
+                })
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>>>()?;
         executable_tests.sort_by(|left, right| left.stable_id.cmp(&right.stable_id));
 
         let status = if current {
@@ -882,6 +907,72 @@ mod tests {
                     .to_string_lossy()
                     .contains(".tmp"))
         );
+    }
+
+    #[test]
+    fn evidence_rejections_do_not_create_partial_outputs() {
+        let root = tempfile::tempdir().expect("persistence root should be created");
+        let key = evidence_key();
+        let mut invalid = evidence_result(ProfileStatus::Validated);
+        invalid.profile_id = "../escape".to_string();
+        let pending = PendingProfileEvidence {
+            expected_key: key.clone(),
+            actual_key: key.clone(),
+            result: invalid,
+        };
+        assert!(persist_snapshot(root.path(), &complete_v3_fixture(), true, &[pending]).is_err());
+        assert!(!root.path().join("artifacts").exists());
+
+        for (status, target) in [
+            (ProfileStatus::Validated, "different-target"),
+            (ProfileStatus::Failed, "aarch64-apple-darwin"),
+        ] {
+            let root = tempfile::tempdir().expect("persistence root should be created");
+            let mut result = evidence_result(status);
+            result.target = target.to_string();
+            let pending = PendingProfileEvidence {
+                expected_key: key.clone(),
+                actual_key: key.clone(),
+                result,
+            };
+            assert!(
+                persist_snapshot(root.path(), &complete_v3_fixture(), true, &[pending]).is_err()
+            );
+            assert!(!root.path().join("artifacts").exists());
+        }
+    }
+
+    #[test]
+    fn imported_evidence_rejects_unknown_workspace_package() {
+        let directory = tempfile::tempdir().expect("evidence directory should be created");
+        let key = evidence_key();
+        let artifact = ProfileEvidenceArtifact {
+            schema_version: 1,
+            profile_id: "native-macos".to_string(),
+            cache_key: key.clone(),
+            status: ArtifactProfileStatus::Validated,
+            executable_tests: vec![ArtifactExecutableTest {
+                stable_id: "foreign::bin::works".to_string(),
+                package_id: "foreign".to_string(),
+                binary_id: "bin".to_string(),
+                test_name: "works".to_string(),
+                ignored: false,
+            }],
+            unavailable_reason: None,
+        };
+        std::fs::write(
+            directory.path().join("evidence.json"),
+            serde_json::to_vec(&artifact).expect("artifact should serialize"),
+        )
+        .expect("artifact should be written");
+        let expected = BTreeMap::from([("native-macos".to_string(), key)]);
+        let error = read_profile_evidence(
+            directory.path(),
+            &expected,
+            &BTreeSet::from(["pkg".to_string()]),
+        )
+        .expect_err("foreign package identities must be rejected");
+        assert!(error.to_string().contains("unknown workspace package"));
     }
     #[test]
     fn adapter_matrix_sync_is_scoped_and_idempotent() {

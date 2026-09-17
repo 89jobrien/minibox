@@ -183,21 +183,6 @@ impl SarifResult {
         });
         self
     }
-
-    /// Add a file location with line number.
-    #[allow(dead_code)]
-    pub fn with_file_line(mut self, uri: impl Into<String>, line: u32) -> Self {
-        self.locations.push(Location {
-            physical_location: PhysicalLocation {
-                artifact_location: ArtifactLocation { uri: uri.into() },
-                region: Some(Region {
-                    start_line: line,
-                    start_column: None,
-                }),
-            },
-        });
-        self
-    }
 }
 
 // ── Location ─────────────────────────────────────────────────────────────
@@ -240,12 +225,9 @@ pub struct Message {
 /// SARIF result severity levels.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
 pub enum Level {
     Error,
     Warning,
-    Note,
-    None,
 }
 
 // ── Generic diagnostic converter ────────────────────────────────────────

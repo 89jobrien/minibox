@@ -18,7 +18,7 @@ use std::path::Path;
 use xshell::{Shell, cmd};
 
 /// Ordered stability pipeline branches.
-const PIPELINE: &[&str] = &["develop", "staging", "release", "main"];
+pub const PIPELINE: &[&str] = &["develop", "staging", "release", "main"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tier(usize);
