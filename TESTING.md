@@ -1,5 +1,5 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - xtask/src/main.rs
   - Justfile
@@ -8,7 +8,7 @@ sources:
   - crates/minibox/src/testing
   - crates/minibox-core/src/adapters
   - .github/workflows
-generated: 2026-09-04
+generated: 2026-09-16
 ---
 
 # Testing Guide
@@ -292,7 +292,7 @@ All helpers live behind the `test-utils` feature flag.
 
 ## CI Coverage
 
-Fourteen workflows currently live in `.github/workflows/`:
+CI responsibilities are listed by workflow name rather than a hard-coded workflow count:
 
 | Workflow | Primary purpose |
 | --- | --- |
@@ -301,6 +301,7 @@ Fourteen workflows currently live in `.github/workflows/`:
 | `merge.yml` | Push/merge-group matrix across active workflow branches |
 | `macos.yml` | macOS `cargo fmt --all --check` |
 | `conformance.yml` | Conformance, property, krun, CLI, borrow, and quickcheck suites |
+| `context-snapshot.yml` | Cross-platform v3 context evidence collection and aggregate validation |
 | `stability-gates.yml` | docs, adapter coverage, no-unwrap, compile, and handler coverage |
 | `protocol-drift.yml` | Protocol hash/variant drift |
 | `protocol-sites.yml` | Handler dependency construction-site drift |

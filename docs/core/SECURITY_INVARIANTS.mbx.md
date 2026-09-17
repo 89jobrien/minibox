@@ -1,5 +1,5 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - crates/minibox-core/src/image/layer.rs
   - crates/minibox/src/container/process.rs
@@ -12,7 +12,7 @@ sources:
   - crates/minibox/src/daemon/handler/run.rs
   - crates/minibox/tests/security_regression.rs
   - crates/minibox/tests/daemon_security_regression.rs
-generated: 2026-08-28
+generated: 2026-09-16
 ---
 
 # Security Invariants
@@ -23,7 +23,7 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 ---
 

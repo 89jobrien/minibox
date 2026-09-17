@@ -1,5 +1,5 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -19,7 +19,7 @@ sources:
   - crates/minibox-testsuite
   - crates/minibox-cni
   - crates/minibox-tui
-generated: 2026-09-04
+generated: 2026-09-16
 ---
 
 # Crate Support Tiers
@@ -28,7 +28,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
 Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).

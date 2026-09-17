@@ -231,15 +231,17 @@ report that the repository password is correct. A newly initialized repository r
 ## Testing
 
 ```bash
-cargo xtask test unit        # unit + conformance + property tests (any platform)
+cargo xtask test unit        # workspace library tests only (any platform)
 cargo xtask test conformance # OCI adapter conformance matrix
+cargo xtask test property    # property-test suites
 just test-integration        # cgroup tests (Linux + root)
 just test-e2e                # protocol end-to-end tests (any platform)
 just test-system             # daemon + CLI full-stack tests (Linux + root)
 ```
 
-The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`TESTING.md`](TESTING.md) for the full test
+The unit gate runs workspace `--lib` targets and a zero-test guard for `minibox-testsuite`;
+conformance and property tests remain separate suites. Unit tests run on macOS without root.
+See [`TESTING.md`](TESTING.md) for the full test
 strategy and [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md) for how
 the harness is built.
 
@@ -275,16 +277,16 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature                | Status                               |
-| ---------------------- | ------------------------------------ |
-| Bridge networking      | Experimental                         |
-| OCI push/commit/build  | Experimental                         |
-| macOS VZ.framework     | Removed after Apple ARM64 bug        |
-| Seccomp / capabilities | Planned                              |
-| Rootless support       | Planned                              |
-| Port forwarding / DNS  | Planned                              |
-| Windows (WSL2)         | Planned                              |
-| MCP control surface    | Initial MCP stdio server implemented |
+| Feature                | Status                                           |
+| ---------------------- | ------------------------------------------------ |
+| Bridge networking      | Experimental                                     |
+| OCI push/commit/build  | Experimental                                     |
+| macOS VZ.framework     | Removed after Apple ARM64 bug                    |
+| Seccomp / capabilities | Planned                                          |
+| Rootless support       | Planned                                          |
+| Port forwarding / DNS  | Implemented for Linux `native` bridge networking |
+| Windows (WSL2)         | Planned                                          |
+| MCP control surface    | Initial MCP stdio server implemented             |
 
 Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 
