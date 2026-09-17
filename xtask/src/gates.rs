@@ -980,7 +980,7 @@ mod tests {
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
-    fn rustqual_handler_parameter_policy_is_centralized() {
+    fn rustqual_parameter_policy_remains_strict() {
         let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("xtask manifest must be beneath workspace root");
@@ -1001,8 +1001,8 @@ mod tests {
         );
         assert_eq!(
             max_parameters(&workspace_root.join("crates/minibox/rustqual.toml")),
-            9,
-            "the minibox crate config must centralize its handler-boundary exception"
+            5,
+            "the minibox crate must retain the strict parameter threshold"
         );
     }
 
