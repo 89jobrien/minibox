@@ -246,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn safe_default_denies_stop_rm_mutations() {
+    fn safe_default_denies_rm_mutation() {
         let policy = AgentPolicy::safe_default();
 
         assert!(policy.validate_mutation("minibox_rm").is_err());

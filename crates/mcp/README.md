@@ -36,3 +36,25 @@ malformed values are logged and ignored.
 Tracing is written to stderr so stdout remains reserved for MCP frames. Tool
 failures are returned as structured MCP errors carrying a stable
 `minibox::mcp::*` diagnostic code and a `retryable` hint in the error data.
+
+## Rust API
+
+Generic client calls are read-only by default:
+
+```rust
+let result = client.call(DaemonRequest::List).await?;
+```
+
+Mutating generic calls must carry proof produced by the active policy. This
+keeps callers from accidentally bypassing the same opt-ins used by MCP tools:
+
+```rust
+let policy = AgentPolicy::from_env();
+let request = policy.authorize_mutation(
+    "custom_stop",
+    DaemonRequest::Stop { id: container_id },
+)?;
+let (result, output_truncated) = client
+    .call_authorized(request, policy.max_output_bytes)
+    .await?;
+```

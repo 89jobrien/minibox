@@ -42,6 +42,29 @@ async fn spawn_client_with_env(
     ().serve(process).await.expect("start mcp child process")
 }
 
+async fn forward_run_with_opt_in(env_name: &str, arguments: serde_json::Value) -> DaemonRequest {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(mock_daemon_verify(
+        listener,
+        vec![DaemonResponse::ContainerStopped { exit_code: 0 }],
+        tx,
+    ));
+    let service = spawn_client_with_env(&socket_path, &[(env_name, "true")]).await;
+
+    service
+        .call_tool(
+            CallToolRequestParams::new("minibox_run")
+                .with_arguments(arguments.as_object().cloned().expect("object arguments")),
+        )
+        .await
+        .expect("opted-in unsafe run should succeed");
+    let request = rx.await.expect("request captured");
+    service.cancel().await.expect("cancel service");
+    request
+}
+
 fn bind_mock(tmp: &TempDir) -> (UnixListener, PathBuf) {
     let socket_path = tmp.path().join("daemon.sock");
     let listener = UnixListener::bind(&socket_path).expect("bind mock daemon socket");
@@ -298,6 +321,60 @@ async fn unsafe_runs_are_denied_before_daemon_connect() {
 }
 
 #[tokio::test]
+async fn privileged_run_reaches_daemon_when_opted_in() {
+    let request = forward_run_with_opt_in(
+        "MINIBOX_MCP_ALLOW_PRIVILEGED",
+        json!({"image": "alpine", "privileged": true}),
+    )
+    .await;
+
+    assert!(matches!(
+        request,
+        DaemonRequest::Run {
+            privileged: true,
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
+async fn bind_mount_run_reaches_daemon_when_opted_in() {
+    let request = forward_run_with_opt_in(
+        "MINIBOX_MCP_ALLOW_BIND_MOUNTS",
+        json!({
+            "image": "alpine",
+            "mounts": [{"host_path": "/tmp", "container_path": "/host", "read_only": true}]
+        }),
+    )
+    .await;
+
+    let DaemonRequest::Run { mounts, .. } = request else {
+        panic!("expected Run request");
+    };
+    assert_eq!(mounts.len(), 1);
+    assert_eq!(mounts[0].host_path, PathBuf::from("/tmp"));
+    assert_eq!(mounts[0].container_path, PathBuf::from("/host"));
+    assert!(mounts[0].read_only);
+}
+
+#[tokio::test]
+async fn host_network_run_reaches_daemon_when_opted_in() {
+    let request = forward_run_with_opt_in(
+        "MINIBOX_MCP_ALLOW_HOST_NETWORK",
+        json!({"image": "alpine", "network": "host"}),
+    )
+    .await;
+
+    assert!(matches!(
+        request,
+        DaemonRequest::Run {
+            network: Some(minibox_core::domain::NetworkMode::Host),
+            ..
+        }
+    ));
+}
+
+#[tokio::test]
 async fn rm_reaches_daemon_when_opted_in() {
     let tmp = TempDir::new().expect("tempdir");
     let (listener, socket_path) = bind_mock(&tmp);
@@ -399,6 +476,57 @@ async fn client_server_boundary_preserves_error_kinds() {
         assert_error_code(error, expected);
         service.cancel().await.expect("cancel service");
     }
+}
+
+#[tokio::test]
+async fn minibox_run_rejects_metadata_overflow() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    let (tx, _rx) = oneshot::channel();
+    tokio::spawn(mock_daemon_verify(
+        listener,
+        vec![DaemonResponse::ContainerCreated {
+            id: "x".repeat(64 * 1024),
+        }],
+        tx,
+    ));
+    let service = spawn_client(&socket_path).await;
+
+    let error = service
+        .call_tool(
+            CallToolRequestParams::new("minibox_run")
+                .with_arguments(json!({"image": "alpine"}).as_object().cloned().unwrap()),
+        )
+        .await
+        .expect_err("oversized run metadata must be rejected");
+    assert_error_code(error, "minibox::mcp::output_limit_exceeded");
+    service.cancel().await.expect("cancel service");
+}
+
+#[tokio::test]
+async fn minibox_run_reports_malformed_base64_as_protocol_error() {
+    let tmp = TempDir::new().expect("tempdir");
+    let (listener, socket_path) = bind_mock(&tmp);
+    let (tx, _rx) = oneshot::channel();
+    tokio::spawn(mock_daemon_verify(
+        listener,
+        vec![DaemonResponse::ContainerOutput {
+            stream: OutputStreamKind::Stdout,
+            data: "not-base64!".to_string(),
+        }],
+        tx,
+    ));
+    let service = spawn_client(&socket_path).await;
+
+    let error = service
+        .call_tool(
+            CallToolRequestParams::new("minibox_run")
+                .with_arguments(json!({"image": "alpine"}).as_object().cloned().unwrap()),
+        )
+        .await
+        .expect_err("malformed output must be rejected");
+    assert_error_code(error, "minibox::mcp::protocol_error");
+    service.cancel().await.expect("cancel service");
 }
 
 #[tokio::test]
