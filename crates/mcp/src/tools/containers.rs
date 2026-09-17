@@ -416,4 +416,25 @@ mod tests {
         assert_eq!(output.exit_code, Some(0));
         assert!(!output.truncated);
     }
+
+    #[test]
+    fn normalize_run_output_keeps_lossy_utf8_within_byte_limit() {
+        let data = base64::engine::general_purpose::STANDARD.encode([b'a', 0xff]);
+        let output = normalize_run_output(
+            vec![
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stdout,
+                    data,
+                },
+                DaemonResponse::ContainerStopped { exit_code: 0 },
+            ],
+            2,
+            false,
+        )
+        .expect("normalize lossy output");
+
+        assert!(output.stdout.len() <= 2);
+        assert!(output.truncated);
+        assert!(output.stdout.is_char_boundary(output.stdout.len()));
+    }
 }

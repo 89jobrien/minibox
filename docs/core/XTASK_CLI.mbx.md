@@ -15,7 +15,7 @@ generated: 2026-09-12
 
 # xtask CLI Reference
 
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the

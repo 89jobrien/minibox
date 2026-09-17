@@ -58,7 +58,17 @@ impl MiniboxDaemonClient {
             .result)
     }
 
-    pub(crate) async fn call_authorized(
+    /// Send a policy-authorized daemon request.
+    ///
+    /// Obtain `request` from [`crate::policy::AgentPolicy::authorize_mutation`].
+    /// The boolean in the result reports whether streamed container output was
+    /// truncated to `max_output_bytes`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the socket call, response decoding, daemon handling,
+    /// or output accounting fails.
+    pub async fn call_authorized(
         &self,
         request: Authorized<DaemonRequest>,
         max_output_bytes: usize,
