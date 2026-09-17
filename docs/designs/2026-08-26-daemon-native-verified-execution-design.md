@@ -1,8 +1,8 @@
 ---
-source_sha: 1aafa0cb91e565cfe181356280b00d51cd1b1194
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
-  - crates/minibox-core/src/domain/execution_manifest.rs
-  - crates/minibox-core/src/domain/execution_policy.rs
+  - crates/minibox-domain/src/execution_manifest.rs
+  - crates/minibox-domain/src/execution_policy.rs
   - crates/minibox-core/src/protocol.rs
   - crates/minibox-core/src/trace.rs
   - crates/minibox/src/daemon/handler/
@@ -12,10 +12,15 @@ sources:
   - crates/miniboxd/src/main.rs
   - crates/mbx/src/commands/sandbox.rs
   - crates/mcp/src/
-generated: 2026-08-26
+generated: 2026-09-16
 ---
 
 # Design: Daemon-Native Verified Execution
+
+> Paths labelled as new in the context map are proposed implementation targets and may not
+> exist until this historical design is implemented. Existing domain sources moved from
+> `minibox-core/src/domain/` to the canonical `minibox-domain` crate; references below use
+> their current locations.
 
 ## Goal
 
@@ -40,8 +45,8 @@ The daemon slice must land and pass protocol/conformance gates before either cli
 
 | File                                                      | Purpose                                            | Changes Needed                                                                                   |
 | --------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `crates/minibox-core/src/domain/verified_execution.rs`    | New verified-execution domain model and audit port | Add request, evidence, status, retention, query, and store types                                 |
-| `crates/minibox-core/src/domain/mod.rs`                   | Domain exports                                     | Export verified-execution types                                                                  |
+| `crates/minibox-domain/src/verified_execution.rs`         | New verified-execution domain model and audit port | Add request, evidence, status, retention, query, and store types                                 |
+| `crates/minibox-domain/src/lib.rs`                        | Domain exports                                     | Export verified-execution types                                                                  |
 | `crates/minibox-core/src/protocol.rs`                     | Canonical daemon protocol                          | Add execute/list/show/prune requests and responses; update terminal classification and snapshots |
 | `crates/minibox-core/tests/protocol_evolution.rs`         | Protocol compatibility snapshots                   | Cover additive request and response shapes                                                       |
 | `crates/minibox-core/tests/property_roundtrip.rs`         | Protocol serialization properties                  | Generate and round-trip new variants                                                             |
@@ -71,26 +76,26 @@ The daemon slice must land and pass protocol/conformance gates before either cli
 
 ### Dependencies
 
-| File                                                   | Relationship                                                                     |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `crates/minibox-core/src/domain/execution_manifest.rs` | Supplies sealed workload identity embedded in every audit record                 |
-| `crates/minibox-core/src/domain/execution_policy.rs`   | Evaluates operator and request policies independently; both must allow           |
-| `crates/minibox/src/daemon/state.rs`                   | Tracks transient container state but does not own retained execution evidence    |
-| `crates/minibox/src/daemon/handler/manifest.rs`        | Existing manifest verification remains supported for ordinary containers         |
-| `crates/minibox-core/src/trace.rs`                     | Reference pattern for a synchronous storage port and one-file-per-record adapter |
-| `crates/mbx/src/commands/run.rs`                       | Reference pattern for streaming `ContainerOutput` responses                      |
-| `crates/mcp/src/tools/containers.rs`                   | Reference pattern for bounded output normalization and daemon calls              |
+| File                                              | Relationship                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `crates/minibox-domain/src/execution_manifest.rs` | Supplies sealed workload identity embedded in every audit record                 |
+| `crates/minibox-domain/src/execution_policy.rs`   | Evaluates operator and request policies independently; both must allow           |
+| `crates/minibox/src/daemon/state.rs`              | Tracks transient container state but does not own retained execution evidence    |
+| `crates/minibox/src/daemon/handler/manifest.rs`   | Existing manifest verification remains supported for ordinary containers         |
+| `crates/minibox-core/src/trace.rs`                | Reference pattern for a synchronous storage port and one-file-per-record adapter |
+| `crates/mbx/src/commands/run.rs`                  | Reference pattern for streaming `ContainerOutput` responses                      |
+| `crates/mcp/src/tools/containers.rs`              | Reference pattern for bounded output normalization and daemon calls              |
 
 ### Existing Test Coverage
 
-| Test Location                                          | Current Coverage                                   | Required Extension                                            |
-| ------------------------------------------------------ | -------------------------------------------------- | ------------------------------------------------------------- |
-| `crates/minibox-core/src/domain/execution_manifest.rs` | Stable digest, hashed environment, serialization   | Embed manifests in audit records without weakening privacy    |
-| `crates/minibox-core/src/domain/execution_policy.rs`   | Image, network, privilege, memory, and mount rules | Prove operator/request intersection semantics                 |
-| `crates/minibox-core/src/protocol.rs`                  | Wire snapshots and terminal table                  | Add all verified-execution variants                           |
-| `crates/minibox/src/daemon/handler/mod.rs`             | Mock handler dependencies and policy paths         | Add failure-boundary cleanup and audit tests                  |
-| `crates/mbx/tests/sandbox_tests.rs`                    | Timeout and exit-code behavior                     | Move timeout ownership to daemon and assert returned evidence |
-| `crates/mcp/tests/integration.rs`                      | Real MCP stdio mapping for run/list                | Add verified execution, audit reads, and prune denial         |
+| Test Location                                     | Current Coverage                                   | Required Extension                                            |
+| ------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| `crates/minibox-domain/src/execution_manifest.rs` | Stable digest, hashed environment, serialization   | Embed manifests in audit records without weakening privacy    |
+| `crates/minibox-domain/src/execution_policy.rs`   | Image, network, privilege, memory, and mount rules | Prove operator/request intersection semantics                 |
+| `crates/minibox-core/src/protocol.rs`             | Wire snapshots and terminal table                  | Add all verified-execution variants                           |
+| `crates/minibox/src/daemon/handler/mod.rs`        | Mock handler dependencies and policy paths         | Add failure-boundary cleanup and audit tests                  |
+| `crates/mbx/tests/sandbox_tests.rs`               | Timeout and exit-code behavior                     | Move timeout ownership to daemon and assert returned evidence |
+| `crates/mcp/tests/integration.rs`                 | Real MCP stdio mapping for run/list                | Add verified execution, audit reads, and prune denial         |
 
 ### Risk
 

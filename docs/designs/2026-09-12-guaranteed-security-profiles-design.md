@@ -1,5 +1,5 @@
 ---
-source_sha: 09902733a48219449a6569c01a3f8c5a67ba0c09
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - Cargo.toml
   - crates/minibox-domain/Cargo.toml
@@ -44,10 +44,14 @@ sources:
   - crates/mcp/src/types.rs
   - crates/minibox-crux-plugin/src/lib.rs
   - crates/minibox-testsuite/src/adapters/runtime.rs
-generated: 2026-09-12
+generated: 2026-09-16
 ---
 
 # Design: Guaranteed Security Profiles
+
+> Context-map entries labelled "New" are proposed paths, not claims that those files exist at
+> this snapshot. Existing paths in this design were revalidated against the repository at the
+> provenance SHA.
 
 ## Goal
 

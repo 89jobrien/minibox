@@ -1,5 +1,5 @@
 ---
-source_sha: f0fd2661aa36411f42a73ed1f44ce49455acd7d1
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - xtask/src/main.rs
   - xtask/schema/cli.schema.json
@@ -10,7 +10,7 @@ sources:
   - xtask/src/context/test_inventory.rs
   - xtask/src/context/output.rs
   - xtask/context.toml
-generated: 2026-09-12
+generated: 2026-09-16
 ---
 
 # xtask CLI Reference
@@ -36,7 +36,7 @@ Bare `cargo xtask test` prints the suite list and exits 0.
 
 | Suite | Notes |
 |---|---|
-| `unit` | Unit + conformance tests, any platform |
+| `unit` | Workspace `--lib` tests plus the `minibox-testsuite` zero-test guard; separate from conformance/property suites |
 | `conformance` | Commit+build+push conformance suite + reports |
 | `krun-conformance` | krun adapter conformance (HVF/KVM) |
 | `turmoil` | Turmoil network simulation tests |

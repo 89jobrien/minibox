@@ -1,5 +1,5 @@
 ---
-source_sha: 98dc14c01dc5e448f6d44d0d3933d5abc194ac2c
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - CLAUDE.md
   - Cargo.toml
@@ -12,7 +12,7 @@ sources:
   - xtask/schema/cli.schema.json
   - docs/core/XTASK_CLI.mbx.md
   - .github/workflows/merge.yml
-generated: 2026-09-15
+generated: 2026-09-16
 ---
 
 # Design: Guarded Taskit Promotion Wrapper

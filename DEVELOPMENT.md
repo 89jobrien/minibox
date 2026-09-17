@@ -1,11 +1,11 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - xtask/src/main.rs
   - Justfile
   - scripts
   - crates/miniboxd/src/adapter_registry.rs
-generated: 2026-09-04
+generated: 2026-09-16
 ---
 
 # Development Guide
@@ -37,7 +37,9 @@ See the [Command Reference](#command-reference) table below for the full list.
 - Rust stable (edition 2024)
 - [cargo-nextest](https://nexte.st/) for test filtering
 - [just](https://just.systems/) for convenience recipes
-- Linux + root for integration/e2e tests (unit tests run on macOS)
+- Protocol E2E and unit suites run on any platform without root.
+- Native integration, sandbox, and full daemon/CLI system suites require Linux, root,
+  cgroups v2, and the other host capabilities reported by `cargo xtask doctor`.
 
 ## Good to have
 

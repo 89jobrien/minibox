@@ -1,12 +1,12 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - crates/minibox-core/Cargo.toml
   - crates/minibox-core/src/
   - crates/minibox/Cargo.toml
   - crates/minibox/src/
   - xtask/src/protocol_drift.rs
-generated: 2026-08-26
+generated: 2026-09-16
 ---
 
 # Design: Minibox Crate Boundaries

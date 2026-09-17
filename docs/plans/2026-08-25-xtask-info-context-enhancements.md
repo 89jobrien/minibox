@@ -1,5 +1,10 @@
 # Plan: xtask-info-context enhancements
 
+> **Superseded by V3:** This v2 plan is retained as a historical implementation record.
+> The current contract and design are defined in
+> [`docs/designs/2026-09-08-accurate-context-snapshot-design.md`](../designs/2026-09-08-accurate-context-snapshot-design.md).
+> Do not implement or restore the v2 schema described below.
+
 ## 1) Health / state block
 
 - Date: 2026-08-25

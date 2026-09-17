@@ -1,5 +1,5 @@
 ---
-source_sha: 304cb7f8b7a583efd4977e055eb77030256a0324
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - Cargo.toml
   - CLAUDE.md
@@ -20,7 +20,7 @@ sources:
   - xtask/src/test_image.rs
   - xtask/src/xconfig.rs
   - xtask/xconfig.toml
-generated: 2026-09-08
+generated: 2026-09-16
 ---
 
 # Design: Accurate Context Snapshot V3

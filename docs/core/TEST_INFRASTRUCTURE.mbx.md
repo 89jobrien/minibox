@@ -1,5 +1,5 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - crates/minibox
   - crates/minibox-core
@@ -19,7 +19,7 @@ sources:
   - crates/ail
   - xtask/src/main.rs
   - .github/workflows
-generated: 2026-08-28
+generated: 2026-09-16
 ---
 
 # Test Infrastructure Report
@@ -83,7 +83,8 @@ feature-gated, ignored, and root-required tests are selected by dedicated suites
 | Borrow-reasoning fixtures                    | 19           | any         | no     | yes         |
 | Security regression                          | ~19          | any         | no     | yes         |
 | Cgroup integration                           | 16           | Linux       | yes    | promotion branches |
-| E2E daemon+CLI                               | 15           | Linux       | yes    | promotion branches |
+| Protocol E2E                                 | varies       | any         | no     | promotion branches |
+| Full-stack daemon+CLI system                 | 15           | Linux       | yes    | promotion branches |
 | Sandbox                                      | ~17          | Linux       | yes    | **no**      |
 | CLI subprocess                               | 30           | any         | no     | **no**      |
 | krun conformance                             | ~29          | macOS/Linux | no     | yes         |
@@ -93,13 +94,14 @@ feature-gated, ignored, and root-required tests are selected by dedicated suites
 
 ## CI Workflows
 
-14 workflows in `.github/workflows/`:
+CI responsibilities are listed by workflow name rather than a hard-coded count:
 
 | Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
 | --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ci.yml`, `pr.yml`, `merge.yml` | Main CI, PR, and push/merge-group gates |
 | `macos.yml`, `rust-clippy.yml` | macOS formatting and clippy review |
 | `conformance.yml` | conformance, property, krun, CLI, borrow, quickcheck |
+| `context-snapshot.yml` | cross-platform v3 context evidence collection and aggregate validation |
 | `stability-gates.yml` | docs, adapter/no-unwrap/compile, handler coverage |
 | `protocol-drift.yml`, `protocol-sites.yml` | protocol and construction-site drift |
 | `nightly.yml` | scheduled audits and coverage check |

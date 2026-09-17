@@ -1,18 +1,22 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - .gitignore
-  - assets
   - docs/core/ARCHITECTURE.mbx.md
   - docs/core/FEATURE_MATRIX.mbx.md
   - docs/core/ROADMAP.mbx.md
-generated: 2026-09-06
+generated: 2026-09-16
 ---
 
 # Assets Site Improvement Tracker
 
-Tracks follow-up work for the static reference site under `assets/`. The pages currently exist
-only as ignored local files because `.gitignore` excludes the entire directory.
+> **Historical snapshot:** the ignored local `assets/` tree described below is not present in
+> this checkout and was never a durable repository source. The tracker is retained to explain
+> that abandoned direction; current tracked site documentation lives under `docs/`.
+
+Tracks the abandoned follow-up work for the former static reference site under `assets/`. At the
+time this plan was written, those pages existed only as ignored local files because `.gitignore`
+excluded the entire directory.
 
 ## Status Legend
 

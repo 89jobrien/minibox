@@ -75,6 +75,21 @@ def collect-docs [] {
             })
         }
     }
+
+    # Plans, designs, specs, and other nested docs may also carry provenance.
+    # Include them for freshness/path validation without treating them as a
+    # canonical doc home for collision detection.
+    for f in (glob "docs/**/*.md") {
+        let rel = ($f | path relative-to (pwd))
+        if not ($docs | any {|d| $d.path == $rel}) {
+            $docs = ($docs | append {
+                path: $rel
+                home: "docs-other"
+                base: ($rel | path basename | str replace ".mbx.md" "" | str replace ".md" "")
+                front: (read-frontmatter $rel)
+            })
+        }
+    }
     $docs
 }
 

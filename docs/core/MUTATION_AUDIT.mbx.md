@@ -1,5 +1,5 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - crates/minibox-core/src/image/layer.rs
   - crates/minibox/src/daemon/server.rs
@@ -9,7 +9,7 @@ sources:
   - crates/minibox-core/src/image/registry.rs
   - crates/minibox/src/adapters/ghcr.rs
   - crates/minibox/tests/security_regression.rs
-generated: 2026-08-28
+generated: 2026-09-16
 ---
 
 # Mutation Audit Checklist — Selected Security-Critical Modules

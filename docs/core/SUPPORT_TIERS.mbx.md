@@ -1,5 +1,5 @@
 ---
-source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
+source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
 sources:
   - crates/minibox-core
   - crates/minibox-domain
@@ -13,7 +13,7 @@ sources:
   - crates/minibox/src/adapters/docker_desktop.rs
   - crates/minibox-cni
   - crates/minibox-tui
-generated: 2026-09-04
+generated: 2026-09-16
 ---
 
 # Support Tiers
