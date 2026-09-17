@@ -1,5 +1,5 @@
 ---
-source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
+source_sha: 583d795681594db0435e7fbc4d196e19edfef358
 sources:
   - crates/minibox-domain
   - crates/minibox-core

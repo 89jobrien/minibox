@@ -1,5 +1,5 @@
 ---
-source_sha: d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
+source_sha: a72281f338bd3ea9b790b77145de108c97281f20
 sources:
   - crates/minibox/src/lib.rs
   - crates/minibox-macros
