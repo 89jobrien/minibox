@@ -26,12 +26,11 @@ via `cargo xtask doctor` — all checks passed, `smolvm` on PATH, no extra
 
 ```
 cd /Users/joe/dev/minibox
-cargo build --release -p miniboxd -p mbx
+cargo build --release -p miniboxd -p minibox-cli
 ```
 
-The CLI package is named `mbx`, not `minibox-cli` — `cargo build -p
-minibox-cli` fails with "package not found". Binaries land at
-`target/release/miniboxd` and `target/release/mbx`.
+The CLI Cargo package is named `minibox-cli`; its binary remains `mbx`.
+Binaries land at `target/release/miniboxd` and `target/release/mbx`.
 
 ## Run (agent path) — use the driver
 
@@ -102,7 +101,7 @@ target/release/mbx doctor
 ## Run (human path)
 
 ```
-cargo build --release -p miniboxd -p mbx
+cargo build --release -p miniboxd -p minibox-cli
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock MINIBOX_STATE_DIR=/tmp/mbx-state ./target/release/miniboxd &
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock ./target/release/mbx pull alpine:latest
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock ./target/release/mbx run alpine:latest -- sh
@@ -135,10 +134,10 @@ cargo xtask test unit        # cross-platform unit + conformance subset
   silently becomes `.FOO` (parse error: "Assignment operations require a
   variable"). Use single-quoted `nu -c '...'` for any script containing
   `$env`, `$in`, or other `$`-prefixed nu syntax.
-- **`mbx build -p minibox-cli` doesn't exist.** The CLI crate's package
-  name is `mbx` (`crates/mbx/Cargo.toml`), matching its binary name. The
-  workspace also has an unrelated `crates/minibox` (core lib) and
-  `crates/minibox-core` — neither produces the CLI binary.
+- **Package and binary names differ.** Cargo commands use package
+  `minibox-cli` (`crates/mbx/Cargo.toml`), while the executable is named
+  `mbx`. The workspace also has `crates/minibox` (core lib) and
+  `crates/minibox-core`; neither produces the CLI binary.
 - **A local `export def rm [...]` in a Nushell script shadows the builtin
   `rm`.** Defining `rm` to mean "remove a container" broke `rm -r -f
 $RUN_DIR` in `teardown` — it called the container-removal command
@@ -163,9 +162,9 @@ containers)` for `ps` if the run's command already exited — that's
 
 ## Troubleshooting
 
-| Symptom                                                                          | Fix                                                                                                                                                                                                                            |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `Connection refused (os error 61)` from any `mbx` command                        | The daemon isn't running on that socket. Either it was never started, or it was started via `job spawn`/`&` in a `nu -c` call that already exited (see Gotchas). Re-run `start` and immediately check `ps                      | where name =~ "miniboxd"` before doing anything else. |
-| `metrics server bind ... Address already in use (os error 48)` in the daemon log | Harmless if you only care about the container lifecycle — the daemon logs a `WARN` and continues without the metrics endpoint (port 9090 already held by another `miniboxd`, e.g. a pre-existing system-level one). Not fatal. |
-| `error: unknown package minibox-cli` from `cargo build -p minibox-cli`           | Wrong package name — use `-p mbx`.                                                                                                                                                                                             |
-| `mbx doctor` prints `cargo xtask doctor` output instead of daemon status         | Expected — `doctor` is a preflight/capability check, not a socket call. Use `mbx ps` to actually exercise the running daemon.                                                                                                  |
+| Symptom                                                                          | Fix                                                                                                                                      |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `Connection refused (os error 61)` from any `mbx` command                        | The daemon is not running on that socket. Re-run `start`; the driver now fails unless the expected socket appears.                       |
+| `metrics server bind ... Address already in use (os error 48)` in the daemon log | Harmless for container lifecycle testing: the daemon logs a `WARN` and continues without metrics because another process owns port 9090. |
+| `error: package ID specification 'mbx' did not match any packages`               | Cargo uses the package name `minibox-cli`; run `cargo build -p minibox-cli`. The resulting binary is still `target/release/mbx`.         |
+| `mbx doctor` prints `cargo xtask doctor` output instead of daemon status         | Expected: `doctor` is a preflight/capability check, not a socket call. Use `mbx ps` to exercise the running daemon.                      |
