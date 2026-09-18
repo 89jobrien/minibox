@@ -3,7 +3,7 @@
 This document summarizes which minibox adapters work on which platforms and what
 capabilities each adapter provides. It is written for end users of minibox.
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 ---
 
@@ -11,11 +11,12 @@ Last updated: 2026-09-17
 
 | Adapter  | macOS | Linux | Windows | Status       | Use when...                           |
 | -------- | :---: | :---: | :-----: | ------------ | ------------------------------------- |
-| `smolvm` |  Yes  |  Yes  |   No    | Experimental | Default on all platforms              |
+| `smolvm` |  Yes  |  Yes  |   No    | Experimental | Preferred Unix default when available |
 | `krun`   |  Yes  |  Yes  |   No    | Experimental | Fallback when `smolvm` is not on PATH |
 | `native` |  No   |  Yes  |   No    | Production   | Linux with root, full isolation       |
 | `gke`    |  No   |  Yes  |   No    | Production   | Unprivileged GKE pods                 |
 | `colima` |  Yes  |  Yes  |   No    | Experimental | Colima/Lima VM environment            |
+| `vz`     |  Yes  |  No   |   No    | Blocked      | Opt-in VZ build; VM boot is blocked   |
 | `winbox` |  No   |  No   | (stub)  | Stub         | Not yet functional                    |
 
 ---
@@ -69,7 +70,7 @@ MINIBOX_ADAPTER=colima miniboxd
 
 - **Platforms:** Linux only (x86_64 and arm64)
 - **Requirements:**
-  - Root (or `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`) for namespace and cgroup operations
+  - Root (UID 0); native daemon startup rejects non-root execution
   - cgroups v2 mounted at `/sys/fs/cgroup`
   - Overlay filesystem support in the kernel
 - **Isolation:** Linux PID, mount, network, UTS, and IPC namespaces + cgroups v2
@@ -81,7 +82,7 @@ at compile time:
 
 - **Off (default):** the built-in `BridgeNetwork` adapter — veth pairs, IP allocation, and DNAT
   implemented directly in Rust, no external dependencies.
-- **On (`cargo build --features cni` / `miniboxd --features cni`):** real CNI-spec plugin
+- **On (`cargo build -p miniboxd --features cni`):** real CNI-spec plugin
   execution via `minibox-cni`, gaining in-container DNS through the standard `dnsname` plugin.
   Requires:
   - The standard `containernetworking/plugins` release binaries — `bridge`, `host-local`,
@@ -171,11 +172,11 @@ adapters.
 | Feature               | smolvm | krun | native | gke | colima |
 | --------------------- | :----: | :--: | :----: | :-: | :----: |
 | Bridge (experimental) |   No   |  No  |  Yes   | No  |   No   |
-| Port forwarding       |   No   |  No  |   No   | No  |   No   |
-| DNS                   |   No   |  No  |   No   | No  |   No   |
+| Port forwarding       |   No   |  No  |  Yes   | No  |   No   |
+| DNS                   |   No   |  No  |  Yes   | No  |   No   |
 
-Bridge networking is experimental and Linux-only (`native` adapter).
-Port forwarding and DNS are not yet implemented on any adapter.
+Bridge networking, port forwarding, and DNS configuration are experimental and
+Linux-only (`native` adapter).
 
 ### Mounts and Privileges
 
@@ -191,13 +192,15 @@ and require root.
 
 ## Security
 
-All adapters enforce the following protections regardless of platform:
+All adapters enforce the following image and request protections regardless of platform:
 
 - **Tar path validation** — rejects `..` components and absolute paths in image layers
 - **Setuid stripping** — removes setuid/setgid bits when extracting layers
 - **Device node rejection** — block and character device entries in layers are rejected
-- **Unix socket auth** — the daemon rejects requests from non-root callers via
-  `SO_PEERCRED` (Linux/macOS)
+
+The `native` adapter additionally rejects non-root Unix-socket callers through
+`SO_PEERCRED`. VM-backed adapters rely on their host/VM boundary and socket file
+permissions instead of enabling that native-only peer policy.
 
 The following are available on all adapters except the Windows stub:
 
@@ -249,11 +252,12 @@ supported platform in the current release.
 
 ## Further Reading
 
-- [Architecture reference](ARCHITECTURE.mbx.md) — crate layout, adapter wiring,
+- [Architecture reference](core/ARCHITECTURE.mbx.md) — crate layout, adapter wiring,
   domain traits, protocol overview
-- [Feature matrix (developer)](FEATURE_MATRIX.mbx.md) — detailed capability matrix
+- [Feature matrix (developer)](core/FEATURE_MATRIX.mbx.md) — detailed capability matrix
   with source references
-- [Security invariants](SECURITY_INVARIANTS.mbx.md) — security rules that must be
+- [Security invariants](core/SECURITY_INVARIANTS.mbx.md) — security rules that must be
   preserved across changes
-- [Verifiable execution](verifiable-execution.mbx.md) — execution manifest format
+- [Execution manifest](core/ARCHITECTURE.mbx.md#execution-manifest) — execution manifest
+  format and verification flow
   and attestation path

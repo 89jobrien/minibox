@@ -80,7 +80,7 @@ op run --env-file=$HOME/dev/.env -- rust-script helpers/whatidid.rs
 Builds a transcript from harvested sessions (cwd, branch, SIGNALS block with tool
 counts, then interleaved human/assistant turns). Sends to `claude-haiku-4-5-20251001`.
 
-Model prompt lives in `prompts/analysis.txt`. Returns structured JSON digest:
+Model prompt lives in `prompts/analysis.whatidid.txt`. Returns structured JSON digest:
 `goals[]` each with `tasks[]`, `human_hours`, `domain_skills`, `tech_skills`.
 
 Caches result to `cache/YYYY-MM-DD.json` — re-runs skip the API call.
@@ -94,7 +94,7 @@ seat_cost_per_mo   = 39                              # Claude Code Pro seat
 leverage           = human_value / seat_cost_per_mo
 ```
 
-Token cost model: prefix-matched against `report.rs → MODEL_PRICING`.
+Token cost model: prefix-matched against `model_pricing.json`.
 Fallback: $3.00 input / $15.00 output per 1M tokens.
 
 ### 5. Generate HTML report
@@ -127,20 +127,10 @@ Report: /tmp/whatidid-2026-05-17.html
 
 ## Token Cost Model
 
-| Provider  | Model prefix     | Input $/1M | Output $/1M |
-| --------- | ---------------- | ---------- | ----------- |
-| Anthropic | claude-opus-4    | $15.00     | $75.00      |
-| Anthropic | claude-sonnet-4  | $3.00      | $15.00      |
-| Anthropic | claude-haiku     | $0.80      | $4.00       |
-| OpenAI    | gpt-5, gpt-4o    | $2.50      | $10.00      |
-| OpenAI    | gpt-4.1          | $2.00      | $8.00       |
-| OpenAI    | o3               | $10.00     | $40.00      |
-| Google    | gemini-2.5-pro   | $1.25      | $10.00      |
-| Google    | gemini-2.5-flash | $0.15      | $0.60       |
+`model_pricing.json` is the canonical prefix-to-rate table. Unknown models use
+its `fallback` input/output rates; do not duplicate rates in this document.
 
-Fallback (unknown model): $3.00 input / $15.00 output.
-
-Update `report.py → _MODEL_PRICING` when rates change.
+Update `model_pricing.json` when rates change.
 
 ## Common Mistakes
 
@@ -150,6 +140,6 @@ Update `report.py → _MODEL_PRICING` when rates change.
 - **Double-counting sessions** — a single working session may span midnight; use
   `created_at` (session start) not `updated_at` as the date key.
 - **Calling the API without a cached result check** — always check
-  `cache/YYYY-MM-DD.json` before hitting GitHub Models; the API has rate limits.
-- **Hardcoding model names** — use prefix matching in `_MODEL_PRICING` so new model
-  variants don't silently fall through to zero cost.
+  `cache/YYYY-MM-DD.json` before hitting the Anthropic API; the API has rate limits.
+- **Hardcoding model names** — add prefix entries to `model_pricing.json` so new model
+  variants use explicit rates instead of the fallback.

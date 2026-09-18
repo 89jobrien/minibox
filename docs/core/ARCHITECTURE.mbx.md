@@ -1,5 +1,5 @@
 ---
-source_sha: 583d795681594db0435e7fbc4d196e19edfef358
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -49,7 +49,7 @@ generated: 2026-09-16
 <!-- fact:workspace_version=0.33.0 -->
 
 ```text
-minibox-macros          (proc-macro, ~300 LOC)
+minibox-macros          (declarative macros, ~300 LOC)
     ^
 minibox-domain          (lib) — pure values, policies, lifecycle events, and ports
     ^
@@ -57,17 +57,17 @@ minibox-core            (lib) — protocol, clients, OCI/image services, shared 
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
     ^        ^        ^
-macbox   smolbox   winbox  (platform libs) — Colima | smolvm/krun | Windows stub
+macbox   smolbox   winbox  (platform libs) — krun/Colima/VZ | VM facades | Windows stub
     ^        ^        ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
 minibox-cli             (package, ~3.2k LOC) — `mbx` binary; optional TUI feature
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
 minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
-minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
+minibox-testsuite       (lib+2 bins, internal) — conformance harness plus report runners
 minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
 minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
-minibox-tui             (bin) — read-only TUI dashboard (ratatui + crossterm), `mbx tui`
+minibox-tui             (lib) — read-only TUI dashboard (ratatui + crossterm), used by `mbx tui`
 ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 ```
@@ -109,16 +109,16 @@ remains a compatibility path to the same type identities.
 | -------------------- | ----------------------------------------------------- | --------------------------------------- |
 | `ImageRegistry`      | `has_image`, `pull_image`, `get_image_layers`         | All adapter suites                      |
 | `RegistryRouter`     | `route` (hostname -> registry)                        | All suites via `HostnameRegistryRouter` |
-| `ImageLoader`        | `load_image` (local tarball)                          | native, gke, colima                     |
+| `ImageLoader`        | `load_image` (local tarball)                          | native, gke, colima, smolvm             |
 | `FilesystemProvider` | supertrait: `RootfsSetup + ChildInit`                 | All suites                              |
 | `ResourceLimiter`    | `create`, `add_process`, `cleanup`                    | All suites (noop on gke/smolvm)         |
 | `ContainerRuntime`   | `capabilities`, `spawn_process`, `wait_for_exit`      | All suites                              |
 | `NetworkProvider`    | `setup`, `attach`, `cleanup`, `stats`                 | native (bridge/host/noop), others noop  |
-| `MetricsRecorder`    | `increment_counter`, `record_histogram`, `set_gauge`  | native, gke, smolvm                     |
+| `MetricsRecorder`    | `increment_counter`, `record_histogram`, `set_gauge`  | native, gke, smolvm, krun               |
 | `ExecRuntime`        | `run_in_container`                                    | native only                             |
 | `ImagePusher`        | `push_image`                                          | native, gke, colima                     |
 | `ContainerCommitter` | `commit`                                              | native, colima                          |
-| `ImageBuilder`       | `build_image`                                         | native, colima                          |
+| `ImageBuilder`       | `build_image`                                         | native, colima, smolvm                  |
 | `VmCheckpoint`       | `save_snapshot`, `restore_snapshot`, `list_snapshots` | noop everywhere                         |
 | `PtyAllocator`       | `allocate`                                            | internal exec path                      |
 
@@ -139,7 +139,7 @@ Defined in `crates/minibox-domain/src/extensions.rs`.
 | ------------------ | :----: | :--: | :----: | :----: | :--: | :--: | :--: | :--: | :----: |
 | ImageRegistry      |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub |  --  |   --   |
 | RegistryRouter     |   Y    |  Y   |   Y    |   Y    |  Y   |  --  |  --  |  --  |   --   |
-| ImageLoader        |   Y    |  Y   |   Y    |  noop  | noop |  --  |  --  |  --  |   --   |
+| ImageLoader        |   Y    |  Y   |   Y    |   Y    | noop |  --  |  --  |  --  |   --   |
 | FilesystemProvider |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub | stub |  stub  |
 | ResourceLimiter    |   Y    | noop |   Y    |   Y    |  Y   | stub | stub | stub |  stub  |
 | ContainerRuntime   |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub | stub |  stub  |
@@ -157,8 +157,8 @@ restored after its 2026-05 removal but remains nonfunctional because Linux VM bo
 Key: **Y** = real impl wired, **noop** = no-op wired, **stub** = returns Err (library only),
 **--** = not implemented
 
-\*krun constructs its own `NoOpMetricsRecorder` internally rather than accepting the shared
-broker — an inconsistency vs native/gke/smolvm.
+Krun receives the shared metrics recorder through the composition root, matching the other
+wired suites.
 
 ### Wiring Status
 
@@ -229,13 +229,13 @@ ListPipelines, ShowPipeline, RunWorkflow
 
 ### DaemonResponse Variants
 
-**Terminal** (end a request): ContainerCreated, Success, ContainerPaused,
+**Terminal** (end a request): Success, ContainerPaused,
 ContainerResumed, ContainerList, ImageLoaded, ImageList, Error,
 ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
 PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
 Manifest, VerifyResult, WorkflowComplete
 
-**Non-terminal** (streaming): ContainerOutput, ExecStarted, PushProgress,
+**Non-terminal** (streaming): ContainerCreated, ContainerOutput, ExecStarted, PushProgress,
 BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
 
 ---

@@ -9,7 +9,7 @@
   and seccomp BPF filters.
 - **Success criteria**: Standing stabilization gates remain green as features land.
   Linux native adapter is production-ready at v0.33.0. macOS feels native via
-  smolvm (VM-backed). Full test suite (~1,467 tests) green on CI.
+  smolvm (VM-backed). Workspace, conformance, and platform-specific CI suites remain green.
 - **Current phase**: Active development under the stabilization policy. The blanket
   feature freeze was lifted on 2026-08-18; quality hardening continues.
 

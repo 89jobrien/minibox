@@ -18,21 +18,21 @@ crux agent  <-->  minibox-crux-plugin (stdio)  <-->  miniboxd (Unix socket)
 
 13 handlers across two namespaces:
 
-| Handler | Description |
-|---|---|
-| `minibox::container::run` | Create and start a container |
-| `minibox::container::stop` | Stop a running container |
-| `minibox::container::pause` | Freeze a container (cgroup.freeze) |
-| `minibox::container::resume` | Thaw a paused container |
-| `minibox::container::rm` | Remove a stopped container |
-| `minibox::container::exec` | Execute a command in a running container |
-| `minibox::container::ps` | List all containers |
-| `minibox::container::logs` | Fetch container logs |
-| `minibox::image::pull` | Pull an image from a registry |
-| `minibox::image::build` | Build an image from a Dockerfile |
-| `minibox::image::push` | Push an image to a registry |
-| `minibox::image::ls` | List cached images |
-| `minibox::image::rm` | Remove a cached image |
+| Handler                      | Description                              |
+| ---------------------------- | ---------------------------------------- |
+| `minibox::container::run`    | Create and start a container             |
+| `minibox::container::stop`   | Stop a running container                 |
+| `minibox::container::pause`  | Freeze a container (cgroup.freeze)       |
+| `minibox::container::resume` | Thaw a paused container                  |
+| `minibox::container::rm`     | Remove a stopped container               |
+| `minibox::container::exec`   | Execute a command in a running container |
+| `minibox::container::ps`     | List all containers                      |
+| `minibox::container::logs`   | Fetch container logs                     |
+| `minibox::image::pull`       | Pull an image from a registry            |
+| `minibox::image::build`      | Build an image from a Dockerfile         |
+| `minibox::image::push`       | Push an image to a registry              |
+| `minibox::image::ls`         | List cached images                       |
+| `minibox::image::rm`         | Remove a cached image                    |
 
 ## Usage
 
@@ -49,15 +49,15 @@ objects to stdout. Logging goes to stderr (controlled by `RUST_LOG`).
 
 ## Protocol messages
 
-| Request | Response |
-|---|---|
-| `Declare` | `Declare { handlers }` |
+| Request                     | Response                                       |
+| --------------------------- | ---------------------------------------------- |
+| `Declare`                   | `Declare { handlers }`                         |
 | `Invoke { handler, input }` | `InvokeOk { output }` or `InvokeErr { error }` |
-| `Shutdown` | `ShutdownAck` |
+| `Shutdown`                  | `ShutdownAck`                                  |
 
 ## Security
 
 Mount inputs are validated: paths must be absolute with no `..`
 components. The plugin itself does not perform container operations
-directly — all mutations go through `miniboxd`, which enforces its own
-auth (SO_PEERCRED) and policy gates.
+directly — all mutations go through `miniboxd`, which enforces container
+policy gates. The native adapter additionally requires root peer credentials.

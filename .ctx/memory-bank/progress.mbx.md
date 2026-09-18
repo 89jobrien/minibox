@@ -55,7 +55,7 @@
     - SHA-256 (never plaintext),
     - policy evaluation via `mbx verify`
 - **OTEL trace export**:
-    - full OTLP/gRPC exporter via opentelemetry 0.31,
+    - full OTLP/gRPC exporter via opentelemetry 0.32,
     - batch export, graceful fallback,
     - OtelGuard shutdown
     - Wired in miniboxd main.
@@ -79,12 +79,12 @@
 
 ### Testing infrastructure
 
-- ~1,467 tests total across all categories
-- ~728 inline unit tests + ~739 integration test files
+- 96 integration test files under `crates/*/tests/`
+- ~1,060 integration-test annotations + ~1,228 inline test annotations
 - 19 security regression tests pinning all 12 invariants
 - ~46 proptest property tests (protocol roundtrip, cgroup bounds, daemon state)
-- 28 conformance tests (backend-agnostic adapter trait contracts)
-- 11 borrow-reasoning fixtures (must-pass/must-fail)
+- 123 conformance tests (backend-agnostic adapter and port contracts)
+- 19 borrow-reasoning fixtures (must-pass/must-fail)
 - 15 e2e daemon+CLI tests (Linux+root)
 - 16 cgroup integration tests (Linux+root)
 - ~17 sandbox tests, 30 CLI subprocess tests
@@ -95,13 +95,9 @@
 
 ### CI pipeline
 
-- 8 GHA workflows:
-    - lint,
-    - test,
-    - conformance,
-    - protocol drift,
-    - nightly audit,
-    - release
+- 15 GHA workflows covering CI/PR/merge, macOS, conformance, context snapshots,
+  stability and protocol gates, clippy review, nightly audits, promotion, releases,
+  package publishing, and issue summaries
 - Self-hosted runner on VPS for Linux-specific tests
 - Pre-commit/pre-push local gates via cargo xtask
 
@@ -263,6 +259,7 @@
   same 5 mock types (~62 duplicate occurrences via `dupehound scan`). Fix candidate:
   replace with `pub use minibox_core::adapters::mocks::{...}` re-export, consistent
   with `minibox`'s existing re-export-of-`minibox-core` convention. Filed as task t23.
-- CI coverage gaps — property tests, borrow fixtures, sandbox tests, CLI
-  subprocess tests, krun conformance not in any CI workflow
-- macOS VZ.framework — blocked by Apple bug on ARM64; adapter removed 2026-05-08
+- CI coverage gaps — sandbox tests and the feature-gated CLI subprocess suite are
+  not in any CI workflow
+- macOS VZ.framework — restored behind the opt-in `vz` feature, but VM boot remains
+  blocked by `VZLinuxBootLoader` failures on current macOS

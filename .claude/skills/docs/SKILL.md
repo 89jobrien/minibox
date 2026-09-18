@@ -30,9 +30,9 @@ built — `docs/core/`.
 **One topic, one home.** A base name appearing in both top level and
 `docs/core/` is a defect, not a style choice: the two copies drift, and readers
 have no way to tell which is authoritative. The audit script reports these as
-errors. This repo currently has three (`USAGE`, `TESTING`, `DEVELOPMENT`) —
-when you touch either side of a collision, resolve it rather than deepening it:
-pick the canonical file, reduce the other to a one-line pointer, or merge them.
+errors. The current audit reports no collisions. If one appears, resolve it rather
+than deepening it: pick the canonical file, reduce the other to a one-line pointer,
+or merge them.
 
 New memory-bank and `docs/core` files use the `.mbx.md` extension; top-level
 files use plain `.md`.
@@ -77,7 +77,7 @@ them as unstamped for visibility, which is informational, not a failure.
 Before claiming a link works, request it. A 404 in documentation is worse than
 no link: it costs the reader time and signals the doc is unmaintained.
 
-`scripts/doc-audit.nu --links` does this across every doc, deduplicating URLs
+`.claude/skills/docs/scripts/doc-audit.nu --links` does this across every doc, deduplicating URLs
 so a link repeated in ten files costs one request. Anything that doesn't
 answer 2xx/3xx is reported with its status code and the docs containing it.
 

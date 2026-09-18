@@ -81,14 +81,14 @@ sudo ./target/release/mbx rm <id>
 
 ## Platform Support
 
-| Platform              | Status         | Adapter         | Notes                                 |
-| --------------------- | -------------- | --------------- | ------------------------------------- |
-| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay      |
-| Linux aarch64         | **Production** | `native`        | Same as x86_64                        |
-| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed |
-| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                     |
-| Windows               | Planned        | `winbox` stub   | Returns error unconditionally         |
+| Platform              | Status         | Adapter         | Notes                                   |
+| --------------------- | -------------- | --------------- | --------------------------------------- |
+| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay        |
+| Linux aarch64         | **Production** | `native`        | Same as x86_64                          |
+| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS   |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; opt-in VZ is blocked |
+| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                       |
+| Windows               | Planned        | `winbox` stub   | Returns error unconditionally           |
 
 See [`docs/core/FEATURE_MATRIX.mbx.md`](docs/core/FEATURE_MATRIX.mbx.md) for the full per-adapter capability
 breakdown.
@@ -100,13 +100,15 @@ breakdown.
 16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
 
 ```
-minibox-macros          proc macros (as_any!, adapt!)
+minibox-macros          declarative macros (as_any!, adapt!)
     ^
-minibox-core            cross-platform types, domain traits, protocol, OCI ops
+minibox-domain          canonical domain values, policies, events, and ports
+    ^
+minibox-core            protocol, clients, OCI services, shared adapters
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
     ^        ^        ^
-macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+macbox   smolbox   winbox  krun/Colima/VZ | VM facades | Windows stub
     ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
@@ -154,21 +156,23 @@ Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITE
 
 | Area           | Protection                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Socket auth    | `SO_PEERCRED` — UID 0 only, socket mode `0600`                      |
+| Socket auth    | Native adapter: `SO_PEERCRED` UID 0 only; socket mode `0600`        |
 | Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction  |
 | Tar extraction | Rejects `..`, absolute symlinks, device nodes; strips setuid/setgid |
 | DoS limits     | 1 MiB request, 10 MiB manifest, 10 GiB/layer, 50 GiB total image    |
 | Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs              |
 | PID limit      | 1024 per container (default)                                        |
 
-**Not yet implemented:** capability dropping, seccomp filters, user namespace remapping,
-rootless support.
+**Not yet implemented:** default capability dropping, general-purpose seccomp profiles,
+user namespace remapping, and rootless support. A narrow seccomp rule already prevents
+mount-remount widening after container initialization.
 
 ---
 
 ## Configuration
 
-Configuration is layered: TOML config file → environment variables → defaults.
+Configuration is layered from defaults, then system TOML, user TOML, and finally
+environment-variable overrides.
 
 **Config files** (later overrides earlier):
 
@@ -182,20 +186,22 @@ log_level = "info"
 [policy]
 allow_privileged = false
 allow_bind_mounts = false
-max_image_size_mb = 2048
 ```
+
+`max_image_size_mb` is parsed from TOML but is not yet wired into runtime policy enforcement.
+`log_level` is also parsed but tracing currently follows `RUST_LOG`.
 
 **Environment variables** (override config file values):
 
-| Variable                    | Default                                         | Purpose                   |
-| --------------------------- | ----------------------------------------------- | ------------------------- |
-| `MINIBOX_ADAPTER`           | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection   |
-| `MINIBOX_DATA_DIR`          | `/var/lib/minibox`                              | Image + container storage |
-| `MINIBOX_RUN_DIR`           | `/run/minibox`                                  | Socket + runtime state    |
-| `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
-| `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                         | Permit `-v` bind mounts   |
-| `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                         | Permit `--privileged`     |
-| `RUST_LOG`                  | —                                               | Tracing log level         |
+| Variable                    | Default                                                    | Purpose                   |
+| --------------------------- | ---------------------------------------------------------- | ------------------------- |
+| `MINIBOX_ADAPTER`           | auto: `smolvm`; Linux `native` / macOS `krun` fallback     | Adapter suite selection   |
+| `MINIBOX_DATA_DIR`          | Linux root: `/var/lib/minibox`; macOS: Application Support | Image + container storage |
+| `MINIBOX_RUN_DIR`           | Linux: `/run/minibox`; macOS: `/tmp/minibox`               | Socket + runtime state    |
+| `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service`            | Cgroup root               |
+| `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                                    | Permit `-v` bind mounts   |
+| `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                                    | Permit `--privileged`     |
+| `RUST_LOG`                  | —                                                          | Tracing log level         |
 
 ---
 
@@ -277,16 +283,16 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature                | Status                                           |
-| ---------------------- | ------------------------------------------------ |
-| Bridge networking      | Experimental                                     |
-| OCI push/commit/build  | Experimental                                     |
-| macOS VZ.framework     | Removed after Apple ARM64 bug                    |
-| Seccomp / capabilities | Planned                                          |
-| Rootless support       | Planned                                          |
-| Port forwarding / DNS  | Implemented for Linux `native` bridge networking |
-| Windows (WSL2)         | Planned                                          |
-| MCP control surface    | Initial MCP stdio server implemented             |
+| Feature                | Status                                              |
+| ---------------------- | --------------------------------------------------- |
+| Bridge networking      | Experimental                                        |
+| OCI push/commit/build  | Experimental                                        |
+| macOS VZ.framework     | Restored behind opt-in `vz`; boot currently blocked |
+| Seccomp / capabilities | Planned                                             |
+| Rootless support       | Planned                                             |
+| Port forwarding / DNS  | Implemented for Linux `native` bridge networking    |
+| Windows (WSL2)         | Planned                                             |
+| MCP control surface    | Initial MCP stdio server implemented                |
 
 Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 

@@ -34,7 +34,7 @@
             "Bash(handoff-detect:*)",
             "Bash(gkg index:*)",
             "Bash(nu:*)",
-            "Bash(minibox:*)",
+            "Bash(mbx:*)",
             "Bash(tailscale status:*)",
             "Bash(mise:*)",
             "Bash(ssh-add -l)",

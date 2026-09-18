@@ -1,5 +1,5 @@
 ---
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/limiter.rs
@@ -22,7 +22,9 @@ sources:
   - crates/minibox/src/adapters/gke.rs
   - crates/minibox/src/adapters/colima.rs
   - crates/minibox/src/adapters/smolvm.rs
-  - crates/smolbox/src/krun
+  - crates/macbox/src/krun
+  - crates/macbox/tests/krun_conformance_tests.rs
+  - crates/macbox/tests/krun_adapter_conformance.rs
   - crates/macbox/src/vz
   - crates/minibox/src/adapters/docker_desktop.rs
   - crates/mcp
@@ -35,7 +37,7 @@ generated: 2026-09-16
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 ---
 
@@ -53,8 +55,7 @@ Last updated: 2026-09-17
 | `winbox` | `windows` | Stub | -- |
 <!-- END GENERATED: adapter-suites -->
 
-[^1]: `native` requires root (UID 0) for runtime operations. Non-root startup emits a warning;
-      selection itself is not rejected. Linux only
+[^1]: `native` requires root (UID 0); daemon startup rejects non-root native selection. Linux only
       (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.
 [^2]: `gke` is Linux only (`cfg!(target_os = "linux")`). Unprivileged — no root required.
       Uses proot (ptrace) and copy-based filesystem instead of overlay.
@@ -105,7 +106,7 @@ Last updated: 2026-09-17
 | `overlay_filesystem` | Yes | Limited | No | Yes | No | Blocked | No |
 | `parallel_layer_pull` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
 | `pause_resume` | No | No | No | Yes | No | No | No |
-| `peer_credential_auth` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `peer_credential_auth` | No | No | No | Yes | No | No | No |
 | `pid_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
 | `pid_reconciliation` | No | No | No | Yes | No | No | No |
 | `port_forwarding` | No | No | No | Yes | No | Blocked | No |
@@ -209,11 +210,11 @@ Key implementation sites backing the "Yes" entries above:
   (see `crates/minibox/src/adapters/smolvm.rs:SmolVmRuntime`).
 - **`krun` adapter** uses libkrun to run containers in
   lightweight VMs
-  (see `crates/smolbox/src/krun/runtime.rs:KrunRuntime`).
+  (see `crates/macbox/src/krun/runtime.rs:KrunRuntime`).
   All four adapter ports (runtime, registry, filesystem, limiter)
   are wired into the daemon
   (see `crates/miniboxd/src/main.rs:build_krun_handler_dependencies`)
-  and pass 31 conformance tests. Acts as the fallback when
+  and pass 29 krun-specific conformance tests. Acts as the fallback when
   `smolvm` is unavailable.
 - **`vz` adapter** uses Apple's Virtualization.framework directly
   (see `crates/macbox/src/vz/`), communicating with the in-VM

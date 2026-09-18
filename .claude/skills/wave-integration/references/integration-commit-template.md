@@ -13,7 +13,7 @@ Branches:
 Tests: cargo test --workspace — 488 passed, 0 failed
 
 Conflicts resolved: 2 files
-- crates/foo/src/lib.rs: kept rename from main, added new variant from feat/branch-a
+- crates/foo/src/lib.rs: kept rename from develop, added new variant from feat/branch-a
 - Cargo.toml: took higher reqwest version (0.12.28) from feat/branch-b
 
 Skipped: feat/branch-d (test failures after rebase — escalated)

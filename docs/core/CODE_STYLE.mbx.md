@@ -59,10 +59,10 @@ crates/
   minibox/          # Infrastructure adapters + container runtime (Linux-native + cross-platform)
   miniboxd/         # Daemon binary: socket listener, handler dispatch, adapter wiring
   mbx/              # minibox-cli package; mbx binary and optional TUI command
-  minibox-macros/   # proc-macro adapter boilerplate reduction
+  minibox-macros/   # declarative adapter-boilerplate macros
   minibox-testsuite/   # Conformance test harness and runner
-  macbox/           # Colima composition and feature-gated VZ path
-  smolbox/          # smolvm + krun implementations
+  macbox/           # krun implementation, Colima composition, feature-gated VZ
+  smolbox/          # smolvm + krun compatibility re-exports
   winbox/           # Windows adapter: HCS/WSL2 backends
   minibox-crux-plugin/ # crux runtime plugin
   mcp/              # minibox-mcp stdio control surface
@@ -81,9 +81,9 @@ Key conventions:
   OS-specific runtime implementations outside it.
 - `minibox` re-exports everything from `minibox-core` that adapters or macros need. Do not remove these re-exports; macro expansion depends on them.
 - Adapters implement canonical traits from `minibox-domain` (possibly imported through the
-  `minibox-core::domain` compatibility facade). Linux/shared adapters live in `minibox`, Colima
-  composition and VZ live in `macbox`, smolvm/krun live in `smolbox`, and Windows work lives in
-  `winbox`.
+  `minibox-core::domain` compatibility facade). Linux/shared and smolvm implementations live in
+  `minibox`; krun, Colima composition, and VZ live in `macbox`; `smolbox` provides compatibility
+  re-exports; Windows work lives in `winbox`.
 
 ---
 
@@ -738,10 +738,11 @@ protocol types:
    `crates/minibox-core/tests/protocol_evolution.rs`.
 6. **Run `cargo xtask verify`** to confirm fmt, clippy, and borrow fixtures pass.
 
-`DaemonResponse::ContainerOutput` is **non-terminal** (a container can produce many output chunks
-before stopping). All other response variants end request streaming. When adding a new response
-variant, explicitly decide and document whether it is terminal or non-terminal, and update the
-terminal-response logic in the handler.
+Terminal response classification is centralized in `DaemonResponse::is_terminal()`.
+`ContainerOutput`, `LogLine`, `ContainerCreated`, `ExecStarted`, `PushProgress`, `BuildOutput`,
+`Event`, `UpdateProgress`, and `WorkflowStepComplete` are non-terminal; the remaining variants
+end request streaming. When adding a response variant, explicitly classify it and update the
+canonical predicate and protocol evolution tests.
 
 ---
 

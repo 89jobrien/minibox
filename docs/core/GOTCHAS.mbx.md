@@ -1,5 +1,5 @@
 ---
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/lib.rs
   - crates/minibox-macros
@@ -16,7 +16,7 @@ generated: 2026-09-16
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -119,10 +119,9 @@ file's module doc for the authoritative flow. Summary, grounded in the current c
   the unknown-value error text (both are asserted by name in
   `adapter_registry::tests::adapter_selection_error_unknown_message_format` and
   `unavailable_adapter_error_message_says_not_available`).
-- **`native` without root** — not rejected by `parse_adapter`/`adapter_from_env` (it is a
-  compiled, known adapter on Linux); instead `warn_if_native_without_root()` (Linux-only)
-  emits a `tracing::warn!` at startup if UID != 0, since namespace/overlay/cgroup setup will
-  fail later at runtime rather than at selection time.
+- **`native` without root** — parsing succeeds because `native` is a known Linux adapter, but
+  daemon startup emits a warning and then rejects the suite unless UID is 0. Namespace,
+  overlay, and cgroup setup therefore never starts in a non-root native daemon.
 - See `docs/core/FEATURE_MATRIX.mbx.md` for the full per-adapter capability matrix and
   `docs/core/ARCHITECTURE.mbx.md` for the adapter trait/composition overview.
 
@@ -130,7 +129,8 @@ file's module doc for the authoritative flow. Summary, grounded in the current c
 
 Several one-off design/plan documents were deleted or consolidated during doc cleanups
 (`8377af53` pruned `docs/superpowers/plans/*`, `1d3a3579` archived stale plan statuses,
-`109a9683` deleted `docs/notes/`). The flat `docs/*.md` files that used to hold canonical
+and `109a9683` removed the then-current `docs/notes/` content; new notes have since been
+added there). The flat `docs/*.md` files that used to hold canonical
 reference content (`docs/FEATURE_MATRIX.md`, `docs/ARCHITECTURE.md`, `docs/GOTCHAS.md`, etc.)
 were also renamed to `docs/core/*.mbx.md` — if a link or search result points at an old flat
 `docs/<NAME>.md` path or a `docs/superpowers/...` path that 404s, the canonical replacement is
@@ -141,8 +141,6 @@ almost always the matching `docs/core/<NAME>.mbx.md` file. Start from the "Read 
 
 - **Package versus binary name** — the package is `minibox-cli` and its binary is `mbx`.
   The `macbox` crate was never named `mbx`; references to an `mbx` package are stale.
-- **App Sandbox blocks fork** — see "macOS Notarization / App Sandbox Constraints" in CLAUDE.md
-  for the full SBPL allowlist.
 
 ## Container Init (`filesystem.rs` / `process.rs`)
 

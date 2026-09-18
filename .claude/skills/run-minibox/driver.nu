@@ -94,7 +94,7 @@ export def start [] {
     mkdir (state-dir)
     rm -f (sock)
     cd (repo)
-    $env.MINIBOX_STATE_DIR = (state-dir)
+    $env.MINIBOX_DATA_DIR = (state-dir)
     $env.MINIBOX_SOCKET_PATH = (sock)
     let lf = (log-file)
     let launched = (do { ^sh -c 'nohup "$1" >"$2" 2>&1 & echo $!' sh $bin $lf } | complete)

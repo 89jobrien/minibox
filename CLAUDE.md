@@ -64,7 +64,7 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: staged fmt/clippy plus config/docs checks.
 - `cargo xtask prepush` — broader gate: release build, release nextest, and conformance (use `cargo xtask coverage` separately for coverage reports).
-- `cargo xtask test unit` — cross-platform unit and conformance subset.
+- `cargo xtask test unit` — cross-platform workspace library tests.
 - `cargo xtask test property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
 - `just test-e2e` — cross-platform protocol end-to-end tests.
@@ -102,7 +102,7 @@ No Python scripts are expected in the project; use Rust scripts or Nushell helpe
 
 - Preserve tar extraction protections: reject `..`, absolute symlinks, device nodes, FIFOs, and setuid/setgid bits.
 - Keep overlay/path validation inside the target root.
-- Preserve Unix socket peer credential checks and root-only access.
+- Preserve native-adapter Unix socket peer credential checks and root-only access.
 - Enforce image pull size limits.
 - Container init must use `execve` with explicit env, not `execvp`.
 
@@ -131,7 +131,7 @@ Branches follow the stability pipeline:
   markers in docs/core/{ARCHITECTURE,CRATE_INVENTORY}.mbx.md, or
   `cargo xtask verify`'s docs-audit reports a mismatch.
 - If a file listed in taskit.toml's `[[protocol.surfaces]]` is deleted or
-  renamed, update the list and run `taskit check-protocol-drift --update`
+  renamed, update the list and run `taskit protocol drift --update`
   to regenerate taskit-protocol.lock, or the check breaks.
 
 ## Hook Notes

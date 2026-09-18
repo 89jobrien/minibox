@@ -1,5 +1,5 @@
 ---
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/network/bridge.rs
@@ -11,6 +11,8 @@ sources:
   - crates/minibox/src/daemon/telemetry
   - crates/mcp
   - crates/macbox/src/vz
+  - crates/macbox/tests/krun_conformance_tests.rs
+  - crates/macbox/tests/krun_adapter_conformance.rs
   - crates/minibox/src/adapters/colima_commit.rs
   - crates/minibox/src/adapters/colima_push.rs
 generated: 2026-09-16
@@ -18,7 +20,7 @@ generated: 2026-09-16
 
 # Minibox Roadmap
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 ## Engineering Priorities
 
@@ -62,7 +64,7 @@ Last updated: 2026-09-17
 - **`just install-hooks` recipe**: One-command hook installation documented
   in onboarding (#293).
 - **krun daemon wiring**: `KrunRuntime`/`KrunRegistry`/`KrunFilesystem`/
-  `KrunLimiter` all wired in miniboxd. 31 conformance tests pass. krun is
+  `KrunLimiter` all wired in miniboxd. 29 krun-specific conformance tests pass. krun is
   the fallback when smolvm binary is absent; smolvm remains the primary default.
 - **Native bridge port forwarding and DNS**: DNAT mappings and in-container `resolv.conf`
   configuration are implemented by `BridgeNetwork`.
@@ -98,9 +100,8 @@ This section tracks ideas for using minibox to run itself and AI tooling.
 
 ### Done
 
-- **`just dogfood`** — spins up an alpine container to validate runtime isolation,
-  then runs `cargo xtask test unit`. Gates the unit test suite on the container
-  runtime proving itself healthy first.
+- **`just test-linux`** — builds the Linux dogfood image, loads it into minibox,
+  and runs the test workload inside a container.
 
 ### Planned
 

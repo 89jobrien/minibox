@@ -1,5 +1,5 @@
 ---
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox
   - crates/minibox-core
@@ -55,7 +55,7 @@ feature-gated, ignored, and root-required tests are selected by dedicated suites
 | minibox-core       | 10                | ~126              | ~285         |
 | miniboxd           | 13                | ~72               | ~24          |
 | minibox-cli        | 3                 | ~32               | ~96          |
-| macbox             | 3                 | ~30               | ~63          |
+| macbox             | 5                 | ~30               | ~63          |
 | minibox-testsuite  | 0                 | 0                 | ~24          |
 | smolbox            | 2                 | 0                 | ~3           |
 | winbox             | 1                 | 0                 | ~5           |
@@ -141,7 +141,7 @@ CI responsibilities are listed by workflow name rather than a hard-coded count:
 | `architecture`          | dependency-ring and canonical-owner guard                |
 | `musl-check`            | release cross-build for Linux musl targets               |
 | `bench`                 | criterion benchmarks in crates/minibox-bench (8 targets) |
-| `check-stale-names`     | audit workspace for banned old crate/binary names        |
+| `check stale-names`     | audit workspace for banned old crate/binary names        |
 | `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
 
 ---

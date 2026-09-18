@@ -1,6 +1,6 @@
 # minibox-macros
 
-Procedural macros for minibox.
+Declarative macros for minibox.
 
 ## Macros
 

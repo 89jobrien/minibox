@@ -13,7 +13,7 @@ Currently a placeholder with dependencies declared but not implemented. When ena
 ## See Also
 
 - `hcs.rs` adapter skeleton in minibox (defines HCS types and APIs)
-- CLAUDE.md § Current Limitations — Windows support is not yet wired
+- `docs/core/FEATURE_MATRIX.mbx.md` — current Windows support status
 
 ## Future Work
 

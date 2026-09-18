@@ -268,7 +268,7 @@ enum Commands {
         user: Option<String>,
     },
 
-    /// Fetch or stream log output from a container.
+    /// Fetch stored log output from a container.
     ///
     /// Sends a `DaemonRequest::ContainerLogs` to the daemon and prints each
     /// log line to stdout (stdout stream) or stderr (stderr stream).
@@ -276,7 +276,7 @@ enum Commands {
         /// Container ID or name.
         id: String,
 
-        /// Keep the connection open and stream new output as it arrives.
+        /// Reserved for future streaming support; currently fetches stored output.
         #[arg(long)]
         follow: bool,
     },

@@ -24,7 +24,7 @@ When invoked to debug minibox issues, follow this systematic approach:
 RUST_LOG=debug sudo ./target/release/miniboxd 2>&1 | tee /tmp/miniboxd_debug.log
 
 # In another terminal, attempt the failing operation
-sudo ./target/release/minibox run alpine -- /bin/sh
+sudo ./target/release/mbx run alpine -- /bin/sh
 
 # Capture kernel messages
 dmesg -w | grep -E "minibox|cgroup|overlayfs|pivot_root"
@@ -76,7 +76,7 @@ just test-integration
 just doctor
 
 # Run xtask suite
-cargo xtask test-unit
+cargo xtask test unit
 ```
 
 ### 2. Reproduce the Issue
@@ -276,7 +276,7 @@ fn spawn_child(write_fd: OwnedFd) -> Result<Pid> {
 **Verification checklist**:
 
 - [ ] Original reproduction case no longer fails
-- [ ] `cargo xtask test unit` passes (all unit + conformance)
+- [ ] `cargo xtask test unit` passes (workspace library tests)
 - [ ] `just test-integration` passes (requires Linux+root)
 - [ ] `just test-e2e` passes (cross-platform protocol tests)
 - [ ] `just test-system` passes (requires Linux+root)
@@ -292,7 +292,7 @@ fn spawn_child(write_fd: OwnedFd) -> Result<Pid> {
 ```bash
 # Trace syscalls during container init
 sudo strace -f -e trace=clone,unshare,mount,pivot_root,execve \
-    ./target/release/minibox run alpine -- /bin/echo hi 2>&1 | head -100
+    ./target/release/mbx run alpine -- /bin/echo hi 2>&1 | head -100
 
 # Check namespace membership
 ls -la /proc/{container_pid}/ns/
@@ -323,7 +323,7 @@ echo $$ | sudo tee /sys/fs/cgroup/minibox.slice/test/cgroup.procs
 
 ```bash
 # Send raw protocol message to daemon socket
-echo '{"type":"ListContainers"}' | sudo socat - UNIX-CONNECT:/run/minibox/miniboxd.sock
+echo '{"type":"List"}' | sudo socat - UNIX-CONNECT:/run/minibox/miniboxd.sock
 
 # Watch protocol traffic
 sudo strace -e trace=recvfrom,sendto -p $(pgrep miniboxd) 2>&1 | head -50
@@ -393,7 +393,7 @@ For each debugging session, provide:
 | `mount: EINVAL` on overlay     | Bad lowerdir/upperdir/workdir combination        | Verify all three are distinct, non-nested paths  |
 | `mount: EINVAL` on MS_PRIVATE  | Already private, or inside container             | Check mount propagation with `findmnt`           |
 | `pivot_root: EINVAL`           | new_root not a mount point, or not private       | Bind-mount rootfs; call MS_PRIVATE first         |
-| `execvp: ENOENT`               | Command not in rootfs                            | Check image extraction; verify path in container |
+| `execve: ENOENT`               | Command not in rootfs                            | Check image extraction; verify path in container |
 | `write to cgroup.procs: EBUSY` | Cgroup has children ("no internal process" rule) | Use leaf cgroup; check hierarchy                 |
 
 ### Async Runtime Issues

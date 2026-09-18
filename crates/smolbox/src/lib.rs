@@ -1,9 +1,9 @@
-//! smolbox -- smolvm and krun adapter suites for minibox.
+//! Compatibility facade for minibox VM adapter suites.
 //!
-//! This crate houses the lightweight VM adapter backends:
+//! This crate preserves stable import paths for lightweight VM backends:
 //!
-//! - [`smolvm`] -- `SmolVM` CLI adapter (delegates to `smolvm machine run`)
-//! - [`krun`] -- libkrun FFI adapter (delegates to smolvm/libkrun microVMs)
+//! - [`smolvm`] re-exports the implementation from `minibox::adapters`
+//! - [`krun`] re-exports the implementation from `macbox::krun`
 //! - [`preflight`] -- smolvm binary detection and version checking
 
 pub mod krun;

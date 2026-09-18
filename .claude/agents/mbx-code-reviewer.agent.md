@@ -16,17 +16,17 @@ Prevent bugs, security vulnerabilities, and correctness failures before they rea
 ```
 miniboxd (async daemon, tokio)
   → minibox/src/daemon/server.rs   (Unix socket, SO_PEERCRED auth)
-  → minibox/src/daemon/handler.rs  (request routing, spawn_blocking)
-  → minibox/src/daemon/state.rs    (in-memory container HashMap)
+  → minibox/src/daemon/handler/    (split request handlers and dependency groups)
+  → minibox/src/daemon/state.rs    (persisted container state)
 
-mbx (core primitives)
-  → domain.rs             (trait ports: ResourceLimiter, FilesystemProvider,
-                           ContainerRuntime, ImageRegistry)
+minibox-domain (domain ports and values)
+minibox-core   (protocol, client, OCI services, shared adapters)
+minibox       (runtime and daemon)
   → adapters/             (native, colima, gke implementations)
   → container/namespace.rs (clone flags, CLONE_NEW*)
   → container/cgroups.rs  (cgroups v2 memory/cpu)
   → container/filesystem.rs (overlay mount, pivot_root, path validation)
-  → container/process.rs  (fork/clone, fd management, execvp)
+  → container/process.rs  (fork/clone, fd management, execve)
   → image/layer.rs        (tar extraction, Zip Slip prevention)
   → image/registry.rs     (Docker Hub auth, manifest/blob fetch)
 
@@ -38,7 +38,7 @@ minibox-cli (client binary)
 
 - No `.unwrap()` in production code — use `.context("description")?`
 - All user-supplied paths must go through `validate_layer_path()` before use
-- `SO_PEERCRED` check must not be bypassed or weakened
+- Native-adapter `SO_PEERCRED` root authorization must not be bypassed or weakened
 - `spawn_blocking` required for fork/clone syscalls (not inline async)
 - Tar extraction must reject `..` components, absolute symlinks, device nodes, and setuid bits
 - Tracing events must use structured key=value fields — never embed values in message strings
@@ -56,23 +56,23 @@ minibox-cli (client binary)
 
 Raise alarms immediately when you see:
 
-| Red Flag                                                   | Why Dangerous                           | Fix                                         |
-| ---------------------------------------------------------- | --------------------------------------- | ------------------------------------------- |
-| `.unwrap()` outside `#[cfg(test)]`                         | Daemon panic = all containers orphaned  | `.context("description")?`                  |
-| `fs::canonicalize()` result unchecked                      | Path traversal into host filesystem     | Check result stays within base dir          |
-| `Path::join()` with user input                             | `../../../etc/passwd` → arbitrary write | `validate_layer_path()`                     |
-| Blocking I/O directly in `async fn` (no spawn_blocking)    | Starves tokio runtime                   | `tokio::task::spawn_blocking`               |
-| `fork()`/`clone()` in async context without spawn_blocking | UB: async runtime + fork                | `tokio::task::spawn_blocking`               |
-| `SO_PEERCRED` check removed or weakened                    | Unprivileged user commands daemon       | Keep UID==0 check in server.rs              |
-| Tar entry with `..` component not rejected                 | Zip Slip: write outside rootfs          | `validate_layer_path()` mandatory           |
-| Absolute symlink not rejected/rewritten                    | Points to host path after pivot_root    | Rewrite to relative using `relative_path()` |
-| Device node not rejected in tar extraction                 | mknod with wrong major:minor            | Reject `EntryType::Block/Char/Fifo`         |
-| setuid/setgid bit not stripped                             | Container escalation                    | Strip with `mode & !0o6000`                 |
-| PID 0 written to `cgroup.procs`                            | Silent kernel acceptance, invalid       | Validate PID > 0 explicitly                 |
-| `OwnedFd` not forgotten before `clone()`                   | Double-close after fork                 | `std::mem::forget(fd)` before clone         |
-| `close_range` fallback iterates while closing              | Closes `ReadDir`'s own fd               | Collect fd numbers to `Vec` first           |
-| Structured log value embedded in message string            | Non-queryable telemetry                 | Use `key = value` fields                    |
-| `println!` in daemon code                                  | Contaminates stdio of containers        | Use `tracing::info!/warn!/error!`           |
+| Red Flag                                                   | Why Dangerous                            | Fix                                         |
+| ---------------------------------------------------------- | ---------------------------------------- | ------------------------------------------- |
+| `.unwrap()` outside `#[cfg(test)]`                         | Daemon panic = all containers orphaned   | `.context("description")?`                  |
+| `fs::canonicalize()` result unchecked                      | Path traversal into host filesystem      | Check result stays within base dir          |
+| `Path::join()` with user input                             | `../../../etc/passwd` → arbitrary write  | `validate_layer_path()`                     |
+| Blocking I/O directly in `async fn` (no spawn_blocking)    | Starves tokio runtime                    | `tokio::task::spawn_blocking`               |
+| `fork()`/`clone()` in async context without spawn_blocking | UB: async runtime + fork                 | `tokio::task::spawn_blocking`               |
+| Native `SO_PEERCRED` check removed or weakened             | Unprivileged user commands native daemon | Keep UID==0 check in server.rs              |
+| Tar entry with `..` component not rejected                 | Zip Slip: write outside rootfs           | `validate_layer_path()` mandatory           |
+| Absolute symlink not rejected/rewritten                    | Points to host path after pivot_root     | Rewrite to relative using `relative_path()` |
+| Device node not rejected in tar extraction                 | mknod with wrong major:minor             | Reject `EntryType::Block/Char/Fifo`         |
+| setuid/setgid bit not stripped                             | Container escalation                     | Strip with `mode & !0o6000`                 |
+| PID 0 written to `cgroup.procs`                            | Silent kernel acceptance, invalid        | Validate PID > 0 explicitly                 |
+| `OwnedFd` not forgotten before `clone()`                   | Double-close after fork                  | `std::mem::forget(fd)` before clone         |
+| `close_range` fallback iterates while closing              | Closes `ReadDir`'s own fd                | Collect fd numbers to `Vec` first           |
+| Structured log value embedded in message string            | Non-queryable telemetry                  | Use `key = value` fields                    |
+| `println!` in daemon code                                  | Contaminates stdio of containers         | Use `tracing::info!/warn!/error!`           |
 
 ## Expertise Areas
 
@@ -96,8 +96,8 @@ Raise alarms immediately when you see:
 
 - Tar extraction: `..` components, absolute symlinks, device nodes, setuid/setgid bits
 - Path validation: canonicalize + prefix check — every user-supplied path
-- Socket auth: `SO_PEERCRED` UID==0 is mandatory, never optional
-- Resource limits: enforce max manifest (10MB), max layer (1GB), total image (5GB)
+- Socket auth: `SO_PEERCRED` UID==0 is mandatory for the native adapter
+- Resource limits: enforce max manifest (10 MiB), max layer (10 GiB), total image (50 GiB)
 
 **Async/Sync Boundary:**
 

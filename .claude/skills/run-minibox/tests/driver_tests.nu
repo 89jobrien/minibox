@@ -37,8 +37,10 @@ printf "socket=%s\\nargs=%s\\n" "$MINIBOX_SOCKET_PATH" "$*" > "($record)"
 
     let daemon = ($temp | path join "miniboxd")
     let observed_pid = ($temp | path join "observed-pid")
+    let observed_data_dir = ($temp | path join "observed-data-dir")
     $'#!/bin/sh
 printf "%s" "$$" > "($observed_pid)"
+printf "%s" "$MINIBOX_DATA_DIR" > "($observed_data_dir)"
 touch "$MINIBOX_SOCKET_PATH"
 while :; do sleep 1; done
 ' | save $daemon
@@ -75,6 +77,7 @@ while :; do sleep 1; done
     let stored_pid = (open --raw ($run_dir | path join "daemon.pid") | str trim)
     let actual_pid = (open --raw $observed_pid | str trim)
     check ($stored_pid == $actual_pid) $"captured pid ($stored_pid) != daemon pid ($actual_pid)"
+    check ((open --raw $observed_data_dir | str trim) == $"($run_dir)/state") "data dir env was not forwarded"
     check (($run_dir | path join "miniboxd.sock") | path exists) "start succeeded without expected socket"
 
     let teardown = (invoke $driver $vars "teardown")

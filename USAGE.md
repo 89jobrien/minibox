@@ -27,8 +27,12 @@ cargo build --release
 # Optional host sanity check
 cargo xtask doctor
 
-# Start daemon (requires root)
+# Start daemon (requires root for native)
 sudo ./target/release/miniboxd
+
+# Override adapter selection or replace an existing daemon
+sudo ./target/release/miniboxd --adapter native
+sudo ./target/release/miniboxd --restart
 
 # Pull and run
 sudo ./target/release/mbx pull alpine
@@ -76,7 +80,6 @@ sudo /usr/local/bin/mbx resume demo
 
 # Inspect logs and lifecycle events
 sudo /usr/local/bin/mbx logs demo
-sudo /usr/local/bin/mbx logs --follow demo
 sudo /usr/local/bin/mbx events
 
 # Load a local OCI tarball and run it
@@ -87,6 +90,13 @@ sudo /usr/local/bin/mbx run mbx-tester -- /run-tests.sh
 sudo /usr/local/bin/mbx prune
 sudo /usr/local/bin/mbx rmi alpine:latest
 ```
+
+`mbx logs --follow` is reserved for a future streaming implementation; current
+log retrieval returns stored output and exits.
+
+Other command groups include `update`, `sandbox`, `snapshot`, `pipeline`, `upgrade`,
+`diagnose`, `doctor`, `manifest`, and `verify`. Use `mbx help <command>` for flags;
+`mbx rm --all` removes every stopped container.
 
 **Environment-Specific Usage**
 

@@ -1,11 +1,11 @@
 # minibox-core
 
-Cross-platform shared types, protocol definitions, and domain traits for minibox.
+Cross-platform protocol, client, image, and shared adapter infrastructure for minibox.
 
 ## Contents
 
 - **Protocol** — JSON-over-newline messages for daemon/CLI communication (run, list, stop, remove containers)
-- **Domain traits** — `ContainerRuntime`, `ImageRegistry`, `FilesystemProvider`, `ResourceLimiter` ports for hexagonal architecture
+- **Domain facade** — compatibility re-exports of ports canonically owned by `minibox-domain`
 - **Image management** — `ImageStore`, `RegistryClient` abstractions; layer caching and manifest parsing
 - **Error types** — Unified `ImageError`, `ContainerError` enums across platforms
 - **Preflight** — Host capability probing (cgroups v2, overlay, namespaces, kernel version)

@@ -16,6 +16,7 @@
     { "$ref": "#/$defs/commands/fix" },
     { "$ref": "#/$defs/commands/pre-commit" },
     { "$ref": "#/$defs/commands/prepush" },
+    { "$ref": "#/$defs/commands/musl-check" },
     { "$ref": "#/$defs/commands/agentlint" },
     { "$ref": "#/$defs/commands/coverage" },
     { "$ref": "#/$defs/commands/coverage-check" },
@@ -118,7 +119,7 @@
             "type": "object",
             "properties": {
               "action": { "enum": ["audit", "lint", "update-date", "sync-adapters"] },
-              "full": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Full audit mode instead of Quick." },
+              "full": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Full audit mode instead of Quick; rewrites the tracked xtask/docs-audit-report.json report." },
               "strict": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Only meaningful in Quick mode (ignored when --full is set)." },
               "sarif": { "type": "string", "format": "path", "appliesTo": ["lint"], "description": "Write a SARIF report of frontmatter/status violations." }
             }
@@ -181,6 +182,13 @@
         "type": "object",
         "description": "Release build (miniboxd, minibox-core, mbx, minibox, minibox-macros) + nextest (release profile) + conformance suite. Skipped entirely if no Rust files are in the push range. Checkpointed.",
         "properties": { "command": { "const": "prepush" } },
+        "required": ["command"],
+        "mutatesWorkspace": false
+      },
+      "musl-check": {
+        "type": "object",
+        "description": "Cross-build miniboxd and minibox-cli for x86_64-unknown-linux-musl. Warns and skips when prerequisites are unavailable unless MINIBOX_REQUIRE_MUSL_CHECK=1.",
+        "properties": { "command": { "const": "musl-check" } },
         "required": ["command"],
         "mutatesWorkspace": false
       },
@@ -405,7 +413,14 @@
         "description": "Short end-to-end demonstration: pull + run against the named adapter. Exits 0 even on command failure (advisory).",
         "properties": {
           "command": { "const": "demo" },
-          "args": { "type": "object", "properties": { "adapter": { "type": "string", "default": "smolvm" } } }
+          "args": {
+            "type": "object",
+            "properties": {
+              "adapter": { "type": "string", "default": "smolvm" },
+              "filter": { "type": "string", "description": "Run only showcase scenarios whose names contain this value." },
+              "strict": { "type": "boolean", "default": false, "description": "Exit non-zero when a showcase command fails." }
+            }
+          }
         },
         "required": ["command"]
       },

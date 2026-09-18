@@ -333,7 +333,7 @@ fn cmd_test(sh: &Shell, root: &std::path::Path) -> Result<()> {
         eprintln!("Usage: cargo xtask test <suite>");
         eprintln!();
         eprintln!("Suites:");
-        eprintln!("  unit              unit + conformance tests (any platform)");
+        eprintln!("  unit              workspace library tests (any platform)");
         eprintln!("  conformance       commit+build+push conformance suite + reports");
         eprintln!("  krun-conformance  krun adapter conformance (HVF/KVM)");
         eprintln!("  turmoil           turmoil network simulation tests");
@@ -685,7 +685,7 @@ fn print_help() -> Result<()> {
     eprintln!("  verify             read-only gate: fmt, clippy, check, borrow fixtures, docs");
     eprintln!("  lint               fmt-check + clippy + cargo check");
     eprintln!("  fix                fmt + clippy --fix + re-stage");
-    eprintln!("  pre-commit         validation-only pre-commit checks");
+    eprintln!("  pre-commit         staged fmt/clippy plus repository checks");
     eprintln!("  prepush            release build + lib tests + conformance");
     eprintln!("  agentlint [--all]  lint agent config files");
     eprintln!("  coverage [--open] [--lcov-only] [--html-only]");
@@ -703,7 +703,7 @@ fn print_help() -> Result<()> {
     eprintln!("                       bump version and optionally insert release notes");
     eprintln!("  preflight                      check required tools");
     eprintln!("  doctor                         full preflight diagnostics");
-    eprintln!("  promote [--from <tier>] [--to <tier>] [--dry-run]");
+    eprintln!("  promote [--from <tier>] [--to <tier>] [--dry-run] [--skip-ci-check]");
     eprintln!("  ci-watch [--branch <name>]     watch latest GHA run");
     eprintln!("  daily-orchestration [--ci] [--dry-run]");
     eprintln!("  council [--base <ref>] [--mode core|extended] [--prod]");

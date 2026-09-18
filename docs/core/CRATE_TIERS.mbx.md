@@ -28,7 +28,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
 Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
@@ -64,7 +64,7 @@ These crates are intended to resolve fully from crates.io and are treated as pub
 
 | Crate            | Publish intent | Why it is public                                                                 |
 | ---------------- | -------------- | --------------------------------------------------------------------------------- |
-| `minibox-macros` | Yes            | Reusable proc-macros consumed by public/shared runtime crates.                    |
+| `minibox-macros` | Yes            | Reusable declarative macros consumed by public/shared runtime crates.             |
 | `minibox-domain` | Yes            | Canonical pure domain values, policies, lifecycle events, and ports.              |
 | `minibox-core`   | Yes            | Stable shared domain/protocol library for clients and integrations.               |
 | `minibox-mcp`    | Yes            | MCP integration surface for agent/tooling workflows (experimental but published). |
@@ -126,8 +126,8 @@ the ports from `minibox-domain` through the compatibility paths in `minibox-core
 
 | Crate    | Path            | Role                                                                                                                                                        |
 | -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `macbox` | `crates/macbox` | Colima dependency composition plus the feature-gated VZ implementation path. Colima adapters live in `minibox`; krun and smolvm live in `smolbox`.          |
-| `smolbox` | `crates/smolbox` | macOS VM adapter suite: smolvm (default) and krun (fallback) adapter implementations.                                                                      |
+| `macbox` | `crates/macbox` | Krun implementation, Colima dependency composition, and the feature-gated VZ implementation path.                                                         |
+| `smolbox` | `crates/smolbox` | Compatibility facade re-exporting smolvm implementations from `minibox` and krun implementations from `macbox`.                                           |
 | `winbox` | `crates/winbox` | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
 
 Note: `dockerbox` and `tailbox` were extracted to the separate `minibox-plugins`
@@ -193,8 +193,8 @@ in release binaries.
 
 Non-Rust modules with their own toolchain and release lifecycle.
 
-No active external modules. The `agentbox/` Go module (council agent, commit-msg tool)
-was removed during the v0.23.0 consolidation; only a pre-built binary artifact remains.
+`agentbox/` is an active Go module for multi-provider agent/review tooling used while
+developing Minibox. It is not a Rust workspace member and follows its own Go module lifecycle.
 
 ---
 
@@ -245,5 +245,5 @@ This document was created as part of a stabilization milestone declared in issue
 crates in all tiers continue to receive fixes and enhancements.
 
 **Freeze lifted 2026-08-18** (issue #127 closed). All six stabilization gates were
-verified green on the `next` branch. New Core and Platform crates may now be proposed
+verified green on the integration branch. New Core and Platform crates may now be proposed
 subject to the standard PR gate process described above.

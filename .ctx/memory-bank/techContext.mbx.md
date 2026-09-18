@@ -5,10 +5,10 @@
 - Language / runtime: Rust 2024 edition, MSRV 1.85
 - Framework: tokio (async runtime), axum (HTTP/metrics), clap (CLI)
 - Package manager: cargo, workspace resolver v3
-- Major dependencies: nix 0.29, reqwest 0.12 (rustls), serde/serde_json,
+- Major dependencies: nix 0.29, reqwest 0.13 (rustls), serde/serde_json,
   flate2/tar (image layers), sha2 (content addressing), chrono, uuid,
-  opentelemetry 0.31 + tracing-opentelemetry 0.32 (OTLP/gRPC),
-  prometheus-client 0.23, dashmap 6, ipnet 2
+  opentelemetry 0.32 + tracing-opentelemetry 0.33 (OTLP/gRPC),
+  prometheus-client 0.24, dashmap 6, ipnet 2
 
 **Environment**
 
@@ -35,6 +35,6 @@
 **Constraints**
 
 - Dual license: MIT OR Apache-2.0
-- Stabilization freeze — no new features without approval
+- Standing stabilization gates remain mandatory; the blanket feature freeze is lifted
 - Self-hosted GHA runner on VPS (label: `minibox`) for Linux tests
 - macOS CI on GitHub-hosted runners

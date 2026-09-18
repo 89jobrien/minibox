@@ -237,4 +237,4 @@ assert_eq!(computed.to_string(), stored);
 - Policy engine: `crates/minibox-core/src/domain/execution_policy.rs`
 - Protocol requests: `GetManifest`, `VerifyManifest` in
   `crates/minibox-core/src/protocol.rs`
-- Architecture overview: [`docs/ARCHITECTURE.mbx.md`](ARCHITECTURE.mbx.md)
+- Architecture overview: [`docs/core/ARCHITECTURE.mbx.md`](../core/ARCHITECTURE.mbx.md)

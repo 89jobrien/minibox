@@ -2,7 +2,7 @@
 name: wave-integration
 description: >
   Use when merging multiple parallel agent branches (waves) into a single integration
-  commit — rebasing each onto main, resolving conflicts while preserving intent, running tests
+  commit — rebasing each onto develop, resolving conflicts while preserving intent, running tests
   per branch, and producing a clean summary commit with a conflict resolution log.
 argument-hint: "[BRANCH_LIST]"
 ---
@@ -11,7 +11,7 @@ argument-hint: "[BRANCH_LIST]"
 
 ## Overview
 
-Integrates parallel agent branches (a "wave") into main sequentially: rebase → resolve conflicts
+Integrates parallel agent branches (a "wave") into `develop` sequentially: rebase → resolve conflicts
 → test → repeat. Produces one integration commit summarizing all changes plus an explicit log of
 every conflict resolved and the reasoning used.
 
@@ -26,16 +26,17 @@ from each other (resolve those manually before invoking this skill).
 
 ## Helpers & References
 
-| File | Purpose |
-|------|---------|
-| `helpers/wave-integrate.nu` | Automated rebase+test+merge loop; run directly or use as reference |
-| `references/conflict-resolution-log.md` | Filled example of a complete conflict log |
-| `references/integration-commit-template.md` | Commit message templates for all integration outcomes |
+| File                                        | Purpose                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------ |
+| `helpers/wave-integrate.nu`                 | Automated rebase+test+merge loop; run directly or use as reference |
+| `references/conflict-resolution-log.md`     | Filled example of a complete conflict log                          |
+| `references/integration-commit-template.md` | Commit message templates for all integration outcomes              |
 
 Run the helper:
+
 ```bash
-wave-integrate --branches "feat/a feat/b feat/c" --base main
-wave-integrate --branches "feat/a feat/b" --dry-run   # rebase+test only, no merge
+nu .claude/skills/wave-integration/helpers/wave-integrate.nu --branches "feat/a feat/b feat/c" --base develop
+nu .claude/skills/wave-integration/helpers/wave-integrate.nu --branches "feat/a feat/b" --dry-run
 ```
 
 ---
@@ -55,21 +56,21 @@ For each branch confirm it compiles before touching it:
 git checkout <branch> && cargo check --workspace 2>&1 | tail -3
 ```
 
-### 2. Rebase each branch onto current main (in dependency order)
+### 2. Rebase each branch onto current develop (in dependency order)
 
 Process branches one at a time — never attempt an octopus merge.
 
 ```bash
-git checkout main && git pull
+git checkout develop && git pull
 git checkout <branch>
-git rebase main
+git rebase develop
 ```
 
 **If rebase conflicts:**
 
 1. For each conflicted file, read BOTH sides:
-    - `git show HEAD:<file>` — incoming (main) version
-    - `git show REBASE_HEAD:<file>` — branch version
+   - `git show HEAD:<file>` — incoming (`develop`) version
+   - `git show REBASE_HEAD:<file>` — branch version
 2. Identify the **intent** of each side — do not just pick one side mechanically.
 3. Produce a merged version that preserves both intents.
 4. Record the conflict in the resolution log (see Step 5).
@@ -80,17 +81,17 @@ git rebase main
 ### 3. Test after each rebase
 
 ```bash
-cargo xtask test-unit 2>&1 | tail -20
+cargo xtask test unit 2>&1 | tail -20
 ```
 
 - If tests fail: debug and fix on the branch before proceeding to the next branch.
 - If fix is non-trivial: stop and report to user rather than guessing.
 - Cap at 3 fix attempts per branch before escalating.
 
-### 4. Merge to main
+### 4. Merge to develop
 
 ```bash
-git checkout main
+git checkout develop
 git merge --no-ff <branch> -m "integrate(<scope>): merge <branch>"
 ```
 
@@ -131,7 +132,7 @@ If there were zero conflicts, note that explicitly.
 
 Summarize:
 
-- Branches integrated (with final SHAs on main)
+- Branches integrated (with final SHAs on `develop`)
 - Test result
 - Conflict resolution log (full table)
 - Any branches skipped or escalated, and why
@@ -154,4 +155,5 @@ Summarize:
 - **Using `--skip` to clear conflicts** — drops commits silently; always resolve.
 - **Not testing between branches** — one broken branch can hide failures in the next.
 - **Vague conflict log ("kept both")** — always state the _intent_ of each side.
-- **Committing to main directly** — always rebase the branch, then merge to main.
+- **Committing to main directly** — integrate feature work through `develop`; promote through
+  `develop` -> `staging` -> `release` -> `main`.

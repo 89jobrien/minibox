@@ -97,7 +97,7 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
 
 /// Fix gate: version bump + fmt + clippy --fix + re-stage (macOS-safe, fast)
 ///
-/// This mutates files and the git index. Use `pre-commit` for validation-only checks.
+/// This applies clippy fixes; `pre-commit` only formats/re-stages staged Rust and validates.
 pub fn fix(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
@@ -129,9 +129,9 @@ pub fn fix(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Pre-commit gate: validation-only checks (macOS-safe, fast)
+/// Pre-commit gate: staged formatting, clippy, and repository checks (macOS-safe, fast).
 ///
-/// Never stages or edits files. Use `fix` for auto-formatting and clippy --fix.
+/// Formats and re-stages staged Rust files, but does not apply clippy fixes.
 /// Release build and conformance suite run at pre-push time, not here.
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
@@ -1091,7 +1091,7 @@ mod tests {
     }
 
     /// Tripwire: `test_unit` (the implementation of `cargo xtask test unit`,
-    /// the canonical "unit + conformance + property tests, any platform"
+    /// the canonical workspace library test command
     /// command per README.md/CLAUDE.md) must keep invoking `cargo nextest run
     /// --workspace --lib`, and the only crate ever excluded from that run must
     /// be the explicit, expected set below.

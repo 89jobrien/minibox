@@ -5,12 +5,12 @@
 16-crate Rust 2024 workspace + `xtask` (v0.33.0):
 
 ```
-minibox-macros       proc-macro (~300 LOC)
+minibox-macros       declarative macros (~300 LOC)
 minibox-domain       pure domain values, policies, lifecycle events, and ports
 minibox-core         protocol, clients, OCI/image services, shared adapters
 minibox              Linux adapters, daemon handler/server/state (~21.5k LOC)
-macbox               macOS backend wiring (delegates to smolbox)
-smolbox              smolvm + krun adapter implementations
+macbox               krun implementation + Colima/VZ composition
+smolbox              compatibility facade for minibox smolvm + macbox krun
 winbox               Windows stub (WSL2, ~40% scaffolded, not wired into miniboxd)
 miniboxd             daemon entry point, adapter DI composition root (~1.6k LOC)
 mbx                  CLI client (~3.2k LOC)

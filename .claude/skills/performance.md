@@ -16,13 +16,13 @@ Systematic performance analysis for minibox, focusing on **container init latenc
 
 ## Minibox Performance Targets
 
-| Metric                 | Target           | Verification                                  | Failure Threshold              |
-| ---------------------- | ---------------- | --------------------------------------------- | ------------------------------ |
-| Protocol encode/decode | nanosecond scale | `minibox-bench --suite codec`                 | regression >10% vs latest.json |
-| Adapter trait overhead | nanosecond scale | `minibox-bench --suite adapter`               | regression >10% vs latest.json |
-| Container init latency | <500 ms          | `hyperfine 'minibox run alpine -- /bin/true'` | >1 s is a blocker              |
-| Daemon idle memory     | <50 MB RSS       | `/usr/bin/time -v miniboxd`                   | >100 MB warrants investigation |
-| Image pull latency     | network-bound    | manual timing                                 | measure, don't gate            |
+| Metric                 | Target           | Verification                                          | Failure Threshold              |
+| ---------------------- | ---------------- | ----------------------------------------------------- | ------------------------------ |
+| Protocol encode/decode | nanosecond scale | `cargo bench -p minibox-bench --bench protocol_codec` | regression over baseline       |
+| Adapter trait overhead | nanosecond scale | `cargo bench -p minibox-bench --bench trait_dispatch` | regression over baseline       |
+| Container init latency | <500 ms          | `hyperfine 'mbx run alpine -- /bin/true'`             | >1 s is a blocker              |
+| Daemon idle memory     | <50 MB RSS       | `/usr/bin/time -v miniboxd`                           | >100 MB warrants investigation |
+| Image pull latency     | network-bound    | manual timing                                         | measure, don't gate            |
 
 ## Benchmark Workflow
 
@@ -38,7 +38,7 @@ cargo xtask bench
 cp bench/results/latest.json /tmp/baseline.json
 
 # Also run criterion benches for HTML reports
-cargo bench -p minibox-cli
+cargo bench -p minibox-bench
 ```
 
 ### 2. Make Changes
@@ -62,14 +62,11 @@ diff /tmp/baseline.json bench/results/latest.json
 ```bash
 # Requires a running daemon and a pulled image
 sudo ./target/release/miniboxd &
-sudo ./target/release/minibox pull alpine
+sudo ./target/release/mbx pull alpine
 
 # Benchmark init time
-hyperfine 'sudo ./target/release/minibox run alpine -- /bin/true' \
+hyperfine 'sudo ./target/release/mbx run alpine -- /bin/true' \
   --warmup 3 --runs 10
-
-# For overlay-only timing, bypass the CLI
-hyperfine 'sudo ./scripts/bench-overlay.sh' --warmup 3
 ```
 
 ### 5. Daemon Memory Profile
@@ -82,7 +79,7 @@ grep VmRSS /proc/$(pgrep miniboxd)/status
 
 # Under load — run 20 containers in parallel
 for i in $(seq 1 20); do
-  sudo ./target/release/minibox run alpine -- /bin/true &
+  sudo ./target/release/mbx run alpine -- /bin/true &
 done
 wait
 grep VmRSS /proc/$(pgrep miniboxd)/status
@@ -98,7 +95,7 @@ grep VmRSS /proc/$(pgrep miniboxd)/status
 
 ```bash
 # Profile with flamegraph
-sudo cargo flamegraph -- ./target/release/minibox run alpine -- /bin/true
+sudo cargo flamegraph -- ./target/release/mbx run alpine -- /bin/true
 open flamegraph.svg
 
 # Look for:
@@ -118,12 +115,12 @@ open flamegraph.svg
 
 ### Issue: Codec Regression
 
-**Symptom**: `minibox-bench --suite codec` shows regression vs `latest.json`
+**Symptom**: the `protocol_codec` Criterion target regresses against the selected baseline
 
 **Detection**:
 
 ```bash
-./target/release/minibox-bench --suite codec 2>&1 | grep -E "ns|regression"
+cargo bench -p minibox-bench --bench protocol_codec
 ```
 
 **Common causes**:
@@ -145,12 +142,12 @@ pub struct ContainerOutput<'a> {
 
 ### Issue: Adapter Trait Overhead
 
-**Symptom**: `minibox-bench --suite adapter` shows overhead increase
+**Symptom**: the `trait_dispatch` Criterion target shows overhead growth
 
 Adapter dispatch goes through `dyn Trait` trait objects. If a hot path is hitting `dyn ContainerRuntime` thousands of times per second, evaluate whether the dispatch is avoidable.
 
 ```bash
-./target/release/minibox-bench --suite adapter
+cargo bench -p minibox-bench --bench trait_dispatch
 ```
 
 This bench measures the overhead of `dyn ResourceLimiter`, `dyn FilesystemProvider`, `dyn ContainerRuntime`, and `dyn ImageRegistry` calls against no-op mock implementations. Regression here indicates vtable dispatch cost increased — usually from adding more indirection or heap allocation to the trait methods.
@@ -168,7 +165,7 @@ done &
 
 # Run 100 containers serially
 for i in $(seq 1 100); do
-  sudo ./target/release/minibox run alpine -- /bin/true
+  sudo ./target/release/mbx run alpine -- /bin/true
 done
 ```
 
@@ -180,39 +177,37 @@ done
 
 ## Benchmark Result Pipeline
 
-The bench pipeline is append-only and must stay in sync:
+The bench pipeline collects Criterion output and maintains per-environment baselines:
 
 ```
 cargo xtask bench
-  → runs ./target/release/minibox-bench
-  → appends new row to bench/results/bench.jsonl
-  → overwrites bench/results/latest.json
+  → runs cargo bench -p minibox-bench
+  → writes JSON/CSV snapshots and an HTML dashboard under bench/results/
 
-bench/results/bench.jsonl   ← full history, append-only, committed
-bench/results/latest.json   ← current snapshot for devloop, committed
+bench/baseline.<env>.json   ← tracked comparison baseline
+bench/results/              ← generated local/CI artifacts
 ```
 
 To commit bench results:
 
 ```bash
-cargo xtask bench-vps --commit        # run on VPS, commit locally
-cargo xtask bench-vps --commit --push # run on VPS, commit + push
+just bench-baseline
 ```
 
-Never edit `bench.jsonl` manually — it is the canonical history.
+Do not hand-edit generated results or baseline snapshots.
 
 ## Profiling Tools Reference
 
-| Tool                 | Purpose                             | Command                                          |
-| -------------------- | ----------------------------------- | ------------------------------------------------ |
-| **minibox-bench**    | Microbenchmarks — codec and adapter | `./target/release/minibox-bench --suite codec`   |
-| **cargo bench**      | Criterion benches with HTML         | `cargo bench -p minibox-cli`                     |
-| **hyperfine**        | Container init wall-clock           | `hyperfine 'minibox run alpine -- /bin/true'`    |
-| **flamegraph**       | CPU hotspot profiling               | `sudo cargo flamegraph -- minibox run ...`       |
-| **/proc/PID/status** | Daemon RSS                          | `grep VmRSS /proc/$(pgrep miniboxd)/status`      |
-| **/usr/bin/time -v** | Peak RSS                            | `/usr/bin/time -v sudo miniboxd`                 |
-| **strace -c**        | Syscall frequency                   | `sudo strace -c minibox run alpine -- /bin/true` |
-| **perf stat**        | CPU instruction counts              | `sudo perf stat minibox run alpine -- /bin/true` |
+| Tool                  | Purpose                         | Command                                      |
+| --------------------- | ------------------------------- | -------------------------------------------- |
+| **minibox-bench**     | Criterion benchmark crate       | `cargo bench -p minibox-bench`               |
+| **cargo xtask bench** | Result collection and baselines | `cargo xtask bench --check`                  |
+| **hyperfine**         | Container init wall-clock       | `hyperfine 'mbx run alpine -- /bin/true'`    |
+| **flamegraph**        | CPU hotspot profiling           | `sudo cargo flamegraph -- mbx run ...`       |
+| **/proc/PID/status**  | Daemon RSS                      | `grep VmRSS /proc/$(pgrep miniboxd)/status`  |
+| **/usr/bin/time -v**  | Peak RSS                        | `/usr/bin/time -v sudo miniboxd`             |
+| **strace -c**         | Syscall frequency               | `sudo strace -c mbx run alpine -- /bin/true` |
+| **perf stat**         | CPU instruction counts          | `sudo perf stat mbx run alpine -- /bin/true` |
 
 Install:
 
@@ -229,8 +224,8 @@ cargo install hyperfine  # Linux
 
 Before committing changes that touch container init, protocol, or adapter code:
 
-- [ ] `cargo xtask bench` shows no regression vs `latest.json`
+- [ ] `cargo xtask bench --check` shows no regression against the selected baseline
 - [ ] `hyperfine` container init time within target if init path changed
 - [ ] `grep VmRSS` shows stable daemon memory after 50 container runs
 - [ ] Flamegraph reviewed if init time increased by more than 50 ms
-- [ ] `bench/results/latest.json` committed alongside code changes if benchmarks improved
+- [ ] Updated `bench/baseline.<env>.json` reviewed when intentionally accepting a new baseline

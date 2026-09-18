@@ -7,7 +7,7 @@ Async container daemon entry point with platform dispatch.
 Dispatches to platform-specific implementations via conditional compilation:
 
 - **Linux** — `minibox` crate for full container runtime (handler, server, state)
-- **macOS** — `macbox` for smolvm, krun, or Colima containers
+- **macOS** — `minibox` smolvm, `macbox` krun/Colima/VZ, and `smolbox` facades
 - **Windows** — `winbox` stub for future implementation
 
 The main server loop uses `minibox::daemon` for request handling and state
@@ -18,14 +18,14 @@ management across all platforms.
 Set `MINIBOX_ADAPTER` to choose an adapter suite at startup. Unrecognized values
 print a structured error listing valid options.
 
-| Value    | Platform     | Notes                                      |
-| -------- | ------------ | ------------------------------------------ |
-| `native` | Linux        | Full namespace/cgroup v2/overlay isolation |
-| `gke`    | Linux        | Unprivileged pods via proot + copy-FS      |
-| `smolvm` | macOS/Linux  | Default on macOS; falls back to `krun`     |
-| `krun`   | macOS/Linux  | Automatic fallback when smolvm absent      |
-| `colima` | macOS/Linux  | Delegates to Colima (limactl + nerdctl)    |
-| `vz`     | macOS only   | Feature-gated (`--features vz`); blocked by Apple bug (GH #61) |
+| Value    | Platform    | Notes                                                          |
+| -------- | ----------- | -------------------------------------------------------------- |
+| `native` | Linux       | Full namespace/cgroup v2/overlay isolation                     |
+| `gke`    | Linux       | Unprivileged pods via proot + copy-FS                          |
+| `smolvm` | macOS/Linux | Preferred default when its binary is present                   |
+| `krun`   | macOS/Linux | macOS fallback when smolvm is absent                           |
+| `colima` | macOS/Linux | Delegates to Colima (limactl + nerdctl)                        |
+| `vz`     | macOS only  | Feature-gated (`--features vz`); blocked by Apple bug (GH #61) |
 
 Run `mbx doctor` to see which adapter suites are compiled into the current build.
 

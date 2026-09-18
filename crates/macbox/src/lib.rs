@@ -1,4 +1,4 @@
-//! macOS orchestration for miniboxd via the Colima adapter suite.
+//! macOS and VM orchestration for miniboxd via krun, Colima, and VZ.
 //!
 //! On macOS, Linux container primitives (namespaces, cgroups, overlayfs) are
 //! unavailable. This crate bridges that gap by delegating container operations
@@ -12,6 +12,7 @@
 //!
 //! # Modules
 //!
+//! - [`krun`] — libkrun runtime, registry, filesystem, and limiter adapters
 //! - [`paths`] — macOS-specific default directories and socket path
 //! - [`preflight`] — Colima/backend detection via `colima status`
 //! - [`vz`] — VZ.framework and vsock integration

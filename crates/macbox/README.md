@@ -4,15 +4,15 @@ macOS daemon implementation. Supports multiple adapter suites selected via `MINI
 
 ## Adapters
 
-### `smolvm` (default)
+### `smolvm` (default, implemented in `minibox`)
 
-Lightweight Linux VMs with subsecond boot. Selected automatically when the `smolvm` binary
-is present on PATH. Falls back to `krun` when absent.
+Selected automatically when the `smolvm` binary is present on PATH. The
+implementation lives in `minibox::adapters`; macbox owns the krun fallback.
 
 ### `krun`
 
 Uses libkrun to run containers in lightweight micro-VMs (HVF on macOS, KVM on Linux).
-All four adapter ports (runtime, registry, filesystem, limiter) are wired and pass 31
+All four adapter ports (runtime, registry, filesystem, limiter) are wired and pass 29
 conformance tests. Acts as the automatic fallback when smolvm is unavailable.
 
 - `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter`
@@ -35,7 +35,8 @@ Uses macOS Virtualization.framework to boot a lightweight Alpine Linux VM and fo
 container operations to an in-VM miniboxd agent over vsock. Currently blocked by
 `VZErrorInternal(code=1)` on macOS 26 ARM64 ([GH #61](https://github.com/89jobrien/minibox/issues/61)).
 
-Requires `--features vz` and a VM image at `~/.minibox/vm/` (`cargo xtask build-vm-image`).
+Requires `--features vz` and manually provisioned kernel/rootfs assets under
+`~/.minibox/vm/`; no current xtask command builds those VZ assets.
 
 ## Setup
 
@@ -50,8 +51,7 @@ MINIBOX_ADAPTER=krun ./target/release/miniboxd
 colima start
 MINIBOX_ADAPTER=colima ./target/release/miniboxd
 
-# VZ (requires --features vz, currently blocked by Apple bug)
-cargo xtask build-vm-image
+# VZ (requires pre-provisioned assets and --features vz; currently blocked)
 cargo build --release --features vz
 MINIBOX_ADAPTER=vz ./target/release/miniboxd
 ```

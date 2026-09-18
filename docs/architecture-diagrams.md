@@ -54,7 +54,7 @@
   │    └──→ linuxbox
   ├──→ linuxbox
   │    ├──→ minibox-core
-  │    ├──→ minibox-macros (proc-macro)
+  │    ├──→ minibox-macros (declarative macros)
   │    └──→ nix (syscalls)
   ├──→ macbox (cfg target_os = "macos")
   └──→ winbox (cfg target_os = "windows")
@@ -282,7 +282,7 @@
   │ 36. close_extra_fds():                                      │
   │     close_range(3, ~0U, 0) (kernel 5.9+)                    │
   │     fallback: /proc/self/fd iteration                       │
-  │ 37. execvp("/bin/echo", ["hello"])                          │
+  │ 37. execve("/bin/echo", ["hello"], env)                     │
   │     ↓ (process replaced, never returns)                     │
   └───────────────────────────┬─────────────────────────────────┘
                               │
@@ -744,7 +744,7 @@
   │  ┌──────────────────┐     ┌──────────────────┐                │
   │  │ clone(2)         │     │ mount()          │                │
   │  │ waitpid()        │     │ pivot_root()     │                │
-  │  │ execvp()         │     │ umount2()        │                │
+  │  │ execve()         │     │ umount2()        │                │
   │  └──────────────────┘     └──────────────────┘                │
   │                                                               │
   │  cgroups.rs               layer.rs                            │
@@ -770,7 +770,7 @@
 
 ```
   Container init failure (child process):
-    execvp fails → _exit(127)
+    execve fails → _exit(127)
     pivot_root fails → _exit(127)
 
                     │

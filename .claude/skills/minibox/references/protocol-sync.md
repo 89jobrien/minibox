@@ -1,36 +1,33 @@
 ---
 name: protocol-sync
 description:
-  After adding or modifying a DaemonRequest variant or field, audit all
-  6 propagation sites for consistency. Reports missing or mismatched implementations.
+  After adding or modifying a DaemonRequest variant or field, audit the canonical
+  protocol and every server, frontend, and test consumer for consistency.
   Invoke after any protocol.rs change.
 disable-model-invocation: true
 ---
 
 # protocol-sync — DaemonRequest propagation audit
 
-Run this skill after any change to `DaemonRequest` in either `protocol.rs`. It walks
-all 6 propagation sites and produces a status table.
+Run this skill after any change to `DaemonRequest` in the canonical protocol. It walks
+the dispatch, handler, frontend, and test consumers and produces a status table.
 
 ---
 
-## Step 1 — Extract variant lists from both protocol.rs files
+## Step 1 — Extract the canonical variant list
 
-Read both files and collect every `DaemonRequest` variant name.
-
-- `crates/minibox-core/src/protocol.rs` — cross-platform definition
-- `crates/mbx/src/protocol.rs` — mbx-local definition (must stay in sync)
+Read `crates/minibox-core/src/protocol.rs` and collect every `DaemonRequest` variant name.
+There is no second CLI-local protocol definition; all frontends use this canonical type.
 
 Use the Grep tool:
 
 ```
 pattern: "^\s+\w+\s*\{" or enum variant lines inside DaemonRequest
-files: crates/minibox-core/src/protocol.rs, crates/mbx/src/protocol.rs
+file: crates/minibox-core/src/protocol.rs
 ```
 
-Concretely: grep for `DaemonRequest` in both files, then read the surrounding enum
-body. List all variant names from each file. If the two lists differ, flag every
-discrepancy immediately — this is the most critical gap.
+Read the surrounding enum body and list all variants and fields. Treat it as the
+single wire-contract inventory for the remaining checks.
 
 ---
 
@@ -43,28 +40,22 @@ Grep `crates/minibox/src/daemon/server.rs` for `DaemonRequest::` to list all han
 variants. Compare against the variant list from Step 1. Report any variant that
 appears in protocol.rs but is absent from the match.
 
-Note: per CLAUDE.md, adding a variant also requires updating `is_terminal_response()`
-in the same file if the new variant is non-terminal (like `ContainerOutput`).
+Also inspect `DaemonResponse::is_terminal()` in the canonical protocol when response
+flow changes.
 
 ---
 
-## Step 3 — Check handler.rs functions
+## Step 3 — Check split handler modules
 
-Each `DaemonRequest` variant should have a corresponding handler function in
-`crates/minibox/src/daemon/handler.rs`. The naming convention is `handle_<snake_case>`.
+Each implemented operation should have a corresponding handler function under
+`crates/minibox/src/daemon/handler/`. The naming convention is `handle_<snake_case>`.
 
-Grep `crates/minibox/src/daemon/handler.rs` for `fn handle_` to list all handler
+Search `crates/minibox/src/daemon/handler/` for `fn handle_` to list all handler
 functions. For each variant from Step 1, check whether a corresponding `handle_`
 function exists. Report missing handlers.
 
-Also check that the `handle_run` parameter chain is consistent: per CLAUDE.md,
-adding a parameter requires updating these sites in order:
-
-1. server.rs dispatch pattern match
-2. `handle_run`
-3. `handle_run_streaming`
-4. `run_inner_capture`
-5. `run_inner`
+For `Run`, trace the server dispatch into `RunParams` and the preparation/request
+modules rather than relying on a fixed historical function chain.
 
 ---
 
@@ -72,11 +63,12 @@ adding a parameter requires updating these sites in order:
 
 The CLI constructs `DaemonRequest` variants when sending commands to the daemon.
 
-Grep `crates/minibox-cli/src/main.rs` and `crates/minibox-cli/src/commands/` for
+Search `crates/mbx/src/main.rs` and `crates/mbx/src/commands/` for
 `DaemonRequest::` to find all construction sites. For each variant from Step 1,
 confirm at least one construction site exists. Report variants with no CLI entry
 point (they may be intentionally daemon-internal, so note them as "no CLI path"
-rather than "MISSING" unless context suggests otherwise).
+rather than "MISSING" unless context suggests otherwise). Repeat for MCP, Crux,
+and TUI when the operation is exposed by those frontends.
 
 ---
 
@@ -101,10 +93,10 @@ glob: **/*test*.rs
 Output a markdown table with one row per `DaemonRequest` variant:
 
 ```
-| Variant | core/protocol.rs | mbx/protocol.rs | server.rs | handler.rs | CLI | tests |
-|---------|-----------------|-----------------|-----------|------------|-----|-------|
-| RunContainer | OK | OK | OK | OK | OK | 12 tests |
-| StopContainer | OK | OK | OK | OK | OK | 4 tests |
+| Variant | protocol.rs | server.rs | handler/ | mbx | integrations | tests |
+|---------|-------------|-----------|----------|-----|--------------|-------|
+| Run | OK | OK | OK | OK | MCP/Crux | 12 tests |
+| Stop | OK | OK | OK | OK | MCP/Crux | 4 tests |
 | ... | ... | ... | ... | ... | ... | ... |
 ```
 
@@ -121,19 +113,15 @@ Cell values:
 
 If gaps are found, provide exact instructions:
 
-**Missing from mbx/protocol.rs**: Add the variant definition, matching the struct
-fields exactly from minibox-core/protocol.rs. Add `#[serde(default)]` to any new
-fields for backward compatibility.
-
 **Missing from server.rs dispatch**: Add a match arm in the `handle_request` (or
 equivalent) function. Follow the existing pattern for similar variants.
 
-**Missing handler function**: Add `async fn handle_<variant>(...)` to handler.rs.
+**Missing handler function**: Add `async fn handle_<variant>(...)` to the owning handler module.
 If it involves container operations, wrap blocking work in
 `tokio::task::spawn_blocking`.
 
-**Missing from CLI**: Add a subcommand in `crates/minibox-cli/src/main.rs` or a new
-file under `crates/minibox-cli/src/commands/`. Wire it to construct the
+**Missing from CLI**: Add a subcommand in `crates/mbx/src/main.rs` or a new
+file under `crates/mbx/src/commands/`. Wire it to construct the
 `DaemonRequest` variant and send via `DaemonClient`.
 
 **Missing tests**: Add at least one happy-path and one error-path test in
@@ -147,17 +135,17 @@ file under `crates/minibox-cli/src/commands/`. Wire it to construct the
 If a field was added to an existing variant (not a new variant), do the following
 instead of the full audit:
 
-1. Grep both protocol.rs files for the variant struct — confirm both have the new
-   field.
-2. Confirm the new field has `#[serde(default)]`.
-3. Grep handler_tests.rs for all construction sites of that variant — confirm they
+1. Confirm the canonical variant has the new field and uses `#[serde(default)]`
+   when wire compatibility requires it.
+2. Search server dispatch, handlers, and all frontend construction sites.
+3. Search tests for all construction sites of that variant — confirm they
    compile (run `cargo check -p minibox` to verify).
-4. Grep CLI source for construction sites of that variant — confirm they set the
+4. Confirm frontend construction sites set the
    new field or rely on `Default`.
 
 ## Dashbox Logging
 
-After completing the audit, append to `~/.mbx/automation-runs.jsonl` so this run appears
+After completing the audit, append to `$HOME/.mbx/automation-runs.jsonl` so this run appears
 in the automation-runs log:
 
 ```bash

@@ -1,5 +1,5 @@
 ---
-source_sha: 583d795681594db0435e7fbc4d196e19edfef358
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -108,7 +108,7 @@ sudo ./target/release/mbx rm <id>
 16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
 
 ```
-minibox-macros          proc macros (as_any!, adapt!)
+minibox-macros          declarative macros (as_any!, adapt!)
     ^
 minibox-domain          pure domain values, policies, events, and ports
     ^
@@ -116,7 +116,7 @@ minibox-core            protocol, client transport, OCI/image services, compatib
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
     ^        ^        ^
-macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+macbox   smolbox   winbox  macOS krun/Colima/VZ | VM facades | Windows stub
     ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
@@ -149,7 +149,7 @@ Full architecture reference: [`ARCHITECTURE`](ARCHITECTURE.mbx.md).
 
 | Area           | Protection                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Socket auth    | `SO_PEERCRED` — UID 0 only, socket mode `0600`                      |
+| Socket auth    | Native adapter: `SO_PEERCRED` UID 0 only; socket mode `0600`        |
 | Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction  |
 | Tar extraction | Rejects `..`, absolute symlinks, device nodes; strips setuid/setgid |
 | DoS limits     | 1 MB request, 10 MB manifest, 10 GiB/layer, 50 GiB total image      |
@@ -164,7 +164,8 @@ with `mount(MS_REMOUNT)` after container initialization.
 
 ## Configuration
 
-Configuration is layered: TOML config file → environment variables → defaults.
+Configuration is layered from defaults, then system TOML, user TOML, and finally
+environment-variable overrides.
 
 **Config files** (later overrides earlier):
 
@@ -178,16 +179,18 @@ log_level = "info"
 [policy]
 allow_privileged = false
 allow_bind_mounts = false
-max_image_size_mb = 2048
 ```
+
+`max_image_size_mb` is parsed from TOML but is not yet wired into runtime policy enforcement.
+`log_level` is also parsed but tracing currently follows `RUST_LOG`.
 
 **Environment variables** (override config file values):
 
 | Variable                    | Default                                         | Purpose                   |
 | --------------------------- | ----------------------------------------------- | ------------------------- |
-| `MINIBOX_ADAPTER`           | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection   |
-| `MINIBOX_DATA_DIR`          | `/var/lib/minibox`                              | Image + container storage |
-| `MINIBOX_RUN_DIR`           | `/run/minibox`                                  | Socket + runtime state    |
+| `MINIBOX_ADAPTER`           | auto: `smolvm`; Linux `native` / macOS `krun` fallback | Adapter suite selection   |
+| `MINIBOX_DATA_DIR`          | Linux root: `/var/lib/minibox`; macOS: Application Support | Image + container storage |
+| `MINIBOX_RUN_DIR`           | Linux: `/run/minibox`; macOS: `/tmp/minibox`    | Socket + runtime state    |
 | `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
 | `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                         | Permit `-v` bind mounts   |
 | `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                         | Permit `--privileged`     |
@@ -206,8 +209,8 @@ just test-e2e                # protocol end-to-end tests (any platform)
 just test-system             # daemon + CLI full-stack tests (Linux + root)
 ```
 
-The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`TEST_INFRASTRUCTURE`](TEST_INFRASTRUCTURE.mbx.md).
+The conformance inventory runs 123 backend-agnostic adapter and port contract tests. Unit tests
+run on macOS without root. See [`TEST_INFRASTRUCTURE`](TEST_INFRASTRUCTURE.mbx.md).
 
 ---
 
@@ -257,6 +260,7 @@ Full details: [`ROADMAP`](ROADMAP.mbx.md).
 
 ## License
 
-Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
+Licensed under either of [MIT](../../LICENSE-MIT) or
+[Apache-2.0](../../LICENSE-APACHE) at your option.
 
 <sup>Previously named `mbx` during early development.</sup>

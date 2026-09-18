@@ -8,19 +8,18 @@ builds, and test infrastructure as a compiled Rust binary (not shell scripts).
 ### Quality Gates
 
 ```bash
-cargo xtask pre-commit        # fmt-check + lint + release build (macOS-safe)
-cargo xtask prepush           # fast lib tests (debug, incremental)
-cargo xtask test-unit         # all unit + conformance tests
-cargo xtask test-conformance  # commit+build+push conformance suite + artifact reports
-cargo xtask test-krun-conformance  # krun adapter conformance (HVF/KVM, sets MINIBOX_KRUN_TESTS=1)
-cargo xtask test-property     # property-based tests (proptest, any platform)
-cargo xtask test-integration  # cgroup + integration tests (Linux, root)
-cargo xtask test-e2e          # protocol e2e tests (any platform, no root required)
-cargo xtask test-system-suite # full-stack system tests (Linux, root, cgroups v2)
-cargo xtask test-e2e-suite    # alias for test-system-suite (backward compat)
-cargo xtask test-sandbox      # sandbox contract tests (Linux, root, Docker Hub)
-cargo xtask coverage-check    # llvm-cov minibox; fail if handler.rs fns < 80%
-cargo xtask check-repo-clean  # warn if generated artifacts (target/, traces/, *.profraw) are tracked
+cargo xtask pre-commit          # staged fmt/clippy plus architecture/config/docs checks
+cargo xtask prepush             # musl check, release build, nextest, conformance
+cargo xtask test unit           # workspace library tests
+cargo xtask test conformance    # adapter and port conformance suite
+cargo xtask test krun-conformance
+cargo xtask test property       # property-based tests (any platform)
+cargo xtask test integration    # cgroup + integration tests (Linux, root)
+cargo xtask test e2e            # protocol e2e tests (any platform)
+cargo xtask test system-suite   # full-stack tests (Linux, root, cgroups v2)
+cargo xtask test sandbox        # sandbox contract tests (Linux, root, Docker Hub)
+cargo xtask coverage-check    # llvm-cov minibox; fail if handler/ functions fall below 80%
+cargo xtask check repo-clean  # warn if generated artifacts are tracked
 ```
 
 ### Benchmarks
@@ -37,13 +36,14 @@ cargo xtask bench --env <name>     # baseline environment: local (default), self
 cargo xtask bench --threshold <pct> # regression threshold percentage for --check
 ```
 
-### VM Image (macOS/vz adapter)
+### VM and Test Images
 
 ```bash
-cargo xtask build-vm-image          # download Alpine kernel/rootfs, cross-compile agent (cached)
-cargo xtask build-vm-image --force  # force re-download and recompile
-cargo xtask run-vm                  # boot VM with interactive shell (QEMU HVF, Ctrl-A X to exit)
-cargo xtask test-vm                 # build musl test binaries + run in VM, stream results
+cargo xtask build-test-image          # build the cached OCI test image
+cargo xtask setup-test-vm             # prepare the smolvm test environment
+cargo xtask setup-test-vm --force     # rebuild cached VM assets
+cargo xtask test-in-vm                # run tests through the configured VM backend
+cargo xtask test-linux                # run the Linux dogfood pipeline
 ```
 
 ### Test Infrastructure
@@ -68,12 +68,12 @@ cargo xtask bump [patch|minor|major]  # bump workspace version in Cargo.toml
 cargo xtask preflight                 # check required tools are on PATH and functional
 cargo xtask doctor                    # full preflight: tools + CARGO_TARGET_DIR + Linux system checks
 cargo xtask available                 # verify cargo xtask is runnable (real capability check)
-cargo xtask lint-docs                 # validate frontmatter + status values in docs/superpowers/
-cargo xtask context [--save]          # dump machine-readable repo context snapshot (JSON)
-cargo xtask check-stale-names         # audit workspace for banned old crate/binary names
-cargo xtask check-protocol-drift [--update] [--warn-only] [--hook]
+cargo xtask docs lint                 # validate supported plan/spec frontmatter
+cargo xtask info context [--save]     # dump machine-readable repo context snapshot (JSON)
+cargo xtask check stale-names         # audit workspace for banned old crate/binary names
+cargo xtask check protocol-drift [--update] [--warn-only] [--hook]
                                       # verify core contract hashes
-cargo xtask check-protocol-sites [<file>] [--expected N] [--warn-only]
+cargo xtask check protocol-sites [<file>] [--expected N] [--warn-only]
                                       # verify HandlerDependencies construction site count
 ```
 
@@ -90,8 +90,8 @@ cargo xtask clean-artifacts   # remove non-critical build outputs
 | ------------------- | ------------------------------------------------------------- |
 | `gates.rs`          | Quality gate implementations (fmt, clippy, nextest, coverage) |
 | `bench.rs`          | Benchmark run, result persistence, per-env baseline checking  |
-| `vm_image.rs`       | Alpine download, agent cross-compile, VM image assembly       |
-| `vm_run.rs`         | VM boot: interactive shell or test execution under QEMU       |
+| `setup_test_vm.rs`  | Prepare the smolvm test environment                           |
+| `test_in_vm.rs`     | Execute the configured VM test profiles                       |
 | `test_image.rs`     | OCI test image build and Linux dogfood test runner            |
 | `test_linux.rs`     | Run test suite inside a minibox container                     |
 | `cgroup_tests.rs`   | cgroup v2 integration test runner (delegated hierarchy)       |

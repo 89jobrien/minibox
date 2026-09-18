@@ -47,15 +47,17 @@ See the [Command Reference](#command-reference) table below for the full list.
 
 ## Runner Hierarchy
 
-Minibox has two task runners. They are complementary, not competing:
+Minibox has three task layers. They are complementary, not competing:
 
-| Runner  | Role                              | When to use                  |
-| ------- | --------------------------------- | ---------------------------- |
-| `xtask` | CI gates, canonical test suites   | Always for CI-critical paths |
-| `just`  | Wraps xtask + convenience recipes | Day-to-day development       |
+| Runner  | Role                                      | When to use                 |
+| ------- | ----------------------------------------- | --------------------------- |
+| `xtask` | Canonical Rust gates and test suites      | CI-critical direct commands |
+| `crux`  | Composes repeatable development pipelines | Shared local/CI workflows   |
+| `just`  | Stable entry points over Crux and xtask   | Day-to-day development      |
 
-**Rule of thumb:** if a GitHub Actions workflow calls it, the source of truth
-is `cargo xtask <command>`. `just` recipes delegate to xtask where possible.
+**Rule of thumb:** use `just` for discoverable entry points, inspect the referenced
+`crux/dev/*.crux` pipeline for orchestration, and use `cargo xtask <command>` for
+the underlying Rust gate when direct control is needed.
 `scripts/` contains AI agent tooling and one-off helpers -- not part of the
 core build/test pipeline.
 
@@ -93,6 +95,10 @@ cargo xtask prepush
 ```bash
 # Start daemon (Linux, requires root)
 sudo ./target/release/miniboxd
+
+# Override adapter selection or replace an existing daemon
+sudo ./target/release/miniboxd --adapter native
+sudo ./target/release/miniboxd --restart
 
 # CLI commands (daemon must be running)
 sudo ./target/release/mbx pull alpine
@@ -218,8 +224,9 @@ mbx doctor                   # adapter diagnostics + delegates to cargo xtask do
 - `CARGO_TARGET_DIR` env var (advisory)
 - Linux-only: cgroups v2 unified hierarchy, overlay FS, kernel >= 5.0
 
-`mbx doctor` runs `cargo xtask doctor` first, then shows adapter suite diagnostics
-(which adapter is compiled in and which would be selected by the current environment).
+`mbx doctor` runs `cargo xtask doctor` first, then shows compiled adapter-suite
+diagnostics. Use daemon startup logs to confirm the adapter actually selected for
+the current platform and environment.
 
 `scripts/preflight.nu` is a lightweight SessionStart hook — it runs at shell startup
 to surface obvious missing deps. It is not a substitute for `cargo xtask doctor`.
@@ -264,12 +271,16 @@ the release build, release library tests, and conformance. GitHub workflows cove
 | Variable               | Purpose                                          | Default                            |
 | ---------------------- | ------------------------------------------------ | ---------------------------------- |
 | `MINIBOX_ADAPTER`      | Adapter suite: native, gke, colima, smolvm, krun | auto: smolvm, fallback native/krun |
-| `MINIBOX_DATA_DIR`     | Image/container storage                          | `/var/lib/minibox` (root)          |
-| `MINIBOX_RUN_DIR`      | Socket/runtime directory                         | `/run/minibox`                     |
+| `MINIBOX_DATA_DIR`     | Image/container storage                          | Linux root: `/var/lib/minibox`     |
+| `MINIBOX_RUN_DIR`      | Socket/runtime directory                         | Linux: `/run/minibox`              |
 | `MINIBOX_SOCKET_PATH`  | Unix socket path                                 | `$MINIBOX_RUN_DIR/miniboxd.sock`   |
 | `MINIBOX_CGROUP_ROOT`  | Cgroup root for containers                       | systemd slice path                 |
 | `MINIBOX_NETWORK_MODE` | Network mode: none, bridge, host, tailnet        | `none`                             |
 | `RUST_LOG`             | Tracing verbosity (debug, info, warn, etc)       | unset                              |
+
+On macOS the default data directory is under `~/Library/Application Support`
+and the default run directory is `/tmp/minibox`; explicit environment variables
+override platform defaults.
 
 ## Cleanup
 
@@ -353,7 +364,7 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 | Task                                  | Command                                | When to use                        |
 | ------------------------------------- | -------------------------------------- | ---------------------------------- |
-| Machine-readable repo snapshot (JSON) | `cargo xtask context`                  | Feed to agents or CI dashboards    |
+| Machine-readable repo snapshot (JSON) | `cargo xtask info context`             | Feed to agents or CI dashboards    |
 | Daily orchestration workflow          | `cargo xtask daily-orchestration`      | CI-driven; use `--dry-run` locally |
 | Host capability report                | `cargo xtask doctor`                   | Verify tools/env/kernel capability |
 | Preflight tool check                  | `cargo xtask preflight`                | Verify cargo, nextest, gh on PATH  |

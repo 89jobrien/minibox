@@ -31,15 +31,15 @@ generated: 2026-09-16
 | minibox-domain      | lib        | ~6.1k  | 21           | inline                  | test-utils                |
 | minibox-core        | lib        | ~12.6k | 28           | 10 integration + inline | test-utils, fuzzing       |
 | minibox             | lib        | ~21.5k | 71           | 56 integration + inline | test-utils, metrics, otel |
-| minibox-macros      | proc-macro | ~175   | 9            | 1 integration           | --                        |
+| minibox-macros      | lib        | ~175   | 9            | 1 integration           | --                        |
 | miniboxd            | bin+lib    | ~1.6k  | 4            | 13 integration + inline | metrics, otel, tailnet    |
-| macbox              | lib        | ~3.6k  | 16           | 4                       | --                        |
+| macbox              | lib        | ~3.6k  | 16           | 5                       | --                        |
 | smolbox             | lib        | ~148   | 4            | 2 integration           | --                        |
 | winbox              | lib        | ~280   | 5            | 1 integration           | --                        |
 | minibox-cli         | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests, tui     |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
 | minibox-mcp         | lib+bin    | ~1.6k  | 11           | 1 integration           | --                        |
-| minibox-testsuite   | lib+bin    | ~3.7k  | 27           | 3 integration           | --                        |
+| minibox-testsuite   | lib+bin    | ~3.7k  | 27           | inline                  | --                        |
 | minibox-bench       | lib        | ~1.4k  | 4 + 8 benches | inline fixture tests   | --                        |
 | ail                 | bin        | ~4     | 1            | 0                       | --                        |
 | minibox-cni         | lib        | —      | —            | integration + inline    | --                        |
@@ -114,7 +114,7 @@ implementations + daemon server/handler/state + testing infrastructure.
 
 ## minibox-macros
 
-Declarative macros for adapter boilerplate reduction.
+Declarative `macro_rules!` macros for adapter boilerplate reduction.
 
 **Macros:** `as_any!` (downcasting), `default_new!` (Default via new()),
 `adapt!` (both), `provide!` (LLM provider constructors), `require_capability!`
@@ -139,27 +139,26 @@ feature-gated VZ startup path (currently blocked during VM boot).
 
 ## macbox
 
-macOS daemon entry point and Colima adapter wiring. smolvm and krun adapters
-live in `smolbox` (see below).
+macOS platform support. Krun implementations live in `macbox::krun`; Colima
+composition and the feature-gated VZ path also live here.
 
 **Backends:**
 
 - **Colima**: `ColimaRegistry`, `ColimaRuntime`, `ColimaFilesystem`,
   `ColimaLimiter` -- delegates to `colima ssh`/limactl/nerdctl
+- **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
+  libkrun micro-VMs (HVF on macOS, KVM on Linux)
 
 ---
 
 ## smolbox
 
-smolvm and krun adapter implementations for macOS VM backends.
+Compatibility facade for smolvm and krun adapter imports.
 
 **Backends:**
 
-- **smolvm**: `SmolVmRegistry`, `SmolVmRuntime`, `SmolVmFilesystem`,
-  `SmolVmLimiter` -- lightweight Linux VMs with subsecond boot
-- **krun**: `KrunRegistry`, `KrunRuntime`, `KrunFilesystem`, `KrunLimiter` --
-  libkrun micro-VMs (HVF on macOS, KVM on Linux); structs live in
-  `crates/smolbox/src/krun/`
+- **smolvm** re-exports implementations owned by `minibox::adapters`.
+- **krun** re-exports implementations owned by `macbox::krun`.
 
 ---
 
@@ -267,8 +266,8 @@ cas-add, cas-check.
 **Subcommand groups:** `test <suite>` (unit, conformance, krun-conformance,
 turmoil, shuttle, property, quickcheck, integration, e2e, system-suite,
 sandbox, gke-profile, gke-adapter), `check <target>` (stale-names,
-protocol-drift, protocol-sites, adapter-coverage, no-unwrap, repo-clean),
-`docs <action>` (audit, lint, update-date), `info <target>` (metrics,
+protocol-drift, protocol-sites, protocol-variants, adapter-coverage, no-unwrap, repo-clean),
+`docs <action>` (audit, lint, update-date, sync-adapters), `info <target>` (metrics,
 context, changes).
 
 The tree currently contains 96 integration test files under `crates/*/tests/`; use grouped

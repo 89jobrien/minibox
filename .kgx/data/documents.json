@@ -13,6 +13,32 @@
           "offset": 0
         }
       ]
+    },
+    {
+      "id": "minibox-context-map-f5481a94",
+      "title": "Minibox Whole-Project Context Map",
+      "source": ".ctx/godmode/memory-bank/system-patterns.md",
+      "raw_content": "Minibox contains the minibox-domain, minibox-core, minibox, miniboxd, mbx, macbox, smolbox, winbox, minibox-mcp, minibox-crux-plugin, minibox-tui, minibox-testsuite, and xtask components (Cargo.toml:3-20). Minibox uses hexagonal architecture with enforced minibox-domain to minibox-core to minibox dependency rings (xtask/src/architecture.rs:68-117). Minibox-core depends on minibox-domain (crates/minibox-core/Cargo.toml:32-56). Minibox depends on minibox-core (crates/minibox/Cargo.toml:50-73). Macbox depends on minibox and minibox-core (crates/macbox/Cargo.toml:11-20). Smolbox depends on minibox and macbox (crates/smolbox/Cargo.toml:8-12). Winbox depends on minibox and minibox-core (crates/winbox/Cargo.toml:8-20). Miniboxd depends on minibox and selects macbox, smolbox, or winbox platform composition (crates/miniboxd/Cargo.toml:31-52; crates/miniboxd/src/main.rs:705-785). Mbx depends on minibox-core and constructs daemon protocol requests (crates/mbx/Cargo.toml:16-18; crates/mbx/src/commands/run.rs:119-142). The daemon client uses the daemon protocol over a Unix socket (crates/minibox-core/src/client/socket.rs:30-81). The daemon server uses the daemon protocol and dispatches handler dependencies (crates/minibox/src/daemon/server.rs:243-403; crates/minibox/src/daemon/handler/mod.rs:263-282). Handler dependencies use domain ports including runtime, filesystem, image, and networking ports (crates/minibox-domain/src/runtime.rs:168-219; crates/minibox-domain/src/filesystem.rs:133-290; crates/minibox-domain/src/image.rs:38-132; crates/minibox-domain/src/networking.rs:132-219). Minibox-mcp, minibox-crux-plugin, and minibox-tui depend on minibox-core and translate operations into the daemon protocol (crates/mcp/Cargo.toml:20-34; crates/minibox-crux-plugin/Cargo.toml:16-23; crates/minibox-tui/Cargo.toml:15-21). Minibox-testsuite depends on minibox and minibox-core and implements inventory-registered conformance coverage (crates/minibox-testsuite/Cargo.toml:18-32; crates/minibox-testsuite/src/lib.rs:66-134). Xtask depends on minibox-testsuite and orchestrates quality and test gates (xtask/Cargo.toml:12-28; xtask/src/gates.rs:58-101).",
+      "chunks": [
+        {
+          "id": "ed5850dc-6af5-4f5d-9946-327f1336a8df",
+          "doc_id": "minibox-context-map-f5481a94",
+          "text": "Minibox contains the minibox-domain, minibox-core, minibox, miniboxd, mbx, macbox, smolbox, winbox, minibox-mcp, minibox-crux-plugin, minibox-tui, minibox-testsuite, and xtask components (Cargo.toml:3-20). Minibox uses hexagonal architecture with enforced minibox-domain to minibox-core to minibox dependency rings (xtask/src/architecture.rs:68-117). Minibox-core depends on minibox-domain (crates/minibox-core/Cargo.toml:32-56). Minibox depends on minibox-core (crates/minibox/Cargo.toml:50-73). Macbox depends on minibox and minibox-core (crates/macbox/Cargo.toml:11-20). Smolbox depends on minibox and macbox (crates/smolbox/Cargo.toml:8-12). Winbox depends on minibox and minibox-core (crates/winbox/Cargo.toml:8-20). Miniboxd depends on minibox and selects macbox, smolbox, or winbox platform composition (crates/miniboxd/Cargo.toml:31-52; crates/miniboxd/src/main.rs:705-785). Mbx depends on minibox-core and constructs daemon protocol requests (crates/mbx/Cargo.toml:16-18; crates/mbx/src/comm",
+          "offset": 0
+        },
+        {
+          "id": "3cb1bde3-05b2-424b-b914-aa137ad23241",
+          "doc_id": "minibox-context-map-f5481a94",
+          "text": "mposition (crates/miniboxd/Cargo.toml:31-52; crates/miniboxd/src/main.rs:705-785). Mbx depends on minibox-core and constructs daemon protocol requests (crates/mbx/Cargo.toml:16-18; crates/mbx/src/commands/run.rs:119-142). The daemon client uses the daemon protocol over a Unix socket (crates/minibox-core/src/client/socket.rs:30-81). The daemon server uses the daemon protocol and dispatches handler dependencies (crates/minibox/src/daemon/server.rs:243-403; crates/minibox/src/daemon/handler/mod.rs:263-282). Handler dependencies use domain ports including runtime, filesystem, image, and networking ports (crates/minibox-domain/src/runtime.rs:168-219; crates/minibox-domain/src/filesystem.rs:133-290; crates/minibox-domain/src/image.rs:38-132; crates/minibox-domain/src/networking.rs:132-219). Minibox-mcp, minibox-crux-plugin, and minibox-tui depend on minibox-core and translate operations into the daemon protocol (crates/mcp/Cargo.toml:20-34; crates/minibox-crux-plugin/Cargo.toml:16-23; crates",
+          "offset": 800
+        },
+        {
+          "id": "04a08519-c6b0-4b75-a0db-f0824643962d",
+          "doc_id": "minibox-context-map-f5481a94",
+          "text": "box-mcp, minibox-crux-plugin, and minibox-tui depend on minibox-core and translate operations into the daemon protocol (crates/mcp/Cargo.toml:20-34; crates/minibox-crux-plugin/Cargo.toml:16-23; crates/minibox-tui/Cargo.toml:15-21). Minibox-testsuite depends on minibox and minibox-core and implements inventory-registered conformance coverage (crates/minibox-testsuite/Cargo.toml:18-32; crates/minibox-testsuite/src/lib.rs:66-134). Xtask depends on minibox-testsuite and orchestrates quality and test gates (xtask/Cargo.toml:12-28; xtask/src/gates.rs:58-101).",
+          "offset": 1600
+        }
+      ]
     }
   ]
 }

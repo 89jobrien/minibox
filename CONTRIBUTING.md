@@ -31,7 +31,7 @@ workflow, command reference, and CI gate descriptions.
 
 ```bash
 cargo xtask pre-commit     # conditional fmt/clippy + architecture/docs checks
-cargo xtask test unit      # cross-platform unit and conformance subset
+cargo xtask test unit      # cross-platform workspace library tests
 cargo deny check           # license + advisory audit
 ```
 

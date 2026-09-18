@@ -26,14 +26,9 @@ Both binaries exit `0` on success and `1` on any test failure.
 
 ## Test count and categories
 
-28 conformance tests across four adapter modules:
-
-| Adapter    | Tests | Notes                                         |
-| ---------- | ----- | --------------------------------------------- |
-| `limiter`  | 7     | `ResourceLimiter` — cgroup lifecycle contract |
-| `registry` | 6     | `ImageRegistry` — pull count and has_image    |
-| `runtime`  | 8     | `ContainerRuntime` — spawn, PIDs, sync/async  |
-| `state`    | 7     | `DaemonState` — add/remove/list/persist/name  |
+The current inventory contains 123 tests across 22 adapter and port categories.
+The runner reports the authoritative count at startup and pins a minimum of 123
+tests so dropped inventory registrations cannot silently shrink the suite.
 
 Categories used in the harness:
 
@@ -47,7 +42,7 @@ Categories used in the harness:
 crates/minibox-testsuite/
   src/
     harness/          ConformanceTest trait, TestContext, TestRunner, ReportGenerator
-    adapters/         per-adapter test modules (registry, runtime, limiter, state)
+    adapters/         per-port contract modules (registry, runtime, limiter, state, etc.)
     bin/
       run_conformance.rs     CLI: run all tests, exit 1 on failure
       generate_report.rs     CLI: run tests, write JSON + JUnit reports to artifacts/
@@ -55,22 +50,19 @@ crates/minibox-testsuite/
 
 ## Adding a new conformance test
 
-1. Add a struct in the relevant `src/adapters/<adapter>.rs` file.
-2. Implement `ConformanceTest` — provide `name()`, `adapter()`, `category()`, and `run_sync()`.
-3. Append `Box::new(YourStruct)` to the `all()` function in that file.
-4. Verify with `cargo run -p minibox-conformance --bin run-conformance`.
+1. Add a `conformance_test!` invocation in the relevant `src/adapters/<adapter>.rs` file.
+2. Declare the test name, adapter category, optional required capability, and test body.
+3. Verify with `cargo run -p minibox-testsuite --bin run-conformance`.
 
 Example skeleton:
 
-```rust
-pub struct MyNewTest;
-impl ConformanceTest for MyNewTest {
-    fn name(&self) -> &str { "my_new_test" }
-    fn adapter(&self) -> &str { "runtime" }
-    fn category(&self) -> TestCategory { TestCategory::Unit }
-    fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
-        let runtime = MockRuntime::new();
-        // ... drive the mock, call ctx.assert_* methods ...
+```rust,ignore
+crate::conformance_test! {
+    name: "my_new_test",
+    adapter: "runtime",
+    category: Unit,
+    |ctx| {
+        // Drive the mock and call ctx.assert_* methods.
         ctx.result()
     }
 }
@@ -81,8 +73,8 @@ impl ConformanceTest for MyNewTest {
 | Category    | Command                                                | Requires root/Linux |
 | ----------- | ------------------------------------------------------ | ------------------- |
 | Conformance | `cargo run -p minibox-testsuite --bin run-conformance` | No                  |
-| Unit        | `cargo xtask test-unit`                                | No                  |
+| Unit        | `cargo xtask test unit`                                | No                  |
 | Integration | `just test-integration`                                | Yes (cgroups)       |
-| E2E         | `just test-e2e`                                        | Yes (daemon)        |
+| E2E         | `just test-e2e`                                        | No                  |
 
 Conformance tests are the fastest gate and safe to run on any platform.

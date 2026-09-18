@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-09-16
+updated: 2026-09-18
 items:
 - id: gh-473
   name: feat-xtask---squash-chain-branches-during-promotion
@@ -9,54 +9,88 @@ items:
   title: 'feat(xtask): squash chain branches during promotion'
   description: CapabilityMatrix missing from terminal/non-terminal classification coverage
   extra:
-  - date: 2026-09-16
+  - date: 2026-09-18
     type: blocker
     note: CapabilityMatrix missing from terminal/non-terminal classification coverage
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (13 files)
+  title: Uncommitted changes (30 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .ctx/rustqual-baseline.json
+    .ctx/memory-bank/activeContext.mbx.md
+    .ctx/memory-bank/progress.mbx.md
+    .ctx/memory-bank/systemPatterns.mbx.md
+    .ctx/memory-bank/techContext.mbx.md
     .minibox/checkpoints/prepush.json
-    crates/macbox/src/vz/adapter.rs
-    crates/macbox/src/vz/vsock.rs
-    crates/mbx/src/main.rs
-    crates/mcp/src/policy.rs
-    crates/minibox/src/adapters/smolvm.rs
-    crates/minibox/src/daemon/handler/pipeline.rs
-    crates/minibox/src/daemon/handler/run.rs
-    rustqual.toml
-    crates/minibox/src/daemon/handler/run/
+    Justfile
+    README.md
+    crates/macbox/src/krun/runtime.rs
+    crates/minibox-core/src/protocol.rs
+    crates/minibox-core/tests/protocol_evolution.rs
+    crates/minibox-domain/src/checkpoint.rs
+    crates/minibox-domain/src/networking.rs
+    crates/minibox-testsuite/README.md
+    crates/minibox/src/container/process.rs
+    crates/minibox/src/daemon/handler/snapshot.rs
+    crates/minibox/src/daemon/state.rs
+    docs/PLATFORM_SUPPORT.md
+    docs/core/ABOUT.mbx.md
+    docs/core/ARCHITECTURE.mbx.md
+    docs/core/FEATURE_MATRIX.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/TEST_INFRASTRUCTURE.mbx.md
+    docs/core/XTASK_CLI.mbx.md
+    xtask/schema/cli.schema.json
+    docs/designs/2026-09-18-environment-attested-isolation-design.md
+    docs/designs/2026-09-18-isolation-policy-admission-design.md
+    docs/designs/2026-09-18-typed-isolation-policy-contract-design.md
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .ctx/rustqual-baseline.json
+  - .ctx/memory-bank/activeContext.mbx.md
+  - .ctx/memory-bank/progress.mbx.md
+  - .ctx/memory-bank/systemPatterns.mbx.md
+  - .ctx/memory-bank/techContext.mbx.md
   - .minibox/checkpoints/prepush.json
-  - crates/macbox/src/vz/adapter.rs
-  - crates/macbox/src/vz/vsock.rs
-  - crates/mbx/src/main.rs
-  - crates/mcp/src/policy.rs
-  - crates/minibox/src/adapters/smolvm.rs
-  - crates/minibox/src/daemon/handler/pipeline.rs
-  - crates/minibox/src/daemon/handler/run.rs
-  - rustqual.toml
-  - crates/minibox/src/daemon/handler/run/
+  - Justfile
+  - README.md
+  - crates/macbox/src/krun/runtime.rs
+  - crates/minibox-core/src/protocol.rs
+  - crates/minibox-core/tests/protocol_evolution.rs
+  - crates/minibox-domain/src/checkpoint.rs
+  - crates/minibox-domain/src/networking.rs
+  - crates/minibox-testsuite/README.md
+  - crates/minibox/src/container/process.rs
+  - crates/minibox/src/daemon/handler/snapshot.rs
+  - crates/minibox/src/daemon/state.rs
+  - docs/PLATFORM_SUPPORT.md
+  - docs/core/ABOUT.mbx.md
+  - docs/core/ARCHITECTURE.mbx.md
+  - docs/core/FEATURE_MATRIX.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/TEST_INFRASTRUCTURE.mbx.md
+  - docs/core/XTASK_CLI.mbx.md
+  - xtask/schema/cli.schema.json
+  - docs/designs/2026-09-18-environment-attested-isolation-design.md
+  - docs/designs/2026-09-18-isolation-policy-admission-design.md
+  - docs/designs/2026-09-18-typed-isolation-policy-contract-design.md
 log:
-- date: '20260916.092128'
+- date: '20260918.201226'
   summary: done=60 running=0 pending=27 blocked=1
   commits:
-  - d8e7ef8cfb6b1e9005e632e8d8183f8148b501bb
-  - 6bd3eb96bf86b591d9d543ed974a20b8e53dea38
-  - 98dc14c01dc5e448f6d44d0d3933d5abc194ac2c
-  - ff562fba87269344caee0f1c10d8f60227a97183
-  - b50d069b7e52eadf0ab4f0f760676cd3963e0bbb
-  - f0fd2661aa36411f42a73ed1f44ce49455acd7d1
-  - 7b16fa914cd0735dd49c7049a733db7781998312
-  - f1ab017f8eb2b137d75dbc44614b45979d5c36a4
-  - 32632a499083a0763fe5bc37f3939f70e3987fa3
-  - 09902733a48219449a6569c01a3f8c5a67ba0c09
+  - f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
+  - 98cfc0e94b126624f7c86c89e8edc86444ab63c4
+  - 583d795681594db0435e7fbc4d196e19edfef358
+  - a72281f338bd3ea9b790b77145de108c97281f20
+  - 3a1004578cf0a9cdc4a55dff934df1cc9ae5e5de
+  - e69e7241926c3c4dd1d0687842030a56f489769f
+  - 92f3dc98f95612ad0c0228501f3c930ca72a8e84
+  - 0d5b9bd0155a791770d4710bab9355dc67413a4f
+  - ccbccce8fca98f61f1855bb1a653e34e616eb2e2
+  - c43f3e8239702bf942e9d05cb338a053a7a216f4

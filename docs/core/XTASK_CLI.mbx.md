@@ -1,5 +1,5 @@
 ---
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - xtask/src/main.rs
   - xtask/schema/cli.schema.json
@@ -15,7 +15,7 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -80,7 +80,7 @@ Bare `cargo xtask docs` prints the action list.
 
 | Action | Flags | Notes |
 |---|---|---|
-| `audit` | `--full` `--strict` | Audit `docs/core/` facts against code. `--full` runs full mode; `--strict` only affects Quick mode (the default when `--full` is absent). |
+| `audit` | `--full` `--strict` | Audit `docs/core/` facts against code. `--full` also rewrites the tracked `xtask/docs-audit-report.json`; `--strict` only affects Quick mode (the default when `--full` is absent). |
 | `lint` | `--sarif <path>` | Validate frontmatter + status values under the legacy `docs/superpowers/{plans,specs}/` paths. If those directories are absent, zero files are checked. |
 | `update-date` | — | Rewrite the Last-updated stamp in `FEATURE_MATRIX.mbx.md`. |
 | `sync-adapters` | — | Idempotently regenerate only the marked adapter-suite and capability blocks from `xtask/context.toml`. |
@@ -115,7 +115,7 @@ Options:
 
 ##### Evidence and validation semantics
 
-Facts carry separate `declared`, `observed`, and `validation` values. `declared` records policy or manifest intent, `observed` records runtime or source evidence, and `validation.state` distinguishes `match`, `mismatch`, `declared_only`, `observed_only`, `unavailable`, and `not_applicable`. Missing observations are never silently converted to empty strings, zero tests, or successful validation.
+Facts carry separate `declared`, `observed`, and `validation` values. `declared` records policy or manifest intent, `observed` records runtime or source evidence, and `validation.state` distinguishes `match`, `mismatch`, `declared_only`, `observed_only`, and `unavailable`. Missing observations are never silently converted to empty strings, zero tests, or successful validation.
 
 The repository identity includes the full commit, branch, changed paths, and a dirty-worktree fingerprint. The fingerprint covers tracked and untracked changed-path state and changed content while excluding ignored files and content outside the repository.
 
@@ -182,10 +182,10 @@ The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `
 
 | Command | Flags | Description |
 |---|---|---|
-| `bump` | `[patch\|minor\|major]` (default `patch`) | Bump the workspace version. |
+| `bump` | `[patch\|minor\|major]` (default `patch`), `--changelog` | Bump the workspace version; optionally promote release fragments into the changelog. |
 | `preflight` | — | Verify required tools are on PATH (`cargo`, `cargo-nextest`, `gh`). |
 | `doctor` | — | Full preflight diagnostics — same underlying probe as `mbx doctor`. |
-| `promote` | `--from <tier>` `--to <tier>` `--dry-run` `--skip-ci-check` | Cascade-merge one stability tier into the next (`develop -> staging -> release -> main`), gated on CI green unless explicitly overridden. |
+| `promote` | `--from <tier>` `--to <tier>` `--dry-run` `--skip-ci-check` | Cascade-merge one stability tier into the next (`develop -> staging -> release -> main`); `--skip-ci-check` bypasses the source-branch status gate. |
 | `ci-watch` | `--branch <name>` | Watch the most recent GitHub Actions run with job-level detail; defaults to the current branch. |
 | `daily-orchestration` | `--ci` `--dry-run` | Run the daily maintenance orchestration pass. Unlike most xtask parsers, unrecognized flags here cause a hard usage error rather than a warning. |
 | `council` | `--base <ref>` (default `main`) `--mode core\|extended` (default `core`) `--no-synthesis` `--prod` | Run devloop council analysis against a base ref. |

@@ -91,8 +91,8 @@ unless you separately `--name` it and it's still running when you `ps`
 
 Most `mbx` subcommands require a live `miniboxd`. The one exception:
 `mbx doctor` shells out to `cargo xtask doctor` and reports adapter
-capability without touching a socket — useful for checking what adapter
-would be selected before spending time booting anything.
+capability without touching a socket — useful for inspecting compiled adapter
+support before spending time booting anything.
 
 ```
 target/release/mbx doctor
@@ -102,12 +102,12 @@ target/release/mbx doctor
 
 ```
 cargo build --release -p miniboxd -p minibox-cli
-MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock MINIBOX_STATE_DIR=/tmp/mbx-state ./target/release/miniboxd &
+MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock MINIBOX_DATA_DIR=/tmp/mbx-state ./target/release/miniboxd &
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock ./target/release/mbx pull alpine:latest
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock ./target/release/mbx run alpine:latest -- sh
 ```
 
-Same env vars the driver uses (`MINIBOX_SOCKET_PATH`, `MINIBOX_STATE_DIR`).
+Same env vars the driver uses (`MINIBOX_SOCKET_PATH`, `MINIBOX_DATA_DIR`).
 Difference from the driver: no automatic detach, no isolated run dir, and
 you're responsible for killing the daemon yourself.
 
@@ -115,7 +115,7 @@ you're responsible for killing the daemon yourself.
 
 ```
 cargo xtask verify           # fmt check, clippy -D warnings, borrow fixtures
-cargo xtask test unit        # cross-platform unit + conformance subset
+cargo xtask test unit        # cross-platform workspace library tests
 ```
 
 ## Gotchas

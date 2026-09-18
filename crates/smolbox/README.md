@@ -1,20 +1,16 @@
 # smolbox
 
-Lightweight VM adapter suites for minibox on macOS and Linux.
+Compatibility import facade for VM adapter suites on macOS and Linux.
 
 ## Adapters
 
 ### smolvm
 
-Delegates container operations to the `smolvm` CLI (`smolvm machine run`).
-Provides subsecond Linux VM boot on macOS via Apple Hypervisor.framework.
-This is the default adapter when the `smolvm` binary is on PATH.
+Re-exports the smolvm implementation owned by `minibox::adapters`.
 
 ### krun
 
-Uses libkrun to run containers inside micro-VMs (HVF on macOS, KVM on
-Linux). Acts as the automatic fallback when smolvm is unavailable.
-Implements all four domain ports: runtime, registry, filesystem, limiter.
+Re-exports the krun implementation owned by `macbox::krun`.
 
 ## Preflight
 
@@ -24,7 +20,8 @@ correct suite at startup.
 
 ## Usage
 
-smolbox is consumed by `macbox` and `miniboxd` — it is not used directly.
+smolbox is consumed by `miniboxd` and may be used by integrations that need
+stable VM adapter import paths.
 
 ```toml
 [dependencies]

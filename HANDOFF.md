@@ -1,7 +1,12 @@
-# Handoff — minibox (2026-08-22)
+# Handoff — minibox (2026-09-18)
 
-**Branch:** develop | **Build:** clean | **Tests:** failing
-EOD update on branch chore/xtask-borrow-fixtures. Recent 24h work: 6aaf6b3 test(xtask): add borrow fixture verification
+**Branch:** develop | **Build/tests:** not revalidated for the current dirty worktree
+Current tracked state is mirrored in `.ctx/HANDOFF.minibox.minibox.yaml`; the worktree has
+pre-existing documentation, context, and isolation-design changes.
+
+## Prior Recorded Activity (2026-08-22)
+
+EOD update on branch chore/xtask-borrow-fixtures. Recent work: 6aaf6b3 test(xtask): add borrow fixture verification
 3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
 3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
 f9229da perf(xtask): skip cargo compilation in pre-commit when no Rust files staged
@@ -29,12 +34,11 @@ d4fb4b7 ci: trigger workflow
 
 ## Items
 
-| ID               | P   | Status | Title                          |
-| ---------------- | --- | ------ | ------------------------------ |
-| uncommitted-work | P1  | open   | Uncommitted changes (25 files) |
+| ID               | P   | Status  | Title                                         |
+| ---------------- | --- | ------- | --------------------------------------------- |
+| gh-473           | P2  | blocked | Squash chain branches during promotion        |
+| uncommitted-work | P1  | open    | Uncommitted documentation and context changes |
 
 ## Log
 
-- 20260820.232101: done=163 running=0 pending=2 blocked=0
-
-# --- TODO: automated handoff sweep on 2026-08-23 could not verify this repo's handoff status -- the prior per-repo report was either stale, missing, or unconfirmable against current git state. Needs manual review. ---
+- 20260918.201226: done=60 running=0 pending=27 blocked=1

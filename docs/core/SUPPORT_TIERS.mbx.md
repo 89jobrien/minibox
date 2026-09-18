@@ -20,7 +20,7 @@ generated: 2026-09-16
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
 (per-adapter capability breakdown), `docs/core/CRATE_TIERS.mbx.md` (architectural layer
@@ -43,7 +43,7 @@ classification — Core/Platform/Experimental/Internal/External).
 Fully supported. All six mandatory stability gates must pass continuously. Breaking changes require a
 deprecation cycle of at least one minor release with a compiler or runtime warning before removal.
 Security issues receive a response within 72 hours. Crates in this tier are covered by CI on every
-PR and every push to `next`.
+PR and every push to `develop`.
 
 ### Tier 2 — Experimental
 
@@ -77,10 +77,10 @@ in any release. No security response commitment. Exists to document intent or re
 
 | Crate / Component | Type    | Notes                                                   |
 | ----------------- | ------- | ------------------------------------------------------- |
-| `macbox`          | Crate   | Colima composition plus feature-gated VZ path           |
-| `smolbox`         | Crate   | Owns smolvm and krun implementations; depends on macbox |
-| `smolvm` adapter  | Adapter | Default macOS adapter; implementation owned by smolbox  |
-| `krun` adapter    | Adapter | Fallback VM adapter; implementation owned by smolbox    |
+| `macbox`          | Crate   | Owns krun plus Colima composition and feature-gated VZ  |
+| `smolbox`         | Crate   | Compatibility facade over minibox/macbox VM adapters    |
+| `smolvm` adapter  | Adapter | Default macOS adapter; implementation owned by minibox  |
+| `krun` adapter    | Adapter | Fallback VM adapter; implementation owned by macbox     |
 | `colima` adapter  | Adapter | Delegates to `nerdctl`/`limactl`; exec/logs are limited |
 | `vz` adapter      | Adapter | Feature-gated and selectable, but VM boot is blocked    |
 | `minibox-tui`     | Crate   | Read-only dashboard used by optional `minibox-cli/tui`  |
