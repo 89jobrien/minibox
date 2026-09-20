@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-09-19
+updated: 2026-09-20
 items:
 - id: gh-473
   name: feat-xtask---squash-chain-branches-during-promotion
@@ -9,47 +9,26 @@ items:
   title: 'feat(xtask): squash chain branches during promotion'
   description: CapabilityMatrix missing from terminal/non-terminal classification coverage
   extra:
-  - date: 2026-09-19
+  - date: 2026-09-20
     type: blocker
     note: CapabilityMatrix missing from terminal/non-terminal classification coverage
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (13 files)
+  title: Uncommitted changes (2 files)
   description: |-
     Working tree has uncommitted changes:
-    .claude/hooks/protocol-drift-check.nu
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    .minibox/checkpoints/prepush.json
-    Justfile
-    crates/macbox/src/krun/runtime.rs
-    crates/minibox-core/src/protocol.rs
-    crates/minibox-core/tests/protocol_evolution.rs
-    crates/minibox-domain/src/checkpoint.rs
-    crates/minibox-domain/src/networking.rs
-    crates/minibox/src/container/process.rs
-    crates/minibox/src/daemon/handler/snapshot.rs
-    crates/minibox/src/daemon/state.rs
   files:
-  - .claude/hooks/protocol-drift-check.nu
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - .minibox/checkpoints/prepush.json
-  - Justfile
-  - crates/macbox/src/krun/runtime.rs
-  - crates/minibox-core/src/protocol.rs
-  - crates/minibox-core/tests/protocol_evolution.rs
-  - crates/minibox-domain/src/checkpoint.rs
-  - crates/minibox-domain/src/networking.rs
-  - crates/minibox/src/container/process.rs
-  - crates/minibox/src/daemon/handler/snapshot.rs
-  - crates/minibox/src/daemon/state.rs
 log:
-- date: '20260919.130347'
-  summary: done=60 running=0 pending=27 blocked=1
+- date: '20260920.132935'
+  summary: done=65 running=0 pending=27 blocked=1
   commits:
+  - 1a981654efdc80f6c6439dfb00e6ea6d278cf2f0
   - 99e9a680047fef08ee8e84431104430ba74c42e5
   - 3e0780ea5255517cf7d8619d2fe9f45a86d1bd9c
   - 06f61a79ec807b05238479050a4d43864ec9bf3b
@@ -59,4 +38,3 @@ log:
   - a72281f338bd3ea9b790b77145de108c97281f20
   - 3a1004578cf0a9cdc4a55dff934df1cc9ae5e5de
   - e69e7241926c3c4dd1d0687842030a56f489769f
-  - 92f3dc98f95612ad0c0228501f3c930ca72a8e84
