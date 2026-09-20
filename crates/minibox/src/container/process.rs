@@ -367,8 +367,8 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     crate::container::mount_seccomp::install_mount_immutability_filter()
         .with_context(|| "child: install_mount_immutability_filter")?;
 
-    // TODO(feature-idea-14): add and verify a default capability drop policy for
-    // unprivileged containers.
+    // TODO(feature-idea-14): add and verify a default capability drop policy plus
+    // no_new_privs for unprivileged containers; keep privileged mode an explicit relaxation.
     // TODO(feature-idea-16): add user-namespace setup with uid_map/gid_map and the
     // storage, networking, and cgroup support required for rootless operation.
     // TODO(feature-idea-17): extend the mount-only seccomp filter into a documented,

@@ -1,60 +1,136 @@
 # minibox-mcp
 
-`minibox-mcp` publishes the `mcp` binary and Rust library crate. It exposes a
-local MCP stdio server that lets MCP clients inspect and control a running
-`miniboxd` daemon through the existing Unix socket protocol.
+The Cargo package `minibox-mcp` publishes the `mcp` binary and the Rust library crate named `mcp`.
+It is a local Model Context Protocol server that exposes typed minibox tools over stdio and calls a
+running `miniboxd` through the existing Unix socket protocol.
 
-The first implementation slice is intentionally local and bounded:
+The server does not implement a second runtime or bypass daemon policy:
 
-- stdio MCP transport only
-- existing `minibox-core` daemon protocol only
-- read-only inspection tools by default
-- controlled run/pull/stop/rm tools guarded by agent policy
+```text
+MCP client <-> mcp (stdio) <-> miniboxd (Unix socket) <-> selected adapter suite
+```
 
-## Permission model
+## Running the server
 
-Everything is deny-by-default except the core agent workflow:
+```bash
+cargo build -p minibox-mcp --release
+RUST_LOG=mcp=debug ./target/release/mcp
+```
 
-| Tool                                                                                 | Default | Opt-in                                |
-| ------------------------------------------------------------------------------------ | ------- | ------------------------------------- |
-| `minibox_doctor`, `minibox_ps`, `minibox_images`, `minibox_logs`, `minibox_manifest` | allowed | —                                     |
-| `minibox_run` (ephemeral, unprivileged, no network)                                  | allowed | —                                     |
-| `minibox_run` with `privileged`                                                      | denied  | `MINIBOX_MCP_ALLOW_PRIVILEGED=true`   |
-| `minibox_run` with bind mounts                                                       | denied  | `MINIBOX_MCP_ALLOW_BIND_MOUNTS=true`  |
-| `minibox_run` with `network: host`                                                   | denied  | `MINIBOX_MCP_ALLOW_HOST_NETWORK=true` |
-| `minibox_pull`, `minibox_stop`, `minibox_rm`                                         | denied  | `MINIBOX_MCP_ALLOW_MUTATION=true`     |
+The startup banner and tracing go to stderr. Stdout is reserved for MCP frames. Socket resolution
+uses `MINIBOX_SOCKET_PATH`, `MINIBOX_RUN_DIR`, and then the platform default inherited from
+`minibox-core`.
 
-The asymmetry is deliberate: an ephemeral, isolated, auto-removed run is the
-tool an agent exists to call, so it stays available without configuration,
-while anything that escalates privileges or mutates shared daemon state
-(pulled image cache, other containers' lifecycle) requires an explicit
-operator opt-in.
+Example client configuration:
 
-`MINIBOX_MCP_MAX_OUTPUT_BYTES` bounds collected daemon output (default 1 MiB);
-malformed values are logged and ignored.
+```json
+{
+  "command": "/absolute/path/to/target/release/mcp",
+  "env": {
+    "MINIBOX_SOCKET_PATH": "/run/minibox/miniboxd.sock"
+  }
+}
+```
 
-Tracing is written to stderr so stdout remains reserved for MCP frames. Tool
-failures are returned as structured MCP errors carrying a stable
-`minibox::mcp::*` diagnostic code and a `retryable` hint in the error data.
+## Tools
+
+| Tool               | Purpose                                               | Default policy                 |
+| ------------------ | ----------------------------------------------------- | ------------------------------ |
+| `minibox_doctor`   | Check daemon socket connectivity                      | Allowed                        |
+| `minibox_ps`       | List known containers                                 | Allowed                        |
+| `minibox_images`   | List cached images                                    | Allowed                        |
+| `minibox_logs`     | Fetch stored container logs                           | Allowed                        |
+| `minibox_manifest` | Fetch an execution manifest                           | Allowed                        |
+| `minibox_run`      | Run an ephemeral container and collect bounded output | Allowed safely                 |
+| `minibox_pull`     | Pull an OCI image                                     | Denied without mutation opt-in |
+| `minibox_stop`     | Stop a container by ID or name                        | Denied without mutation opt-in |
+| `minibox_rm`       | Remove a stopped container by ID or name              | Denied without mutation opt-in |
+
+`minibox_run` defaults to an ephemeral, auto-removed, unprivileged container with no network.
+Default limits are 512 MiB memory and CPU weight 100 when the caller omits them.
+
+## Agent policy
+
+| Variable                         | Enables                                              | Default |
+| -------------------------------- | ---------------------------------------------------- | ------- |
+| `MINIBOX_MCP_ALLOW_MUTATION`     | Pull, stop, remove, and authorized generic mutations | false   |
+| `MINIBOX_MCP_ALLOW_BIND_MOUNTS`  | Bind mounts in `minibox_run`                         | false   |
+| `MINIBOX_MCP_ALLOW_PRIVILEGED`   | Privileged `minibox_run`                             | false   |
+| `MINIBOX_MCP_ALLOW_HOST_NETWORK` | Host network mode in `minibox_run`                   | false   |
+| `MINIBOX_MCP_MAX_OUTPUT_BYTES`   | Maximum collected container output                   | 1 MiB   |
+
+Boolean opt-ins accept `1`, `true`, `yes`, or `on` in the explicitly supported case variants.
+Unknown network modes and unclean mount paths are rejected before daemon connection.
+
+The MCP policy is an additional boundary. The daemon's own bind-mount, privileged, peer-credential,
+and adapter capability checks still apply.
+
+## Output and errors
+
+Run output is decoded from daemon base64 frames into separate stdout and stderr strings. Container
+output is truncated at the configured limit and reports `truncated: true`; non-output metadata has
+a separate 64 KiB cap. Other calls reject responses that exceed the configured serialized limit.
+
+Tool failures are structured MCP errors with stable `minibox::mcp::*` diagnostic codes and a
+`retryable` hint. Daemon errors, connection errors, invalid input, policy denials, protocol errors,
+and output-limit errors remain distinguishable.
 
 ## Rust API
 
-Generic client calls are read-only by default:
+The main public types are `MiniboxMcpServer`, `MiniboxDaemonClient`, `AgentPolicy`,
+`Authorized<T>`, `DaemonCallResult`, and the schema-facing input/output types in `mcp::types`.
 
-```rust
+Read-only generic calls need no authorization proof:
+
+```rust,no_run
+use mcp::client::MiniboxDaemonClient;
+use minibox_core::protocol::DaemonRequest;
+
+# async fn list() -> mcp::error::Result<()> {
+let client = MiniboxDaemonClient::from_env();
 let result = client.call(DaemonRequest::List).await?;
+assert_eq!(result.terminal_type.as_deref(), Some("ContainerList"));
+# Ok(())
+# }
 ```
 
-Mutating generic calls must carry proof produced by the active policy. This
-keeps callers from accidentally bypassing the same opt-ins used by MCP tools:
+Mutating generic calls require an unforgeable proof returned by the active policy:
 
-```rust
+```rust,no_run
+use mcp::{client::MiniboxDaemonClient, policy::AgentPolicy};
+use minibox_core::protocol::DaemonRequest;
+
+# async fn stop(container_id: String) -> mcp::error::Result<()> {
+let client = MiniboxDaemonClient::from_env();
 let policy = AgentPolicy::from_env();
 let request = policy.authorize_mutation(
     "custom_stop",
     DaemonRequest::Stop { id: container_id },
 )?;
-let (result, output_truncated) = client
+let (_result, _truncated) = client
     .call_authorized(request, policy.max_output_bytes)
     .await?;
+# Ok(())
+# }
+```
+
+## Constraints
+
+- Stdio is the only MCP transport.
+- The daemon transport is currently Unix-socket based; Windows daemon transport is not ready.
+- There are no snapshot, pipeline, exec, event-stream, build, push, or verify tools in this first
+  tool set, although some corresponding read-only requests can be made through the Rust client.
+- The package is publishable, but operational use still requires a compatible local `miniboxd`.
+
+## Development and testing
+
+Unit tests cover policy, schema conversion, response accounting, tool mapping, and authorization.
+Integration tests spawn a real MCP client/server pair with a mock daemon and verify tool discovery,
+request translation, policy denial, error kinds, and bounded output.
+
+```bash
+cargo check -p minibox-mcp
+cargo clippy -p minibox-mcp --all-targets -- -D warnings
+cargo nextest run -p minibox-mcp
+cargo xtask verify
 ```

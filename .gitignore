@@ -46,6 +46,7 @@ agentbox/bin/
 
 # Version bump state
 .minibox-bump-state
+.minibox/checkpoints/
 
 # Rust build artifacts
 /target/
@@ -172,6 +173,7 @@ docs/archive/
 .ctx/.initialized
 # handoff-end
 .claude/skills/whatidid/cache/
+.claude/skills/whatidid.zip
 .capsec-baseline.json
 bench/results/
 .taskit-state.json
@@ -179,6 +181,7 @@ bench/results/
 .taskit/
 dupehound-results.*
 dupehound-card.*
+/wave-status.json
 .looprs/observability/
 .looprs/observability/runtime.jsonl
 .cc-audit.yaml

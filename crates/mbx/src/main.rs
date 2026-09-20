@@ -226,7 +226,7 @@ enum Commands {
         restart: bool,
     },
 
-    // TODO(feature-idea-06): add CLI commands for image listing, build, and push to expose the
+    // TODO(feature-idea-06): add CLI commands for image listing and push to expose the remaining
     // daemon operations already available through the protocol and Crux plugin.
     /// Pull an image from Docker Hub
     Pull {
@@ -240,6 +240,28 @@ enum Commands {
         /// Target platform (e.g. linux/arm64). Defaults to host platform.
         #[arg(long)]
         platform: Option<String>,
+    },
+
+    /// Build an image from a Dockerfile context.
+    Build {
+        /// Build context directory.
+        context: String,
+
+        /// Target image tag.
+        #[arg(short = 't', long)]
+        tag: String,
+
+        /// Dockerfile path relative to the build context.
+        #[arg(short = 'f', long, default_value = "Dockerfile")]
+        file: String,
+
+        /// Build-time variable in KEY=VALUE form. Repeatable.
+        #[arg(long = "build-arg", value_name = "KEY=VALUE")]
+        build_args: Vec<String>,
+
+        /// Disable cached build layers.
+        #[arg(long)]
+        no_cache: bool,
     },
 
     /// Execute a command inside a running container.
@@ -575,6 +597,26 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             into_cli(commands::pull::execute(image, tag, platform, socket_path).await)
         }
 
+        Commands::Build {
+            context,
+            tag,
+            file,
+            build_args,
+            no_cache,
+        } => into_cli(
+            commands::build::execute(
+                commands::build::BuildOptions {
+                    context: context.into(),
+                    tag,
+                    file: file.into(),
+                    build_args,
+                    no_cache,
+                },
+                socket_path,
+            )
+            .await,
+        ),
+
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
             into_cli(commands::load::execute(path, name, tag, socket_path).await)
@@ -890,6 +932,18 @@ mod tests {
             Commands::Pull { platform, .. } => assert_eq!(platform, None),
             _ => panic!("expected Pull"),
         }
+    }
+
+    #[test]
+    fn cli_parses_build_subcommand() {
+        let cli = Cli::try_parse_from([
+            "mbx",
+            "build",
+            "-t",
+            "minibox-e2e/alpine-echo:latest",
+            "tests/e2e/images/alpine-echo",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
     }
 
     #[test]

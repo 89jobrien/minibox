@@ -1,63 +1,102 @@
 # minibox-crux-plugin
 
-JSON-RPC stdio plugin that exposes minibox container and image operations
-to [crux](https://github.com/89jobrien/crux) agents.
+`minibox-crux-plugin` is a newline-delimited JSON stdio bridge between Crux workflows and a local
+`miniboxd` daemon. It translates namespaced handler invocations into the canonical
+`minibox_core::protocol::DaemonRequest` types and returns serialized daemon responses.
 
-## How it works
-
-The plugin runs as a standalone binary, communicating over stdin/stdout
-using the crux plugin protocol (newline-delimited JSON). It connects to
-a running `miniboxd` daemon via its Unix socket and translates crux
-handler invocations into `DaemonRequest`/`DaemonResponse` round-trips.
-
-```
-crux agent  <-->  minibox-crux-plugin (stdio)  <-->  miniboxd (Unix socket)
+```text
+Crux host <-> minibox-crux-plugin (stdin/stdout) <-> miniboxd (Unix socket)
 ```
 
-## Handlers
+The package provides both the `minibox-crux-plugin` binary and a `minibox_crux_plugin` library.
 
-13 handlers across two namespaces:
+## Stdio protocol
 
-| Handler                      | Description                              |
-| ---------------------------- | ---------------------------------------- |
-| `minibox::container::run`    | Create and start a container             |
-| `minibox::container::stop`   | Stop a running container                 |
-| `minibox::container::pause`  | Freeze a container (cgroup.freeze)       |
-| `minibox::container::resume` | Thaw a paused container                  |
-| `minibox::container::rm`     | Remove a stopped container               |
-| `minibox::container::exec`   | Execute a command in a running container |
-| `minibox::container::ps`     | List all containers                      |
-| `minibox::container::logs`   | Fetch container logs                     |
-| `minibox::image::pull`       | Pull an image from a registry            |
-| `minibox::image::build`      | Build an image from a Dockerfile         |
-| `minibox::image::push`       | Push an image to a registry              |
-| `minibox::image::ls`         | List cached images                       |
-| `minibox::image::rm`         | Remove a cached image                    |
+Requests are tagged with `method`; responses are tagged with `status`. Each JSON object occupies
+one line. Logs go to stderr so stdout remains protocol-only.
 
-## Usage
-
-```bash
-# Build
-cargo build -p minibox-crux-plugin --release
-
-# Run (miniboxd must be running)
-./target/release/minibox-crux-plugin
+```json
+{ "method": "Declare" }
 ```
 
-The plugin reads `Request` objects from stdin and writes `Response`
-objects to stdout. Logging goes to stderr (controlled by `RUST_LOG`).
+```json
+{
+  "method": "Invoke",
+  "params": { "handler": "minibox::container::ps", "input": {} }
+}
+```
 
-## Protocol messages
+```json
+{ "method": "Shutdown" }
+```
 
 | Request                     | Response                                       |
 | --------------------------- | ---------------------------------------------- |
 | `Declare`                   | `Declare { handlers }`                         |
 | `Invoke { handler, input }` | `InvokeOk { output }` or `InvokeErr { error }` |
-| `Shutdown`                  | `ShutdownAck`                                  |
+| `Shutdown`                  | `ShutdownAck`, then process exit               |
 
-## Security
+Malformed JSON lines are logged and skipped rather than producing a protocol response.
 
-Mount inputs are validated: paths must be absolute with no `..`
-components. The plugin itself does not perform container operations
-directly — all mutations go through `miniboxd`, which enforces container
-policy gates. The native adapter additionally requires root peer credentials.
+## Handlers
+
+| Handler                      | Required or notable input                                      |
+| ---------------------------- | -------------------------------------------------------------- |
+| `minibox::container::run`    | `image`; optional command, env, mounts, limits, name, platform |
+| `minibox::container::stop`   | `id`                                                           |
+| `minibox::container::pause`  | `id`                                                           |
+| `minibox::container::resume` | `id`                                                           |
+| `minibox::container::rm`     | `id`                                                           |
+| `minibox::container::exec`   | `id`, `command`; optional env and tty                          |
+| `minibox::container::ps`     | empty object                                                   |
+| `minibox::container::logs`   | `id`                                                           |
+| `minibox::image::pull`       | `image`; optional tag and platform                             |
+| `minibox::image::build`      | `context_path`; optional tag and Dockerfile text               |
+| `minibox::image::push`       | `image`                                                        |
+| `minibox::image::ls`         | empty object                                                   |
+| `minibox::image::rm`         | `image_ref`                                                    |
+
+The run handler creates a non-ephemeral request. Exec is available only when the selected daemon
+suite supplies an exec runtime. Push currently uses anonymous credentials and the `image` field as
+the complete target reference; an advertised separate `target` value is not consumed.
+
+## Build and run
+
+```bash
+cargo build -p minibox-crux-plugin --release
+RUST_LOG=minibox_crux_plugin=debug ./target/release/minibox-crux-plugin
+```
+
+The daemon must be reachable through the standard socket resolution rules:
+`MINIBOX_SOCKET_PATH`, `MINIBOX_RUN_DIR`, then the platform default.
+
+## Library API
+
+| API                                          | Purpose                                                             |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| `handler_decls()`                            | Return the 13 declared handler names and descriptions               |
+| `build_request()`                            | Validate JSON input and construct a daemon request                  |
+| `dispatch()`                                 | Call the daemon and collect responses through terminal/stream close |
+| `process_request()`                          | Execute one stdio protocol request                                  |
+| `parse_mounts()`                             | Validate absolute bind-mount paths without parent traversal         |
+| `protocol::{Request, Response, HandlerDecl}` | Public stdio message model                                          |
+
+## Security and limitations
+
+- Bind-mount paths must be absolute and contain no `..` components.
+- Mutations still pass through daemon policy and selected-adapter capability checks.
+- Native daemon sockets additionally enforce peer credentials.
+- This is a local stdio/Unix-socket bridge; it provides no remote authentication or transport.
+- Handler inputs do not yet expose every field in the daemon protocol.
+
+## Development and testing
+
+Unit tests cover every request mapping and validation path. Integration tests spawn the binary,
+exercise declare/invoke/shutdown framing, and use a mock daemon to verify translated requests and
+streaming responses.
+
+```bash
+cargo check -p minibox-crux-plugin
+cargo clippy -p minibox-crux-plugin --all-targets -- -D warnings
+cargo nextest run -p minibox-crux-plugin
+```

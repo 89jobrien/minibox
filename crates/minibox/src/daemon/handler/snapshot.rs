@@ -8,6 +8,9 @@ use crate::daemon::state::DaemonState;
 
 use super::HandlerDependencies;
 
+// TODO(feature-idea-29): resolve snapshot paths relative to a trusted directory handle with
+// openat2 containment (or an openat/O_NOFOLLOW fallback) before enabling real checkpoint backends.
+
 /// Save a VM state snapshot for a container.
 pub async fn handle_save_snapshot(
     id: String,

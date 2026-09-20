@@ -365,6 +365,9 @@ impl DaemonState {
     /// marked "Stopped" since the processes are no longer alive.
     ///
     /// Returns silently if the state file does not exist or is unreadable.
+    // TODO(feature-idea-28): fail closed on corrupt or unreadable state, serialize durable
+    // writes, and guard lifecycle transitions with process-held locks plus adapter-specific
+    // runtime identity (pidfd on Linux).
     pub async fn load_from_disk(&self) {
         let mut records: HashMap<String, ContainerRecord> = if let Some(repo) = &self.repository {
             match repo.load_containers() {

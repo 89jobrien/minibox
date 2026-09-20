@@ -8,6 +8,9 @@ use std::sync::Arc;
 // VM Checkpoint Port
 // ---------------------------------------------------------------------------
 
+// TODO(feature-idea-31): define versioned immutable snapshot IDs, parent lineage, payload
+// lengths/digests, and root-last atomic publication before implementing backend storage.
+
 /// Metadata describing a saved VM snapshot.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SnapshotInfo {
