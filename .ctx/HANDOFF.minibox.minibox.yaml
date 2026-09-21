@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-09-20
+updated: 2026-09-21
 items:
 - id: gh-473
   name: feat-xtask---squash-chain-branches-during-promotion
@@ -9,9 +9,19 @@ items:
   title: 'feat(xtask): squash chain branches during promotion'
   description: CapabilityMatrix missing from terminal/non-terminal classification coverage
   extra:
-  - date: 2026-09-20
+  - date: 2026-09-21
     type: blocker
     note: CapabilityMatrix missing from terminal/non-terminal classification coverage
+- id: gh-507
+  name: feat-oci---stabilize-push--commit--and-build
+  priority: P2
+  status: blocked
+  title: 'feat(oci): stabilize push, commit, and build'
+  description: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
+  extra:
+  - date: 2026-09-21
+    type: blocker
+    note: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
@@ -25,9 +35,10 @@ items:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
 log:
-- date: '20260920.132935'
-  summary: done=65 running=0 pending=27 blocked=1
+- date: '20260921.142311'
+  summary: done=65 running=0 pending=26 blocked=2
   commits:
+  - 10305f266242c26ee318602c673bb98eabbce13f
   - 1a981654efdc80f6c6439dfb00e6ea6d278cf2f0
   - 99e9a680047fef08ee8e84431104430ba74c42e5
   - 3e0780ea5255517cf7d8619d2fe9f45a86d1bd9c
@@ -37,4 +48,3 @@ log:
   - 583d795681594db0435e7fbc4d196e19edfef358
   - a72281f338bd3ea9b790b77145de108c97281f20
   - 3a1004578cf0a9cdc4a55dff934df1cc9ae5e5de
-  - e69e7241926c3c4dd1d0687842030a56f489769f
