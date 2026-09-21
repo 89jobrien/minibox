@@ -9,7 +9,7 @@ generated: 2026-08-28
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-09-20
+Last updated: 2026-09-21
 
 ---
 
