@@ -472,6 +472,7 @@ mod step_runner_tests {
         assert!(!caps.contains(&StepCapability::AccessRegistry));
     }
 
+    /// Checks the invariants shared by every step-runner implementation.
     pub fn assert_step_runner_contract(runner: &dyn StepRunner) {
         assert!(!runner.kind().is_empty(), "runner kind must not be empty");
         let _caps = runner.required_capabilities();

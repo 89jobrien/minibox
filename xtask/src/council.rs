@@ -7,6 +7,7 @@ use std::process::Command;
 use crate::dotenv;
 use crate::xconfig::XConfig;
 
+/// Builds agentbox when absent, injects its dotenv credentials, and runs a council review.
 pub fn run(root: &Path, base: &str, mode: &str, no_synthesis: bool, prod: bool) -> Result<()> {
     let cfg = XConfig::load(root)?;
 

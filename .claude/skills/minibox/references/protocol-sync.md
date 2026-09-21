@@ -21,7 +21,7 @@ There is no second CLI-local protocol definition; all frontends use this canonic
 
 Use the Grep tool:
 
-```
+```text
 pattern: "^\s+\w+\s*\{" or enum variant lines inside DaemonRequest
 file: crates/minibox-core/src/protocol.rs
 ```
@@ -80,7 +80,7 @@ test cases construct it. A count of 0 is a coverage gap — flag it.
 
 Also grep the broader workspace for any other test files that construct `DaemonRequest`:
 
-```
+```text
 pattern: DaemonRequest::
 path: crates/
 glob: **/*test*.rs
@@ -92,7 +92,7 @@ glob: **/*test*.rs
 
 Output a markdown table with one row per `DaemonRequest` variant:
 
-```
+```text
 | Variant | protocol.rs | server.rs | handler/ | mbx | integrations | tests |
 |---------|-------------|-----------|----------|-----|--------------|-------|
 | Run | OK | OK | OK | OK | MCP/Crux | 12 tests |

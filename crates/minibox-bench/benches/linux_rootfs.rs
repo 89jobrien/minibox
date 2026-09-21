@@ -59,6 +59,7 @@ mod real {
             .collect()
     }
 
+    /// Registers and runs the linux rootfs benchmarks.
     pub fn bench_linux_rootfs(c: &mut Criterion) {
         if !minibox_bench::is_root() {
             eprintln!("SKIP: linux_rootfs benches require root; benching nothing");

@@ -1,3 +1,5 @@
+//! Collects adapter docs data for the xtask context snapshot.
+
 use super::collect::output::sync_adapter_matrix;
 use super::manifest::{load_manifest, validate_manifest};
 use anyhow::{Context, Result, bail};

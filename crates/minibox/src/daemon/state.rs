@@ -838,6 +838,17 @@ impl crate::container_state::ContainerStateAccess for DaemonState {
             .ok_or_else(|| anyhow::anyhow!("container {container_id} has no overlay upper dir"))
     }
 
+    async fn get_merged_rootfs(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf> {
+        let map = self.containers.read().await;
+        let record = map
+            .get(container_id)
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
+        record
+            .merged_dir
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} has no merged rootfs"))
+    }
+
     async fn get_source_image_ref(&self, container_id: &str) -> anyhow::Result<String> {
         let map = self.containers.read().await;
         let record = map

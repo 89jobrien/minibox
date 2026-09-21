@@ -168,7 +168,6 @@ the group form (`xtask check protocol-sites <file>`, file at nth(3)), but deprec
    ```
 
    Then rewire dispatch to pass slices instead of re-reading `env::args()`:
-
    - In `main()`: `let argv: Vec<String> = env::args().collect();`
    - `Some("check") => cmd_check(&sh, root, &argv[2..])` — `cmd_check` takes
      `rest: &[String]`, uses `rest.first()` as the sub and passes `&rest[1..]` on.
@@ -186,7 +185,7 @@ the group form (`xtask check protocol-sites <file>`, file at nth(3)), but deprec
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask                             → all green
    cargo clippy -p xtask -- -D warnings                   → zero warnings
    cargo run -p xtask -- check-protocol-sites crates/miniboxd/src/main.rs --expected 4
@@ -227,7 +226,6 @@ HandlerDependencies site-count guard — CI invokes the wrong tool with all args
    exits 0 (scanner ignores args). After the fix it must fail on the missing file.
 
 2. Implement:
-
    - Delete the `Some("check-protocol-sites") => check_protocol_sites::run(root)` arm
      (main.rs:240).
    - Register the dead-variant scanner under the check group instead: add
@@ -242,7 +240,7 @@ HandlerDependencies site-count guard — CI invokes the wrong tool with all args
 
 3. Verify:
 
-   ```
+   ```text
    cargo run -p xtask -- check-protocol-sites crates/miniboxd/src/main.rs --expected 4  → exit 0 (site-count guard)
    cargo run -p xtask -- check-protocol-sites nonexistent-file --expected 99            → exit != 0 (file not found)
    cargo run -p xtask -- check protocol-variants                                        → runs scanner
@@ -266,7 +264,6 @@ HandlerDependencies site-count guard — CI invokes the wrong tool with all args
    `cargo check -p minibox --benches` → `error[E0603]: module 'run' is private` at line 11.
 
 2. Implement:
-
    - Line 11: `use minibox::daemon::handler::run::RunParams;` →
      `use minibox::daemon::handler::RunParams;`
    - Sweep every remaining `handler::run::` path in the file to the `handler::` re-export
@@ -276,7 +273,7 @@ HandlerDependencies site-count guard — CI invokes the wrong tool with all args
 
 3. Verify:
 
-   ```
+   ```text
    cargo check -p minibox --benches           → clean, zero warnings
    cargo clippy -p minibox --benches -- -D warnings  → zero warnings
    ```
@@ -367,7 +364,7 @@ The stale block references the pre-refactor surface: `create_test_deps` (now
 
 3. Verify:
 
-   ```
+   ```text
    cargo check -p miniboxd --all-targets --target aarch64-unknown-linux-gnu  → clean
    cargo check --workspace --all-targets                                     → clean on macOS
    ```
@@ -446,7 +443,7 @@ The stale block references the pre-refactor surface: `create_test_deps` (now
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox                    → all green
    cargo clippy -p minibox -- -D warnings          → zero warnings
    ```
@@ -532,7 +529,7 @@ test file found via `grep -rln handle_pipeline crates/minibox/tests/`)
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p miniboxd                                               → green
    cargo check -p miniboxd --all-targets --target aarch64-unknown-linux-gnu    → clean
    cargo clippy -p miniboxd -- -D warnings                                     → zero warnings
@@ -612,7 +609,7 @@ test file found via `grep -rln handle_pipeline crates/minibox/tests/`)
 
 3. Verify (wire format unchanged — snapshots must not move):
 
-   ```
+   ```text
    cargo nextest run -p minibox-core            → green, snapshot tests untouched
    cargo clippy -p minibox-core -- -D warnings  → zero warnings
    cargo xtask check protocol-drift             → if hash-fail: re-run with --update and
@@ -658,7 +655,6 @@ test file found via `grep -rln handle_pipeline crates/minibox/tests/`)
    the current result before changing anything.
 
 2. Implement:
-
    - lib.rs:105-115: replace the hand-rolled `matches!` with `resp.is_terminal()`.
      Behavior change: `ContainerCreated` stops being terminal for the plugin — correct per
      the protocol contract; the plugin's run handler then relies on stream close (the
@@ -675,7 +671,7 @@ test file found via `grep -rln handle_pipeline crates/minibox/tests/`)
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-crux-plugin        → all green
    cargo clippy -p minibox-crux-plugin -- -D warnings  → zero warnings
    ```
@@ -965,7 +961,6 @@ dropped — inconsistent with `ContainerPolicy::from_env` (handler/mod.rs:352) w
 1. Failing state: `cargo check -p ail` errors ("not included in the workspace").
 
 2. Implement:
-
    - Root `Cargo.toml` members: add `"crates/ail",` after `"crates/smolbox",`.
    - `crates/ail/Cargo.toml`:
 
@@ -1010,7 +1005,7 @@ variant, reqwest 0.13 in public API) plus minibox-macros' new macros.
 
 3. Verify:
 
-   ```
+   ```text
    cargo check --workspace                    → clean (Cargo.lock updates)
    cargo nextest run -p minibox-core          → green
    git diff --stat                            → Cargo.toml + Cargo.lock only

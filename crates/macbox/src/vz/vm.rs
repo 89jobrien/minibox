@@ -383,10 +383,12 @@ mod imp {
     pub struct VzVm;
 
     impl VzVm {
+        /// Boots a virtual machine from the supplied kernel and root filesystem configuration.
         pub fn boot(_config: VzVmConfig) -> Result<Self> {
             bail!("VzVm requires macOS 11+ and the `vz` feature")
         }
 
+        /// Stops the virtual machine and releases its resources.
         pub fn stop(&self) {}
     }
 }

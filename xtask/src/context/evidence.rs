@@ -1,3 +1,5 @@
+//! Collects evidence data for the xtask context snapshot.
+
 use super::model::{ExecutableTest, ProfileStatus, TestProfileResult, WorkspaceSnapshot};
 use std::collections::BTreeSet;
 

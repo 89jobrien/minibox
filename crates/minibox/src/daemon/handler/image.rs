@@ -402,6 +402,68 @@ pub async fn handle_commit(
 
 // ─── Build ──────────────────────────────────────────────────────────────────
 
+struct TemporaryDockerfile {
+    path: std::path::PathBuf,
+}
+
+impl TemporaryDockerfile {
+    fn create(context: &std::path::Path, contents: &[u8]) -> Result<(Self, String)> {
+        const MAX_ATTEMPTS: usize = 8;
+        for _ in 0..MAX_ATTEMPTS {
+            let name = format!(
+                ".minibox-build-{}.Dockerfile",
+                uuid::Uuid::new_v4().simple()
+            );
+            match Self::create_named(context, &name, contents) {
+                Ok(temporary) => return Ok((temporary, name)),
+                Err(error)
+                    if error
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|error| error.kind() == std::io::ErrorKind::AlreadyExists) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        anyhow::bail!("unable to allocate a collision-free temporary Dockerfile")
+    }
+
+    fn create_named(context: &std::path::Path, name: &str, contents: &[u8]) -> Result<Self> {
+        use std::io::Write;
+
+        let path = context.join(name);
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
+        }
+        let mut file = options.open(&path)?;
+        if let Err(error) = file.write_all(contents).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = std::fs::remove_file(&path);
+            return Err(error.into());
+        }
+        Ok(Self { path })
+    }
+}
+
+impl Drop for TemporaryDockerfile {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_file(&self.path)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!(
+                path = %self.path.display(),
+                error = %error,
+                "build: failed to remove temporary Dockerfile"
+            );
+        }
+    }
+}
+
 /// Build an image from an inline Dockerfile string.
 ///
 /// Streams [`DaemonResponse::BuildOutput`] for each Dockerfile step, then
@@ -462,15 +524,32 @@ pub async fn handle_build(
             }
         }
     };
-    let dockerfile_path = context_dir.join("Dockerfile.minibox-build");
-    if let Err(e) = tokio::fs::write(&dockerfile_path, &dockerfile).await {
-        send_error(&tx, "handle_build", format!("write Dockerfile: {e}")).await;
-        return;
-    }
+    let context_for_dockerfile = context_dir.clone();
+    let dockerfile_bytes = dockerfile.into_bytes();
+    let temporary = tokio::task::spawn_blocking(move || {
+        TemporaryDockerfile::create(&context_for_dockerfile, &dockerfile_bytes)
+    })
+    .await;
+    let (_temporary_dockerfile, dockerfile_name) = match temporary {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            send_error(&tx, "handle_build", format!("write Dockerfile: {error}")).await;
+            return;
+        }
+        Err(error) => {
+            send_error(
+                &tx,
+                "handle_build",
+                format!("write Dockerfile task failed: {error}"),
+            )
+            .await;
+            return;
+        }
+    };
 
     let context = minibox_core::domain::BuildContext {
         directory: context_dir,
-        dockerfile: std::path::PathBuf::from("Dockerfile.minibox-build"),
+        dockerfile: std::path::PathBuf::from(dockerfile_name),
     };
     let config = minibox_core::domain::BuildConfig {
         tag: tag.clone(),
@@ -656,6 +735,46 @@ pub async fn handle_list_images(
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod temporary_dockerfile_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn create_named_rejects_collision_and_symlink_without_touching_target() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let target = temp.path().join("target");
+        std::fs::write(&target, "unchanged").expect("write target");
+        let candidate = temp.path().join("candidate");
+        std::os::unix::fs::symlink(&target, &candidate).expect("create candidate symlink");
+
+        let result = TemporaryDockerfile::create_named(temp.path(), "candidate", b"malicious");
+        assert!(result.is_err());
+        assert_eq!(
+            std::fs::read_to_string(target).expect("read target"),
+            "unchanged"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temporary_dockerfile_is_mode_0600_and_removed_on_drop() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let (temporary, _name) =
+            TemporaryDockerfile::create(temp.path(), b"FROM scratch\n").expect("create file");
+        let path = temporary.path.clone();
+        let mode = std::fs::metadata(&path)
+            .expect("temporary metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+        drop(temporary);
+        assert!(!path.exists());
+    }
+}
 
 #[cfg(all(test, feature = "registry"))]
 mod registry_router_tests {

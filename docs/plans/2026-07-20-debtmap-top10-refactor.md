@@ -37,6 +37,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Above `run_daemon`, add:
+
    ```rust
    fn init_daemon_tracing() {
        #[cfg(feature = "otel")]
@@ -48,9 +49,11 @@ zero breaking API changes.
        minibox_core::init_tracing();
    }
    ```
+
    Note: under `#[cfg(feature = "otel")]` the guard must outlive the daemon process, so
    this helper cannot simply drop it at function return. Change the signature to return the
    guard so `run_daemon` keeps it alive:
+
    ```rust
    #[cfg(feature = "otel")]
    fn init_daemon_tracing() -> minibox::daemon::telemetry::traces::OtelGuard {
@@ -62,13 +65,16 @@ zero breaking API changes.
        minibox_core::init_tracing();
    }
    ```
+
 2. In `run_daemon`, replace the `// ── Tracing ──` block (lines 353-360) with:
+
    ```rust
    #[cfg(feature = "otel")]
    let _otel_guard = init_daemon_tracing();
    #[cfg(not(feature = "otel"))]
    init_daemon_tracing();
    ```
+
 3. Verify: `cargo check -p miniboxd` → compiles with default features, then
    `cargo check -p miniboxd --features otel` → compiles.
 4. Run: `git branch --show-current` (must not be `main`).
@@ -80,6 +86,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Add helper (placed after `init_daemon_tracing`):
+
    ```rust
    fn select_and_validate_adapter_suite() -> Result<AdapterSuite> {
        let suite = adapter_registry::adapter_from_env().map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -106,11 +113,14 @@ zero breaking API changes.
        Ok(suite)
    }
    ```
+
 2. In `run_daemon`, replace the `// ── Adapter suite ──` through
    `// ── Cgroup self-migration ──` blocks (original lines 371-397) with:
+
    ```rust
    let suite = select_and_validate_adapter_suite()?;
    ```
+
 3. Verify: `cargo check -p miniboxd`, `cargo check -p miniboxd --target x86_64-unknown-linux-musl` if cross toolchain is installed locally, otherwise skip cross-check (macOS dev machine — Linux-gated branches are not exercised by `cargo check` on macOS per `CLAUDE.md`).
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(miniboxd): extract select_and_validate_adapter_suite from run_daemon"`
@@ -121,6 +131,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Add helper:
+
    ```rust
    fn prepare_daemon_directories(paths: &DaemonPaths) -> Result<()> {
        const OWNER_RWX_PERMS: u32 = 0o700;
@@ -140,10 +151,13 @@ zero breaking API changes.
        Ok(())
    }
    ```
+
 2. In `run_daemon`, replace the `// ── Directories ──` block (original lines 414-430) with:
+
    ```rust
    prepare_daemon_directories(&paths)?;
    ```
+
 3. Verify: `cargo check -p miniboxd`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(miniboxd): extract prepare_daemon_directories from run_daemon"`
@@ -154,6 +168,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Add helper:
+
    ```rust
    #[cfg(feature = "metrics")]
    async fn build_metrics_recorder() -> Result<Arc<dyn minibox_core::domain::MetricsRecorder>> {
@@ -187,10 +202,13 @@ zero breaking API changes.
        Ok(Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()))
    }
    ```
+
 2. In `run_daemon`, replace the `// ── Metrics ──` block (original lines 449-473) with:
+
    ```rust
    let metrics_recorder = build_metrics_recorder().await?;
    ```
+
 3. Verify: `cargo check -p miniboxd`, `cargo check -p miniboxd --features metrics`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(miniboxd): extract build_metrics_recorder from run_daemon"`
@@ -201,6 +219,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Add helper:
+
    ```rust
    fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> ContainerPolicy {
        let env_policy = ContainerPolicy::from_env();
@@ -217,12 +236,16 @@ zero breaking API changes.
        }
    }
    ```
+
 2. In `run_daemon`, replace the policy-building block (original lines 478-490, the comment
    plus `env_policy`/`policy` construction) with:
+
    ```rust
    let policy = resolve_container_policy(&config);
    ```
+
    Keep the existing `tracing::info!(allow_bind_mounts = ..., allow_privileged = ..., "container policy configured (config > env > default)")` call immediately after, unchanged.
+
 3. Verify: `cargo check -p miniboxd`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(miniboxd): extract resolve_container_policy from run_daemon"`
@@ -233,6 +256,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Add helper:
+
    ```rust
    fn bind_and_secure_socket(sock_path: &Path) -> Result<UnixListener> {
        if sock_path.exists() {
@@ -281,13 +305,16 @@ zero breaking API changes.
        Ok(raw_listener)
    }
    ```
+
 2. In `run_daemon`, replace the socket-bind-and-permissions block (original lines 511-557)
    with:
+
    ```rust
    let sock_path = &paths.socket_path;
    let raw_listener = bind_and_secure_socket(sock_path)?;
    info!("listening on {}", sock_path.display());
    ```
+
 3. Verify: `cargo check -p miniboxd`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(miniboxd): extract bind_and_secure_socket from run_daemon"`
@@ -298,6 +325,7 @@ zero breaking API changes.
 **File**: `crates/miniboxd/src/main.rs`
 
 1. Add helper:
+
    ```rust
    fn install_shutdown_signal_handlers() -> Result<impl std::future::Future<Output = ()>> {
        use tokio::signal::unix::{SignalKind, signal};
@@ -311,18 +339,24 @@ zero breaking API changes.
        })
    }
    ```
+
 2. In `run_daemon`, replace the `// ── Signal handling ──` block (original lines 561-570)
    with:
+
    ```rust
    let shutdown = install_shutdown_signal_handlers()?;
    ```
+
 3. Verify: `cargo check -p miniboxd`.
 4. Full-phase verification (run once, after this final Phase 1a task):
-   ```
+
+   ```text
    cargo xtask verify
    ```
+
    Expected: fmt check, workspace check, and clippy (`-D warnings`) all pass with no new
    warnings introduced by the 7 extractions.
+
 5. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(miniboxd): extract install_shutdown_signal_handlers from run_daemon"`
 
@@ -336,6 +370,7 @@ zero breaking API changes.
 **File**: `crates/mbx/src/commands/exec.rs`
 
 1. Add helper (place above `execute`):
+
    ```rust
    fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
        let bytes = base64::engine::general_purpose::STANDARD
@@ -354,13 +389,16 @@ zero breaking API changes.
        Ok(())
    }
    ```
+
 2. In `execute`, replace the `DaemonResponse::ContainerOutput { stream, data } => { ... }`
    match arm body with:
+
    ```rust
    DaemonResponse::ContainerOutput { stream, data } => {
        handle_container_output(stream, &data)?;
    }
    ```
+
 3. Verify: `cargo check -p mbx`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(mbx): extract handle_container_output from exec::execute"`
@@ -371,6 +409,7 @@ zero breaking API changes.
 **File**: `crates/mbx/src/commands/exec.rs`
 
 1. Add helper:
+
    ```rust
    #[cfg(unix)]
    fn spawn_stdin_relay_task(socket_path: std::path::PathBuf, exec_id: String) {
@@ -398,11 +437,14 @@ zero breaking API changes.
        });
    }
    ```
+
 2. In `execute`, inside the `DaemonResponse::ExecStarted { exec_id }` arm's `if tty { ... }`
    block, replace the `tokio::spawn(async move { ... })` stdin-relay block with:
+
    ```rust
    spawn_stdin_relay_task(sp.clone(), exec_id.clone());
    ```
+
 3. Verify: `cargo check -p mbx`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(mbx): extract spawn_stdin_relay_task from exec::execute"`
@@ -413,6 +455,7 @@ zero breaking API changes.
 **File**: `crates/mbx/src/commands/exec.rs`
 
 1. Add helper:
+
    ```rust
    #[cfg(unix)]
    async fn send_initial_pty_size(socket_path: &std::path::Path, exec_id: &str) {
@@ -426,12 +469,15 @@ zero breaking API changes.
            .await;
    }
    ```
+
 2. In `execute`'s `if tty { ... }` block, replace the "Initial terminal size" block
    (the `#[cfg(unix)] { let (cols, rows) = ...; ... }`) with:
+
    ```rust
    #[cfg(unix)]
    send_initial_pty_size(&sp, &exec_id).await;
    ```
+
 3. Verify: `cargo check -p mbx`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(mbx): extract send_initial_pty_size from exec::execute"`
@@ -442,6 +488,7 @@ zero breaking API changes.
 **File**: `crates/mbx/src/commands/exec.rs`
 
 1. Add helper:
+
    ```rust
    #[cfg(unix)]
    fn spawn_sigwinch_forwarder_task(socket_path: std::path::PathBuf, exec_id: String) {
@@ -470,11 +517,14 @@ zero breaking API changes.
        }
    }
    ```
+
 2. In `execute`'s `if tty { ... }` block, replace the "SIGWINCH forwarding" block with:
+
    ```rust
    #[cfg(unix)]
    spawn_sigwinch_forwarder_task(sp.clone(), exec_id.clone());
    ```
+
 3. Verify: `cargo check -p mbx`.
 4. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(mbx): extract spawn_sigwinch_forwarder_task from exec::execute"`
@@ -485,6 +535,7 @@ zero breaking API changes.
 **File**: `crates/mbx/src/commands/exec.rs`
 
 1. Add helper (after the three helpers above exist):
+
    ```rust
    async fn handle_exec_started(exec_id: String, tty: bool, socket_path: &std::path::Path) {
        if tty {
@@ -497,31 +548,41 @@ zero breaking API changes.
        }
    }
    ```
+
    Note: on non-`unix` targets `tty` is always forced `false` earlier in `execute()`
    (`let tty = tty && std::io::stdout().is_terminal();` — but the `is_terminal()` gate is
    platform-independent while the spawn helpers are `#[cfg(unix)]` only); confirm this
    compiles on the non-unix path by wrapping the body in `#[cfg(unix)]` as shown so the
    `if tty` check with no unix body is a no-op on non-unix, matching current behavior
    exactly (the original code has no non-unix `if tty` body either).
+
 2. In `execute`, replace the entire `DaemonResponse::ExecStarted { exec_id } => { if tty { ... } }`
    arm with:
+
    ```rust
    DaemonResponse::ExecStarted { exec_id } => {
        handle_exec_started(exec_id, tty, &sp).await;
    }
    ```
+
 3. Verify: `cargo check -p mbx`, then run the existing regression test:
-   ```
+
+   ```text
    cargo nextest run -p mbx -- exec_sends_correct_request
    ```
+
    Expected: PASS (this test drives `execute()` end-to-end through a mock Unix socket
    server and asserts on the request payload — it exercises this exact code path).
+
 4. Full-phase verification:
-   ```
+
+   ```text
    cargo xtask verify
    cargo nextest run -p mbx
    ```
+
    Expected: fmt/clippy clean, all `mbx` tests green.
+
 5. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(mbx): extract handle_exec_started from exec::execute"`
 
@@ -550,6 +611,7 @@ rely on stale line numbers from the design doc once Task 2.1 has run.
 4. Create `crates/minibox-core/src/domain/state.rs` containing `ContainerState` enum and its
    `impl ContainerState` + `impl Display` blocks, cut verbatim.
 5. Create `crates/minibox-core/src/domain/mod.rs`:
+
    ```rust
    mod error;
    mod ids;
@@ -559,14 +621,16 @@ rely on stale line numbers from the design doc once Task 2.1 has run.
    pub use ids::*;
    pub use state::*;
    ```
+
    (Remaining unmigrated types stay in `domain.rs` temporarily — see step 6.)
+
 6. Rename `crates/minibox-core/src/domain.rs` to
    `crates/minibox-core/src/domain/legacy.rs`, remove the moved items (`DomainError`,
    `ContainerId`, `SessionId`, `ContainerState` and their impls) from it, and add
    `mod legacy; pub use legacy::*;` to `domain/mod.rs`. This keeps every not-yet-migrated
    type compiling under the new directory layout for the remaining tasks in this phase.
 7. Verify: `cargo check --workspace` — every downstream `minibox_core::domain::{DomainError,
-   ContainerId, SessionId, ContainerState}` import must still resolve via the re-exports.
+ContainerId, SessionId, ContainerState}` import must still resolve via the re-exports.
 8. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(minibox-core): scaffold domain/ module, move error/ids/state"`
 
@@ -627,7 +691,7 @@ rely on stale line numbers from the design doc once Task 2.1 has run.
 
 1. Create `crates/minibox-core/src/domain/exec.rs` containing: `ExecSpec` struct,
    `ExecHandle` struct, `ProgressSink<T>` trait + its two impls (`for
-   tokio::sync::mpsc::Sender<T>` and `for Arc<dyn ProgressSink<T>>`), `ExecRuntime` trait —
+tokio::sync::mpsc::Sender<T>` and `for Arc<dyn ProgressSink<T>>`), `ExecRuntime` trait —
    cut verbatim.
 2. Add `mod exec; pub use exec::*;` to `domain/mod.rs`.
 3. Verify: `cargo check --workspace`.
@@ -700,9 +764,9 @@ rely on stale line numbers from the design doc once Task 2.1 has run.
 1. Create `crates/minibox-core/src/domain/workflow.rs` containing every remaining item from
    `legacy.rs` — at this point that is exactly the workflow-engine cluster: `StepRetry`,
    `ExprVar`, `WorkflowStep`, `WorkflowDef`, `PhaseOutcome`, `StepStatus` + `impl From<StepStatus>
-   for StepState`, `determine_final_phase`, `StepCapability`, `StepContext`, `StepOutput`,
+for StepState`, `determine_final_phase`, `StepCapability`, `StepContext`, `StepOutput`,
    `StepRunnerCapability`, `StepRunner` trait, `StepRunnerRegistry` + `impl
-   StepRunnerRegistry` + `impl Default`, `ContainerRunStepRunner` + `impl StepRunner`,
+StepRunnerRegistry` + `impl Default`, `ContainerRunStepRunner` + `impl StepRunner`,
    `ImagePullStepRunner` + `impl StepRunner`, `ExecStepRunner` + `impl StepRunner`,
    `OverlaySnapshotStepRunner` + `impl StepRunner`, `StepCompletion`,
    `determine_step_completion`, `ResolvedStep`, `resolve_step_vars`, `propagate_output`,
@@ -715,18 +779,21 @@ rely on stale line numbers from the design doc once Task 2.1 has run.
 4. Verify each module's internal `use` statements: since these types previously all lived in
    one file, cross-module references (e.g. `workflow.rs`'s `ContainerRunStepRunner` referring
    to runtime/exec/image/filesystem types) now need explicit `use super::{runtime::*,
-   exec::*, image::*, filesystem::*};` or `use crate::domain::{...};` imports — add them as
+exec::*, image::*, filesystem::*};` or `use crate::domain::{...};` imports — add them as
    needed per compiler errors.
 5. Verify: `cargo check --workspace` — must be completely clean, no unresolved imports
    anywhere in the workspace.
 6. Full-phase verification:
-   ```
+
+   ```text
    cargo xtask verify
    cargo test --workspace
    ```
+
    Expected: fmt/clippy clean; all existing `domain.rs`-colocated unit tests (which moved
    with their respective type modules) still pass, plus every downstream crate's tests that
    depend on `minibox_core::domain::*` types.
+
 7. Run: `git branch --show-current` (must not be `main`).
    Commit: `git commit -m "refactor(minibox-core): move workflow engine types out of domain legacy, delete legacy.rs"`
 
@@ -734,7 +801,7 @@ rely on stale line numbers from the design doc once Task 2.1 has run.
 
 ## Final verification (after all three phases)
 
-```
+```text
 cargo xtask verify
 cargo test --workspace
 cargo xtask borrow-fixtures

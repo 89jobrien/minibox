@@ -1,3 +1,5 @@
+//! Collects output data for the xtask context snapshot.
+
 use super::super::manifest::ContextManifest;
 use super::super::model::{
     AdapterMaturity, CapabilitySupport, EvidenceId, ExecutableTest, ProfileStatus,

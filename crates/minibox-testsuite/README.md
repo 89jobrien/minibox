@@ -12,13 +12,13 @@ from `minibox::testing::mocks` — no kernel interaction, network calls, or daem
 
 Run the full suite and print a pass/fail summary:
 
-```
+```text
 cargo run -p minibox-testsuite --bin run-conformance
 ```
 
 Generate JSON and JUnit XML reports in `artifacts/`:
 
-```
+```text
 cargo run -p minibox-testsuite --bin generate-report
 ```
 
@@ -38,7 +38,7 @@ Categories used in the harness:
 
 ## Structure
 
-```
+```text
 crates/minibox-testsuite/
   src/
     harness/          ConformanceTest trait, TestContext, TestRunner, ReportGenerator

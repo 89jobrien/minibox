@@ -157,6 +157,9 @@ struct HookToolInput {
     file_path: Option<PathBuf>,
 }
 
+/// Compares normalized contract-surface hashes with the protocol lockfile.
+///
+/// Can update the lockfile, skip unrelated hook events, or emit detected drift as SARIF.
 pub fn run(
     root: &Path,
     update: bool,

@@ -220,7 +220,7 @@ were removed, the test would fail.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core --test a1_mutation_audit  -> all green
    cargo clippy -p minibox-core -- -D warnings                 -> zero warnings
    ```
@@ -383,7 +383,7 @@ the setuid mask, and path component classification.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox --test a2_exhaustive_small_domain  -> all green
    cargo clippy -p minibox -- -D warnings                          -> zero warnings
    ```
@@ -566,7 +566,7 @@ request/response framing and error propagation without a real socket.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox --test a3_stream_trait_boundary  -> all green
    cargo clippy -p minibox -- -D warnings                        -> zero warnings
    ```
@@ -774,7 +774,7 @@ Concurrent stress tests for `DaemonState` using `tokio::sync::Barrier`.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox --test a4_barrier_race  -> all green
    cargo clippy -p minibox -- -D warnings               -> zero warnings
    ```
@@ -1016,7 +1016,7 @@ as a standalone type. We substitute `ContainerInfo` and
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core --test a5_roundtrip_proptest  -> all green
    cargo clippy -p minibox-core -- -D warnings                     -> zero warnings
    ```

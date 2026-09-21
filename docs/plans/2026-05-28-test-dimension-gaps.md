@@ -110,7 +110,7 @@ on arbitrary input and that round-trip invariants hold.
 
 **Crate**: `minibox-crux-plugin`
 **File(s)**: `crates/minibox-crux-plugin/fuzz/fuzz_targets/fuzz_build_request.rs`,
-             `crates/minibox-crux-plugin/fuzz/Cargo.toml`
+`crates/minibox-crux-plugin/fuzz/Cargo.toml`
 **Run**: `cd crates/minibox-crux-plugin && cargo fuzz run fuzz_build_request -- -max_total_time=30`
 
 The crux plugin accepts JSON from stdin and passes it to
@@ -159,7 +159,6 @@ no panics on malformed input.
 2. Add seed corpus: `crates/minibox-crux-plugin/fuzz/corpus/fuzz_build_request/`
    with representative JSON inputs (Declare, Invoke with each handler,
    Shutdown).
-
 3. Verify: run for 30s, no crashes.
 4. Commit: `test(crux-plugin): add fuzz target for JSON-RPC request parsing`
 
@@ -167,7 +166,7 @@ no panics on malformed input.
 
 **Crate**: `smolbox`
 **File(s)**: `crates/smolbox/src/preflight.rs` (extend existing tests),
-             `crates/smolbox/tests/proptest_preflight.rs`
+`crates/smolbox/tests/proptest_preflight.rs`
 **Run**: `cargo test -p smolbox`
 
 smolbox currently has 4 unit tests, all in `preflight.rs`. The
@@ -253,7 +252,7 @@ various formats, plus a property test for arbitrary version strings.
 
 **Crate**: workspace
 **File(s)**: `docs/TEST_INFRASTRUCTURE.mbx.md` (update),
-             `crates/minibox/tests/regression_template.rs` (example)
+`crates/minibox/tests/regression_template.rs` (example)
 **Run**: `cargo test -p minibox --test regression_template`
 
 Establish a convention for regression tests so future bug fixes

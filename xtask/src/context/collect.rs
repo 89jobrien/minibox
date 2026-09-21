@@ -1,3 +1,5 @@
+//! Coordinates collection of every section in an xtask context snapshot.
+
 use super::manifest::{AdapterRegistryObservation, ContextManifest};
 use super::model::{
     AdapterMaturity, AdapterSnapshot, CapabilitySupport, CollectorTask, ContextDiagnostic,

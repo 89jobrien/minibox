@@ -101,7 +101,7 @@ Use `--no-ff` to preserve branch topology in the log.
 
 Maintain a running list during integration:
 
-```
+```text
 ## Conflict Resolution Log
 
 | File | Branch | Main side intent | Branch side intent | Resolution |

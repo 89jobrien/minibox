@@ -14,6 +14,7 @@ Parse `$ARGUMENTS` for: `--save`, `--crates <csv>`, `--reports-dir <path>`.
 Default crates: `minibox`, `minibox-macros`, `mbx`, `miniboxd`.
 
 For each crate:
+
 1. Run: `cargo test -p <crate> --lib -- --format json -Z unstable-options 2>/dev/null`
 2. Parse JSON event lines: collect `type=test` events, count `ok`/`failed`/`ignored`
 3. Collect names of failed tests

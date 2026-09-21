@@ -476,6 +476,7 @@ pub struct SandboxClient {
 }
 
 impl SandboxClient {
+    /// Starts an isolated daemon fixture for command-level tests.
     pub fn start() -> Self {
         Self {
             fixture: DaemonFixture::start(),
@@ -490,6 +491,7 @@ impl SandboxClient {
         }
     }
 
+    /// Pulls the image once and records it in the fixture cache.
     pub fn ensure_image(&mut self, image: &str) {
         if self.pulled_images.contains(image) {
             return;
@@ -500,6 +502,7 @@ impl SandboxClient {
         self.pulled_images.insert(image.to_string());
     }
 
+    /// Runs a command in a fixture container, pulling the image once if needed.
     pub fn execute(&mut self, image: &str, cmd: &[&str]) -> ExecResult {
         self.ensure_image(image);
         let (img, tag) = Self::parse_image_tag(image);
@@ -515,6 +518,7 @@ impl SandboxClient {
         }
     }
 
+    /// Runs a command in a fixture container with memory and CPU limits.
     pub fn execute_with_limits(
         &mut self,
         image: &str,
@@ -548,6 +552,7 @@ impl SandboxClient {
         }
     }
 
+    /// Starts a long-running fixture container and returns its child process.
     pub fn spawn_container(&mut self, image: &str, cmd: &[&str]) -> Child {
         self.ensure_image(image);
         let (img, tag) = Self::parse_image_tag(image);

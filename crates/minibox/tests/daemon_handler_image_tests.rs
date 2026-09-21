@@ -55,6 +55,20 @@ use tempfile::TempDir;
 mod daemon_handler_common;
 use daemon_handler_common::*;
 
+fn temporary_dockerfiles(directory: &std::path::Path) -> Vec<std::path::PathBuf> {
+    std::fs::read_dir(directory)
+        .expect("read build context")
+        .filter_map(Result::ok)
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".minibox-build-")
+        })
+        .map(|entry| entry.path())
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // handle_pull Tests
 // ---------------------------------------------------------------------------
@@ -1111,6 +1125,103 @@ async fn test_handle_build_success() {
         "expected BuildComplete, got {terminal:?}"
     );
     assert_eq!(mock_builder.call_count(), 1);
+    assert!(
+        temporary_dockerfiles(temp_dir.path()).is_empty(),
+        "temporary Dockerfile must be removed after success"
+    );
+}
+
+#[tokio::test]
+async fn test_handle_build_preserves_preexisting_similar_filename() {
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let sentinel = temp_dir.path().join(".minibox-build-existing.Dockerfile");
+    std::fs::write(&sentinel, "do not overwrite").expect("write sentinel");
+    let state = create_test_state_with_dir(&temp_dir);
+    let mock_builder = Arc::new(minibox_core::adapters::mocks::MockImageBuilder::new());
+    let deps = {
+        let mut dependencies = (*create_test_deps_with_dir(&temp_dir)).clone();
+        dependencies.build.image_builder =
+            Some(mock_builder as minibox_core::domain::DynImageBuilder);
+        Arc::new(dependencies)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(16);
+
+    handler::handle_build(
+        "FROM scratch".to_string(),
+        temp_dir.path().to_string_lossy().into_owned(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    while let Ok(Some(response)) =
+        tokio::time::timeout(std::time::Duration::from_millis(300), rx.recv()).await
+    {
+        if !matches!(response, DaemonResponse::BuildOutput { .. }) {
+            break;
+        }
+    }
+
+    assert_eq!(
+        std::fs::read_to_string(&sentinel).expect("read sentinel"),
+        "do not overwrite"
+    );
+    assert_eq!(temporary_dockerfiles(temp_dir.path()), vec![sentinel]);
+}
+
+#[tokio::test]
+async fn test_handle_build_removes_temporary_dockerfile_after_parser_failure() {
+    struct ParsingBuilder;
+
+    impl minibox_core::domain::AsAny for ParsingBuilder {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl minibox_core::domain::ImageBuilder for ParsingBuilder {
+        async fn build_image(
+            &self,
+            context: &minibox_core::domain::BuildContext,
+            _config: &minibox_core::domain::BuildConfig,
+            _progress_tx: minibox_core::domain::DynProgressSink<
+                minibox_core::domain::BuildProgress,
+            >,
+        ) -> anyhow::Result<minibox_core::domain::ImageMetadata> {
+            let contents =
+                tokio::fs::read_to_string(context.directory.join(&context.dockerfile)).await?;
+            minibox_core::image::dockerfile::parse(&contents)?;
+            anyhow::bail!("expected parser failure")
+        }
+    }
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let state = create_test_state_with_dir(&temp_dir);
+    let deps = {
+        let mut dependencies = (*create_test_deps_with_dir(&temp_dir)).clone();
+        dependencies.build.image_builder = Some(Arc::new(ParsingBuilder));
+        Arc::new(dependencies)
+    };
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<DaemonResponse>(8);
+
+    handler::handle_build(
+        "RUN invalid-before-from".to_string(),
+        temp_dir.path().to_string_lossy().into_owned(),
+        "myimage:latest".to_string(),
+        vec![],
+        false,
+        state,
+        deps,
+        tx,
+    )
+    .await;
+    let response = rx.recv().await.expect("receive parser error");
+    assert!(matches!(response, DaemonResponse::Error { .. }));
+    assert!(temporary_dockerfiles(temp_dir.path()).is_empty());
 }
 
 // ---------------------------------------------------------------------------
@@ -1306,6 +1417,10 @@ async fn test_handle_build_adapter_failure_returns_error() {
     assert!(
         matches!(terminal, Some(DaemonResponse::Error { ref message }) if message.contains("mock build failure")),
         "expected build failure error, got {terminal:?}"
+    );
+    assert!(
+        temporary_dockerfiles(temp_dir.path()).is_empty(),
+        "temporary Dockerfile must be removed after builder failure"
     );
 }
 

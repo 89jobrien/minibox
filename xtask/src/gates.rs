@@ -507,8 +507,7 @@ pub fn test_turmoil(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Property-based tests (proptest)
-/// Shuttle concurrency tests (deterministic random scheduling).
+/// Runs the Shuttle concurrency suite with deterministic random scheduling.
 pub fn test_shuttle(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -519,6 +518,7 @@ pub fn test_shuttle(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Runs the gated release-mode property suites for minibox and its daemon.
 pub fn test_property(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     let sh = sh.clone();

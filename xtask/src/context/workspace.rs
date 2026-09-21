@@ -1,3 +1,5 @@
+//! Collects workspace data for the xtask context snapshot.
+
 /// Stable identity used in portable test evidence.
 ///
 /// Cargo package IDs embed checkout paths for path dependencies, so imported

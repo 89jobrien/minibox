@@ -1,3 +1,5 @@
+//! Collects manifest data for the xtask context snapshot.
+
 use super::model::{AdapterMaturity, CapabilitySupport};
 use anyhow::{Context, Result, bail};
 use serde::Deserialize;

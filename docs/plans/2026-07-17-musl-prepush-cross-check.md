@@ -54,7 +54,7 @@ Design doc: `docs/designs/2026-07-17-musl-prepush-cross-check-design.md`
 
 3. Verify:
 
-   ```
+   ```text
    cargo check -p xtask
    ```
 
@@ -110,7 +110,7 @@ Design doc: `docs/designs/2026-07-17-musl-prepush-cross-check-design.md`
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask -- musl_cross_check_error_has_diagnostic_shape   → PASS
    cargo clippy -p xtask -- -D warnings                                        → zero warnings
    ```
@@ -127,15 +127,13 @@ Design doc: `docs/designs/2026-07-17-musl-prepush-cross-check-design.md`
 1. Prerequisite (one-time, not part of the commit): install the missing rustup
    target so the success path can be verified locally:
 
-   ```
+   ```text
    rustup target add x86_64-unknown-linux-musl
    ```
 
 2. Implement. Replace the stale TODO block currently at lines 187-189
-   (`// TODO: add \`cargo check --target x86_64-unknown-linux-musl\` here to catch ...`
-   through `// the 2026-05-22 cluster of 5 iterative CI-fix-push cycles. See mistakes.md.`)
-   with a call to a new helper, and add that helper directly above `pub fn prepush`
-   (below the `MuslCrossCheckError` struct added in Task 2):
+   (`// TODO: add \`cargo check --target x86_64-unknown-linux-musl\` here to catch ...`through`// the 2026-05-22 cluster of 5 iterative CI-fix-push cycles. See mistakes.md.`)
+with a call to a new helper, and add that helper directly above `pub fn prepush`(below the`MuslCrossCheckError` struct added in Task 2):
 
    ```rust
    /// Cross-compile `miniboxd` + `mbx` in release mode for the VPS deploy
@@ -171,7 +169,7 @@ Design doc: `docs/designs/2026-07-17-musl-prepush-cross-check-design.md`
 
 3. Verify:
 
-   ```
+   ```text
    cargo check -p xtask                     → compiles clean
    cargo clippy -p xtask -- -D warnings     → zero warnings
    cargo xtask prepush                      → runs cross_check_musl_release first;

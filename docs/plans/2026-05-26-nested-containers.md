@@ -44,7 +44,7 @@ pub struct NestingContext {
 
 ### Data flow
 
-```
+```text
 Host (depth 0)
   |-- minibox run --privileged alpine
   |     env: MINIBOX_NEST_DEPTH=1
@@ -128,7 +128,7 @@ Container init sets `MINIBOX_NEST_DEPTH=N` where N = parent depth + 1.
 
 If `depth >= max_depth`, container creation fails with:
 
-```
+```text
 Error: nesting depth 4 exceeds maximum (MINIBOX_MAX_NEST_DEPTH=4)
 ```
 
@@ -146,20 +146,20 @@ In the child init path (after `CLONE_NEWNS`, before `pivot_root`):
 
 1. Mount `tmpfs` at `<rootfs>/dev` with `mode=0755`.
 2. Create device nodes via `mknod`:
-    - `/dev/null` (c 1, 3)
-    - `/dev/zero` (c 1, 5)
-    - `/dev/full` (c 1, 7)
-    - `/dev/random` (c 1, 8)
-    - `/dev/urandom` (c 1, 9)
-    - `/dev/tty` (c 5, 0)
-    - `/dev/console` (c 5, 1)
-    - `/dev/ptmx` (c 5, 2) -> symlink to `/dev/pts/ptmx`
+   - `/dev/null` (c 1, 3)
+   - `/dev/zero` (c 1, 5)
+   - `/dev/full` (c 1, 7)
+   - `/dev/random` (c 1, 8)
+   - `/dev/urandom` (c 1, 9)
+   - `/dev/tty` (c 5, 0)
+   - `/dev/console` (c 5, 1)
+   - `/dev/ptmx` (c 5, 2) -> symlink to `/dev/pts/ptmx`
 3. Mount `devpts` at `<rootfs>/dev/pts` with `newinstance,ptmxmode=0666`.
 4. Create symlinks:
-    - `/dev/fd` -> `/proc/self/fd`
-    - `/dev/stdin` -> `/proc/self/fd/0`
-    - `/dev/stdout` -> `/proc/self/fd/1`
-    - `/dev/stderr` -> `/proc/self/fd/2`
+   - `/dev/fd` -> `/proc/self/fd`
+   - `/dev/stdin` -> `/proc/self/fd/0`
+   - `/dev/stdout` -> `/proc/self/fd/1`
+   - `/dev/stderr` -> `/proc/self/fd/2`
 5. Create `/dev/shm` directory (tmpfs mount point for POSIX shared memory).
 
 This runs for all privileged containers, not just nested ones, since it
@@ -206,22 +206,22 @@ rootfs for the inner miniboxd to function.
 ## Test plan
 
 1. **Unit tests** (in-crate, no root needed):
-    - `NestingContext` construction and depth validation.
-    - Overlay probe logic (mock mount syscall).
-    - Cgroup delegation path generation.
-    - Device node list completeness (tmpfs + mknod).
+   - `NestingContext` construction and depth validation.
+   - Overlay probe logic (mock mount syscall).
+   - Cgroup delegation path generation.
+   - Device node list completeness (tmpfs + mknod).
 
 2. **Integration test** (`#[ignore]`, Linux + root):
-    - Outer minibox runs Alpine with miniboxd binary bind-mounted.
-    - Inner miniboxd starts, pulls `busybox`, runs `echo nested-ok`.
-    - Assert stdout contains `nested-ok`.
-    - Verify inner cgroup was created under outer's subtree.
-    - Verify cleanup: inner cgroup removed, overlay unmounted.
+   - Outer minibox runs Alpine with miniboxd binary bind-mounted.
+   - Inner miniboxd starts, pulls `busybox`, runs `echo nested-ok`.
+   - Assert stdout contains `nested-ok`.
+   - Verify inner cgroup was created under outer's subtree.
+   - Verify cleanup: inner cgroup removed, overlay unmounted.
 
 3. **Depth limit test** (`#[ignore]`, Linux + root):
-    - Set `MINIBOX_MAX_NEST_DEPTH=2`.
-    - Nest to depth 2 (succeeds), attempt depth 3 (fails with error).
+   - Set `MINIBOX_MAX_NEST_DEPTH=2`.
+   - Nest to depth 2 (succeeds), attempt depth 3 (fails with error).
 
 4. **Overlay fallback test** (`#[ignore]`, Linux + root):
-    - Force overlay probe to return `false` (via test-only override).
-    - Verify tmpfs-copy path is taken at depth >= 2.
+   - Force overlay probe to return `false` (via test-only override).
+   - Verify tmpfs-copy path is taken at depth >= 2.

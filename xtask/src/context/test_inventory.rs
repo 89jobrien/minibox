@@ -1,3 +1,5 @@
+//! Collects test inventory data for the xtask context snapshot.
+
 use super::collect::{CommandRunner, CommandSpec, RepositoryReader, redact_diagnostic};
 use super::manifest::ValidationProfile;
 use super::model::{

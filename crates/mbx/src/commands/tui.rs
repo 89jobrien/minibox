@@ -1,5 +1,6 @@
 //! `mbx tui` — read-only terminal dashboard (container table + live event log).
 
+/// Executes the `tui` command.
 pub async fn execute() -> anyhow::Result<()> {
     minibox_tui::run()
         .await

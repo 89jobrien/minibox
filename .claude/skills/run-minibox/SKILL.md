@@ -24,7 +24,7 @@ via `cargo xtask doctor` — all checks passed, `smolvm` on PATH, no extra
 
 ## Build
 
-```
+```text
 cd /Users/joe/dev/minibox
 cargo build --release -p miniboxd -p minibox-cli
 ```
@@ -42,7 +42,7 @@ process — the daemon dies as soon as that process exits, which looks like a
 successful start followed by silent failure on the next command. Always
 launch via the driver, not a raw `job spawn`/`&`.
 
-```
+```text
 cd /Users/joe/dev/minibox
 
 # 1. Build (only needed after code changes)
@@ -70,7 +70,7 @@ nu -c 'source .claude/skills/run-minibox/driver.nu; teardown'
 
 Actual verified transcript of step 4 (`smoke`):
 
-```
+```text
 --- pull alpine:latest ---
 Pulling alpine:latest…
 pulled alpine:latest
@@ -94,13 +94,13 @@ Most `mbx` subcommands require a live `miniboxd`. The one exception:
 capability without touching a socket — useful for inspecting compiled adapter
 support before spending time booting anything.
 
-```
+```text
 target/release/mbx doctor
 ```
 
 ## Run (human path)
 
-```
+```text
 cargo build --release -p miniboxd -p minibox-cli
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock MINIBOX_DATA_DIR=/tmp/mbx-state ./target/release/miniboxd &
 MINIBOX_SOCKET_PATH=/tmp/miniboxd.sock ./target/release/mbx pull alpine:latest
@@ -113,7 +113,7 @@ you're responsible for killing the daemon yourself.
 
 ## Test
 
-```
+```text
 cargo xtask verify           # fmt check, clippy -D warnings, borrow fixtures
 cargo xtask test unit        # cross-platform workspace library tests
 ```

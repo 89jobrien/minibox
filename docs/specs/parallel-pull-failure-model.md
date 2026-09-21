@@ -17,7 +17,7 @@ All code references are to `crates/minibox-core/src/image/registry.rs` unless no
 
 ---
 
-## §1  Failure Scenarios
+## §1 Failure Scenarios
 
 ### 1.1 Single layer fails, others succeed
 
@@ -53,7 +53,7 @@ state. See §3 for state detail.
 
 ---
 
-## §2  Error Propagation
+## §2 Error Propagation
 
 ### 2.1 Task return type
 
@@ -102,7 +102,7 @@ The `tmp_dir` from an aborted extraction remains on disk (see §3.3).
 
 ---
 
-## §3  State After Failure
+## §3 State After Failure
 
 ### 3.1 Layers that completed before the first error
 
@@ -155,7 +155,7 @@ file is considered incomplete and is not returned by `ImageStore::has_image`.
 
 ---
 
-## §4  Retry Semantics
+## §4 Retry Semantics
 
 ### 4.1 No built-in retry
 
@@ -187,7 +187,7 @@ missing blob, permanent auth failure).
 
 ---
 
-## §5  Interaction with LimitedStream
+## §5 Interaction with LimitedStream
 
 ### 5.1 Where LimitedStream is inserted
 
@@ -227,40 +227,40 @@ differently from network or digest errors; the same drain-loop path applies (§2
 
 ---
 
-## §6  Test Plan
+## §6 Test Plan
 
 Tests in `crates/minibox-core/src/image/registry.rs` under `#[cfg(test)] mod tests`.
 
 ### Existing tests
 
-| Test name                                  | Covers                                           |
-| ------------------------------------------ | ------------------------------------------------ |
+| Test name                                      | Covers                                          |
+| ---------------------------------------------- | ----------------------------------------------- |
 | `pull_image_downloads_and_stores_all_layers` ✓ | Happy path: all layers succeed, manifest stored |
-| `pull_image_errors_when_auth_fails` ✓       | Auth failure before any layer task is spawned    |
-| `pull_image_errors_when_blob_fetch_fails` ✓ | Single-layer HTTP 500 failure (§1.1)             |
-| `pull_image_errors_on_digest_mismatch` ✓    | Digest mismatch on a single layer (§1.1, §3.2)  |
-| `layer_task_join_error_contains_digest` ✓   | Panic in layer task maps to digest (§2.1, #151) |
-| `pull_layer_errors_on_404` ✓               | HTTP 404 on blob fetch                           |
+| `pull_image_errors_when_auth_fails` ✓          | Auth failure before any layer task is spawned   |
+| `pull_image_errors_when_blob_fetch_fails` ✓    | Single-layer HTTP 500 failure (§1.1)            |
+| `pull_image_errors_on_digest_mismatch` ✓       | Digest mismatch on a single layer (§1.1, §3.2)  |
+| `layer_task_join_error_contains_digest` ✓      | Panic in layer task maps to digest (§2.1, #151) |
+| `pull_layer_errors_on_404` ✓                   | HTTP 404 on blob fetch                          |
 
 ### Tests needed
 
-| Test name                                          | Scenario (section)                                |
-| -------------------------------------------------- | ------------------------------------------------- |
-| `pull_image_second_layer_fails_first_cached`       | First layer cached; second fails — verify first  |
-|                                                    | layer dir persists on disk (§1.4, §3.1)           |
-| `pull_image_all_layers_fail`                       | All blobs return 500 — error is returned, no      |
-|                                                    | manifest stored, layer dirs absent (§1.3, §3.4)   |
-| `pull_image_skips_cached_layers_on_repull`         | Run pull_image twice; second run skips cached     |
-|                                                    | layers (§4.3)                                     |
-| `pull_image_stale_tmp_dir_removed_on_repull`       | Leave a `*.tmp` dir from a previous run; verify   |
-|                                                    | it is removed before extraction starts (§4.3)     |
-| `pull_image_size_limit_error_no_layer_dir`         | Serve a response with body > MAX_LAYER_SIZE via   |
-|                                                    | chunked transfer (no Content-Length); verify      |
-|                                                    | LimitedStream fires, tmp_dir absent (§5.2)        |
-| `pull_image_content_length_too_large_rejected`     | Serve Content-Length > MAX_LAYER_SIZE; verify     |
-|                                                    | rejection before streaming (§5.3)                 |
-| `pull_image_manifest_not_stored_on_layer_failure`  | Layer fails; verify `store.has_image()` returns   |
-|                                                    | false and no manifest file exists (§3.4)          |
+| Test name                                         | Scenario (section)                              |
+| ------------------------------------------------- | ----------------------------------------------- |
+| `pull_image_second_layer_fails_first_cached`      | First layer cached; second fails — verify first |
+|                                                   | layer dir persists on disk (§1.4, §3.1)         |
+| `pull_image_all_layers_fail`                      | All blobs return 500 — error is returned, no    |
+|                                                   | manifest stored, layer dirs absent (§1.3, §3.4) |
+| `pull_image_skips_cached_layers_on_repull`        | Run pull_image twice; second run skips cached   |
+|                                                   | layers (§4.3)                                   |
+| `pull_image_stale_tmp_dir_removed_on_repull`      | Leave a `*.tmp` dir from a previous run; verify |
+|                                                   | it is removed before extraction starts (§4.3)   |
+| `pull_image_size_limit_error_no_layer_dir`        | Serve a response with body > MAX_LAYER_SIZE via |
+|                                                   | chunked transfer (no Content-Length); verify    |
+|                                                   | LimitedStream fires, tmp_dir absent (§5.2)      |
+| `pull_image_content_length_too_large_rejected`    | Serve Content-Length > MAX_LAYER_SIZE; verify   |
+|                                                   | rejection before streaming (§5.3)               |
+| `pull_image_manifest_not_stored_on_layer_failure` | Layer fails; verify `store.has_image()` returns |
+|                                                   | false and no manifest file exists (§3.4)        |
 
 ---
 

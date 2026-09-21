@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use std::process::Command;
 
+/// Resolves a 1Password reference with the `op` CLI.
 pub fn op_read(op_ref: &str) -> Result<String> {
     let output = Command::new("op")
         .args(["read", "--account", "my.1password.com", op_ref])

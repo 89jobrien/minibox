@@ -1,3 +1,5 @@
+//! Collects model data for the xtask context snapshot.
+
 use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::path::{Component, Path};

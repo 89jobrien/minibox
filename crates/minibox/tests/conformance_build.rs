@@ -240,6 +240,45 @@ async fn build_metadata_reflects_config_tag() -> Result<()> {
     Ok(())
 }
 
+/// Multi-stage COPY must preserve prior layers and copy from a numeric stage reference.
+#[tokio::test]
+async fn build_multistage_copy_preserves_ordered_layers() -> Result<()> {
+    let tmp = tempfile::TempDir::new()?;
+    let store = make_image_store(&tmp);
+    let context_dir = tmp.path().join("context");
+    std::fs::create_dir(&context_dir)?;
+    std::fs::write(context_dir.join("artifact"), "built")?;
+    std::fs::write(
+        context_dir.join("Dockerfile"),
+        "FROM scratch AS build\nCOPY artifact /out/artifact\nFROM build AS final\nCOPY --from=0 /out/artifact /app/artifact\nENV READY=yes\n",
+    )?;
+    let (_backend, builder) = minibox_build_backend(Arc::clone(&store), tmp.path().join("data"));
+    let (tx, _rx) = mpsc::channel(64);
+
+    builder
+        .build_image(
+            &BuildContext {
+                directory: context_dir,
+                dockerfile: std::path::PathBuf::from("Dockerfile"),
+            },
+            &build_config("conformance/multistage:latest"),
+            TokioProgressSink::shared(tx),
+        )
+        .await?;
+
+    let manifest = store.load_manifest_pub("conformance/multistage", "latest")?;
+    assert_eq!(manifest.layers.len(), 1);
+    let layers = store.get_image_layers("conformance/multistage", "latest")?;
+    assert_eq!(
+        std::fs::read_to_string(layers[0].join("app/artifact"))?,
+        "built"
+    );
+    let config: serde_json::Value =
+        serde_json::from_slice(&store.load_config_blob_pub("conformance/multistage", "latest")?)?;
+    assert_eq!(config["config"]["Env"][0], "READY=yes");
+    Ok(())
+}
+
 /// An empty Dockerfile must not cause a panic.
 ///
 /// The builder may return `Ok(meta)` with empty layers or `Err(_)` — both are

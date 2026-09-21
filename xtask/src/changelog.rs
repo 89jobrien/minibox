@@ -41,6 +41,7 @@ impl ChangelogSource for SystemChangelogSource {
     }
 }
 
+/// Moves unreleased changelog entries into a versioned release section.
 pub fn prepare(root: &Path, version: &str) -> Result<Option<PreparedChangelog>> {
     prepare_with(&SystemChangelogSource, root, version)
 }
@@ -63,6 +64,7 @@ fn prepare_with(
     )
 }
 
+/// Replaces a file atomically through a temporary sibling file.
 pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
     let parent = path
         .parent()

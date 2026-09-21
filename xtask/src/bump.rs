@@ -10,6 +10,7 @@ use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
 
+/// Updates workspace package versions at the requested semver level.
 pub fn bump(root: &Path, level: &str) -> Result<String> {
     let manifest_path = root.join("Cargo.toml");
     let content = fs::read_to_string(&manifest_path)?;
@@ -36,6 +37,7 @@ pub fn bump(root: &Path, level: &str) -> Result<String> {
     Ok(next)
 }
 
+/// Updates workspace versions and prepares the matching changelog entry.
 pub fn bump_with_changelog(root: &Path, level: &str) -> Result<Option<String>> {
     let manifest_path = root.join("Cargo.toml");
     let original_manifest = fs::read_to_string(&manifest_path)

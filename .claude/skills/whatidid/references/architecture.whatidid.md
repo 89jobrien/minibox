@@ -41,7 +41,7 @@ loads it rather than maintaining a second table.
 
 ## Leverage metric
 
-```
+```text
 human_value    = total_human_hours × HOURLY_RATE   ($72/hr blended rate)
 seat_cost/mo   = $39/mo enterprise plan
 leverage       = human_value / seat_cost_per_month

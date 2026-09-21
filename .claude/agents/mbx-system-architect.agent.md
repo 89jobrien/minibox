@@ -58,7 +58,7 @@ and the Windows stub according to platform and build availability.
 
 When adding a new platform adapter (e.g., `winbox`, `vf` wired-up):
 
-```
+```text
 1. Implement the required ports under the owning runtime/platform adapter module.
 2. Add adapter metadata and parsing in `crates/miniboxd/src/adapter_registry.rs`.
 3. Add complete `HandlerDependencies` composition in `crates/miniboxd/src/main.rs`.
@@ -86,7 +86,7 @@ Protocol change process:
 
 When a feature touches multiple crates, evaluate impact layer by layer:
 
-```
+```text
 Domain layer (crates/minibox-domain/src/):
   → Does this require a new trait? Or extend existing one?
   → Trait changes are breaking — version carefully
@@ -132,7 +132,7 @@ The `macbox` crate exists precisely to provide macOS-compatible implementations 
 
 This contract is load-bearing for daemon correctness:
 
-```
+```text
 Tokio runtime handles:
   - Unix socket accept() → async
   - Message framing + deserialization → async

@@ -179,7 +179,7 @@ done
 
 The bench pipeline collects Criterion output and maintains per-environment baselines:
 
-```
+```text
 cargo xtask bench
   → runs cargo bench -p minibox-bench
   → writes JSON/CSV snapshots and an HTML dashboard under bench/results/

@@ -26,6 +26,7 @@ Parse `$ARGUMENTS` for: `--base <branch>`, `--mode core|extensive`, `--no-synthe
 3. Each finding includes: file:line, description, suggested fix
 
 **Security role checklist:**
+
 - Path traversal (user input to Path::join without validate_layer_path)
 - `.unwrap()` in non-test code
 - `fork`/`clone` inside `async fn` without spawn_blocking

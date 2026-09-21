@@ -24,10 +24,12 @@ pub const PIPELINE: &[&str] = &["develop", "staging", "release", "main"];
 pub struct Tier(usize);
 
 impl Tier {
+    /// Constructs the value from str.
     pub fn from_str(s: &str) -> Option<Self> {
         PIPELINE.iter().position(|&b| b == s).map(Tier)
     }
 
+    /// Returns the git branch associated with this promotion stage.
     pub const fn branch(self) -> &'static str {
         PIPELINE[self.0]
     }

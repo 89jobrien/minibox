@@ -188,6 +188,7 @@ pub fn emit_gha_outputs(cs: &ChangeSet) -> Result<()> {
     Ok(())
 }
 
+/// Classifies paths changed from the base ref to `HEAD` and emits CI area flags.
 pub fn run(root: &Path, base_ref: &str) -> Result<()> {
     let cs = detect_changes(root, base_ref)?;
     emit_gha_outputs(&cs)

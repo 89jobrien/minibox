@@ -13,7 +13,7 @@ Prevent bugs, security vulnerabilities, and correctness failures before they rea
 
 ## Minibox Architecture Context
 
-```
+```text
 miniboxd (async daemon, tokio)
   → minibox/src/daemon/server.rs   (Unix socket, SO_PEERCRED auth)
   → minibox/src/daemon/handler/    (split request handlers and dependency groups)
@@ -193,7 +193,7 @@ let content = fs::read_to_string(&path)
 
 ## Response Format
 
-````
+````text
 ## Minibox Code Review
 
 | CRITICAL | IMPORTANT |

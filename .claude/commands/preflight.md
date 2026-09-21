@@ -19,7 +19,7 @@ nu scripts/preflight.nu
 
 Expected output (all checks must pass):
 
-```
+```text
 === minibox preflight ===
 [ok]   shell
 [ok]   cargo on PATH
@@ -37,20 +37,20 @@ preflight passed 10/10
 
 ## Step 2 — Interpret failures
 
-| Failing check | Fix |
-|---|---|
-| `cargo on PATH` | `mise exec -- cargo --version` or install rustup |
+| Failing check          | Fix                                                                 |
+| ---------------------- | ------------------------------------------------------------------- |
+| `cargo on PATH`        | `mise exec -- cargo --version` or install rustup                    |
 | `CARGO_TARGET_DIR set` | Set in `.envrc`: `export CARGO_TARGET_DIR=~/.minibox/cache/target/` |
-| `xtask available` | `cargo build -p xtask` |
-| `1Password authed` | Open 1Password app and unlock it |
-| `git repo clean` | Commit or stash uncommitted changes |
+| `xtask available`      | `cargo build -p xtask`                                              |
+| `1Password authed`     | Open 1Password app and unlock it                                    |
+| `git repo clean`       | Commit or stash uncommitted changes                                 |
 
 ## Step 3 — VPS targets
 
 If the task targets the VPS (bench-vps, test-e2e, Linux build), run the VPS health skill
 after local preflight passes:
 
-```
+```text
 /vps-health
 ```
 

@@ -78,6 +78,7 @@ mod linux {
         }
     }
 
+    /// Registers and runs the spawn benchmarks.
     pub fn bench_spawn(c: &mut Criterion) {
         if !minibox_bench::is_root() {
             eprintln!("SKIP: linux_spawn benches require root (euid != 0)");

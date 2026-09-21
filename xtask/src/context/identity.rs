@@ -1,3 +1,5 @@
+//! Collects identity data for the xtask context snapshot.
+
 use super::collect::{
     CommandOutput, CommandRunner, CommandSpec, FingerprintEntry, RepositoryReader,
 };

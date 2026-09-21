@@ -505,6 +505,9 @@ fn check_adapter_manifest_drift(root: &Path) -> Result<()> {
 
 // ── Public entry point ───────────────────────────────────────────────────
 
+/// Checks documented code facts, adapter metadata, and agent definitions for drift.
+///
+/// Full mode also audits freshness and coverage, then writes `xtask/docs-audit-report.json`.
 pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     eprintln!("--- docs-audit ---");
 

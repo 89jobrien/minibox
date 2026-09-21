@@ -68,6 +68,7 @@ impl Clock for SystemClock {
     }
 }
 
+/// Collects and emits the workspace context snapshot.
 pub fn context(root: &Path, options: &ContextOptions) -> Result<()> {
     run_context(
         &SystemCommandRunner,
@@ -80,10 +81,12 @@ pub fn context(root: &Path, options: &ContextOptions) -> Result<()> {
     Ok(())
 }
 
+/// Regenerates the adapter inventory documentation from source metadata.
 pub fn sync_adapter_docs(root: &Path) -> Result<()> {
     adapter_docs::sync(root)
 }
 
+/// Checks that generated adapter documentation matches source metadata.
 pub fn check_adapter_docs(root: &Path) -> Result<()> {
     adapter_docs::check_drift(root)
 }

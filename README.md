@@ -99,7 +99,7 @@ breakdown.
 
 16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
 
-```
+```text
 minibox-macros          declarative macros (as_any!, adapt!)
     ^
 minibox-domain          canonical domain values, policies, events, and ports

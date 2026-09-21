@@ -30,6 +30,7 @@ pub struct Options {
 }
 
 impl Options {
+    /// Parses runner flags and collects arguments after `--` for the test binaries.
     pub fn from_args(args: &[String]) -> Self {
         let smolfile = args
             .windows(2)
@@ -71,6 +72,9 @@ impl VmBackend {
     }
 }
 
+/// Selects an available VM backend and runs the Linux test suites inside it.
+///
+/// Persistent VMs run Cargo directly; ephemeral VMs run cross-compiled test binaries.
 pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
     let cfg = XConfig::load(workspace_root)?;
     let target = &cfg.cross.target;

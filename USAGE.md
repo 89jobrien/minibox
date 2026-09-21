@@ -201,7 +201,7 @@ drift between what was installed and what is running.
 
 **Layout**
 
-```
+```text
 ~/.mbx/vm/overlay/
   cas/<sha256>   ← file content, named by sha256 of content
   refs/<name>    ← text file containing a sha256, maps a name to a CAS object

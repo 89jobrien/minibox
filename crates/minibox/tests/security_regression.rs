@@ -67,6 +67,16 @@ use std::io::Write;
 use tar::{Builder, EntryType, Header};
 use tempfile::TempDir;
 
+use minibox::adapters::MiniboxImageBuilder;
+use minibox::testing::mocks::{MockFilesystem, MockRegistry, MockRuntime};
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::{BuildConfig, BuildContext, DynImageRegistry, ImageBuilder};
+use minibox_core::image::ImageStore;
+use minibox_core::progress::TokioProgressSink;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+
 // ---------------------------------------------------------------------------
 // Tar archive builders
 // ---------------------------------------------------------------------------
@@ -573,6 +583,52 @@ fn mutation_audit_request_size_limit_exists() {
         source.contains("1024 * 1024") || source.contains("1_048_576"),
         "MAX_REQUEST_SIZE must be 1 MB (1024 * 1024 or 1_048_576)"
     );
+}
+
+/// A Dockerfile COPY source cannot escape the caller-provided build context.
+#[tokio::test]
+async fn regression_native_builder_rejects_copy_source_traversal() {
+    let temp = TempDir::new().expect("create temp dir");
+    let context = temp.path().join("context");
+    std::fs::create_dir(&context).expect("create context");
+    std::fs::write(
+        context.join("Dockerfile"),
+        "FROM scratch\nCOPY ../host-secret /secret\n",
+    )
+    .expect("write Dockerfile");
+    std::fs::write(temp.path().join("host-secret"), "secret").expect("write host secret");
+    let image_store =
+        Arc::new(ImageStore::new(temp.path().join("images")).expect("create image store"));
+    let builder = MiniboxImageBuilder::new(
+        Arc::clone(&image_store),
+        temp.path().join("data"),
+        Arc::new(MockFilesystem::new()),
+        Arc::new(MockRuntime::new()),
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            std::iter::empty::<(&str, DynImageRegistry)>(),
+        )),
+    );
+    let (progress_tx, _progress_rx) = mpsc::channel(8);
+
+    let result = builder
+        .build_image(
+            &BuildContext {
+                directory: context,
+                dockerfile: PathBuf::from("Dockerfile"),
+            },
+            &BuildConfig {
+                tag: "security/traversal:latest".to_string(),
+                build_args: vec![],
+                no_cache: false,
+            },
+            TokioProgressSink::shared(progress_tx),
+        )
+        .await;
+
+    let error = result.expect_err("COPY traversal must be rejected");
+    assert!(error.to_string().contains("traversal"), "error: {error:#}");
+    assert!(!image_store.has_image("security/traversal", "latest"));
 }
 
 // ---------------------------------------------------------------------------

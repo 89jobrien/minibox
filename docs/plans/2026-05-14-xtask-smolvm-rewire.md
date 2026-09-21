@@ -48,7 +48,8 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
      `#[cfg(test)]` module
 
 3. Verify:
-   ```
+
+   ```text
    cargo check --manifest-path xtask/Cargo.toml          → clean
    cargo clippy --manifest-path xtask/Cargo.toml -- -D warnings  → zero warnings
    cargo test --manifest-path xtask/Cargo.toml            → all green
@@ -66,6 +67,7 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
 **Run**: `cargo test --manifest-path xtask/Cargo.toml`
 
 1. Write failing test:
+
    ```rust
    #[test]
    fn cpio_initramfs_builder_creates_output_file() {
@@ -85,10 +87,12 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
        }
    }
    ```
+
    Run: `cargo test --manifest-path xtask/Cargo.toml -- cpio_initramfs_builder`
    Expected: FAIL (type doesn't exist yet)
 
 2. Implement — add after `ZigbuildCompiler` impl block in `test_linux.rs`:
+
    ```rust
    /// Build a gzip-compressed cpio initramfs using standard POSIX `find` + `cpio`.
    ///
@@ -134,7 +138,8 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo test --manifest-path xtask/Cargo.toml -- cpio_initramfs_builder  → passes
    cargo clippy --manifest-path xtask/Cargo.toml -- -D warnings            → zero warnings
    ```
@@ -151,6 +156,7 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
 **Run**: `cargo test --manifest-path xtask/Cargo.toml`
 
 1. Write failing test:
+
    ```rust
    #[test]
    fn smolvm_runner_constructs_correctly() {
@@ -158,12 +164,14 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
        assert_eq!(r.image_name, "minibox-tester:latest");
    }
    ```
+
    Run: `cargo test --manifest-path xtask/Cargo.toml -- smolvm_runner_constructs`
    Expected: FAIL (type doesn't exist yet)
 
 2. Implement — update `VmRunner` doc and add `SmolvmRunner` after `CpioInitramfsBuilder`:
 
    Update `VmRunner` trait doc from:
+
    ```rust
    /// Boot a QEMU VM, stream serial output, and detect the test-done sentinel.
    pub trait VmRunner {
@@ -173,7 +181,9 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
        fn run(&self, kernel_path: &Path, initramfs_path: &Path, cmdline: &str) -> Result<()>;
    }
    ```
+
    to:
+
    ```rust
    /// Boot a micro-VM or container and stream test output.
    pub trait VmRunner {
@@ -184,6 +194,7 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
    ```
 
    Add `SmolvmRunner`:
+
    ```rust
    /// Run tests via `minibox run --privileged <image_name> -- /run-tests.sh`.
    ///
@@ -213,7 +224,8 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo test --manifest-path xtask/Cargo.toml -- smolvm_runner_constructs  → passes
    cargo clippy --manifest-path xtask/Cargo.toml -- -D warnings              → zero warnings
    ```
@@ -236,6 +248,7 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
 
    In `test_linux.rs`, remove `#![allow(dead_code)]` (line 10) and update the module
    doc to remove the TODO:
+
    ```rust
    //! test_linux — hexagonal architecture for `cargo xtask test-linux`.
    //!
@@ -248,10 +261,13 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
    ```
 
    In `main.rs`, replace:
+
    ```rust
    Some("test-linux") => bail!("test-linux is not yet implemented for smolvm; see #306"),
    ```
+
    with:
+
    ```rust
    Some("test-linux") => {
        let target_base = std::env::var("CARGO_TARGET_DIR")
@@ -288,7 +304,8 @@ callers after the vm_image pipeline was dropped in #306. Remove them.
    Also add `dirs` to xtask's `Cargo.toml` if not already present (check first).
 
 3. Verify:
-   ```
+
+   ```text
    cargo check --manifest-path xtask/Cargo.toml               → clean
    cargo clippy --manifest-path xtask/Cargo.toml -- -D warnings → zero warnings
    cargo test --manifest-path xtask/Cargo.toml                → all green

@@ -59,7 +59,7 @@ auto-skip through `TestContext`.
 
 4. Verify:
 
-   ```
+   ```text
    cargo check -p minibox-core --features test-utils
    cargo check -p minibox-testsuite
    ```
@@ -148,7 +148,7 @@ auto-skip through `TestContext`.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core --features test-utils  -> all green
    cargo clippy -p minibox-core --features test-utils -- -D warnings  -> zero
    ```
@@ -258,7 +258,7 @@ auto-skip through `TestContext`.
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    cargo clippy -p minibox-testsuite -- -D warnings  -> zero
    ```
@@ -291,7 +291,7 @@ auto-skip through `TestContext`.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    cargo clippy -p minibox-testsuite -- -D warnings  -> zero
    ```
@@ -327,7 +327,7 @@ auto-skip through `TestContext`.
 2. Add the macro to `crates/minibox-testsuite/src/lib.rs` (must be at
    crate root for `#[macro_export]`):
 
-   ```rust
+   ````rust
    /// Declare a conformance test with inventory auto-registration.
    ///
    /// # With capability (auto-skip when unsupported)
@@ -438,7 +438,7 @@ auto-skip through `TestContext`.
            }
        };
    }
-   ```
+   ````
 
 3. Add `paste` to workspace deps in root `Cargo.toml`:
 
@@ -500,7 +500,7 @@ auto-skip through `TestContext`.
 
 6. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    cargo clippy -p minibox-testsuite -- -D warnings  -> zero
    ```
@@ -643,7 +643,7 @@ auto-skip through `TestContext`.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    cargo clippy -p minibox-testsuite -- -D warnings  -> zero
    ```
@@ -787,7 +787,7 @@ auto-skip through `TestContext`.
 
 3. Verify the 6 registry tests still appear in inventory and pass:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    ```
 
@@ -815,34 +815,34 @@ except `registry.rs` and `mod.rs`
 
 2. Capability mapping for each module:
 
-   | Module | Capability |
-   |--------|-----------|
-   | `container_committer` | `Commit` |
-   | `image_builder` | `BuildFromContext` |
-   | `image_pusher` | `PushToRegistry` |
-   | `vm_checkpoint` | `Checkpoint` |
-   | `filesystem` | `Filesystem` |
-   | `exec_runtime` | `Exec` |
-   | `network` | `Network` |
-   | `pty` | `Pty` |
-   | `metrics` | `Metrics` |
-   | `registry_router` | `RegistryRouter` |
-   | `image_loader` | `ImageLoader` |
-   | `registry` | (none — already done) |
-   | `runtime` | (none — general runtime) |
-   | `limiter` | (none — general resource) |
-   | `state` | (none — state management) |
-   | `pause_resume` | (none — lifecycle) |
-   | `list` | (none — listing) |
-   | `policy` | (none — policy) |
-   | `container_id` | (none — ID generation) |
-   | `logs` | (none — log retrieval) |
-   | `remove` | (none — cleanup) |
-   | `stop_handler` | (none — lifecycle) |
+   | Module                | Capability                |
+   | --------------------- | ------------------------- |
+   | `container_committer` | `Commit`                  |
+   | `image_builder`       | `BuildFromContext`        |
+   | `image_pusher`        | `PushToRegistry`          |
+   | `vm_checkpoint`       | `Checkpoint`              |
+   | `filesystem`          | `Filesystem`              |
+   | `exec_runtime`        | `Exec`                    |
+   | `network`             | `Network`                 |
+   | `pty`                 | `Pty`                     |
+   | `metrics`             | `Metrics`                 |
+   | `registry_router`     | `RegistryRouter`          |
+   | `image_loader`        | `ImageLoader`             |
+   | `registry`            | (none — already done)     |
+   | `runtime`             | (none — general runtime)  |
+   | `limiter`             | (none — general resource) |
+   | `state`               | (none — state management) |
+   | `pause_resume`        | (none — lifecycle)        |
+   | `list`                | (none — listing)          |
+   | `policy`              | (none — policy)           |
+   | `container_id`        | (none — ID generation)    |
+   | `logs`                | (none — log retrieval)    |
+   | `remove`              | (none — cleanup)          |
+   | `stop_handler`        | (none — lifecycle)        |
 
 3. After converting all modules, verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    cargo clippy -p minibox-testsuite -- -D warnings  -> zero
    ```
@@ -855,10 +855,11 @@ except `registry.rs` and `mod.rs`
 
 **Crate**: `minibox-testsuite`
 **File(s)**:
+
 - `crates/minibox-testsuite/src/adapters/mod.rs`
 - `crates/minibox-testsuite/src/spoke.rs`
 - `crates/minibox-testsuite/src/lib.rs`
-**Run**: `cargo nextest run -p minibox-testsuite`
+  **Run**: `cargo nextest run -p minibox-testsuite`
 
 1. In `adapters/mod.rs`, remove the `all()` function entirely. Keep
    the `pub mod` declarations (modules still exist, they just register
@@ -874,7 +875,7 @@ except `registry.rs` and `mod.rs`
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-testsuite  -> all green
    cargo clippy -p minibox-testsuite -- -D warnings  -> zero
    ```
@@ -887,9 +888,10 @@ except `registry.rs` and `mod.rs`
 
 **Crate**: `minibox-testsuite`
 **File(s)**:
+
 - `crates/minibox-testsuite/src/bin/run_conformance.rs`
 - `crates/minibox-testsuite/src/bin/generate_report.rs`
-**Run**: `cargo run -p minibox-testsuite --bin run-conformance`
+  **Run**: `cargo run -p minibox-testsuite --bin run-conformance`
 
 1. Rewrite `run_conformance.rs`:
 
@@ -1028,7 +1030,7 @@ except `registry.rs` and `mod.rs`
 
 3. Verify both binaries build and run:
 
-   ```
+   ```text
    cargo run -p minibox-testsuite --bin run-conformance
    cargo run -p minibox-testsuite --bin generate-report
    ```
@@ -1047,7 +1049,7 @@ except `registry.rs` and `mod.rs`
 1. Search for all references to `SpokeRegistry` or `spoke::` outside
    `minibox-testsuite`:
 
-   ```
+   ```text
    rg "SpokeRegistry|spoke::" crates/ --type rust \
      --glob '!**/minibox-testsuite/**'
    ```
@@ -1060,7 +1062,7 @@ except `registry.rs` and `mod.rs`
 
 3. Verify:
 
-   ```
+   ```text
    cargo check --workspace  -> all green
    cargo nextest run --workspace  -> all green
    ```
@@ -1075,13 +1077,13 @@ except `registry.rs` and `mod.rs`
 
 1. Run the full local gate:
 
-   ```
+   ```text
    cargo xtask verify
    ```
 
 2. Run the conformance binary end-to-end:
 
-   ```
+   ```text
    cargo run -p minibox-testsuite --bin run-conformance -- \
      CONFORMANCE_VERBOSE=1
    ```
@@ -1097,9 +1099,9 @@ except `registry.rs` and `mod.rs`
 ## Risk
 
 - [x] Breaking API: `TestContext` gains lifetime. All test impls must
-  update. Contained to `publish = false` test crates.
+      update. Contained to `publish = false` test crates.
 - [x] New deps: `inventory` (0 transitive), `paste` (0 transitive).
-  Both are stable, widely used.
+      Both are stable, widely used.
 - [ ] Feature flag: no new flags. `inventory` in `minibox-core` uses
-  existing `test-utils`.
+      existing `test-utils`.
 - [ ] Semver: no production API changes. All changes are in test infra.
