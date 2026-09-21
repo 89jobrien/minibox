@@ -182,7 +182,7 @@ done
 
 The bench pipeline is append-only and must stay in sync:
 
-```
+```text
 cargo xtask bench
   → runs ./target/release/minibox-bench
   → appends new row to bench/results/bench.jsonl

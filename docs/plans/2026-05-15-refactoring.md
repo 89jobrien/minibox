@@ -64,7 +64,7 @@ modules (#356) — all without changing observable behaviour.
 
 3. Verify:
 
-   ```
+   ```text
    cargo check -p minibox-core              -> OK (no nix dependency)
    cargo clippy -p minibox-core -- -D warnings  -> zero warnings
    ```
@@ -95,7 +95,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo check -p minibox                   -> OK
    cargo clippy -p minibox -- -D warnings   -> zero warnings
    ```
@@ -157,7 +157,7 @@ modules (#356) — all without changing observable behaviour.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    cargo clippy -p minibox -- -D warnings    -> zero warnings
    ```
@@ -198,7 +198,7 @@ modules (#356) — all without changing observable behaviour.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox -p minibox-core  -> all green
    cargo clippy --workspace -- -D warnings       -> zero warnings
    ```
@@ -223,19 +223,19 @@ modules (#356) — all without changing observable behaviour.
 
    b. In `crates/minibox/src/adapters/mod.rs`, replace lines 133–134:
 
-      ```rust
-      // Before:
-      #[cfg(test)]
-      pub mod test_fixtures;
+   ```rust
+   // Before:
+   #[cfg(test)]
+   pub mod test_fixtures;
 
-      // After:
-      #[cfg(test)]
-      pub use minibox_core::adapters::test_fixtures;
-      ```
+   // After:
+   #[cfg(test)]
+   pub use minibox_core::adapters::test_fixtures;
+   ```
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    cargo clippy -p minibox -- -D warnings    -> zero warnings
    ```
@@ -247,7 +247,7 @@ modules (#356) — all without changing observable behaviour.
 
 **Crate**: `minibox`
 **File(s)**: `crates/minibox/src/daemon/handlers/mod.rs`,
-             `crates/minibox/src/daemon/handlers/common.rs`
+`crates/minibox/src/daemon/handlers/common.rs`
 **Run**: `cargo check -p minibox`
 
 1. Create `crates/minibox/src/daemon/handlers/mod.rs`:
@@ -293,7 +293,7 @@ modules (#356) — all without changing observable behaviour.
 
 3. Verify:
 
-   ```
+   ```text
    cargo check -p minibox                   -> OK
    ```
 
@@ -321,7 +321,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    cargo clippy -p minibox -- -D warnings    -> zero warnings
    ```
@@ -343,7 +343,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    cargo clippy -p minibox -- -D warnings    -> zero warnings
    ```
@@ -363,7 +363,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    ```
 
@@ -391,7 +391,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    ```
 
@@ -411,7 +411,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    ```
 
@@ -433,7 +433,7 @@ modules (#356) — all without changing observable behaviour.
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox              -> all green
    cargo clippy -p minibox -- -D warnings    -> zero warnings
    ```
@@ -464,7 +464,7 @@ modules (#356) — all without changing observable behaviour.
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run --workspace            -> all green
    cargo clippy --workspace -- -D warnings  -> zero warnings
    cargo check --workspace                  -> OK
@@ -479,7 +479,7 @@ modules (#356) — all without changing observable behaviour.
 
 1. Run the full pre-commit gate:
 
-   ```
+   ```text
    cargo xtask pre-commit
    ```
 

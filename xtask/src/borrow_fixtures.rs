@@ -1,3 +1,5 @@
+//! Temporarily borrows external fixture files for local test runs.
+
 use anyhow::{Context, Result, bail};
 use std::{
     ffi::OsStr,

@@ -266,6 +266,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 
 // ── Input extraction helpers ───────────────────────────────────────────────────
 
+/// Parses mounts from the supplied JSON value.
 pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
     let Some(arr) = v["mounts"].as_array() else {
         return Ok(vec![]);
@@ -311,6 +312,7 @@ pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
         .collect()
 }
 
+/// Extracts the required str field named by `key`.
 pub fn str_field(v: &Value, key: &str) -> Result<String> {
     v[key]
         .as_str()
@@ -318,16 +320,19 @@ pub fn str_field(v: &Value, key: &str) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("missing or non-string field '{key}'"))
 }
 
+/// Extracts the optional str field named by `key`.
 #[must_use]
 pub fn opt_str_field(v: &Value, key: &str) -> Option<String> {
     v[key].as_str().map(std::string::ToString::to_string)
 }
 
+/// Extracts the optional u64 field named by `key`.
 #[must_use]
 pub fn opt_u64_field(v: &Value, key: &str) -> Option<u64> {
     v[key].as_u64()
 }
 
+/// Extracts the required str array field named by `key`.
 #[must_use]
 pub fn str_array_field(v: &Value, key: &str) -> Option<Vec<String>> {
     v[key].as_array().map(|arr| {

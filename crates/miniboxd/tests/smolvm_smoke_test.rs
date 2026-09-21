@@ -1,3 +1,5 @@
+//! Integration tests for smolvm smoke.
+
 mod helpers;
 
 use helpers::smolvm::{SmolVmFixture, smolvm_available};

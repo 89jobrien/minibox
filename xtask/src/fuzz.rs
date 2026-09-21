@@ -27,6 +27,7 @@ const DEFAULT_TARGETS: &[&str] = &[
 ];
 const DEFAULT_TIME_SECS: u64 = 60;
 
+/// Runs the requested fuzz target or the complete fuzz suite.
 pub fn fuzz(sh: &Shell, root: &Path) -> Result<()> {
     let args: Vec<String> = std::env::args().skip(2).collect();
 

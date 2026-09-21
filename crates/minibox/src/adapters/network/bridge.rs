@@ -17,6 +17,7 @@ pub struct IpAllocator {
 }
 
 impl IpAllocator {
+    /// Initializes `IpAllocator` from subnet.
     pub fn new(subnet: IpNet) -> anyhow::Result<Self> {
         let base = match subnet.network() {
             IpAddr::V4(a) => u32::from(a),
@@ -39,10 +40,12 @@ impl IpAllocator {
         })
     }
 
+    /// Reserves and returns the next available address.
     pub fn allocate(&mut self) -> Option<IpAddr> {
         self.available.pop_first().map(|n| IpAddr::V4(n.into()))
     }
 
+    /// Returns an in-subnet address to the available pool.
     pub fn release(&mut self, ip: IpAddr) {
         if let IpAddr::V4(a) = ip {
             let n = u32::from(a);
@@ -52,6 +55,7 @@ impl IpAllocator {
         }
     }
 
+    /// Returns the gateway.
     pub fn gateway(&self) -> IpAddr {
         IpAddr::V4(self.gateway.into())
     }

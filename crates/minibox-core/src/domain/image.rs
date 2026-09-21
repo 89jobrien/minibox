@@ -1,3 +1,5 @@
+//! Domain types and contracts for image.
+
 use anyhow::Result;
 use async_trait::async_trait;
 use std::path::PathBuf;
@@ -180,6 +182,7 @@ pub struct PushProgress {
 /// Port for pushing images to OCI-compliant registries.
 #[async_trait]
 pub trait ImagePusher: AsAny + Send + Sync {
+    /// Pushes image to its registry.
     async fn push_image(
         &self,
         image_ref: &crate::image::reference::ImageRef,
@@ -207,6 +210,7 @@ pub struct CommitConfig {
 /// Port for snapshotting a container's filesystem diff into a new image.
 #[async_trait]
 pub trait ContainerCommitter: AsAny + Send + Sync {
+    /// Snapshots a container's filesystem changes into a tagged image.
     async fn commit(
         &self,
         container_id: &ContainerId,

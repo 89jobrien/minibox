@@ -88,9 +88,13 @@ pub trait TreeHasher {
 
 /// Persistent storage for checkpoint records.
 pub trait CheckpointStore {
+    /// Loads data from the backing source.
     fn load(&self, gate: GateId) -> Result<Option<CheckpointRecord>>;
+    /// Persists the checkpoint record.
     fn save(&self, record: &CheckpointRecord) -> Result<()>;
+    /// Removes the checkpoint for the specified gate.
     fn clear(&self, gate: GateId) -> Result<()>;
+    /// Removes every persisted gate checkpoint.
     fn clear_all(&self) -> Result<()>;
 }
 
@@ -144,6 +148,7 @@ pub struct FileCheckpointStore {
 }
 
 impl FileCheckpointStore {
+    /// Initializes `FileCheckpointStore` from dir.
     #[must_use]
     pub const fn new(dir: PathBuf) -> Self {
         Self { dir }

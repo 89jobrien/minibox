@@ -287,7 +287,7 @@ impl ColimaRegistry {
 impl ImageRegistry for ColimaRegistry {
     /// Return `true` if the image is present in the containerd image store inside the VM.
     ///
-    /// Runs `nerdctl image inspect <name>:<tag>` and treats a non-zero exit code as absent.
+    /// Returns whether `nerdctl` can inspect the named image and tag.
     async fn has_image(&self, name: &str, tag: &str) -> bool {
         // Strip "library/" prefix — nerdctl and docker both omit it for official images.
         let short_name = name.strip_prefix("library/").unwrap_or(name);
@@ -788,6 +788,7 @@ impl ColimaRuntime {
         self
     }
 
+    /// Returns this value configured with spawner.
     pub fn with_spawner(mut self, spawner: LimaSpawner) -> Self {
         self.spawner = Some(spawner);
         self

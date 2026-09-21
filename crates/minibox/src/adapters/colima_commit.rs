@@ -35,6 +35,7 @@ pub struct ColimaContainerCommitter {
 }
 
 impl ColimaContainerCommitter {
+    /// Initializes `ColimaContainerCommitter` from image store, export dir, and executor.
     pub fn new(image_store: Arc<ImageStore>, export_dir: PathBuf, executor: LimaExecutor) -> Self {
         Self {
             image_store,
@@ -266,6 +267,7 @@ fn parse_image_ref(s: &str) -> (String, String) {
     }
 }
 
+/// Constructs the Colima-backed container commit adapter.
 pub fn colima_container_committer(
     image_store: Arc<ImageStore>,
     export_dir: PathBuf,

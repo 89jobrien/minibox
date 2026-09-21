@@ -36,6 +36,7 @@ pub struct ImageGc {
 }
 
 impl ImageGc {
+    /// Initializes `ImageGc` from store, and leases.
     pub fn new(store: Arc<ImageStore>, leases: Arc<dyn ImageLeaseService>) -> Self {
         Self { store, leases }
     }

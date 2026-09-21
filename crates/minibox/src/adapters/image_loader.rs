@@ -13,6 +13,7 @@ pub struct NativeImageLoader {
 }
 
 impl NativeImageLoader {
+    /// Initializes `NativeImageLoader` from store.
     #[must_use]
     pub const fn new(store: Arc<ImageStore>) -> Self {
         Self { store }

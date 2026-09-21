@@ -26,13 +26,14 @@ from each other (resolve those manually before invoking this skill).
 
 ## Helpers & References
 
-| File | Purpose |
-|------|---------|
-| `helpers/wave-integrate.nu` | Automated rebase+test+merge loop; run directly or use as reference |
-| `references/conflict-resolution-log.md` | Filled example of a complete conflict log |
-| `references/integration-commit-template.md` | Commit message templates for all integration outcomes |
+| File                                        | Purpose                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------ |
+| `helpers/wave-integrate.nu`                 | Automated rebase+test+merge loop; run directly or use as reference |
+| `references/conflict-resolution-log.md`     | Filled example of a complete conflict log                          |
+| `references/integration-commit-template.md` | Commit message templates for all integration outcomes              |
 
 Run the helper:
+
 ```bash
 wave-integrate --branches "feat/a feat/b feat/c" --base main
 wave-integrate --branches "feat/a feat/b" --dry-run   # rebase+test only, no merge
@@ -68,8 +69,8 @@ git rebase main
 **If rebase conflicts:**
 
 1. For each conflicted file, read BOTH sides:
-    - `git show HEAD:<file>` — incoming (main) version
-    - `git show REBASE_HEAD:<file>` — branch version
+   - `git show HEAD:<file>` — incoming (main) version
+   - `git show REBASE_HEAD:<file>` — branch version
 2. Identify the **intent** of each side — do not just pick one side mechanically.
 3. Produce a merged version that preserves both intents.
 4. Record the conflict in the resolution log (see Step 5).
@@ -100,7 +101,7 @@ Use `--no-ff` to preserve branch topology in the log.
 
 Maintain a running list during integration:
 
-```
+```text
 ## Conflict Resolution Log
 
 | File | Branch | Main side intent | Branch side intent | Resolution |

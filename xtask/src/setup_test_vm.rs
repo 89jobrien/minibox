@@ -49,6 +49,9 @@ cargo nextest --version 2>/dev/null || cargo-nextest nextest --version
 echo "provision complete"
 "#;
 
+/// Creates, starts, and provisions the persistent smolvm test machine.
+///
+/// An existing machine is left intact unless `force` requests recreation.
 pub fn run(workspace_root: &Path, force: bool) -> Result<()> {
     let cfg = XConfig::load(workspace_root)?;
     let vm_name = &cfg.vm.name;

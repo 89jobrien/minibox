@@ -59,6 +59,7 @@ pub struct TestSummary {
 }
 
 impl TestSummary {
+    /// Returns `true` when the value is success.
     #[must_use]
     pub const fn is_success(&self) -> bool {
         self.failed == 0
@@ -100,6 +101,7 @@ impl Default for TestRunner {
 }
 
 impl TestRunner {
+    /// Initializes `TestRunner` in its empty default state.
     #[must_use]
     pub fn new() -> Self {
         Self {

@@ -1,3 +1,5 @@
+//! Defines backend capability descriptors and adapter factories for conformance tests.
+
 use minibox_core::adapters::conformance::CapabilityExtras;
 use minibox_core::domain::{
     BackendCapability, BackendCapabilitySet, DynContainerCommitter, DynImageBuilder, DynImagePusher,

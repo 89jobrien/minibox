@@ -1,3 +1,5 @@
+//! Preflight checks for required tools and host capabilities.
+
 /// Domain port: probe whether a named tool is functional.
 ///
 /// Implementations call the real process; test doubles return canned results.

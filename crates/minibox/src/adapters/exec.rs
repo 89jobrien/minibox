@@ -47,6 +47,7 @@ pub struct NativeExecRuntime {
 }
 
 impl NativeExecRuntime {
+    /// Initializes `NativeExecRuntime` from state.
     pub fn new(state: StateHandle) -> Self {
         Self { state }
     }

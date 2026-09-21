@@ -38,6 +38,7 @@ pub struct OciPushAdapter {
 }
 
 impl OciPushAdapter {
+    /// Initializes `OciPushAdapter` from client, and store.
     #[must_use]
     pub const fn new(client: RegistryClient, store: Arc<ImageStore>) -> Self {
         Self { client, store }

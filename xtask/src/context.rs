@@ -24,6 +24,26 @@ struct ContextSnapshot {
     tests: TestSummary,
     ci_workflows: Vec<String>,
     recent_commits: Vec<CommitInfo>,
+    context_map: ContextMap,
+}
+
+#[derive(Serialize)]
+struct ContextMap {
+    crate_assignments: Vec<CrateAssignment>,
+    file_assignments: Vec<String>,
+    task_slices: Vec<TaskSlice>,
+}
+
+#[derive(Serialize)]
+struct CrateAssignment {
+    crate_name: String,
+    lines: usize,
+}
+
+#[derive(Serialize)]
+struct TaskSlice {
+    task_id: String,
+    depends_on: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -33,7 +53,7 @@ struct WorkspaceInfo {
     rust_version: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct CrateInfo {
     name: String,
     kind: Vec<String>,
@@ -311,9 +331,70 @@ fn adapter_table() -> BTreeMap<String, AdapterInfo> {
     m
 }
 
+fn derive_crate_assignments(crates: &[CrateInfo]) -> Vec<CrateAssignment> {
+    let mut assignments = crates
+        .iter()
+        .map(|krate| CrateAssignment {
+            crate_name: krate.name.clone(),
+            lines: krate.lines,
+        })
+        .collect::<Vec<_>>();
+
+    assignments.sort_by(|left, right| {
+        right
+            .lines
+            .cmp(&left.lines)
+            .then_with(|| left.crate_name.cmp(&right.crate_name))
+    });
+    assignments
+}
+
+fn derive_file_assignments() -> Vec<String> {
+    let mut files = vec![
+        ".ctx/godmode/tasks.yaml".to_string(),
+        "docs/core/XTASK_CLI.mbx.md".to_string(),
+        "docs/plans/2026-08-25-xtask-info-context-enhancements.md".to_string(),
+        "xtask/schema/cli.schema.json".to_string(),
+        "xtask/src/context.rs".to_string(),
+        "xtask/src/main.rs".to_string(),
+    ];
+    files.sort();
+    files
+}
+
+fn derive_task_slices() -> Vec<TaskSlice> {
+    vec![
+        TaskSlice {
+            task_id: "xtask-context-1".to_string(),
+            depends_on: vec![],
+        },
+        TaskSlice {
+            task_id: "xtask-context-2".to_string(),
+            depends_on: vec!["xtask-context-1".to_string()],
+        },
+        TaskSlice {
+            task_id: "xtask-context-3".to_string(),
+            depends_on: vec!["xtask-context-1".to_string()],
+        },
+        TaskSlice {
+            task_id: "xtask-context-4".to_string(),
+            depends_on: vec!["xtask-context-2".to_string(), "xtask-context-3".to_string()],
+        },
+        TaskSlice {
+            task_id: "xtask-context-5".to_string(),
+            depends_on: vec!["xtask-context-4".to_string()],
+        },
+        TaskSlice {
+            task_id: "xtask-context-6".to_string(),
+            depends_on: vec!["xtask-context-5".to_string()],
+        },
+    ]
+}
+
 // ─── Entry point ─────────────────────────────────────────────────────────────
 
 // qual:allow(iosp) reason: "xtask entrypoint: shells out + reads fs + aggregates into snapshot"
+/// Collects and emits the workspace context snapshot.
 pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let (commit, branch, timestamp) = git_info(sh)?;
     let workspace = workspace_version(sh)?;
@@ -331,12 +412,12 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     let by_crate: BTreeMap<String, usize> = counts.iter().map(|(k, &v)| (k.clone(), v)).collect();
 
     let snapshot = ContextSnapshot {
-        snapshot_version: 1,
+        snapshot_version: 2,
         commit,
         branch,
         timestamp,
         workspace,
-        crates,
+        crates: crates.clone(),
         adapters: adapter_table(),
         tests: TestSummary {
             total: total_tests,
@@ -344,6 +425,11 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
         },
         ci_workflows: ci_workflows(root),
         recent_commits: recent_commits(sh)?,
+        context_map: ContextMap {
+            crate_assignments: derive_crate_assignments(&crates),
+            file_assignments: derive_file_assignments(),
+            task_slices: derive_task_slices(),
+        },
     };
 
     let json = serde_json::to_string_pretty(&snapshot).context("serialize snapshot")?;
@@ -371,4 +457,180 @@ pub fn context(sh: &Shell, root: &Path, save: bool) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_crates() -> Vec<CrateInfo> {
+        vec![
+            CrateInfo {
+                name: "zeta".to_string(),
+                kind: vec![],
+                deps: vec![],
+                test_count: 0,
+                src_files: 0,
+                lines: 10,
+            },
+            CrateInfo {
+                name: "alpha".to_string(),
+                kind: vec![],
+                deps: vec![],
+                test_count: 0,
+                src_files: 0,
+                lines: 10,
+            },
+            CrateInfo {
+                name: "beta".to_string(),
+                kind: vec![],
+                deps: vec![],
+                test_count: 0,
+                src_files: 0,
+                lines: 25,
+            },
+        ]
+    }
+
+    #[test]
+    fn context_snapshot_includes_context_map() {
+        let value = serde_json::to_value(ContextSnapshot {
+            snapshot_version: 2,
+            commit: "abc1234".to_string(),
+            branch: "develop".to_string(),
+            timestamp: "2026-08-25T00:00:00Z".to_string(),
+            workspace: WorkspaceInfo {
+                version: "0.0.0".to_string(),
+                edition: "2024".to_string(),
+                rust_version: "1.90.0".to_string(),
+            },
+            crates: sample_crates(),
+            adapters: BTreeMap::new(),
+            tests: TestSummary {
+                total: 0,
+                by_crate: BTreeMap::new(),
+            },
+            ci_workflows: vec![],
+            recent_commits: vec![],
+            context_map: ContextMap {
+                crate_assignments: derive_crate_assignments(&sample_crates()),
+                file_assignments: derive_file_assignments(),
+                task_slices: derive_task_slices(),
+            },
+        })
+        .expect("serialize context snapshot");
+
+        assert_eq!(value["snapshot_version"], 2);
+        assert!(value["context_map"]["crate_assignments"].is_array());
+        assert!(value["context_map"]["file_assignments"].is_array());
+        assert!(value["context_map"]["task_slices"].is_array());
+    }
+
+    #[test]
+    fn crate_assignments_are_sorted_and_stable() {
+        let assignments = derive_crate_assignments(&sample_crates());
+        let pairs: Vec<(String, usize)> = assignments
+            .into_iter()
+            .map(|item| (item.crate_name, item.lines))
+            .collect();
+
+        assert_eq!(
+            pairs,
+            vec![
+                ("beta".to_string(), 25),
+                ("alpha".to_string(), 10),
+                ("zeta".to_string(), 10),
+            ]
+        );
+    }
+
+    #[test]
+    fn file_assignments_cover_xtask_info_context_surface() {
+        assert_eq!(
+            derive_file_assignments(),
+            vec![
+                ".ctx/godmode/tasks.yaml".to_string(),
+                "docs/core/XTASK_CLI.mbx.md".to_string(),
+                "docs/plans/2026-08-25-xtask-info-context-enhancements.md".to_string(),
+                "xtask/schema/cli.schema.json".to_string(),
+                "xtask/src/context.rs".to_string(),
+                "xtask/src/main.rs".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn task_slices_define_expected_dependency_graph() {
+        let by_id: BTreeMap<String, Vec<String>> = derive_task_slices()
+            .into_iter()
+            .map(|slice| (slice.task_id, slice.depends_on))
+            .collect();
+
+        assert_eq!(by_id.get("xtask-context-1"), Some(&vec![]));
+        assert_eq!(
+            by_id.get("xtask-context-2"),
+            Some(&vec!["xtask-context-1".to_string()])
+        );
+        assert_eq!(
+            by_id.get("xtask-context-3"),
+            Some(&vec!["xtask-context-1".to_string()])
+        );
+        assert_eq!(
+            by_id.get("xtask-context-4"),
+            Some(&vec![
+                "xtask-context-2".to_string(),
+                "xtask-context-3".to_string()
+            ])
+        );
+        assert_eq!(
+            by_id.get("xtask-context-5"),
+            Some(&vec!["xtask-context-4".to_string()])
+        );
+        assert_eq!(
+            by_id.get("xtask-context-6"),
+            Some(&vec!["xtask-context-5".to_string()])
+        );
+    }
+
+    #[test]
+    fn save_artifact_snapshot_contains_context_map() {
+        let temp = tempfile::tempdir().expect("create tempdir");
+        let snapshot = ContextSnapshot {
+            snapshot_version: 2,
+            commit: "abc1234".to_string(),
+            branch: "develop".to_string(),
+            timestamp: "2026-08-25T00:00:00Z".to_string(),
+            workspace: WorkspaceInfo {
+                version: "0.0.0".to_string(),
+                edition: "2024".to_string(),
+                rust_version: "1.90.0".to_string(),
+            },
+            crates: sample_crates(),
+            adapters: BTreeMap::new(),
+            tests: TestSummary {
+                total: 0,
+                by_crate: BTreeMap::new(),
+            },
+            ci_workflows: vec![],
+            recent_commits: vec![],
+            context_map: ContextMap {
+                crate_assignments: derive_crate_assignments(&sample_crates()),
+                file_assignments: derive_file_assignments(),
+                task_slices: derive_task_slices(),
+            },
+        };
+
+        let path = temp.path().join("snapshot.json");
+        std::fs::write(
+            &path,
+            serde_json::to_string_pretty(&snapshot).expect("serialize snapshot"),
+        )
+        .expect("write snapshot");
+
+        let raw = std::fs::read_to_string(&path).expect("read snapshot");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("parse snapshot");
+        assert!(value["context_map"]["crate_assignments"].is_array());
+        assert!(value["context_map"]["file_assignments"].is_array());
+        assert!(value["context_map"]["task_slices"].is_array());
+    }
 }

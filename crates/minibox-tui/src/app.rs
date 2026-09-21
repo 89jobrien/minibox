@@ -16,6 +16,7 @@ pub struct App {
 }
 
 impl App {
+    /// Initializes `App` in its empty default state.
     pub const fn new() -> Self {
         Self {
             containers: Vec::new(),
@@ -26,6 +27,7 @@ impl App {
         }
     }
 
+    /// Replaces the visible containers and clamps the current selection.
     pub fn set_containers(&mut self, containers: Vec<ContainerInfo>) {
         self.containers = containers;
         if self.selected >= self.containers.len() {
@@ -33,6 +35,7 @@ impl App {
         }
     }
 
+    /// Formats and appends a container event to the bounded event log.
     pub fn push_event(&mut self, event: &ContainerEvent) {
         self.events.push(format_event(event));
         if self.events.len() > MAX_EVENT_LOG {
@@ -40,12 +43,14 @@ impl App {
         }
     }
 
+    /// Advances selection to the next item, wrapping at the end.
     pub fn select_next(&mut self) {
         if !self.containers.is_empty() {
             self.selected = (self.selected + 1) % self.containers.len();
         }
     }
 
+    /// Moves selection to the previous item, wrapping at the start.
     pub fn select_prev(&mut self) {
         if !self.containers.is_empty() {
             self.selected = (self.selected + self.containers.len() - 1) % self.containers.len();

@@ -8,7 +8,7 @@ generated: 2026-08-22
 
 # xtask CLI Reference
 
-Last updated: 2026-08-22
+Last updated: 2026-09-21
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -86,7 +86,7 @@ Bare `cargo xtask info` prints the target list.
 | Target | Flags | Notes |
 |---|---|---|
 | `metrics` | `--save` | Aggregate crate count, test count, source lines. `--save` persists the snapshot to disk. |
-| `context` | `--save` | Machine-readable repo context snapshot. |
+| `context` | `--save` | Machine-readable repo context snapshot. Contract: `snapshot_version: 2` with additive `context_map` (`crate_assignments`, `file_assignments`, `task_slices`). |
 | `changes` | `[<base-ref>]` | Classify changed paths; emits GitHub Actions step outputs. Default base ref: `HEAD^`. |
 
 Deprecated aliases: `collect-metrics`, `context`, `detect-changes`.

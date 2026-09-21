@@ -140,7 +140,7 @@ Claude hook config lives in `.claude/settings.json`. The `SessionStart` hook run
 
 ## Quick Reference
 
-```
+```text
 No .unwrap() in production        → use .context("description")?
 No println!/eprintln! in daemon   → use tracing::info!/warn!
 No platform imports in core       → minibox-core has zero OS deps
@@ -165,7 +165,6 @@ _Last synced: 2026-05-18T16:21:06.033093Z._
 #### Workspace MCP
 
 - `/Users/joe/dev/minibox/.vscode/mcp.json` — _servers defined_
-
 - **github** (stdio)
 - **personal** (stdio)
 
@@ -178,13 +177,13 @@ _Last synced: 2026-05-18T16:21:06.033093Z._
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
 <!-- godmode-workflow:begin -->
 
-# Phased workflow
+## Phased workflow
 
 Unless the user clearly opts out (e.g. **"skip plan, just fix it"**), every
 non-trivial task progresses through five phases. Short confirmations like
 **"do it"**, **"act"**, **"go"** advance to the next phase.
 
-## Phases
+### Phases
 
 <godmode-phase name="ORIENT" mode="read-only" response-header="# Phase: ORIENT" skills="godmode handon">
 Default phase. Read files, search code, run `godmode handon`, check task
@@ -220,7 +219,7 @@ Only entered with explicit user approval. After shipping, return to
 ORIENT for the next task.
 </godmode-phase>
 
-## Phase transitions
+### Phase transitions
 
 - **User can skip phases**: "skip plan, implement now" jumps to ACT.
   "just fix it" implies ORIENT → ACT → VERIFY → SHIP in one pass.
@@ -230,33 +229,33 @@ ORIENT for the next task.
 - When the user gives a lettered choice or short confirmation, advance
   to the most obvious next phase without asking.
 
-## Skill invocation rule
+### Skill invocation rule
 
 Before responding in any phase, check if a godmode skill applies.
 1% chance it’s relevant = invoke it. Process skills (`brainstorm`,
 `systematic-debugging`) before implementation skills
 (`task-driven-development`, `parallel-agents`).
 
-## Task graph
+### Task graph
 
 Tasks live in @.ctx/GODMODE.tasks.yaml. Use `Bash(godmode task)` CLI for
 state transitions. Independent chains can run in parallel via
 `Skill(godmode:parallel-agents)`. A task is runnable when all `depends_on`
 items are `done`.
 
-## Memory bank
+### Memory bank
 
 - Persistent context lives in @.ctx/memory-bank/
 - Read before substantive work: !`ls .ctx/memory-bank/`
 - update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md
 - See @AGENTS.md for the full file list
 
-## Context Graph
+### Context Graph
 
 - Wiki root: `Read(.kgx/wiki/index.md)` — run `kgx wiki write`/populate the wiki first if this doesn't exist yet
 - Query the graph: !`kgx query <entity>`
 
-## Agent-specific guidance
+### Agent-specific guidance
 
 For subagent conventions, Codex integration, and memory-bank file
 inventory, see @AGENTS.md.

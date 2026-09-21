@@ -1,3 +1,5 @@
+//! Documentation lint checks used by xtask.
+
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 

@@ -49,6 +49,7 @@ pub struct ZigbuildCompiler {
 }
 
 impl ZigbuildCompiler {
+    /// Initializes `ZigbuildCompiler` from bin packages, and test packages.
     pub const fn new(bin_packages: Vec<String>, test_packages: Vec<String>) -> Self {
         Self {
             bin_packages,
@@ -320,12 +321,14 @@ pub mod mocks {
     }
 
     impl MockCompiler {
+        /// Initializes `MockCompiler` in its empty default state.
         pub fn new() -> Self {
             Self {
                 calls: Arc::new(Mutex::new(vec![])),
                 fail: false,
             }
         }
+        /// Configures this test double to fail its next operation.
         pub fn failing() -> Self {
             Self {
                 fail: true,
@@ -351,12 +354,14 @@ pub mod mocks {
     }
 
     impl MockInitramfsBuilder {
+        /// Initializes `MockInitramfsBuilder` in its empty default state.
         pub fn new() -> Self {
             Self {
                 calls: Arc::new(Mutex::new(vec![])),
                 fail: false,
             }
         }
+        /// Configures this test double to fail its next operation.
         pub fn failing() -> Self {
             Self {
                 fail: true,
@@ -387,12 +392,14 @@ pub mod mocks {
     }
 
     impl MockVmRunner {
+        /// Initializes `MockVmRunner` in its empty default state.
         pub fn new() -> Self {
             Self {
                 calls: Arc::new(Mutex::new(vec![])),
                 fail: false,
             }
         }
+        /// Configures this test double to fail its next operation.
         pub fn failing() -> Self {
             Self {
                 fail: true,

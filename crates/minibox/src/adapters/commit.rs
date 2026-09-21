@@ -21,6 +21,7 @@ pub struct OverlayCommitAdapter {
 }
 
 impl OverlayCommitAdapter {
+    /// Initializes `OverlayCommitAdapter` from image store, and state.
     pub fn new(image_store: Arc<ImageStore>, state: StateHandle) -> Self {
         Self { image_store, state }
     }
@@ -55,6 +56,7 @@ impl ContainerCommitter for OverlayCommitAdapter {
     }
 }
 
+/// Archives an overlay upper directory as a layer in the target image.
 pub fn commit_upper_dir_to_image(
     image_store: Arc<ImageStore>,
     upper_dir: &std::path::Path,
@@ -150,6 +152,7 @@ fn parse_image_ref(s: &str) -> (String, String) {
     }
 }
 
+/// Constructs the native overlay filesystem commit adapter.
 pub fn overlay_commit_adapter(
     image_store: Arc<ImageStore>,
     state: StateHandle,

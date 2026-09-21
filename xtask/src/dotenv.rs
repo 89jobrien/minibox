@@ -1,3 +1,5 @@
+//! Environment-file discovery and 1Password value resolution.
+
 #![allow(dead_code)]
 
 use anyhow::{Context, Result};

@@ -1,3 +1,5 @@
+//! Detects changes to hash-tracked protocol surfaces.
+
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -135,6 +137,9 @@ struct HookToolInput {
     file_path: Option<PathBuf>,
 }
 
+/// Updates or verifies normalized hashes for the tracked core contract surfaces.
+///
+/// Verification can emit SARIF; hook and warning modes report drift without failing the command.
 pub fn run(
     root: &Path,
     update: bool,

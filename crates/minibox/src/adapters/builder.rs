@@ -33,6 +33,7 @@ pub struct MiniboxImageBuilder {
 }
 
 impl MiniboxImageBuilder {
+    /// Initializes `MiniboxImageBuilder` from image store, data dir, filesystem, runtime, and registry router.
     pub fn new(
         image_store: Arc<ImageStore>,
         data_dir: PathBuf,
@@ -417,6 +418,7 @@ impl ImageBuilder for MiniboxImageBuilder {
     }
 }
 
+/// Constructs the native image-builder adapter from its required ports.
 pub fn minibox_image_builder(
     image_store: Arc<ImageStore>,
     data_dir: PathBuf,

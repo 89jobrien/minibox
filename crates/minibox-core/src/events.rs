@@ -78,6 +78,7 @@ pub struct BroadcastEventBroker {
 }
 
 impl BroadcastEventBroker {
+    /// Initializes `BroadcastEventBroker` in its empty default state.
     #[must_use]
     pub fn new() -> Self {
         let (tx, _) = broadcast::channel(1024);

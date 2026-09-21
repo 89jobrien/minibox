@@ -4,6 +4,9 @@ use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::path::Path;
 
+/// Removes unused images through the daemon, or previews removals in dry-run mode.
+///
+/// Prints each affected image and the total reclaimable or reclaimed space.
 pub async fn execute(dry_run: bool, socket_path: &Path) -> anyhow::Result<()> {
     let client = DaemonClient::with_socket(socket_path);
     let mut stream = client

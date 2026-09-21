@@ -11,12 +11,15 @@ pub struct VzVmConfig {
 }
 
 impl VzVmConfig {
+    /// Returns the configured kernel path.
     pub fn kernel_path(&self) -> std::path::PathBuf {
         self.vm_dir.join("boot").join("vmlinuz-virt")
     }
+    /// Returns the configured initramfs path.
     pub fn initramfs_path(&self) -> std::path::PathBuf {
         self.vm_dir.join("boot").join("initramfs-virt")
     }
+    /// Returns the configured rootfs path.
     pub fn rootfs_path(&self) -> std::path::PathBuf {
         self.vm_dir.join("rootfs")
     }
@@ -372,10 +375,12 @@ mod imp {
     pub struct VzVm;
 
     impl VzVm {
+        /// Boots a virtual machine from the supplied kernel and root filesystem configuration.
         pub fn boot(_config: VzVmConfig) -> Result<Self> {
             bail!("VzVm requires macOS 11+ and the `vz` feature")
         }
 
+        /// Stops the virtual machine and releases its resources.
         pub fn stop(&self) {}
     }
 }

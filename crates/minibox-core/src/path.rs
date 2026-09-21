@@ -1,3 +1,5 @@
+//! Validated path types that enforce filesystem boundaries.
+
 use anyhow::{Context, Result, bail};
 use std::path::{Component, Path, PathBuf};
 
@@ -69,6 +71,7 @@ impl ValidatedPath {
         })
     }
 
+    /// Validates an absolute path against the permitted base directory.
     #[cfg(test)]
     pub fn from_absolute(abs_path: &Path, base_dir: &Path) -> Result<Self> {
         let canonical_base = base_dir
@@ -90,16 +93,19 @@ impl ValidatedPath {
         })
     }
 
+    /// Returns this value as path.
     #[must_use]
     pub fn as_path(&self) -> &Path {
         &self.inner
     }
 
+    /// Returns the base dir.
     #[must_use]
     pub fn base_dir(&self) -> &Path {
         &self.base
     }
 
+    /// Appends a relative component while preserving the base-directory boundary.
     #[cfg(test)]
     pub fn join_validated(&self, component: &Path) -> Result<Self> {
         if component.is_absolute() {
@@ -148,11 +154,13 @@ impl std::fmt::Display for ValidatedPath {
 pub struct InternalPath(PathBuf);
 
 impl InternalPath {
+    /// Initializes `InternalPath` from path.
     #[must_use]
     pub const fn new(path: PathBuf) -> Self {
         Self(path)
     }
 
+    /// Consumes this value and returns its inner.
     #[must_use]
     pub fn into_inner(self) -> PathBuf {
         self.0

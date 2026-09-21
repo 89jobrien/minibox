@@ -52,6 +52,7 @@ pub struct NoopLimiter;
 
 #[allow(dead_code)]
 impl NoopLimiter {
+    /// Initializes `NoopLimiter` in its empty default state.
     #[must_use]
     pub const fn new() -> Self {
         Self
@@ -89,6 +90,7 @@ pub struct CopyFilesystem;
 
 #[allow(dead_code)]
 impl CopyFilesystem {
+    /// Initializes `CopyFilesystem` in its empty default state.
     #[must_use]
     pub const fn new() -> Self {
         Self

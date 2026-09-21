@@ -136,6 +136,9 @@ fn handle_container_output(stream: OutputStreamKind, data: &str) -> Result<()> {
     Ok(())
 }
 
+/// Runs a command in a container, streams its output, and exits with the command's status.
+///
+/// When attached to a terminal, this also enables raw mode and forwards input and resize events.
 pub async fn execute(
     container_id: String,
     cmd: Vec<String>,

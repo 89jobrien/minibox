@@ -1,3 +1,5 @@
+//! Quality-gate definitions and execution order.
+
 use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};
@@ -497,7 +499,6 @@ pub fn test_turmoil(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Property-based tests (proptest)
 /// Shuttle concurrency tests (deterministic random scheduling).
 pub fn test_shuttle(sh: &Shell) -> Result<()> {
     cmd!(
@@ -509,6 +510,7 @@ pub fn test_shuttle(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Runs the release-mode runtime and daemon proptest suites behind the property-test gate.
 pub fn test_property(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     let sh = sh.clone();

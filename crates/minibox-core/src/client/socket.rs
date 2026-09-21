@@ -1,3 +1,5 @@
+//! Unix-socket transport for daemon requests and responses.
+
 use super::error::{ClientError, Result};
 use crate::protocol::{DaemonRequest, DaemonResponse, decode_response};
 use std::path::Path;
@@ -9,6 +11,7 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
+    /// Initializes `DaemonClient` in its empty default state.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -16,6 +19,7 @@ impl DaemonClient {
         }
     }
 
+    /// Returns this value configured with socket.
     pub fn with_socket(path: impl AsRef<Path>) -> Self {
         Self {
             socket_path: path.as_ref().to_path_buf(),
@@ -84,6 +88,7 @@ pub struct DaemonWriter {
 }
 
 impl DaemonWriter {
+    /// Returns this value configured with socket.
     pub fn with_socket(path: impl AsRef<Path>) -> Self {
         Self {
             socket_path: path.as_ref().to_path_buf(),

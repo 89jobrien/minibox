@@ -182,6 +182,9 @@ pub fn emit_gha_outputs(cs: &ChangeSet) -> Result<()> {
     Ok(())
 }
 
+/// Classifies paths changed since the base ref and emits CI area flags.
+///
+/// Flags are appended to `$GITHUB_OUTPUT` when available and otherwise printed to stdout.
 pub fn run(root: &Path, base_ref: &str) -> Result<()> {
     let cs = detect_changes(root, base_ref)?;
     emit_gha_outputs(&cs)

@@ -28,5 +28,6 @@ Task description comes from `$ARGUMENTS` or stdin. Parse flags:
    resolves conflicts and surfaces the most actionable findings
 
 Flags:
+
 - `--no-synthesis` — print each agent's output separately, skip final synthesis
 - `--refresh-docs` — force re-fetch of Claude Agent SDK docs even if cache is fresh

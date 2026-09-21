@@ -1,3 +1,5 @@
+//! Fuzzes decode response with arbitrary byte input.
+
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;

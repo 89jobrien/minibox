@@ -35,11 +35,11 @@ demonstrates value and identifies the highest-leverage gaps.
 
 ---
 
-# Phase A: Methodology Extraction (No New Dependencies)
+## Phase A: Methodology Extraction (No New Dependencies)
 
 ---
 
-## A1. Mutation Audit Checklist (from cargo-mutants)
+### A1. Mutation Audit Checklist (from cargo-mutants)
 
 **Methodology:** For every branch, guard, and error return in security-critical
 code, verify that a test exists which fails if that line is deleted or inverted.
@@ -55,7 +55,7 @@ code, verify that a test exists which fails if that line is deleted or inverted.
 
 **Checklist template (per function):**
 
-```
+```text
 [ ] Every `if` guard has a test that triggers the else/rejection branch
 [ ] Every `.context()?` has a test that expects Err for that specific failure
 [ ] Every sanitization (mode &= 0o777, path rewrite) has a before/after assertion
@@ -81,7 +81,7 @@ test. The checklist is 100% green.
 
 ---
 
-## A2. Exhaustive Small-Domain Tests (from kani)
+### A2. Exhaustive Small-Domain Tests (from kani)
 
 **Methodology:** For pure functions with bounded input domains, enumerate ALL
 valid inputs instead of sampling. No symbolic execution needed -- just loops.
@@ -140,7 +140,7 @@ setuid stripping, `has_parent_dir_component`, and entry type classification.
 
 ---
 
-## A3. Stream Trait Boundary (from turmoil)
+### A3. Stream Trait Boundary (from turmoil)
 
 **Methodology:** Make I/O a trait parameter so tests can swap real sockets for
 deterministic fakes. This is the _prerequisite_ for turmoil (Phase B) but
@@ -197,7 +197,7 @@ Five mock-stream failure tests pass.
 
 ---
 
-## A4. Barrier-Based Race Tests (from shuttle)
+### A4. Barrier-Based Race Tests (from shuttle)
 
 **Methodology:** Use `std::sync::Barrier` to force specific thread
 interleavings that expose races, without replacing the sync primitives.
@@ -250,7 +250,7 @@ to increase scheduling diversity.
 
 ---
 
-## A5. Roundtrip Property Rule (from quickcheck)
+### A5. Roundtrip Property Rule (from quickcheck)
 
 **Methodology:** Every public type that crosses a serialization boundary gets
 a roundtrip property test using proptest (already in tree).
@@ -288,7 +288,7 @@ Protocol-drift CI checks generator completeness.
 
 ---
 
-# Phase B: Tooling Adoption (External Dependencies)
+## Phase B: Tooling Adoption (External Dependencies)
 
 Phase B items scale the methodologies from Phase A using purpose-built tools.
 Each item is independently adoptable. Start with B1 and B2, which have the
@@ -296,7 +296,7 @@ highest signal-to-noise ratio.
 
 ---
 
-## B1. cargo-mutants -- Automated Mutation Scanning (P0)
+### B1. cargo-mutants -- Automated Mutation Scanning (P0)
 
 **Unlocked by:** A1 (mutation audit). After the manual audit fills obvious gaps,
 cargo-mutants finds the ones humans miss.
@@ -307,7 +307,7 @@ survivors like `>=` vs `>` in size limit checks.
 
 **Setup:**
 
-```
+```text
 cargo install --locked cargo-mutants
 cargo mutants -f crates/minibox-core/src/image/layer.rs
 ```
@@ -323,7 +323,7 @@ cargo mutants -f crates/minibox-core/src/image/layer.rs
 
 ---
 
-## B2. quickcheck -- Generator-Driven Properties (P0)
+### B2. quickcheck -- Generator-Driven Properties (P0)
 
 **Unlocked by:** A5 (roundtrip rule). After proptest covers the obvious
 roundtrips, quickcheck's `Arbitrary` derive makes it trivial to add generators
@@ -352,7 +352,7 @@ strategies are verbose.
 
 ---
 
-## B3. Kani -- Formal Verification (P1)
+### B3. Kani -- Formal Verification (P1)
 
 **Unlocked by:** A2 (exhaustive small-domain tests). After exhaustive tests
 cover enumerable domains, Kani proves correctness over unbounded domains (all
@@ -396,7 +396,7 @@ mod proofs {
 
 ---
 
-## B4. turmoil -- Deterministic Network Simulation (P1)
+### B4. turmoil -- Deterministic Network Simulation (P1)
 
 **Unlocked by:** A3 (stream trait boundary). Once server and GHCR client are
 generic over their I/O type, turmoil slots in as a drop-in stream provider
@@ -408,7 +408,7 @@ ordering-dependent bugs that mock streams miss.
 
 **Architecture:**
 
-```
+```text
 turmoil::Sim
   +-- "daemon" host (miniboxd server loop)
   +-- "client" host (DaemonRequest sender)
@@ -426,7 +426,7 @@ mid-layer, registry timeout, packet reorder on multiplex.
 
 ---
 
-## B5. shuttle -- Randomized Concurrency Testing (P2)
+### B5. shuttle -- Randomized Concurrency Testing (P2)
 
 **Unlocked by:** A4 (barrier-based race tests). After manual barrier tests
 cover known interleavings, shuttle explores the interleavings you didn't
@@ -450,7 +450,7 @@ exit, GC vs pull.
 
 ---
 
-## B6. loom -- Exhaustive Concurrency Permutation (P3)
+### B6. loom -- Exhaustive Concurrency Permutation (P3)
 
 **Deferred** until a lock-free data structure is introduced in the daemon.
 Current `Mutex`-based state is better served by shuttle (B5).
@@ -460,9 +460,9 @@ atomic CAS, or a custom ring buffer is added.
 
 ---
 
-# Summary
+## Summary
 
-## Dependency Overview
+### Dependency Overview
 
 | Item                          | Phase | New deps?            | Crates affected       |
 | ----------------------------- | ----- | -------------------- | --------------------- |
@@ -478,7 +478,7 @@ atomic CAS, or a custom ring buffer is added.
 | shuttle                       | B5    | Yes (dev)            | minibox               |
 | loom                          | B6    | Yes (dev)            | deferred              |
 
-## CI Integration
+### CI Integration
 
 | Gate                                        | Workflow    | Trigger           | Blocking? |
 | ------------------------------------------- | ----------- | ----------------- | --------- |
@@ -489,7 +489,7 @@ atomic CAS, or a custom ring buffer is added.
 | turmoil scenarios (B4)                      | merge.yml   | push to main/next | yes       |
 | shuttle scenarios (B5)                      | merge.yml   | push to main/next | yes       |
 
-## Success Metrics
+### Success Metrics
 
 | Metric                                     | Baseline            | After Phase A | After Phase B  |
 | ------------------------------------------ | ------------------- | ------------- | -------------- |

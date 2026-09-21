@@ -112,6 +112,7 @@ fn feature_matrix_date(root: &Path) -> String {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 // qual:allow(iosp) reason: "xtask entrypoint: shells out + reads filesystem + aggregates"
+/// Collects workspace health metrics and optionally saves a snapshot.
 pub fn collect_metrics(root: &Path, save: bool) -> Result<()> {
     let collected_at = now_utc();
     let crate_count = count_crates(root).context("count workspace crates")?;

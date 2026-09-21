@@ -1,3 +1,5 @@
+//! Reusable daemon and garbage-collection test doubles.
+
 pub mod daemon;
 pub mod gc;
 

@@ -351,8 +351,7 @@ impl ContainerPolicy {
 /// Parse a boolean-ish environment variable (absent or unrecognised = false).
 pub(crate) fn env_flag(name: &str) -> bool {
     std::env::var(name)
-        .ok()
-        .is_some_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
+        .is_ok_and(|v| matches!(v.trim().to_lowercase().as_str(), "1" | "true" | "yes"))
 }
 
 /// Validate a container run request against the active policy.

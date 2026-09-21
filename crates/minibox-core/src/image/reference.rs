@@ -1,3 +1,5 @@
+//! Parses container image references and derives canonical names, repositories, and cache paths.
+
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -86,6 +88,7 @@ impl ImageRef {
         }
     }
 
+    /// Returns the registry host.
     #[must_use]
     pub fn registry_host(&self) -> &str {
         match self.registry.as_str() {
@@ -94,6 +97,7 @@ impl ImageRef {
         }
     }
 
+    /// Returns the repository.
     #[must_use]
     pub fn repository(&self) -> String {
         format!("{}/{}", self.namespace, self.name)
@@ -110,6 +114,7 @@ impl ImageRef {
         }
     }
 
+    /// Builds the local cache path for this image reference.
     #[must_use]
     pub fn cache_path(&self, images_dir: &Path) -> PathBuf {
         if self.registry == "docker.io" {

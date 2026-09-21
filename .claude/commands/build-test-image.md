@@ -13,7 +13,8 @@ Parse `$ARGUMENTS` for: `--target <triple>` (default: `aarch64-unknown-linux-mus
 
 1. **Cross-compile** with env vars `CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc`
    and `CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc`:
-   ```
+
+   ```text
    cargo build --target <target> -p miniboxd
    cargo build --target <target> -p minibox-cli
    cargo test --no-run --target <target> -p miniboxd --test cgroup_tests
@@ -32,7 +33,8 @@ Parse `$ARGUMENTS` for: `--target <triple>` (default: `aarch64-unknown-linux-mus
    - Write `Dockerfile`: `FROM alpine:3.21`, COPY usr, COPY run-tests.sh, RUN chmod
 
 4. **Build in Colima**:
-   ```
+
+   ```text
    COPYFILE_DISABLE=1 tar --no-xattrs -c -C <ctx> . | colima ssh -- docker build -t minibox-tester:latest -
    ```
 

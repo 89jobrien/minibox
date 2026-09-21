@@ -15,12 +15,14 @@ impl Default for NoopImageGc {
 }
 
 impl NoopImageGc {
+    /// Initializes `NoopImageGc` in its empty default state.
     pub fn new() -> Self {
         Self {
             call_count: Arc::new(Mutex::new(0)),
         }
     }
 
+    /// Returns the measured prune call count.
     pub fn prune_call_count(&self) -> usize {
         *self.call_count.lock().unwrap()
     }

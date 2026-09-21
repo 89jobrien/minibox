@@ -1,3 +1,5 @@
+//! Removes build and test artifacts created by xtask workflows.
+
 use anyhow::Result;
 use std::{fs, path::Path};
 use xshell::{Shell, cmd};

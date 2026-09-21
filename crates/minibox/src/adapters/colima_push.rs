@@ -30,6 +30,7 @@ pub struct ColimaImagePusher {
 }
 
 impl ColimaImagePusher {
+    /// Initializes `ColimaImagePusher` from image store, image loader, export dir, and executor.
     pub fn new(
         image_store: Arc<ImageStore>,
         image_loader: DynImageLoader,
@@ -329,6 +330,7 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', r"'\''"))
 }
 
+/// Constructs the Colima-backed image push adapter.
 pub fn colima_image_pusher(
     image_store: Arc<ImageStore>,
     image_loader: DynImageLoader,

@@ -54,6 +54,7 @@ pub enum MacboxError {
 }
 
 // Issue #161: centralize adapter registration
+/// Builds colima handler dependencies.
 #[allow(clippy::too_many_arguments)]
 pub fn build_colima_handler_dependencies(
     state: Arc<DaemonState>,

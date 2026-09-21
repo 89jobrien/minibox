@@ -20,6 +20,7 @@ pub enum TestCategory {
 }
 
 impl TestCategory {
+    /// Returns this value as str.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -40,14 +41,17 @@ pub enum TestResult {
 }
 
 impl TestResult {
+    /// Returns `true` when the value is pass.
     #[must_use]
     pub const fn is_pass(&self) -> bool {
         matches!(self, Self::Pass)
     }
+    /// Returns `true` when the value is fail.
     #[must_use]
     pub const fn is_fail(&self) -> bool {
         matches!(self, Self::Fail { .. })
     }
+    /// Returns `true` when the value is skipped.
     #[must_use]
     pub const fn is_skipped(&self) -> bool {
         matches!(self, Self::Skipped { .. })
@@ -104,6 +108,7 @@ pub trait ConformanceTest: Send + Sync {
         None
     }
 
+    /// Runs the conformance test synchronously against the supplied context.
     fn run_sync(&self, ctx: &mut TestContext<'_>) -> TestResult;
 
     /// Fully-qualified test id: `"<adapter>::<name>"`.

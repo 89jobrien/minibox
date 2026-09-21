@@ -1,3 +1,5 @@
+//! Domain types and contracts for exec.
+
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -72,6 +74,7 @@ pub type DynProgressSink<T> = Arc<dyn ProgressSink<T>>;
 /// Port for running commands inside already-running containers.
 #[async_trait]
 pub trait ExecRuntime: AsAny + Send + Sync {
+    /// Runs a command in an existing container and streams output through `tx`.
     async fn run_in_container(
         &self,
         container_id: &ContainerId,

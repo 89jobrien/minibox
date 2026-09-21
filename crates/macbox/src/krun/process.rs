@@ -4,6 +4,8 @@
 //! stdout piped; callers can stream output via [`SmolvmProcess::collect_stdout`]
 //! or wait for exit via [`SmolvmProcess::wait`].
 
+#![allow(clippy::unused_async_trait_impl)]
+
 use anyhow::{Context, Result};
 use std::path::Path;
 use tokio::io::AsyncReadExt;
@@ -23,7 +25,7 @@ impl SmolvmProcess {
     }
 
     /// Spawn using an explicit binary path (useful for testing missing-binary path).
-    #[allow(clippy::unused_async)]
+    #[allow(clippy::unused_async, clippy::unused_async_trait_impl)]
     pub async fn spawn_with_bin(
         bin: &Path,
         image: &str,

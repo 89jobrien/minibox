@@ -82,6 +82,7 @@ fn build_pipeline_mount(host_pipeline: std::path::PathBuf) -> BindMount {
     }
 }
 
+/// Handles a daemon pipeline request.
 pub async fn handle_pipeline(
     params: PipelineParams,
     state: Arc<DaemonState>,

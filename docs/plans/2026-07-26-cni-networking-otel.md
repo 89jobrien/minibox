@@ -39,16 +39,20 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 **Run**: `cargo check -p minibox-cni`
 
 1. Add to root `Cargo.toml` `[workspace.members]` (after `"crates/mcp",`):
+
    ```toml
        "crates/minibox-cni",
    ```
+
    Add to root `Cargo.toml` `[workspace.dependencies]` (alphabetical, near other `minibox-*`
    entries):
+
    ```toml
    minibox-cni = { path = "crates/minibox-cni" }
    ```
 
 2. Create `crates/minibox-cni/Cargo.toml`:
+
    ```toml
    [package]
    name = "minibox-cni"
@@ -80,6 +84,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Create `crates/minibox-cni/src/lib.rs`:
+
    ```rust
    //! CNI (Container Network Interface) plugin exec protocol and chain
    //! orchestration for minibox's native Linux adapter.
@@ -108,13 +113,16 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    `crates/minibox-cni/src/exec.rs`, `crates/minibox-cni/src/provider.rs`,
    `crates/minibox-cni/src/result.rs` — each starting with just a module doc comment, e.g.
    `crates/minibox-cni/src/error.rs`:
+
    ```rust
    //! Errors from CNI plugin execution.
    ```
+
    (same one-line pattern for the other four files, module purpose in the doc comment).
 
 5. Verify:
-   ```
+
+   ```text
    cargo check -p minibox-cni    → compiles (empty modules)
    ```
 
@@ -131,6 +139,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 **Run**: `cargo nextest run -p minibox-cni`
 
 1. Write failing test (append to `crates/minibox-cni/src/error.rs`):
+
    ```rust
    #[cfg(test)]
    #[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
@@ -160,10 +169,12 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- plugin_not_found_display_names_the_plugin`
    Expected: FAIL (`CniError` does not exist yet)
 
 2. Implement (prepend to `crates/minibox-cni/src/error.rs`, above the `#[cfg(test)]` block):
+
    ```rust
    //! Errors from CNI plugin execution.
 
@@ -222,7 +233,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -240,6 +252,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 **Run**: `cargo nextest run -p minibox-cni`
 
 1. Write failing test (append to `crates/minibox-cni/src/result.rs`):
+
    ```rust
    #[cfg(test)]
    #[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
@@ -280,10 +293,12 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- cni_result_deserializes_add_output`
    Expected: FAIL (types do not exist yet)
 
 2. Implement (prepend to `crates/minibox-cni/src/result.rs`):
+
    ```rust
    //! Result types returned by a CNI plugin chain's ADD command, and the
    //! CNI-spec structured error payload a plugin may return on failure.
@@ -365,7 +380,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -383,6 +399,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 **Run**: `cargo nextest run -p minibox-cni`
 
 1. Write failing test (append to `crates/minibox-cni/src/config.rs`):
+
    ```rust
    #[cfg(test)]
    #[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
@@ -430,10 +447,12 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- from_file_parses_plugin_chain`
    Expected: FAIL (`NetworkConfigList` does not exist yet)
 
 2. Implement (prepend to `crates/minibox-cni/src/config.rs`, above the `#[cfg(test)]` block):
+
    ```rust
    //! Parsing of CNI `.conflist` network configuration files.
 
@@ -481,7 +500,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -499,6 +519,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 **Run**: `cargo nextest run -p minibox-cni`
 
 1. Write failing test (append to `crates/minibox-cni/src/exec.rs`):
+
    ```rust
    #[cfg(test)]
    #[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
@@ -574,10 +595,12 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- exec_plugin_add_returns_parsed_json`
    Expected: FAIL (`exec_plugin` does not exist yet)
 
 2. Implement (prepend to `crates/minibox-cni/src/exec.rs`, above the `#[cfg(test)]` block):
+
    ```rust
    //! CNI plugin exec protocol: spawns a plugin binary per the CNI spec,
    //! passing config over stdin and reading the JSON result from stdout.
@@ -696,12 +719,14 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        serde_json::from_slice(&output.stdout).map_err(CniError::ConfigParse)
    }
    ```
+
    Note: the JSON fixture strings in the test use escaped quotes (`\"`) because they're embedded
    in a shell-script `echo` string built with Rust's `format!` — this matches exactly what a real
    CNI plugin binary does (emit one JSON line on stdout).
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -720,6 +745,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 1. Write failing test (append inside the existing `#[cfg(test)] mod tests` block in
    `crates/minibox-cni/src/exec.rs`):
+
    ```rust
    #[tokio::test]
    async fn exec_plugin_structured_error_returns_plugin_error() {
@@ -758,6 +784,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- exec_plugin_structured_error_returns_plugin_error`
    Expected: FAIL — the fixture binary name collides with nothing yet defined, so this actually
    compiles against Task 5's `exec_plugin` already; run it to confirm it currently **passes**
@@ -772,7 +799,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    explicit, named test rather than leaving it implicitly covered.
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -791,6 +819,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 1. Write failing test (append inside `#[cfg(test)] mod tests` in
    `crates/minibox-cni/src/exec.rs`):
+
    ```rust
    #[tokio::test]
    async fn exec_plugin_crash_without_structured_error_returns_process_failed() {
@@ -828,6 +857,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- exec_plugin_crash_without_structured_error_returns_process_failed`
    Expected: this exercises the fallback branch already present in Task 5's implementation
    (non-JSON stdout on non-zero exit → `ProcessFailed`). Same characterization note as Task 6.
@@ -835,7 +865,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 2. No implementation changes needed — same rationale as Task 6.
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -854,6 +885,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 1. Write failing test (append inside `#[cfg(test)] mod tests` in
    `crates/minibox-cni/src/config.rs`):
+
    ```rust
    #[allow(clippy::unwrap_used)]
    fn write_executable(dir: &std::path::Path, name: &str, script: &str) {
@@ -902,11 +934,13 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        let _ = std::fs::remove_file("/tmp/minibox-cni-test-portmap-input.json");
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- add_threads_prev_result_across_chain`
    Expected: FAIL (`NetworkConfigList::add` does not exist yet)
 
 2. Implement (append to `crates/minibox-cni/src/config.rs`, after the existing `impl
-   NetworkConfigList` block's `from_file` method, inside the same `impl` block):
+NetworkConfigList` block's `from_file` method, inside the same `impl` block):
+
    ```rust
        /// Run the full ADD chain in plugin order, threading `prevResult`
        /// between plugins. On mid-chain failure, rolls back (`DEL` in
@@ -979,7 +1013,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -998,6 +1033,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 1. Write failing test (append inside `#[cfg(test)] mod tests` in
    `crates/minibox-cni/src/config.rs`):
+
    ```rust
    #[tokio::test]
    async fn add_rolls_back_succeeded_plugins_on_mid_chain_failure() {
@@ -1038,6 +1074,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        assert!(del_marker.exists(), "rollback DEL should have run for the succeeded plugin");
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- add_rolls_back_succeeded_plugins_on_mid_chain_failure`
    Expected: this exercises the rollback branch already implemented in Task 8. Same
    characterization rationale as Tasks 6/7 — Task 8's `add` already performs reverse-order DEL on
@@ -1046,7 +1083,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 2. No implementation changes needed.
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -1065,6 +1103,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 1. Write failing test (append inside `#[cfg(test)] mod tests` in
    `crates/minibox-cni/src/config.rs`):
+
    ```rust
    #[tokio::test]
    async fn del_runs_all_plugins_in_reverse_even_if_one_fails() {
@@ -1097,11 +1136,13 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        assert!(second_marker.exists(), "the succeeding plugin's DEL should still have run");
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- del_runs_all_plugins_in_reverse_even_if_one_fails`
    Expected: FAIL (`NetworkConfigList::del` does not exist yet)
 
 2. Implement (append to `crates/minibox-cni/src/config.rs`, inside the same `impl
-   NetworkConfigList` block, after `add`):
+NetworkConfigList` block, after `add`):
+
    ```rust
        /// Run the DEL chain in reverse plugin order. Individual plugin DEL
        /// failures are logged and do not short-circuit remaining teardown
@@ -1139,7 +1180,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -1157,6 +1199,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 **Run**: `cargo nextest run -p minibox-cni`
 
 1. Write failing test (append to `crates/minibox-cni/src/provider.rs`):
+
    ```rust
    #[cfg(test)]
    #[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
@@ -1214,10 +1257,12 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        }
    }
    ```
+
    Run: `cargo nextest run -p minibox-cni -- attach_then_cleanup_uses_recorded_netns`
    Expected: FAIL (`CniNetworkProvider` does not exist yet)
 
 2. Implement (prepend to `crates/minibox-cni/src/provider.rs`, above the `#[cfg(test)]` block):
+
    ```rust
    //! `NetworkProvider` adapter implementing minibox-core's port via CNI
    //! plugin chains.
@@ -1313,7 +1358,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox-cni    → all green
    cargo clippy -p minibox-cni -- -D warnings    → zero warnings
    ```
@@ -1336,10 +1382,13 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 2. Edit `crates/minibox/Cargo.toml` `[dependencies]` section — add (alphabetical position, near
    other `minibox-*` deps):
+
    ```toml
    minibox-cni = { workspace = true, optional = true }
    ```
+
    Edit `crates/minibox/Cargo.toml` `[features]` section — add after the existing `otel` block:
+
    ```toml
    ## CNI (Container Network Interface) plugin-based bridge networking for the
    ## native Linux adapter. Requires CNI plugin binaries (bridge, host-local,
@@ -1350,14 +1399,17 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    ```
 
 3. Edit `crates/miniboxd/Cargo.toml` `[features]` section — add:
+
    ```toml
    cni = ["minibox/cni"]
    ```
+
    (Do not add `cni` to `default = ["metrics", "otel"]` — stays opt-in per the design's rollout
    decision.)
 
 4. Verify:
-   ```
+
+   ```text
    cargo check -p miniboxd --features cni    → compiles (minibox-cni now an optional dep)
    cargo check -p miniboxd                   → compiles (feature off, unchanged behavior)
    ```
@@ -1383,12 +1435,15 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 2. Locate the `"bridge"` arm inside `resolve_native_network()` (`crates/miniboxd/src/main.rs`,
    inside the existing `match mode.as_str() { ... }` block) and replace:
+
    ```rust
            "bridge" => Ok(Arc::new(
                BridgeNetwork::new().context("BridgeNetwork init failed")?,
            )),
    ```
+
    with:
+
    ```rust
            #[cfg(feature = "cni")]
            "bridge" => {
@@ -1408,12 +1463,14 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
                BridgeNetwork::new().context("BridgeNetwork init failed")?,
            )),
    ```
+
    This preserves the design's decision exactly: same `"bridge"` mode string, cfg-gated
    construction — no runtime toggle, no dual construction, `BridgeNetwork` stays the default with
    the feature off.
 
 3. Verify:
-   ```
+
+   ```text
    cargo check -p miniboxd --features cni    → compiles, uses CniNetworkProvider for "bridge"
    cargo check -p miniboxd                   → compiles, still uses BridgeNetwork for "bridge"
    cargo clippy -p miniboxd --features cni -- -D warnings    → zero warnings
@@ -1435,14 +1492,17 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 1. No new test — instrumentation is additive to an existing, already-tested function; behavior
    must not change. Verify via the existing test suite for `run.rs` staying green (run it before
    and after to confirm no regression):
-   ```
+
+   ```text
    cargo nextest run -p minibox -- daemon::handler::run::
    ```
+
    Expected before change: existing tests pass (establishes baseline).
 
 2. Edit `crates/minibox/src/daemon/handler/run.rs` — add the instrument attribute immediately
    above the `pub async fn handle_run(` signature (matching the exact style already used in
    `crates/minibox/src/daemon/handler/image.rs:77`):
+
    ```rust
    #[instrument(skip(state, deps, tx), fields(image = %params.image, ephemeral = params.ephemeral))]
    pub async fn handle_run(
@@ -1452,12 +1512,14 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        tx: mpsc::Sender<DaemonResponse>,
    ) {
    ```
+
    Confirm `use tracing::instrument;` is present in this file's imports (add it if missing,
    alongside the file's existing `tracing::{...}` import if one exists — check the top of
    `run.rs` for the current import list before adding a duplicate).
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox -- daemon::handler::run::    → all green, unchanged
    cargo clippy -p minibox -- -D warnings                    → zero warnings
    ```
@@ -1480,14 +1542,17 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 2. Edit `crates/minibox/src/adapters/runtime.rs` — add the instrument attribute immediately above
    the `spawn_process` method inside `impl ContainerRuntime for LinuxNamespaceRuntime` (line
    109):
+
    ```rust
    #[instrument(skip(self, config), fields(command = %config.command, privileged = config.privileged), err)]
    async fn spawn_process(&self, config: &ContainerSpawnConfig) -> anyhow::Result<SpawnResult> {
    ```
+
    Confirm `use tracing::instrument;` is present in this file's imports (add if missing).
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p minibox -- runtime::    → all green, unchanged
    cargo clippy -p minibox -- -D warnings       → zero warnings
    ```
@@ -1506,6 +1571,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
 
 1. Write failing test (append a `#[cfg(test)] mod tests` block, or extend the existing one if
    `doctor.rs` already has one — check the file first and follow whichever is the case):
+
    ```rust
    #[test]
    fn cni_plugin_status_reports_missing_binaries_when_path_unset() {
@@ -1529,11 +1595,13 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
        assert!(statuses.iter().all(|s| s.found));
    }
    ```
+
    Run: `cargo nextest run -p mbx -- cni_plugin_status_reports_missing_binaries_when_path_unset`
    Expected: FAIL (`cni_plugin_status` does not exist yet)
 
 2. Implement — add near the existing `compiled_adapters()`/`selected_adapter()` functions in
    `crates/mbx/src/commands/doctor.rs`:
+
    ```rust
    /// Result of checking a single CNI plugin binary's presence.
    pub struct CniPluginStatus {
@@ -1558,6 +1626,7 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
            .collect()
    }
    ```
+
    Also add a module-level `static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());`
    near the top of the test module if this module doesn't already have one for env-mutating tests
    (per this repo's env-mutation convention) — check the file first; if a shared lock already
@@ -1570,7 +1639,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    exactly).
 
 3. Verify:
-   ```
+
+   ```text
    cargo nextest run -p mbx -- doctor::    → all green
    cargo clippy -p mbx -- -D warnings      → zero warnings
    ```
@@ -1591,7 +1661,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    listed above passing with `minibox-cni` included.
 
 2. Edit `justfile`'s `nextest` recipe (confirmed at lines 82-84) to add `-p minibox-cni`:
-   ```
+
+   ```text
    nextest:
        cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd -p minibox-cni
    ```
@@ -1607,7 +1678,8 @@ design at `docs/designs/2026-07-26-cni-networking-otel-design.md`.
    - `mbx doctor` reports plugin presence
 
 4. Verify:
-   ```
+
+   ```text
    cargo nextest run --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd -p minibox-cni    → all green
    ```
 

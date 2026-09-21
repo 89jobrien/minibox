@@ -498,6 +498,9 @@ fn run_agentlint(sh: &Shell, root: &Path, json: bool) -> Result<AgentlintResult>
 
 // ── Public entry point ───────────────────────────────────────────────────
 
+/// Checks documented facts against the workspace and runs `agentlint`.
+///
+/// Full mode also checks freshness and coverage, then writes `xtask/docs-audit-report.json`.
 pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     eprintln!("--- docs-audit ---");
 

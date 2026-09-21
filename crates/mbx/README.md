@@ -7,7 +7,7 @@ printing human-readable output.
 
 ## Commands
 
-```
+```text
 mbx pull <image> [--tag TAG] [--platform PLATFORM]
 mbx run [OPTIONS] <image> -- <command>
 mbx ps
@@ -33,7 +33,7 @@ mbx doctor
 
 ### `run` flags
 
-```
+```text
 --memory N          Memory limit in bytes (cgroups v2 memory.max)
 --cpu-weight N      CPU weight 1-10000 (cgroups v2 cpu.weight)
 --tag TAG           Image tag (default: latest)

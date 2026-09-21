@@ -1,3 +1,5 @@
+//! Domain types and contracts for checkpoint.
+
 use anyhow::Result;
 use std::path::Path;
 use std::sync::Arc;

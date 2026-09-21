@@ -92,6 +92,7 @@ fn fetch_detail(sh: &Shell, run_id: &str, repo: &str) -> Result<RunDetail> {
     serde_json::from_str(&json).context("parse gh run view output")
 }
 
+/// Watches the latest GitHub Actions run for the selected branch.
 pub fn ci_watch(sh: &Shell, branch: Option<&str>) -> Result<()> {
     let repo_json = cmd!(sh, "gh repo view --json nameWithOwner").read()?;
     let repo: RepoInfo = serde_json::from_str(&repo_json).context("parse gh repo view output")?;

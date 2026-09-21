@@ -1,3 +1,5 @@
+//! Domain types and contracts for filesystem.
+
 use anyhow::Result;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

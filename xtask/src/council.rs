@@ -1,3 +1,5 @@
+//! Builds and launches the configured Agentbox council through `dotenvx`.
+
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 use std::process::Command;
@@ -5,6 +7,9 @@ use std::process::Command;
 use crate::dotenv;
 use crate::xconfig::XConfig;
 
+/// Builds Agentbox when absent, resolves its dotenv key, and launches the council workflow.
+///
+/// The selected model is injected through `OPENAI_MODEL`; `prod` chooses the production model.
 pub fn run(root: &Path, base: &str, mode: &str, no_synthesis: bool, prod: bool) -> Result<()> {
     let cfg = XConfig::load(root)?;
 

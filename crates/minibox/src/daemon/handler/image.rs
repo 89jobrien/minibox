@@ -92,6 +92,7 @@ pub(super) fn resolve_platform_registry(
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
 // qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
+/// Handles a daemon pull request.
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 pub async fn handle_pull(
     image: String,
@@ -311,6 +312,7 @@ pub async fn handle_push(
 
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
+/// Handles a daemon commit request.
 pub async fn handle_commit(
     container_id: String,
     target_image: String,

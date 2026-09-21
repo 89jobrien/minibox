@@ -241,6 +241,7 @@ pub struct DockerDesktopFilesystem {
 }
 
 impl DockerDesktopFilesystem {
+    /// Initializes `DockerDesktopFilesystem` from helper image.
     pub fn new(helper_image: impl Into<String>) -> Self {
         Self {
             runtime: DockerDesktopRuntime::new(helper_image),
@@ -312,6 +313,7 @@ pub struct DockerDesktopLimiter {
 }
 
 impl DockerDesktopLimiter {
+    /// Initializes `DockerDesktopLimiter` from helper image.
     pub fn new(helper_image: impl Into<String>) -> Self {
         Self {
             runtime: DockerDesktopRuntime::new(helper_image),

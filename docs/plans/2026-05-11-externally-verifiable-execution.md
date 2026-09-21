@@ -36,7 +36,6 @@ The design aligns with current supply-chain and container standards:
 - `crates/minibox-core/src/domain.rs`
 - `crates/minibox-core/src/lib.rs`
 - `crates/minibox-core/tests/execution_manifest.rs`
-
 - [ ] **Step 1:** Add `ExecutionManifest`, `ExecutionManifestSubject`, `ExecutionManifestImage`, `ExecutionManifestRuntime`, `ExecutionManifestRequest`, `ExecutionManifestMount`, `ExecutionManifestResourceLimits`, and `ExecutionManifestDigest` domain structs in `minibox-core`.
 - [ ] **Step 2:** Add deterministic workload digest calculation that hashes a stable JSON projection excluding volatile fields such as creation timestamp, manifest file path, and the digest field itself.
 - [ ] **Step 3:** Represent secret-bearing environment data as variable names plus SHA-256 value digests, never plaintext values.
@@ -51,7 +50,6 @@ The design aligns with current supply-chain and container standards:
 
 - `crates/minibox/src/daemon/handler.rs`
 - `crates/minibox/tests/daemon_handler_tests.rs`
-
 - [ ] **Step 1:** Extract common run setup from `run_inner` and `run_inner_capture` into a shared helper that accepts `capture_output` and returns prepared run state.
 - [ ] **Step 2:** Keep image resolution, platform registry selection, image pull/cache check, layer lookup, rootfs setup, cgroup setup, network setup, `ContainerRecord` construction, and `ContainerSpawnConfig` construction in the shared helper.
 - [ ] **Step 3:** Preserve existing behavior for non-streaming runs and ephemeral streaming runs, including first streaming response, output capture, state transitions, and auto-remove behavior.
@@ -68,7 +66,6 @@ The design aligns with current supply-chain and container standards:
 - `crates/minibox/src/daemon/state.rs`
 - `crates/minibox/tests/daemon_handler_tests.rs`
 - `docs/SECURITY_INVARIANTS.mbx.md`
-
 - [ ] **Step 1:** Build an `ExecutionManifest` in the shared run preparation helper after image/rootfs/resource/network inputs are known and before `spawn_process`.
 - [ ] **Step 2:** Persist the manifest to `{containers_base}/{id}/execution-manifest.json` with owner-only permissions on Unix.
 - [ ] **Step 3:** Add `execution_manifest_path` and `workload_digest` fields to `ContainerRecord` with serde defaults for backward compatibility.
@@ -88,7 +85,6 @@ The design aligns with current supply-chain and container standards:
 - `crates/miniboxd/src/main.rs`
 - `crates/minibox/tests/daemon_handler_tests.rs`
 - `crates/miniboxd/tests/conformance_wiring.rs`
-
 - [ ] **Step 1:** Add `ExecutionPolicy` and `ExecutionPolicyDecision` types supporting allowed image refs, allowed image digests, required platform, allowed network modes, bind mount allowance, privileged allowance, and expected workload digest.
 - [ ] **Step 2:** Add policy evaluation against `ExecutionManifest` with fail-closed errors for unknown or mismatched measured inputs.
 - [ ] **Step 3:** Wire optional policy loading into `HandlerDependencies` and all miniboxd adapter suite builders, initially from `MINIBOX_EXECUTION_POLICY`.
@@ -108,7 +104,6 @@ The design aligns with current supply-chain and container standards:
 - `crates/minibox/src/daemon/handler.rs`
 - `crates/minibox/tests/daemon_handler_tests.rs`
 - `crates/mbx/tests/cli_subprocess.rs`
-
 - [ ] **Step 1:** Add protocol requests and responses for reading a container execution manifest and verifying it against a policy file.
 - [ ] **Step 2:** Implement daemon handlers that read the persisted manifest by container ID or unambiguous prefix and return JSON or a structured verification result.
 - [ ] **Step 3:** Add `mbx manifest <id>` to print the stored execution manifest without changing `mbx run` streaming behavior.
@@ -126,7 +121,6 @@ The design aligns with current supply-chain and container standards:
 - `docs/SECURITY_INVARIANTS.mbx.md`
 - `docs/superpowers/plans/2026-05-11-externally-verifiable-execution.md`
 - `README.md`
-
 - [ ] **Step 1:** Document the `ExecutionManifest` schema, workload digest inputs, and which fields are intentionally excluded from the digest.
 - [ ] **Step 2:** Document the policy file shape and fail-closed behavior.
 - [ ] **Step 3:** Document explicit non-goals for this phase: no TEE attestation, no encrypted attested sessions, no transparency log, and no signing requirement.

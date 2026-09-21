@@ -128,14 +128,14 @@
       },
       "info": {
         "type": "object",
-        "description": "Introspection. `cargo xtask info <target> [flags...]`. Bare `cargo xtask info` prints the target list.",
+        "description": "Introspection. `cargo xtask info <target> [flags...]`. Bare `cargo xtask info` prints the target list. The `context` target emits snapshot_version=2 with an additive `context_map` contract.",
         "properties": {
           "command": { "const": "info" },
           "args": {
             "type": "object",
             "properties": {
               "target": { "enum": ["metrics", "context", "changes"] },
-              "save": { "type": "boolean", "default": false, "appliesTo": ["metrics", "context"], "description": "Persist the snapshot to disk in addition to printing it." },
+              "save": { "type": "boolean", "default": false, "appliesTo": ["metrics", "context"], "description": "Persist the snapshot to disk in addition to printing it. For `context`, snapshot_version=2 includes `context_map.crate_assignments`, `context_map.file_assignments`, and `context_map.task_slices`." },
               "base_ref": { "type": "string", "default": "HEAD^", "appliesTo": ["changes"], "description": "Git ref to diff against. Emits GitHub Actions step outputs classifying changed paths." }
             }
           }

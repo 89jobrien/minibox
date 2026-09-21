@@ -1,3 +1,5 @@
+//! Domain types and contracts for runtime.
+
 use anyhow::Result;
 use async_trait::async_trait;
 use std::any::Any;

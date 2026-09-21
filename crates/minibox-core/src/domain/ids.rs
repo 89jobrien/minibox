@@ -1,3 +1,5 @@
+//! Domain types and contracts for ids.
+
 use anyhow::Result;
 
 /// Container identifier type.

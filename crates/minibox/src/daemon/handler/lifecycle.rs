@@ -39,6 +39,7 @@ struct FreezeParams {
 /// Look up a container by `id`, verify its state matches `expected_state`, and
 /// return the `cgroup.freeze` path. Returns `Err(DaemonResponse::Error)` if
 /// the container is missing or in an unexpected state.
+#[allow(clippy::result_large_err)]
 async fn freeze_path_for(
     id: &str,
     state: &DaemonState,

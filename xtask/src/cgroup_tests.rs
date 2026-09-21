@@ -1,3 +1,5 @@
+//! Linux cgroup test orchestration for xtask.
+
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, bail};
 #[cfg(target_os = "linux")]

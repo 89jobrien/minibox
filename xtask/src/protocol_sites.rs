@@ -1,3 +1,5 @@
+//! Discovers source locations that use the daemon protocol.
+
 use anyhow::{Result, bail};
 use std::{fs, path::Path};
 

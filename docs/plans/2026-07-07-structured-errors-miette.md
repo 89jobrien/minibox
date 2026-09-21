@@ -36,16 +36,18 @@ rendering.
 
 **Crate**: `minibox-core`, `minibox`, `macbox`, `winbox`
 **File(s)**:
+
 - `crates/minibox-core/src/domain.rs` (line ~1220)
 - `crates/minibox/src/domain.rs` (line ~599)
 - `crates/macbox/src/lib.rs` (line ~44)
 - `crates/winbox/src/lib.rs` (line ~33)
-**Run**: `cargo check --workspace`
+  **Run**: `cargo check --workspace`
 
 For each enum, add `miette::Diagnostic` to the derive and a `#[diagnostic(...)]`
 attribute on each variant.
 
 `crates/minibox-core/src/domain.rs`:
+
 ```rust
 // Before:
 #[derive(Debug, thiserror::Error)]
@@ -70,6 +72,7 @@ pub enum DomainError {
 ```
 
 `crates/macbox/src/lib.rs`:
+
 ```rust
 // Before:
 #[derive(thiserror::Error, Debug)]
@@ -83,6 +86,7 @@ pub enum MacboxError {
 ```
 
 `crates/winbox/src/lib.rs`:
+
 ```rust
 #[derive(thiserror::Error, Debug, miette::Diagnostic)]
 pub enum WinboxError {
@@ -96,7 +100,8 @@ pub enum WinboxError {
 ```
 
 Verify:
-```
+
+```text
 cargo check --workspace  → zero errors
 cargo clippy --workspace -- -D warnings  → zero warnings
 ```
@@ -109,9 +114,10 @@ Commit: `git commit -m "feat(errors): add Diagnostic derive to DomainError, Macb
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/domain.rs`
 - `crates/minibox-core/src/path.rs`
-**Run**: `cargo nextest run -p minibox-core`
+  **Run**: `cargo nextest run -p minibox-core`
 
 The `domain.rs` file has ~16 `anyhow::bail!` calls for volume/mount parsing
 validation. Consolidate them into a typed `ParseError` enum.
@@ -179,8 +185,8 @@ return Err(ParseError::InvalidVolume { input: s.to_string() })?;
 // equivalent but idiomatic: use the ? on an Err to convert via From
 ```
 
-   For unsupported adapter ops (checkpoint, PTY), create `UnsupportedOperation`
-   variants in `DomainError` rather than generic strings:
+For unsupported adapter ops (checkpoint, PTY), create `UnsupportedOperation`
+variants in `DomainError` rather than generic strings:
 
 ```rust
 // Before:
@@ -215,7 +221,8 @@ pub enum InternalPathError {
 ```
 
 Verify:
-```
+
+```text
 cargo nextest run -p minibox-core  → all green
 cargo clippy -p minibox-core -- -D warnings  → zero warnings
 ```
@@ -228,11 +235,12 @@ Commit: `git commit -m "feat(minibox-core): typed ParseError/InternalPathError r
 
 **Crate**: `minibox`
 **File(s)**:
+
 - `crates/minibox/src/adapters/ghcr.rs`
 - `crates/minibox/src/adapters/colima.rs`
 - `crates/minibox/src/container/filesystem.rs`
 - `crates/minibox/src/nesting.rs`
-**Run**: `cargo nextest run -p minibox`
+  **Run**: `cargo nextest run -p minibox`
 
 The 81 `bail!` calls in `minibox` fall into three categories:
 
@@ -295,7 +303,8 @@ pub enum NestingError {
 ```
 
 Verify:
-```
+
+```text
 cargo nextest run -p minibox  → all green
 cargo clippy -p minibox -- -D warnings  → zero warnings
 ```
@@ -308,12 +317,13 @@ Commit: `git commit -m "feat(minibox): typed errors replace bail! in adapters an
 
 **Crate**: `mbx`
 **File(s)**:
+
 - `crates/mbx/src/commands/run.rs`
 - `crates/mbx/src/commands/upgrade.rs`
 - `crates/mbx/src/commands/events.rs`
 - `crates/mbx/src/commands/manifest.rs`
 - `crates/mbx/src/commands/update.rs`
-**Run**: `cargo nextest run -p mbx`
+  **Run**: `cargo nextest run -p mbx`
 
 The existing `RequestError` in `crates/mbx/src/commands/mod.rs` already has
 `Diagnostic`. Extend it with variants for each current `bail!` site:
@@ -390,7 +400,8 @@ return Err(RequestError::NoResponse)?;
 ```
 
 Verify:
-```
+
+```text
 cargo nextest run -p mbx  → all green
 cargo clippy -p mbx -- -D warnings  → zero warnings
 ```
@@ -403,8 +414,9 @@ Commit: `git commit -m "feat(mbx): typed RequestError variants replace inline ba
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/image/registry.rs`
-**Run**: `cargo nextest run -p minibox-core`
+  **Run**: `cargo nextest run -p minibox-core`
 
 The 10 `.into()` patterns (BP-010 findings) in `registry.rs` are
 `return Err(RegistryError::Variant { ... }.into())`. With the `ManifestTooLarge`
@@ -429,7 +441,8 @@ now covered by named variants (`ManifestTooLarge`, `LayerTooLarge`), use the
 named variant.
 
 Verify:
-```
+
+```text
 cargo nextest run -p minibox-core  → all green
 ```
 
@@ -441,9 +454,10 @@ Commit: `git commit -m "refactor(registry): replace Err(.into()) with typed vari
 
 **Crate**: `miniboxd`, `minibox`
 **File(s)**:
+
 - `crates/minibox/src/daemon/handler/mod.rs`
 - `crates/miniboxd/src/main.rs`
-**Run**: `cargo nextest run -p minibox`
+  **Run**: `cargo nextest run -p minibox`
 
 Today `miniboxd` uses `anyhow::Result` internally. Errors serialize to a plain
 `DaemonResponse::Error { message: String }`. Upgrade the handler boundary to
@@ -496,8 +510,8 @@ fn daemon_error(message: String, code: Option<String>) -> RequestError {
 }
 ```
 
-   Update `RequestError::DaemonError` to carry `code: Option<String>` and
-   implement `Diagnostic` manually so the code field renders:
+Update `RequestError::DaemonError` to carry `code: Option<String>` and
+implement `Diagnostic` manually so the code field renders:
 
 ```rust
 // In RequestError (or standalone):
@@ -513,7 +527,8 @@ impl miette::Diagnostic for RequestError {
 ```
 
 Verify:
-```
+
+```text
 cargo nextest run -p minibox -p mbx  → all green
 cargo clippy --workspace -- -D warnings  → zero warnings
 ```
@@ -533,6 +548,7 @@ rustqual . --no-fail --save-baseline .ctx/rustqual-baseline.json
 ```
 
 Expected improvements:
+
 - Most BOILERPLATE BP-009 (manual From error conversions) → resolved by typed variants
 - Most BP-010 (`.into()` patterns) → resolved in Task 5
 - Some BP-001 (inline bail! with string context) → resolved by typed variants
@@ -543,7 +559,7 @@ Commit: `git commit -m "quality: update rustqual baseline after miette migration
 
 ## Ordering Dependencies
 
-```
+```text
 Task 1 (Diagnostic derives)
   └─→ Task 2 (ParseError/InternalPathError in minibox-core)
         └─→ Task 3 (bail! in minibox adapters — uses ParseError)
