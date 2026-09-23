@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-09-21
+updated: 2026-09-23
 items:
 - id: gh-473
   name: feat-xtask---squash-chain-branches-during-promotion
@@ -22,19 +22,27 @@ items:
   - date: 2026-09-21
     type: blocker
     note: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
-- id: uncommitted-work
-  name: uncommitted-work
-  priority: P1
+- id: govexec-1
+  name: pin-immutable-crux-execution-contract
+  priority: P2
   status: open
-  title: Uncommitted changes (2 files)
+  title: Pin immutable Crux execution contract
   description: |-
-    Working tree has uncommitted changes:
-    .ctx/HANDOFF.md
-    .ctx/HANDOFF.minibox.minibox.yaml
+    Pin pushed Crux commit 628eb35, vendor its canonical authorization and record vectors
+    with provenance, then implement the bounded daemon protocol slice before native staged
+    execution. Follow the approved designs committed as 4a7101e2.
   files:
-  - .ctx/HANDOFF.md
-  - .ctx/HANDOFF.minibox.minibox.yaml
+  - docs/designs/2026-09-22-signed-governed-execution-daemon-design.md
+  - docs/designs/2026-09-22-crux-governed-execution-plugin-design.md
 log:
+- date: '20260923.002700'
+  summary: |-
+    Added approved signed governed-execution daemon and Crux plugin designs. Workspace
+    formatting and Clippy passed; nextest passed 2,373 tests with six skipped. Crux
+    prerequisite commit 628eb35 is available on the pushed feature
+    branch.
+  commits:
+  - 4a7101e2
 - date: '20260921.142311'
   summary: done=65 running=0 pending=26 blocked=2
   commits:
