@@ -2,6 +2,24 @@
 //!
 //! Exposes the minibox container API as crux handlers under the
 //! `minibox::container::*` and `minibox::image::*` namespaces.
+//!
+//! # Input contract
+//!
+//! Each handler's declared inputs ([`handler_decls`]) are the handler's
+//! *complete* input contract, and they are enforced by [`build_request`]:
+//!
+//! - every declared field is bound into the outgoing [`DaemonRequest`];
+//! - any field a caller supplies that is not declared is **rejected** with an
+//!   error naming the handler and the offending field.
+//!
+//! The second rule is deliberate. The daemon protocol carries more fields than
+//! this plugin binds (for example [`DaemonRequest::Run`] has `ephemeral`,
+//! `network`, `tty`, and `entrypoint`). Accepting those keys and dropping them
+//! would let a Crux planner believe a capability was applied when it was not, so
+//! the plugin refuses them loudly instead of ignoring them.
+//!
+//! [`DaemonRequest`]: minibox_core::protocol::DaemonRequest
+//! [`DaemonRequest::Run`]: minibox_core::protocol::DaemonRequest::Run
 #![cfg_attr(
     test,
     allow(
@@ -13,7 +31,7 @@
     )
 )]
 
-use crate::protocol::{HandlerDecl, Request, Response};
+use crate::protocol::{HandlerDecl, HandlerInput, Request, Response};
 use anyhow::{Context, Result};
 use minibox_core::client::{DaemonClient, default_socket_path};
 use minibox_core::domain::BindMount;
@@ -25,70 +43,201 @@ pub mod protocol;
 
 // ── Handler declarations ───────────────────────────────────────────────────────
 
-// TODO(feature-idea-03): bring Crux handler inputs to protocol parity and either honor or remove
-// the advertised image push target instead of silently discarding it.
+/// One input field in a handler's contract.
+#[derive(Debug, Clone, Copy)]
+struct InputSpec {
+    /// Field name as it appears in the handler's `input` object.
+    name: &'static str,
+    /// Whether the handler fails without it.
+    required: bool,
+}
+
+/// Declares a required input field.
+const fn required(name: &'static str) -> InputSpec {
+    InputSpec {
+        name,
+        required: true,
+    }
+}
+
+/// Declares an optional input field.
+const fn optional(name: &'static str) -> InputSpec {
+    InputSpec {
+        name,
+        required: false,
+    }
+}
+
+/// The declaration for a single handler: its identity, prose, and input contract.
+struct HandlerSpec {
+    /// Namespaced handler name.
+    name: &'static str,
+    /// One-line summary used as the description prefix.
+    summary: &'static str,
+    /// Complete set of accepted input fields.
+    inputs: &'static [InputSpec],
+    /// Extra prose appended after the rendered input list.
+    notes: &'static str,
+}
+
+/// Every handler this plugin exposes, in declaration order.
+///
+/// This table is the single source of truth: [`handler_decls`] renders the
+/// `Declare` payload from it, and [`build_request`] validates incoming input
+/// against it, so the advertised surface and the enforced surface cannot drift.
+const HANDLERS: &[HandlerSpec] = &[
+    HandlerSpec {
+        name: "minibox::container::run",
+        summary: "Create and start a container (non-ephemeral)",
+        inputs: &[
+            required("image"),
+            optional("tag"),
+            optional("command"),
+            optional("env"),
+            optional("mounts"),
+            optional("memory_limit_bytes"),
+            optional("cpu_weight"),
+            optional("name"),
+            optional("platform"),
+            optional("privileged"),
+        ],
+        notes: "mounts entries are {host_path, container_path, read_only} with absolute paths; \
+                env entries are KEY=VALUE strings.",
+    },
+    HandlerSpec {
+        name: "minibox::container::stop",
+        summary: "Stop a running container",
+        inputs: &[required("id")],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::container::pause",
+        summary: "Pause (freeze) a running container via cgroup.freeze",
+        inputs: &[required("id")],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::container::resume",
+        summary: "Resume (thaw) a paused container",
+        inputs: &[required("id")],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::container::rm",
+        summary: "Remove a stopped container",
+        inputs: &[required("id")],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::container::exec",
+        summary: "Execute a command in a running container (Linux native only)",
+        inputs: &[
+            required("id"),
+            required("command"),
+            optional("env"),
+            optional("tty"),
+        ],
+        notes: "env entries are KEY=VALUE strings.",
+    },
+    HandlerSpec {
+        name: "minibox::container::ps",
+        summary: "List all containers",
+        inputs: &[],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::container::logs",
+        summary: "Fetch logs for a container",
+        inputs: &[required("id")],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::image::pull",
+        summary: "Pull an image from a registry",
+        inputs: &[required("image"), optional("tag"), optional("platform")],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::image::build",
+        summary: "Build an image from a Dockerfile",
+        inputs: &[
+            required("context_path"),
+            optional("tag"),
+            optional("dockerfile"),
+        ],
+        notes: "tag defaults to \"latest\"; dockerfile defaults to \"FROM scratch\".",
+    },
+    HandlerSpec {
+        name: "minibox::image::push",
+        summary: "Push an image to a registry",
+        inputs: &[required("image")],
+        // The destination is derived from the image reference's own registry and
+        // repository. `DaemonRequest::Push` carries no separate destination and
+        // the `ImagePusher` port resolves local cache key and remote destination
+        // from the same `ImageRef`, so a second destination cannot be expressed
+        // without changing the protocol and the port. Rather than advertise a
+        // field that cannot be honored, the input contract omits it and rejects
+        // it on arrival.
+        notes: "The image reference carries its own registry and repository; anonymous \
+                credentials are used.",
+    },
+    HandlerSpec {
+        name: "minibox::image::ls",
+        summary: "List all cached images",
+        inputs: &[],
+        notes: "",
+    },
+    HandlerSpec {
+        name: "minibox::image::rm",
+        summary: "Remove a cached image by reference",
+        inputs: &[required("image_ref")],
+        notes: "",
+    },
+];
+
+/// Looks up a handler's declaration spec, or `None` for an unknown name.
+#[must_use]
+fn handler_spec(name: &str) -> Option<&'static HandlerSpec> {
+    HANDLERS.iter().find(|spec| spec.name == name)
+}
+
+/// Renders a spec's `description` from its summary, input list, and notes.
+///
+/// The `Input: {…}` portion is derived from [`HandlerSpec::inputs`] rather than
+/// written by hand, so the prose a planner reads cannot claim a field the
+/// enforced contract does not accept.
+fn render_description(spec: &HandlerSpec) -> String {
+    let inputs = if spec.inputs.is_empty() {
+        "{}".to_string()
+    } else {
+        let names: Vec<&str> = spec.inputs.iter().map(|i| i.name).collect();
+        format!("{{{}}}", names.join(", "))
+    };
+    if spec.notes.is_empty() {
+        format!("{}. Input: {inputs}", spec.summary)
+    } else {
+        format!("{}. Input: {inputs} {}", spec.summary, spec.notes)
+    }
+}
 
 /// All handlers exposed by this plugin, in declaration order.
 #[must_use]
 pub fn handler_decls() -> Vec<HandlerDecl> {
-    vec![
-        HandlerDecl {
-            name: "minibox::container::run".into(),
-            description: "Create and start a container. Input: {image, command, env, mounts, \
-                          memory_limit_bytes, cpu_weight, name, platform}"
-                .into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::stop".into(),
-            description: "Stop a running container. Input: {id}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::pause".into(),
-            description: "Pause (freeze) a running container via cgroup.freeze. Input: {id}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::resume".into(),
-            description: "Resume (thaw) a paused container. Input: {id}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::rm".into(),
-            description: "Remove a stopped container. Input: {id}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::exec".into(),
-            description: "Execute a command in a running container (Linux native only). \
-                          Input: {id, command, env, tty}"
-                .into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::ps".into(),
-            description: "List all containers. Input: {}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::container::logs".into(),
-            description: "Fetch logs for a container. Input: {id}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::image::pull".into(),
-            description: "Pull an image from a registry. Input: {image}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::image::build".into(),
-            description: "Build an image from a Dockerfile. Input: {context_path, tag}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::image::push".into(),
-            description: "Push an image to a registry. Input: {image, target}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::image::ls".into(),
-            description: "List all cached images. Input: {}".into(),
-        },
-        HandlerDecl {
-            name: "minibox::image::rm".into(),
-            description: "Remove a cached image by reference. Input: {image_ref}".into(),
-        },
-    ]
+    HANDLERS
+        .iter()
+        .map(|spec| HandlerDecl {
+            name: spec.name.to_string(),
+            description: render_description(spec),
+            inputs: spec
+                .inputs
+                .iter()
+                .map(|input| HandlerInput {
+                    name: input.name.to_string(),
+                    required: input.required,
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 // ── Handler dispatch ───────────────────────────────────────────────────────────
@@ -135,17 +284,27 @@ pub async fn dispatch(handler: &str, input: Value) -> Result<Value> {
 }
 
 /// Map a handler name + JSON input to the appropriate `DaemonRequest`.
+///
+/// The handler must be one of [`handler_decls`], and `input` must be a JSON
+/// object whose fields are all declared for that handler — see the crate-level
+/// "Input contract" section. Undeclared fields are rejected rather than
+/// dropped, so an unimplemented capability is reported to the caller instead
+/// of being silently discarded.
 pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
+    let spec =
+        handler_spec(handler).ok_or_else(|| anyhow::anyhow!("unknown handler: {handler}"))?;
+    reject_undeclared_inputs(handler, input, spec)?;
     match handler {
         "minibox::container::run" => {
             let image = str_field(input, "image")?;
-            let tag = opt_str_field(input, "tag");
-            let command = str_array_field(input, "command").unwrap_or_default();
-            let memory_limit_bytes = opt_u64_field(input, "memory_limit_bytes");
-            let cpu_weight = opt_u64_field(input, "cpu_weight");
-            let env = str_array_field(input, "env").unwrap_or_default();
-            let name = opt_str_field(input, "name");
-            let platform = opt_str_field(input, "platform");
+            let tag = opt_str_field(input, "tag")?;
+            let command = str_array_field(input, "command")?.unwrap_or_default();
+            let memory_limit_bytes = opt_u64_field(input, "memory_limit_bytes")?;
+            let cpu_weight = opt_u64_field(input, "cpu_weight")?;
+            let env = str_array_field(input, "env")?.unwrap_or_default();
+            let name = opt_str_field(input, "name")?;
+            let platform = opt_str_field(input, "platform")?;
+            let privileged = opt_bool_field(input, "privileged")?.unwrap_or(false);
             let mounts = parse_mounts(input)?;
 
             Ok(DaemonRequest::Run {
@@ -157,7 +316,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 ephemeral: false,
                 network: None,
                 mounts,
-                privileged: input["privileged"].as_bool().unwrap_or(false),
+                privileged,
                 env,
                 name,
                 tty: false,
@@ -194,10 +353,10 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 
         "minibox::container::exec" => {
             let container_id = str_field(input, "id")?;
-            let cmd = str_array_field(input, "command")
+            let cmd = str_array_field(input, "command")?
                 .ok_or_else(|| anyhow::anyhow!("exec requires 'command' array"))?;
-            let env = str_array_field(input, "env").unwrap_or_default();
-            let tty = input["tty"].as_bool().unwrap_or(false);
+            let env = str_array_field(input, "env")?.unwrap_or_default();
+            let tty = opt_bool_field(input, "tty")?.unwrap_or(false);
             Ok(DaemonRequest::Exec {
                 container_id,
                 cmd,
@@ -220,8 +379,8 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 
         "minibox::image::pull" => {
             let image = str_field(input, "image")?;
-            let tag = opt_str_field(input, "tag");
-            let platform = opt_str_field(input, "platform");
+            let tag = opt_str_field(input, "tag")?;
+            let platform = opt_str_field(input, "platform")?;
             Ok(DaemonRequest::Pull {
                 image,
                 tag,
@@ -237,7 +396,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 str_field(input, "tag")?
             };
             let dockerfile =
-                opt_str_field(input, "dockerfile").unwrap_or_else(|| "FROM scratch".into());
+                opt_str_field(input, "dockerfile")?.unwrap_or_else(|| "FROM scratch".to_string());
             Ok(DaemonRequest::Build {
                 dockerfile,
                 context_path,
@@ -267,6 +426,32 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
 }
 
 // ── Input extraction helpers ───────────────────────────────────────────────────
+
+/// Rejects any input field the handler does not declare.
+///
+/// Enforcing the declared set as the *complete* contract is what stops a caller
+/// from supplying a field the plugin will quietly drop. Without this, a field
+/// like an image push `target` could be accepted and discarded, leaving the
+/// caller to believe the capability was applied.
+fn reject_undeclared_inputs(handler: &str, input: &Value, spec: &HandlerSpec) -> Result<()> {
+    let Some(object) = input.as_object() else {
+        anyhow::bail!("{handler}: input must be a JSON object");
+    };
+    let accepted: Vec<&str> = if spec.inputs.is_empty() {
+        vec!["<none>"]
+    } else {
+        spec.inputs.iter().map(|i| i.name).collect()
+    };
+    for key in object.keys() {
+        if !spec.inputs.iter().any(|i| i.name == key) {
+            anyhow::bail!(
+                "{handler}: unsupported input field '{key}' (accepted fields: {})",
+                accepted.join(", ")
+            );
+        }
+    }
+    Ok(())
+}
 
 /// Parses and validates bind mounts from a handler input object.
 pub fn parse_mounts(v: &Value) -> Result<Vec<BindMount>> {
@@ -322,26 +507,71 @@ pub fn str_field(v: &Value, key: &str) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("missing or non-string field '{key}'"))
 }
 
-#[must_use]
 /// Extracts an optional string field from a handler input object.
-pub fn opt_str_field(v: &Value, key: &str) -> Option<String> {
-    v[key].as_str().map(std::string::ToString::to_string)
+///
+/// A key that is present but not a string is an error rather than a silent
+/// `None`, so a malformed value is never dropped as if it were absent.
+pub fn opt_str_field(v: &Value, key: &str) -> Result<Option<String>> {
+    if v[key].is_null() {
+        return Ok(None);
+    }
+    v[key]
+        .as_str()
+        .map(|s| Some(std::string::ToString::to_string(s)))
+        .ok_or_else(|| anyhow::anyhow!("field '{key}' must be a string"))
 }
 
-#[must_use]
 /// Extracts an optional unsigned integer field from a handler input object.
-pub fn opt_u64_field(v: &Value, key: &str) -> Option<u64> {
-    v[key].as_u64()
+///
+/// A key that is present but not a `u64` is an error rather than a silent
+/// `None`, so a malformed value is never dropped as if it were absent.
+pub fn opt_u64_field(v: &Value, key: &str) -> Result<Option<u64>> {
+    if v[key].is_null() {
+        return Ok(None);
+    }
+    v[key]
+        .as_u64()
+        .map(Some)
+        .ok_or_else(|| anyhow::anyhow!("field '{key}' must be a non-negative integer"))
 }
 
-#[must_use]
+/// Extracts an optional boolean field from a handler input object.
+///
+/// A key that is present but not a boolean is an error rather than a silent
+/// `None`, so a malformed value is never dropped as if it were absent.
+pub fn opt_bool_field(v: &Value, key: &str) -> Result<Option<bool>> {
+    if v[key].is_null() {
+        return Ok(None);
+    }
+    v[key]
+        .as_bool()
+        .map(Some)
+        .ok_or_else(|| anyhow::anyhow!("field '{key}' must be a boolean"))
+}
+
 /// Extracts an optional array of string values from a handler input object.
-pub fn str_array_field(v: &Value, key: &str) -> Option<Vec<String>> {
-    v[key].as_array().map(|arr| {
-        arr.iter()
-            .filter_map(|x| x.as_str().map(std::string::ToString::to_string))
-            .collect()
-    })
+///
+/// A key that is present but is not an array of strings is an error: the
+/// previous lenient form filtered non-string elements out, which silently
+/// dropped caller-supplied entries.
+pub fn str_array_field(v: &Value, key: &str) -> Result<Option<Vec<String>>> {
+    if v[key].is_null() {
+        return Ok(None);
+    }
+    let array = v[key]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("field '{key}' must be an array of strings"))?;
+    array
+        .iter()
+        .enumerate()
+        .map(|(i, element)| {
+            element
+                .as_str()
+                .map(std::string::ToString::to_string)
+                .ok_or_else(|| anyhow::anyhow!("field '{key}': element {i} must be a string"))
+        })
+        .collect::<Result<Vec<String>>>()
+        .map(Some)
 }
 
 /// Process a single request line and produce a response.
@@ -735,5 +965,573 @@ mod tests {
             names.contains(&"minibox::image::rm"),
             "handler_decls must include image::rm"
         );
+    }
+
+    // ── image::push target resolution (issue #518) ───────────────────────────
+
+    /// A Crux planner reads the `Declare` payload to decide what it can ask for.
+    /// Advertising a push `target` the plugin cannot honor makes it plan a
+    /// retag-and-push to a foreign registry that silently never happens, so the
+    /// declared surface must not claim one.
+    #[test]
+    fn image_push_decl_does_not_advertise_unimplemented_target() {
+        let decl = handler_decls()
+            .into_iter()
+            .find(|d| d.name == "minibox::image::push")
+            .expect("image::push must be declared");
+        assert!(
+            !decl.description.contains("target"),
+            "image::push must not advertise a separate push target it cannot honor, \
+             got description: {}",
+            decl.description
+        );
+    }
+
+    /// The target is not merely unadvertised — supplying one is an error. Quietly
+    /// dropping it would leave the caller believing a foreign-registry push ran.
+    #[test]
+    fn image_push_rejects_target_instead_of_discarding_it() {
+        let err = build_request(
+            "minibox::image::push",
+            &json!({"image": "myapp:latest", "target": "ghcr.io/joe/myapp:v1"}),
+        )
+        .expect_err("an unimplemented push target must be rejected, not discarded");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("target"),
+            "error must name the rejected 'target' field, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn image_push_rejects_credentials_it_cannot_supply() {
+        let err = build_request(
+            "minibox::image::push",
+            &json!({
+                "image": "myapp:latest",
+                "credentials": {"type": "Basic", "username": "u", "password": "p"}
+            }),
+        )
+        .expect_err("push credentials are not bound by the plugin, so they must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("credentials"),
+            "error must name the rejected 'credentials' field, got: {msg}"
+        );
+    }
+
+    // ── Input parity with the daemon protocol (issue #518) ───────────────────
+
+    /// Ground truth for one handler, audited against the corresponding
+    /// [`DaemonRequest`] variant in `minibox_core::protocol`.
+    ///
+    /// * `required` / `optional` — the exact input contract `handler_decls()`
+    ///   must advertise. Every one of these is bound into the outgoing request.
+    /// * `must_reject` — fields the protocol provides (or a caller would
+    ///   reasonably guess from it) that this plugin does not implement. These
+    ///   must be rejected outright, never silently discarded.
+    struct ParityRow {
+        /// Namespaced handler name.
+        handler: &'static str,
+        /// Inputs without which the handler must fail.
+        required: &'static [&'static str],
+        /// Inputs that are honored when present.
+        optional: &'static [&'static str],
+        /// Protocol fields the plugin does not implement.
+        must_reject: &'static [&'static str],
+    }
+
+    /// One row per declared handler, in `handler_decls()` order.
+    const PARITY: &[ParityRow] = &[
+        ParityRow {
+            handler: "minibox::container::run",
+            required: &["image"],
+            optional: &[
+                "tag",
+                "command",
+                "env",
+                "mounts",
+                "memory_limit_bytes",
+                "cpu_weight",
+                "name",
+                "platform",
+                "privileged",
+            ],
+            // `DaemonRequest::Run` also carries these; the plugin hardcodes them.
+            must_reject: &[
+                "ephemeral",
+                "network",
+                "tty",
+                "entrypoint",
+                "user",
+                "auto_remove",
+                "priority",
+                "urgency",
+                "execution_context",
+                "cgroup_parent",
+            ],
+        },
+        ParityRow {
+            handler: "minibox::container::stop",
+            required: &["id"],
+            optional: &[],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::container::pause",
+            required: &["id"],
+            optional: &[],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::container::resume",
+            required: &["id"],
+            optional: &[],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::container::rm",
+            required: &["id"],
+            optional: &[],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::container::exec",
+            required: &["id", "command"],
+            optional: &["env", "tty"],
+            // Also covers the protocol's own `container_id`/`cmd` spellings:
+            // a caller guessing those must get a clear error, not a "missing id".
+            must_reject: &["working_dir", "user", "container_id", "cmd"],
+        },
+        ParityRow {
+            handler: "minibox::container::ps",
+            required: &[],
+            optional: &[],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::container::logs",
+            required: &["id"],
+            optional: &[],
+            must_reject: &["follow"],
+        },
+        ParityRow {
+            handler: "minibox::image::pull",
+            required: &["image"],
+            optional: &["tag", "platform"],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::image::build",
+            required: &["context_path"],
+            optional: &["tag", "dockerfile"],
+            must_reject: &["build_args", "no_cache"],
+        },
+        ParityRow {
+            handler: "minibox::image::push",
+            required: &["image"],
+            optional: &[],
+            // The `target` the plugin used to advertise and silently drop, plus
+            // the credentials it cannot supply.
+            must_reject: &["target", "credentials"],
+        },
+        ParityRow {
+            handler: "minibox::image::ls",
+            required: &[],
+            optional: &[],
+            must_reject: &[],
+        },
+        ParityRow {
+            handler: "minibox::image::rm",
+            required: &["image_ref"],
+            optional: &[],
+            must_reject: &[],
+        },
+    ];
+
+    /// A representative, type-correct value for an input field name.
+    ///
+    /// Used to prove a declared field is genuinely accepted and bound, and that
+    /// an undeclared one is rejected for being undeclared rather than for
+    /// having the wrong type.
+    fn sample_value(field: &str) -> Value {
+        match field {
+            "command" => json!(["/bin/sh"]),
+            "env" => json!(["KEY=VALUE"]),
+            "mounts" => json!([{
+                "host_path": "/tmp/data",
+                "container_path": "/data",
+                "read_only": true
+            }]),
+            "memory_limit_bytes" | "cpu_weight" | "build_args" => json!(1024_u64),
+            "privileged" | "tty" | "no_cache" | "follow" | "auto_remove" | "ephemeral" => {
+                json!(true)
+            }
+            "network" | "priority" | "urgency" | "execution_context" | "credentials" => {
+                json!("bridge")
+            }
+            "cgroup_parent" | "working_dir" | "entrypoint" | "user" | "target" | "cmd" => {
+                json!("/some/value")
+            }
+            _ => json!("sample"),
+        }
+    }
+
+    /// Builds an input object carrying every name in `fields`.
+    fn input_of(fields: &[&str]) -> Value {
+        let mut object = serde_json::Map::new();
+        for name in fields {
+            object.insert((*name).to_string(), sample_value(name));
+        }
+        Value::Object(object)
+    }
+
+    /// The audited contract for `handler`, looked up from the table.
+    fn parity_row(handler: &str) -> &'static ParityRow {
+        PARITY
+            .iter()
+            .find(|row| row.handler == handler)
+            .unwrap_or_else(|| panic!("no parity row audited for handler '{handler}'"))
+    }
+
+    /// Every declared handler is audited, and every audited handler is declared.
+    ///
+    /// Without this, adding a handler to `handler_decls()` without auditing it
+    /// would silently escape the parity assertions below.
+    #[test]
+    fn parity_table_covers_every_declared_handler() {
+        let declared: Vec<String> = handler_decls().into_iter().map(|d| d.name).collect();
+        let audited: Vec<&str> = PARITY.iter().map(|row| row.handler).collect();
+
+        for name in &declared {
+            assert!(
+                audited.contains(&name.as_str()),
+                "handler '{name}' is declared but missing a PARITY row"
+            );
+        }
+        for name in &audited {
+            assert!(
+                declared.iter().any(|d| d == name),
+                "handler '{name}' has a PARITY row but is not declared"
+            );
+        }
+        assert_eq!(declared.len(), audited.len());
+    }
+
+    /// Each handler's declared inputs equal the audited protocol contract.
+    ///
+    /// This is the table over `handler_decls()` the issue asks for: a declared
+    /// handler that lists a different field set than the audit — in either
+    /// direction — fails here.
+    #[test]
+    fn handler_decls_declares_exactly_the_audited_protocol_inputs() {
+        for decl in handler_decls() {
+            let row = parity_row(&decl.name);
+            let declared_required: Vec<&str> = decl
+                .inputs
+                .iter()
+                .filter(|i| i.required)
+                .map(|i| i.name.as_str())
+                .collect();
+            let declared_optional: Vec<&str> = decl
+                .inputs
+                .iter()
+                .filter(|i| !i.required)
+                .map(|i| i.name.as_str())
+                .collect();
+
+            assert_eq!(
+                declared_required, row.required,
+                "{}: required inputs drifted from the audited protocol shape",
+                decl.name
+            );
+            assert_eq!(
+                declared_optional, row.optional,
+                "{}: optional inputs drifted from the audited protocol shape",
+                decl.name
+            );
+
+            for rejected in row.must_reject {
+                assert!(
+                    !decl.inputs.iter().any(|i| i.name == *rejected),
+                    "{}: must not advertise '{rejected}' — it is not implemented",
+                    decl.name
+                );
+            }
+        }
+    }
+
+    /// The `Input: {…}` list a planner reads is rendered from the enforced
+    /// contract, so the two cannot describe different things.
+    #[test]
+    fn handler_description_lists_exactly_the_declared_inputs() {
+        for decl in handler_decls() {
+            let expected = if decl.inputs.is_empty() {
+                "Input: {}".to_string()
+            } else {
+                let names: Vec<&str> = decl.inputs.iter().map(|i| i.name.as_str()).collect();
+                format!("Input: {{{}}}", names.join(", "))
+            };
+            assert!(
+                decl.description.contains(&expected),
+                "{}: description must contain '{expected}', got: {}",
+                decl.name,
+                decl.description
+            );
+        }
+    }
+
+    /// Supplying only the required inputs is enough to build a request.
+    #[test]
+    fn every_handler_builds_from_required_inputs_alone() {
+        for row in PARITY {
+            let input = input_of(row.required);
+            let result = build_request(row.handler, &input);
+            assert!(
+                result.is_ok(),
+                "{}: required inputs {:?} must build a request, got: {:?}",
+                row.handler,
+                row.required,
+                result.expect_err("expected success")
+            );
+        }
+    }
+
+    /// Omitting any single required input fails — the contract's `required`
+    /// flag is load-bearing, not decorative.
+    #[test]
+    fn every_required_input_is_enforced() {
+        for row in PARITY {
+            for missing in row.required {
+                let present: Vec<&str> = row
+                    .required
+                    .iter()
+                    .copied()
+                    .filter(|name| name != missing)
+                    .collect();
+                let result = build_request(row.handler, &input_of(&present));
+                assert!(
+                    result.is_err(),
+                    "{}: must fail without required input '{missing}'",
+                    row.handler
+                );
+            }
+        }
+    }
+
+    /// Every declared optional input is genuinely accepted when supplied, so
+    /// declaring a field always corresponds to binding it.
+    #[test]
+    fn every_declared_optional_input_is_accepted() {
+        for row in PARITY {
+            for optional in row.optional {
+                let mut fields: Vec<&str> = row.required.to_vec();
+                fields.push(optional);
+                let result = build_request(row.handler, &input_of(&fields));
+                assert!(
+                    result.is_ok(),
+                    "{}: declared optional input '{optional}' must be accepted, got: {:?}",
+                    row.handler,
+                    result.expect_err("expected success")
+                );
+            }
+        }
+    }
+
+    /// The negative half of the contract: protocol fields the plugin does not
+    /// implement are rejected, not silently dropped.
+    #[test]
+    fn every_unimplemented_protocol_input_is_rejected() {
+        for row in PARITY {
+            for rejected in row.must_reject {
+                let mut fields: Vec<&str> = row.required.to_vec();
+                fields.push(rejected);
+                let result = build_request(row.handler, &input_of(&fields));
+                let err = result.expect_err(&format!(
+                    "{}: unimplemented input '{rejected}' must be rejected",
+                    row.handler
+                ));
+                let msg = err.to_string();
+                assert!(
+                    msg.contains(&format!("'{rejected}'")),
+                    "{}: error must name the rejected field '{rejected}', got: {msg}",
+                    row.handler
+                );
+            }
+        }
+    }
+
+    /// Uniform negative coverage: no handler accepts a field it never declared,
+    /// so an unknown or misspelled key is reported rather than ignored.
+    #[test]
+    fn every_handler_rejects_an_undeclared_field() {
+        for row in PARITY {
+            let mut fields: Vec<&str> = row.required.to_vec();
+            fields.push("totally_undeclared_field");
+            let err = build_request(row.handler, &input_of(&fields))
+                .expect_err(&format!("{}: must reject an undeclared field", row.handler));
+            let msg = err.to_string();
+            assert!(
+                msg.contains("totally_undeclared_field"),
+                "{}: error must name the undeclared field, got: {msg}",
+                row.handler
+            );
+            assert!(
+                msg.contains(row.handler),
+                "{}: error must name the handler, got: {msg}",
+                row.handler
+            );
+        }
+    }
+
+    /// A zero-input handler rejects any field rather than tolerating one.
+    #[test]
+    fn zero_input_handlers_reject_any_field() {
+        for handler in ["minibox::container::ps", "minibox::image::ls"] {
+            let err = build_request(handler, &json!({"all": true})).expect_err(&format!(
+                "{handler} declares no inputs and must reject 'all'"
+            ));
+            assert!(
+                err.to_string().contains("'all'"),
+                "{handler}: error must name the rejected field, got: {err}"
+            );
+        }
+    }
+
+    /// A non-object payload is a contract violation, not an empty request.
+    #[test]
+    fn non_object_input_is_rejected() {
+        for payload in [json!("a string"), json!([1, 2, 3]), json!(null)] {
+            let err = build_request("minibox::container::ps", &payload)
+                .expect_err("non-object input must be rejected");
+            assert!(
+                err.to_string().contains("must be a JSON object"),
+                "error must explain the object requirement, got: {err}"
+            );
+        }
+    }
+
+    /// Malformed values are rejected rather than treated as absent — the lenient
+    /// form silently dropped non-string array elements.
+    #[test]
+    fn malformed_values_are_rejected_not_dropped() {
+        let cases: &[(&str, Value, &str)] = &[
+            (
+                "minibox::container::run",
+                json!({"image": "alpine", "command": ["/bin/sh", 7]}),
+                "element 1",
+            ),
+            (
+                "minibox::container::run",
+                json!({"image": "alpine", "cpu_weight": "500"}),
+                "non-negative integer",
+            ),
+            (
+                "minibox::container::run",
+                json!({"image": "alpine", "privileged": "yes"}),
+                "boolean",
+            ),
+            (
+                "minibox::image::pull",
+                json!({"image": "alpine", "tag": 22}),
+                "must be a string",
+            ),
+            (
+                "minibox::container::run",
+                json!({"image": "alpine", "command": "/bin/sh"}),
+                "array of strings",
+            ),
+        ];
+        for (handler, input, expected) in cases {
+            let err = build_request(handler, input).expect_err("malformed input must be rejected");
+            let msg = err.to_string();
+            assert!(
+                msg.contains(expected),
+                "{handler}: error must mention '{expected}', got: {msg}"
+            );
+        }
+    }
+
+    // ── Declared fields are bound, not just accepted ────────────────────────
+
+    #[test]
+    fn build_request_run_binds_tag() {
+        let req = build_request(
+            "minibox::container::run",
+            &json!({"image": "ubuntu", "tag": "22.04"}),
+        )
+        .expect("build_request");
+        let DaemonRequest::Run { tag, .. } = req else {
+            panic!("expected Run");
+        };
+        assert_eq!(tag, Some("22.04".to_string()), "tag must be bound");
+    }
+
+    #[test]
+    fn build_request_pull_binds_tag_and_platform() {
+        let req = build_request(
+            "minibox::image::pull",
+            &json!({"image": "ubuntu", "tag": "22.04", "platform": "linux/arm64"}),
+        )
+        .expect("build_request");
+        let DaemonRequest::Pull { tag, platform, .. } = req else {
+            panic!("expected Pull");
+        };
+        assert_eq!(tag, Some("22.04".to_string()), "tag must be bound");
+        assert_eq!(
+            platform,
+            Some("linux/arm64".to_string()),
+            "platform must be bound"
+        );
+    }
+
+    #[test]
+    fn build_request_build_binds_dockerfile() {
+        let req = build_request(
+            "minibox::image::build",
+            &json!({"context_path": "/tmp/ctx", "dockerfile": "FROM alpine"}),
+        )
+        .expect("build_request");
+        let DaemonRequest::Build {
+            dockerfile, tag, ..
+        } = req
+        else {
+            panic!("expected Build");
+        };
+        assert_eq!(dockerfile, "FROM alpine", "dockerfile must be bound");
+        assert_eq!(tag, "latest", "tag must still default to latest");
+    }
+
+    #[test]
+    fn build_request_exec_binds_tty_and_env() {
+        let req = build_request(
+            "minibox::container::exec",
+            &json!({"id": "abc", "command": ["ls"], "env": ["A=1"], "tty": true}),
+        )
+        .expect("build_request");
+        let DaemonRequest::Exec { cmd, env, tty, .. } = req else {
+            panic!("expected Exec");
+        };
+        assert_eq!(cmd, vec!["ls".to_string()]);
+        assert_eq!(env, vec!["A=1".to_string()]);
+        assert!(tty, "tty must be bound");
+    }
+
+    /// The `Declare` payload carries the machine-readable contract, so a host can
+    /// validate input before dispatch.
+    #[test]
+    fn declare_payload_serializes_declared_inputs() {
+        let decls = handler_decls();
+        let encoded = serde_json::to_value(&decls).expect("serialize decls");
+        let push = encoded
+            .as_array()
+            .expect("decls array")
+            .iter()
+            .find(|d| d["name"] == json!("minibox::image::push"))
+            .expect("push entry");
+        let inputs = push["inputs"].as_array().expect("inputs array");
+        assert_eq!(inputs.len(), 1, "push declares exactly one input");
+        assert_eq!(inputs[0]["name"], json!("image"));
+        assert_eq!(inputs[0]["required"], json!(true));
     }
 }
