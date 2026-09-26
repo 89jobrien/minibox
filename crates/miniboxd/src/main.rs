@@ -784,20 +784,115 @@ async fn build_handler_deps(
     Ok(Arc::new(deps_inner))
 }
 
+// ── Network mode (MINIBOX_NETWORK_MODE) ───────────────────────────────────
+//
+// The accepted set is identical on every platform and feature combination, so
+// the enum and its parser carry no feature gates: only the target gate below,
+// which folds in `test` so these items exist in the test build on non-Linux
+// hosts too, where no provider-construction call site needs them.
+
+/// Network mode requested for the native adapter via `MINIBOX_NETWORK_MODE`.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NetworkMode {
+    /// No networking — every container gets a `NoopNetwork`.
+    None,
+    /// A bridged network: the CNI plugin provider when the `cni` feature is
+    /// compiled in, otherwise the built-in bridge provider.
+    Bridge,
+    /// The host network namespace.
+    Host,
+    /// A Tailscale tailnet (provider requires the `tailnet` feature).
+    Tailnet,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl NetworkMode {
+    /// Every `MINIBOX_NETWORK_MODE` value the daemon accepts.
+    pub const ALL: &[Self] = &[Self::None, Self::Bridge, Self::Host, Self::Tailnet];
+
+    /// The string identifier for this mode (matches `MINIBOX_NETWORK_MODE`).
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Bridge => "bridge",
+            Self::Host => "host",
+            Self::Tailnet => "tailnet",
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl std::fmt::Display for NetworkMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// `MINIBOX_NETWORK_MODE` value used when the variable is unset.
+#[cfg(any(target_os = "linux", test))]
+const DEFAULT_NETWORK_MODE: &str = "none";
+
+/// Parse a `MINIBOX_NETWORK_MODE` value into a [`NetworkMode`].
+///
+/// Matching is exact and case-sensitive. An unrecognized value — including the
+/// empty string — is a hard error naming the rejected value and the valid set;
+/// it never degrades to [`NetworkMode::None`], so a typo in a unit file or
+/// systemd drop-in surfaces at startup instead of silently isolating every
+/// container's network.
+#[cfg(any(target_os = "linux", test))]
+fn parse_network_mode(value: &str) -> Result<NetworkMode, UnknownNetworkModeError> {
+    match value {
+        "none" => Ok(NetworkMode::None),
+        "bridge" => Ok(NetworkMode::Bridge),
+        "host" => Ok(NetworkMode::Host),
+        "tailnet" => Ok(NetworkMode::Tailnet),
+        _ => Err(UnknownNetworkModeError {
+            requested: value.to_string(),
+        }),
+    }
+}
+
+/// Raised when `MINIBOX_NETWORK_MODE` holds a value the daemon does not accept.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone)]
+struct UnknownNetworkModeError {
+    /// The rejected value, echoed back for the operator.
+    requested: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl std::fmt::Display for UnknownNetworkModeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let valid: Vec<&str> = NetworkMode::ALL
+            .iter()
+            .copied()
+            .map(NetworkMode::as_str)
+            .collect();
+        write!(
+            f,
+            "unknown MINIBOX_NETWORK_MODE value {:?}. Valid options: {}",
+            self.requested,
+            valid.join(", ")
+        )
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl std::error::Error for UnknownNetworkModeError {}
+
 // ── Native adapter (Linux only) ──────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
 // qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
 fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
-    // TODO(feature-idea-05): reject unknown MINIBOX_NETWORK_MODE values instead of silently
-    // selecting NoopNetwork for misspelled configuration.
-    const DEFAULT_NETWORK_MODE: &str = "none";
-    let mode =
+    let raw =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
+    let mode = parse_network_mode(&raw)?;
     info!(network_mode = %mode, "network provider selected");
-    match mode.as_str() {
+    match mode {
         #[cfg(feature = "cni")]
-        "bridge" => {
+        NetworkMode::Bridge => {
             let cni_path =
                 std::env::var("MINIBOX_CNI_PATH").unwrap_or_else(|_| "/opt/cni/bin".to_string());
             let cni_path: Vec<std::path::PathBuf> = std::env::split_paths(&cni_path).collect();
@@ -809,12 +904,12 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
             )))
         }
         #[cfg(not(feature = "cni"))]
-        "bridge" => Ok(Arc::new(
+        NetworkMode::Bridge => Ok(Arc::new(
             BridgeNetwork::new().context("BridgeNetwork init failed")?,
         )),
-        "host" => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
+        NetworkMode::Host => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
         #[cfg(feature = "tailnet")]
-        "tailnet" => {
+        NetworkMode::Tailnet => {
             const DEFAULT_TAILNET_SECRET_NAME: &str = "tailscale-auth-key";
             let tailnet_cfg = TailnetConfig {
                 auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
@@ -827,7 +922,14 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
                     .context("TailnetNetwork init failed")?,
             ))
         }
-        _ => Ok(Arc::new(NoopNetwork::new())),
+        // `tailnet` is a valid mode on every build, but the provider only exists
+        // when the feature is compiled in — surface that instead of quietly
+        // handing back a NoopNetwork the operator did not ask for.
+        #[cfg(not(feature = "tailnet"))]
+        NetworkMode::Tailnet => Err(anyhow::anyhow!(
+            "MINIBOX_NETWORK_MODE=tailnet requires the `tailnet` feature"
+        )),
+        NetworkMode::None => Ok(Arc::new(NoopNetwork::new())),
     }
 }
 
@@ -1726,5 +1828,118 @@ mod cli_args_tests {
     fn unknown_flags_are_ignored() {
         let cli = parse_cli_args(&args(&["--unknown-flag", "--adapter", "krun"]));
         assert_eq!(cli.adapter.as_deref(), Some("krun"));
+    }
+}
+
+// ── MINIBOX_NETWORK_MODE parsing tests ────────────────────────────────────
+
+#[cfg(test)]
+mod network_mode_tests {
+    use super::{DEFAULT_NETWORK_MODE, NetworkMode, parse_network_mode};
+
+    #[test]
+    fn parse_network_mode_none_maps_to_no_network() {
+        assert_eq!(
+            parse_network_mode("none").expect("none is a valid network mode"),
+            NetworkMode::None
+        );
+    }
+
+    #[test]
+    fn parse_network_mode_bridge_maps_to_bridge() {
+        assert_eq!(
+            parse_network_mode("bridge").expect("bridge is a valid network mode"),
+            NetworkMode::Bridge
+        );
+    }
+
+    #[test]
+    fn parse_network_mode_host_maps_to_host() {
+        assert_eq!(
+            parse_network_mode("host").expect("host is a valid network mode"),
+            NetworkMode::Host
+        );
+    }
+
+    #[test]
+    fn parse_network_mode_tailnet_maps_to_tailnet() {
+        assert_eq!(
+            parse_network_mode("tailnet").expect("tailnet is a valid network mode"),
+            NetworkMode::Tailnet
+        );
+    }
+
+    /// An absent `MINIBOX_NETWORK_MODE` must keep today's behaviour: the default
+    /// is a parseable mode, so the call site never has to special-case "unset".
+    #[test]
+    fn default_network_mode_constant_parses_to_no_network() {
+        assert_eq!(DEFAULT_NETWORK_MODE, NetworkMode::None.as_str());
+        assert_eq!(
+            parse_network_mode(DEFAULT_NETWORK_MODE).expect("default mode must parse"),
+            NetworkMode::None
+        );
+    }
+
+    /// Every mode the daemon advertises must round-trip back to its variant,
+    /// so the accepted set and the parser cannot drift apart.
+    #[test]
+    fn every_advertised_mode_round_trips() {
+        for mode in NetworkMode::ALL {
+            let parsed = parse_network_mode(mode.as_str())
+                .unwrap_or_else(|e| panic!("advertised mode {mode:?} must parse: {e}"));
+            assert_eq!(parsed, *mode);
+        }
+    }
+
+    #[test]
+    fn network_mode_as_str_matches_display() {
+        for mode in NetworkMode::ALL {
+            assert_eq!(mode.to_string(), mode.as_str());
+        }
+    }
+
+    #[test]
+    fn unknown_mode_is_rejected() {
+        let err = parse_network_mode("bogus").expect_err("unknown mode must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bogus"),
+            "error must name the rejected value: {msg}"
+        );
+        assert!(
+            msg.contains("MINIBOX_NETWORK_MODE"),
+            "error must name the env var: {msg}"
+        );
+    }
+
+    /// A misspelled mode is the exact regression this guards: it must be a hard
+    /// error, never a silent `none` / NoopNetwork selection.
+    #[test]
+    fn misspelled_mode_is_rejected_not_defaulted() {
+        for misspelled in ["brige", "hosts", "None", " NONE", "none ", "tunnel"] {
+            let parsed = parse_network_mode(misspelled);
+            assert!(
+                parsed.is_err(),
+                "misspelled mode {misspelled:?} must be rejected, got {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejected_mode_error_lists_every_valid_mode() {
+        let err = parse_network_mode("nope").expect_err("unknown mode must be rejected");
+        let msg = err.to_string();
+        for mode in NetworkMode::ALL {
+            assert!(
+                msg.contains(mode.as_str()),
+                "error must list valid mode {mode:?}: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_mode_is_rejected() {
+        let err = parse_network_mode("").expect_err("empty mode must be rejected");
+        assert!(err.to_string().contains("MINIBOX_NETWORK_MODE"));
     }
 }
