@@ -311,8 +311,6 @@ use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
 use minibox_core::image::registry::RegistryClient;
 #[cfg(target_os = "linux")]
 use std::path::Path;
-#[cfg(all(target_os = "linux", feature = "tailnet"))]
-use tailbox::{TailnetConfig, TailnetNetwork};
 
 // ── Path resolution ───────────────────────────────────────────────────────
 
@@ -908,26 +906,14 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
             BridgeNetwork::new().context("BridgeNetwork init failed")?,
         )),
         NetworkMode::Host => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
-        #[cfg(feature = "tailnet")]
-        NetworkMode::Tailnet => {
-            const DEFAULT_TAILNET_SECRET_NAME: &str = "tailscale-auth-key";
-            let tailnet_cfg = TailnetConfig {
-                auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
-                key_secret_name: std::env::var("MINIBOX_TAILNET_SECRET_NAME")
-                    .unwrap_or_else(|_| DEFAULT_TAILNET_SECRET_NAME.to_string()),
-            };
-            Ok(Arc::new(
-                TailnetNetwork::new(tailnet_cfg)
-                    .await
-                    .context("TailnetNetwork init failed")?,
-            ))
-        }
-        // `tailnet` is a valid mode on every build, but the provider only exists
-        // when the feature is compiled in — surface that instead of quietly
-        // handing back a NoopNetwork the operator did not ask for.
-        #[cfg(not(feature = "tailnet"))]
+        // `tailnet` parses on every build so an existing deployment config does not
+        // start failing at startup, but the provider lives in the external `tailbox`
+        // crate, which is not a dependency of this workspace. Report that plainly
+        // rather than quietly handing back a NoopNetwork the operator did not ask
+        // for. See the Features table in this crate's README.
         NetworkMode::Tailnet => Err(anyhow::anyhow!(
-            "MINIBOX_NETWORK_MODE=tailnet requires the `tailnet` feature"
+            "MINIBOX_NETWORK_MODE=tailnet is unavailable: the tailbox provider is not \
+             integrated in this build"
         )),
         NetworkMode::None => Ok(Arc::new(NoopNetwork::new())),
     }
@@ -1540,6 +1526,36 @@ mod tests {
         assert!(
             deps.build.image_builder.is_some(),
             "native suite should wire image build"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn native_network_provider_rejects_unknown_mode() {
+        let error = native_network_provider("brdige")
+            .await
+            .expect_err("unknown network mode must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid MINIBOX_NETWORK_MODE=\"brdige\""),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(all(target_os = "linux", not(feature = "tailnet")))]
+    async fn native_network_provider_rejects_unavailable_tailnet_mode() {
+        let error = native_network_provider("tailnet")
+            .await
+            .expect_err("tailnet requires the tailnet feature");
+
+        assert!(
+            error
+                .to_string()
+                .contains("requires miniboxd to be built with the `tailnet` feature"),
+            "unexpected error: {error}"
         );
     }
 

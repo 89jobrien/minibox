@@ -24,6 +24,105 @@ where
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
 
+/// Features that cannot build on the current host, with the reason.
+///
+/// `cargo check --workspace` only builds default features, so a declared feature
+/// can rot indefinitely without anything noticing. That is how all three of
+/// `miniboxd`'s non-default paths went stale at once: `cni` constructed
+/// `minibox_cni::CniNetworkProvider` without `miniboxd` declaring the dependency,
+/// and `tailnet` referenced the external `tailbox` crate, which is not a
+/// workspace member, from a function that could not compile with the feature on.
+///
+/// Excluding a feature here costs coverage. Including one that cannot build costs
+/// CI. When genuinely unsure, exclude it and say why.
+#[cfg(target_os = "linux")]
+const HOST_EXCLUDED_FEATURES: &[(&str, &str)] =
+    &[("vz", "Virtualization.framework / objc2 are macOS-only")];
+
+#[cfg(not(target_os = "linux"))]
+const HOST_EXCLUDED_FEATURES: &[(&str, &str)] = &[];
+
+/// Every `(package, feature)` pair declared by a workspace member, excluding
+/// `default` and anything in [`HOST_EXCLUDED_FEATURES`].
+///
+/// Members that declare no `[features]` table contribute nothing, so this is
+/// cheap for the majority of the workspace.
+fn declared_feature_combinations(root: &Path) -> Result<Vec<(String, String)>> {
+    let workspace_manifest = root.join("Cargo.toml");
+    let raw = fs::read_to_string(&workspace_manifest)
+        .with_context(|| format!("read {}", workspace_manifest.display()))?;
+    let workspace: toml::Table = raw
+        .parse()
+        .with_context(|| format!("parse {}", workspace_manifest.display()))?;
+
+    let members = workspace
+        .get("workspace")
+        .and_then(toml::Value::as_table)
+        .and_then(|w| w.get("members"))
+        .and_then(toml::Value::as_array)
+        .context("workspace.members missing from the root manifest")?;
+
+    let mut combos = Vec::new();
+    for member in members.iter().filter_map(toml::Value::as_str) {
+        let member_manifest = root.join(member).join("Cargo.toml");
+        let Ok(raw) = fs::read_to_string(&member_manifest) else {
+            continue;
+        };
+        let Ok(manifest) = raw.parse::<toml::Table>() else {
+            continue;
+        };
+        let Some(features) = manifest.get("features").and_then(toml::Value::as_table) else {
+            continue;
+        };
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .and_then(|p| p.get("name"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or(member);
+
+        for feature in features.keys() {
+            if feature == "default" {
+                continue;
+            }
+            if let Some((_, reason)) = HOST_EXCLUDED_FEATURES
+                .iter()
+                .find(|(excluded, _)| *excluded == feature.as_str())
+            {
+                eprintln!("feature matrix: skipping {package}/{feature} — {reason}");
+                continue;
+            }
+            combos.push((package.to_string(), feature.clone()));
+        }
+    }
+    Ok(combos)
+}
+
+/// Build every non-default feature of every workspace member.
+///
+/// A feature that is declared but never compiled is a claim, not a capability.
+/// This turns each claim into a compile so rot surfaces at the gate rather than
+/// in a deployment. Deliberately part of `verify` and not `lint`: it costs one
+/// `cargo check` per combination, which is not worth paying on every commit.
+fn feature_matrix(sh: &Shell, root: &Path) -> Result<()> {
+    let combos = declared_feature_combinations(root)?;
+    for (package, feature) in &combos {
+        eprintln!("feature matrix: cargo check -p {package} --features {feature}");
+        sh.cmd("cargo")
+            .args([
+                "check",
+                "-p",
+                package.as_str(),
+                "--features",
+                feature.as_str(),
+            ])
+            .run()
+            .with_context(|| format!("declared feature {package}/{feature} does not build"))?;
+    }
+    eprintln!("feature matrix passed: {} combination(s)", combos.len());
+    Ok(())
+}
+
 // TODO(feature-idea-02): extend agentlint with semantic checks for local paths, Cargo package
 // names, and documented xtask commands so stale agent guidance fails validation.
 
@@ -54,7 +153,7 @@ pub fn lint(sh: &Shell) -> Result<()> {
 }
 
 /// Read-only local verification gate: fmt check, workspace check, clippy,
-/// borrow fixtures, and docs lint. Does not modify files.
+/// feature matrix, borrow fixtures, and docs lint. Does not modify files.
 pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
     let sh = sh.clone();
     let root = root.to_path_buf();
@@ -69,6 +168,9 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
         cmd!(sh, "cargo check --workspace")
             .run()
             .context("cargo check --workspace failed")?;
+
+        eprintln!("--- verify: feature matrix ---");
+        feature_matrix(&sh, &root)?;
 
         eprintln!("--- verify: clippy ---");
         cmd!(
