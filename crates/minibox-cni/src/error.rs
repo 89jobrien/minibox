@@ -5,6 +5,48 @@ use std::path::PathBuf;
 /// Errors from CNI plugin execution.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum CniError {
+    /// A requested CNI spec version is not one this crate supports.
+    #[error("unsupported CNI spec version '{requested}' (supported: {supported:?})")]
+    #[diagnostic(code(minibox::cni::unsupported_spec_version))]
+    UnsupportedSpecVersion {
+        /// The spec version that was asked for.
+        requested: String,
+        /// The spec versions this crate does support.
+        supported: Vec<String>,
+    },
+
+    /// The runtime did not supply a `CNI_*` variable the command requires.
+    #[error("missing required CNI environment variable '{var}'")]
+    #[diagnostic(code(minibox::cni::missing_env_var))]
+    MissingEnvVar {
+        /// The environment variable that was absent or empty.
+        var: String,
+    },
+
+    /// `CNI_COMMAND` named a command this plugin does not implement.
+    #[error("unsupported CNI_COMMAND '{command}'")]
+    #[diagnostic(code(minibox::cni::unsupported_command))]
+    UnsupportedCommand {
+        /// The raw `CNI_COMMAND` value that was not recognised.
+        command: String,
+    },
+
+    /// A required attribute was absent from the plugin config object.
+    #[error("plugin config is missing required field '{field}'")]
+    #[diagnostic(code(minibox::cni::missing_config_field))]
+    MissingConfigField {
+        /// The config key that was required but absent.
+        field: String,
+    },
+
+    /// The installed plugin/config layout does not satisfy the rollout contract.
+    #[error("CNI rollout preflight failed: {detail}")]
+    #[diagnostic(code(minibox::cni::rollout_preflight))]
+    RolloutPreflight {
+        /// A human-readable description of the unmet expectation.
+        detail: String,
+    },
+
     /// A plugin type was not a single filename component.
     #[error("CNI plugin type '{plugin}' must be a single normal path component")]
     #[diagnostic(code(minibox::cni::invalid_plugin_type))]
