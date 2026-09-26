@@ -127,17 +127,32 @@ pub fn build_colima_handler_dependencies(
             commit_adapter: Some(commit_adapter),
             image_builder: Some(image_builder),
         },
-        events: minibox::daemon::handler::EventDeps {
-            // TODO(feature-idea-11): use one shared event broker and metrics recorder so Colima
-            // events reach subscribers and macOS telemetry matches the other adapter suites.
-            event_sink: Arc::new(minibox_core::events::NoopEventSink),
-            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
-        },
+        events: build_event_deps(),
         policy: minibox::daemon::handler::ContainerPolicy::default(),
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
+}
+
+/// Build the observability dependencies shared by every macOS adapter suite
+/// (Colima, krun, and VZ).
+///
+/// One [`minibox_core::events::BroadcastEventBroker`] backs **both** the write
+/// and read ports, so events emitted by handlers through `event_sink` are
+/// delivered to consumers subscribed on `event_source`. `BroadcastEventBroker`
+/// is the single adapter implementing `EventSink` and `EventSource`; the two
+/// `Arc`s below are clones of the same broker, hence the same broadcast sender.
+///
+/// A single [`minibox::daemon::telemetry::NoOpMetricsRecorder`] is returned so
+/// every suite reports telemetry the same way; swap in
+/// `PrometheusMetricsRecorder` here when the `metrics` feature is enabled.
+pub fn build_event_deps() -> minibox::daemon::handler::EventDeps {
+    let broker = minibox_core::events::BroadcastEventBroker::new();
+    minibox::daemon::handler::EventDeps {
+        event_sink: Arc::new(broker.clone()),
+        event_source: Arc::new(broker),
+        metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
+    }
 }
 
 /// Bind a Unix socket at `path`, removing any stale socket first, and set
@@ -391,11 +406,7 @@ async fn start_krun(
             commit_adapter: None,
             image_builder: None,
         },
-        events: minibox::daemon::handler::EventDeps {
-            event_sink: Arc::new(minibox_core::events::NoopEventSink),
-            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
-        },
+        events: build_event_deps(),
         policy: minibox::daemon::handler::ContainerPolicy::default(),
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -587,11 +598,7 @@ async fn start_vz(
             commit_adapter: None,
             image_builder: None,
         },
-        events: minibox::daemon::handler::EventDeps {
-            event_sink: Arc::new(minibox_core::events::NoopEventSink),
-            event_source: Arc::new(minibox_core::events::BroadcastEventBroker::new()),
-            metrics: Arc::new(minibox::daemon::telemetry::NoOpMetricsRecorder::new()),
-        },
+        events: build_event_deps(),
         policy: minibox::daemon::handler::ContainerPolicy::default(),
         execution_policy: None,
         checkpoint: std::sync::Arc::new(minibox_core::domain::NoopVmCheckpoint),
@@ -656,11 +663,17 @@ mod tests {
         // bind_socket should remove it and succeed.
         let _listener = bind_socket(&path).expect("bind_socket with stale file");
     }
+    use minibox_core::events::ContainerEvent;
     use minibox_core::image::gc::ImageGc;
+    use std::time::Duration;
     use tempfile::TempDir;
 
-    #[tokio::test]
-    async fn colima_dependencies_wire_local_commit_build_and_push_adapters() {
+    /// Build the Colima [`HandlerDependencies`] against in-memory executor and
+    /// spawner doubles — no Colima daemon, no network.
+    ///
+    /// The [`TempDir`] is returned alongside so callers keep the backing
+    /// directories alive for the lifetime of the deps.
+    async fn colima_deps_for_test() -> (TempDir, Arc<HandlerDependencies>) {
         let tmp = TempDir::new().unwrap();
         let data_dir = tmp.path().join("data");
         let containers_dir = data_dir.join("containers");
@@ -684,7 +697,7 @@ mod tests {
         });
 
         let deps = build_colima_handler_dependencies(
-            Arc::clone(&state),
+            state,
             data_dir,
             containers_dir,
             run_containers_dir,
@@ -693,6 +706,13 @@ mod tests {
             spawner,
         )
         .expect("colima deps");
+
+        (tmp, deps)
+    }
+
+    #[tokio::test]
+    async fn colima_dependencies_wire_local_commit_build_and_push_adapters() {
+        let (_tmp, deps) = colima_deps_for_test().await;
 
         assert!(
             deps.build.commit_adapter.is_some(),
@@ -706,5 +726,81 @@ mod tests {
             deps.build.image_pusher.is_some(),
             "image pusher should be wired"
         );
+    }
+
+    /// Issue #513: events emitted through `event_sink` must reach subscribers
+    /// on `event_source`.
+    ///
+    /// Before the fix these were two *disconnected* objects — a
+    /// `NoopEventSink` for writes and a separate, never-written
+    /// `BroadcastEventBroker` for reads — so every handler emission was
+    /// silently dropped and subscribers never saw an event.
+    #[tokio::test]
+    async fn colima_event_sink_delivers_to_event_source_subscribers() {
+        let (_tmp, deps) = colima_deps_for_test().await;
+
+        let mut rx = deps.events.event_source.subscribe();
+        deps.events.event_sink.emit(ContainerEvent::Created {
+            id: "c513".to_string(),
+            image: "alpine:latest".to_string(),
+            timestamp: std::time::SystemTime::now(),
+        });
+
+        let received = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+        assert!(
+            received.is_ok(),
+            "event emitted through event_sink must reach event_source subscribers"
+        );
+        let event = received
+            .expect("timeout resolved")
+            .expect("broadcast recv resolved");
+        assert!(
+            matches!(&event, ContainerEvent::Created { id, .. } if id == "c513"),
+            "subscriber must observe the exact event that the sink emitted"
+        );
+    }
+
+    /// Direct coverage of the shared helper: the sink and source must be two
+    /// views of one broker, so a single emission fans out to every subscriber.
+    #[tokio::test]
+    async fn build_event_deps_wires_one_broker_across_both_ports() {
+        let deps = build_event_deps();
+
+        let mut first = deps.event_source.subscribe();
+        let mut second = deps.event_source.subscribe();
+        deps.event_sink.emit(ContainerEvent::Stopped {
+            id: "shared".to_string(),
+            exit_code: 7,
+            timestamp: std::time::SystemTime::now(),
+        });
+
+        for rx in [&mut first, &mut second] {
+            let received = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await;
+            assert!(
+                received.is_ok(),
+                "every subscriber must observe the event emitted through the shared broker"
+            );
+            let event = received
+                .expect("timeout resolved")
+                .expect("broadcast recv resolved");
+            assert!(
+                matches!(&event, ContainerEvent::Stopped { id, exit_code, .. }
+                    if id == "shared" && *exit_code == 7),
+                "subscriber must observe the exact event that the sink emitted"
+            );
+        }
+    }
+
+    /// The metrics recorder returned by the helper must be usable for all
+    /// three `MetricsRecorder` operations, so every macOS suite can record
+    /// telemetry without bespoke wiring.
+    #[test]
+    fn build_event_deps_metrics_recorder_accepts_all_operations() {
+        let deps = build_event_deps();
+        deps.metrics
+            .increment_counter("mbx_containers_total", &[("adapter", "colima")]);
+        deps.metrics
+            .record_histogram("mbx_start_seconds", 0.25, &[("adapter", "colima")]);
+        deps.metrics.set_gauge("mbx_containers_running", 3.0, &[]);
     }
 }
