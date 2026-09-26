@@ -22,10 +22,11 @@ path = "src/main.rs"
 default = ["metrics", "otel"]
 metrics = ["minibox/metrics"]
 otel    = ["minibox/otel"]
-cni     = ["minibox/cni"]
+cni     = ["minibox/cni", "dep:minibox-cni"]
 vz      = ["macbox/vz"]
-# tailnet feature is declared for cfg(feature = "tailnet") gating in main.rs;
-# the tailbox crate was moved to minibox-plugins — enable separately when available.
+# tailnet is a reserved gate only: the provider lives in the external tailbox
+# crate, which is not a workspace member. Nothing gates on this feature today;
+# resolve_native_network reports tailnet as unavailable on every build.
 tailnet = []
 
 [dependencies]
@@ -43,6 +44,10 @@ tracing-subscriber = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 minibox-core = { workspace = true }
+# `resolve_native_network` constructs minibox_cni::CniNetworkProvider directly
+# under #[cfg(feature = "cni")], so miniboxd needs the crate as a direct
+# dependency — forwarding through minibox/cni alone leaves the path unresolvable.
+minibox-cni = { workspace = true, optional = true }
 macbox = { workspace = true }
 smolbox = { workspace = true }
 nix = { workspace = true }

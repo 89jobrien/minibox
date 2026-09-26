@@ -102,13 +102,13 @@ With the `cni` feature and bridge mode, `MINIBOX_CNI_PATH` and
 
 ## Features
 
-| Feature   | Default | Effect                                                             |
-| --------- | ------- | ------------------------------------------------------------------ |
-| `metrics` | Yes     | Prometheus recorder and metrics HTTP endpoint                      |
-| `otel`    | Yes     | OTLP tracing export                                                |
-| `cni`     | No      | CNI-backed native bridge networking                                |
-| `vz`      | No      | macOS Virtualization.framework path                                |
-| `tailnet` | No      | Reserved cfg gate; external tailbox dependency is not present here |
+| Feature   | Default | Effect                                                 |
+| --------- | ------- | ------------------------------------------------------ |
+| `metrics` | Yes     | Prometheus recorder and metrics HTTP endpoint          |
+| `otel`    | Yes     | OTLP tracing export                                    |
+| `cni`     | No      | CNI-backed native bridge networking                    |
+| `vz`      | No      | macOS Virtualization.framework path (macOS hosts only) |
+| `tailnet` | No      | Reserved gate; no provider exists — see below          |
 
 ## Platform and security constraints
 
@@ -133,14 +133,17 @@ cargo xtask test e2e
 ```
 
 The commands above exercise the default features only. Do not use `--all-features` for Linux
-builds. The `cni` feature is currently non-buildable on Linux: the manifest forwards it to
-`minibox/cni`, but Linux-only daemon code directly references `minibox_cni` without declaring a
-direct `minibox-cni` dependency. A check on another platform can skip that code through
-`cfg(target_os = "linux")` and therefore does not validate the CNI path. Until the dependency
-wiring is fixed, do not use or recommend `cargo check -p miniboxd --features cni` for Linux.
+builds: `vz` pulls in `objc2`, which fails to compile off Apple platforms by design.
 
-The `tailnet` gate references the external `tailbox` crate, which is not a dependency of this
-workspace. That feature is also not buildable on Linux until the external plugin is integrated.
+`cargo xtask verify` additionally builds every non-default feature of every workspace member
+(the "feature matrix"), so a declared feature cannot sit uncompiled. Features that cannot
+build on the current host are listed with a reason in `HOST_EXCLUDED_FEATURES` in
+`xtask/src/gates.rs`.
+
+`MINIBOX_NETWORK_MODE=tailnet` parses on every build, so an existing configuration file does
+not start failing, but constructing the provider returns an error: the implementation lives
+in the external `tailbox` crate, which is not a member of this workspace. Enabling the
+`tailnet` feature does not change that.
 
 Privileged Linux validation is separate from the complete default-feature package and protocol
 e2e tests:
