@@ -996,8 +996,9 @@ fn build_native_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
-        // TODO(feature-idea-12): replace production NoopVmCheckpoint wiring with
-        // adapter-specific snapshot implementations for the existing snapshot protocol.
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -1064,6 +1065,9 @@ fn build_gke_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -1184,6 +1188,9 @@ fn build_smolvm_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -1244,6 +1251,9 @@ fn build_krun_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }

@@ -30,9 +30,12 @@ pub struct SnapshotInfo {
 
 /// Port for saving and restoring VM state checkpoints.
 ///
-/// Adapters that support checkpointing (smolvm, krun, vz) implement this
-/// trait. Adapters that do not support it return an error from every method
-/// and omit [`BackendCapability::Checkpoint`] from their capability set.
+/// The port is defined but **unimplemented**: no adapter in this workspace
+/// satisfies it, and none declares [`BackendCapability::Checkpoint`]. Every
+/// production wiring site therefore installs [`NoopVmCheckpoint`], so snapshot
+/// requests fail with an explicit "not supported" error rather than reporting
+/// state that was never persisted. An adapter that gains real checkpointing
+/// implements this trait and declares the capability in the same change.
 pub trait VmCheckpoint: Send + Sync {
     /// Persist the current VM/container state to `path`.
     ///
@@ -61,7 +64,12 @@ pub type DynVmCheckpoint = Arc<dyn VmCheckpoint>;
 
 /// A no-op [`VmCheckpoint`] that always returns "not supported".
 ///
-/// Used as the default adapter for backends without checkpoint support.
+/// This is the production default for every adapter, because no adapter
+/// implements checkpointing. All three methods fail with the same reason and
+/// none touch the filesystem, so a failed request leaves no snapshot behind.
+/// Note that `list_snapshots` also errors rather than returning an empty
+/// vector: an empty list would assert that no snapshots exist, which this
+/// adapter cannot know.
 pub struct NoopVmCheckpoint;
 
 impl VmCheckpoint for NoopVmCheckpoint {
