@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-09-21
+updated: 2026-09-26
 items:
 - id: gh-473
   name: feat-xtask---squash-chain-branches-during-promotion
@@ -9,7 +9,7 @@ items:
   title: 'feat(xtask): squash chain branches during promotion'
   description: CapabilityMatrix missing from terminal/non-terminal classification coverage
   extra:
-  - date: 2026-09-21
+  - date: 2026-09-26
     type: blocker
     note: CapabilityMatrix missing from terminal/non-terminal classification coverage
 - id: gh-507
@@ -19,32 +19,46 @@ items:
   title: 'feat(oci): stabilize push, commit, and build'
   description: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
   extra:
-  - date: 2026-09-21
+  - date: 2026-09-26
     type: blocker
     note: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (2 files)
+  title: Uncommitted changes (9 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
+    docs/designs/2026-09-21-global-fail-closed-isolation-profiles-design.md
+    docs/designs/2026-09-21-isolation-adapter-qualification-design.md
+    docs/designs/2026-09-21-isolation-admission-lifecycle-design.md
+    docs/designs/2026-09-21-isolation-conformance-rollout-design.md
+    docs/designs/2026-09-21-isolation-profile-contract-design.md
+    docs/designs/2026-09-21-isolation-protocol-migration-design.md
+    docs/designs/2026-09-21-native-standard-v1-enforcement-design.md
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
+  - docs/designs/2026-09-21-global-fail-closed-isolation-profiles-design.md
+  - docs/designs/2026-09-21-isolation-adapter-qualification-design.md
+  - docs/designs/2026-09-21-isolation-admission-lifecycle-design.md
+  - docs/designs/2026-09-21-isolation-conformance-rollout-design.md
+  - docs/designs/2026-09-21-isolation-profile-contract-design.md
+  - docs/designs/2026-09-21-isolation-protocol-migration-design.md
+  - docs/designs/2026-09-21-native-standard-v1-enforcement-design.md
 log:
-- date: '20260921.142311'
-  summary: done=65 running=0 pending=26 blocked=2
+- date: '20260926.125351'
+  summary: done=66 running=0 pending=54 blocked=2
   commits:
-  - 10305f266242c26ee318602c673bb98eabbce13f
-  - 1a981654efdc80f6c6439dfb00e6ea6d278cf2f0
-  - 99e9a680047fef08ee8e84431104430ba74c42e5
-  - 3e0780ea5255517cf7d8619d2fe9f45a86d1bd9c
-  - 06f61a79ec807b05238479050a4d43864ec9bf3b
-  - f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
-  - 98cfc0e94b126624f7c86c89e8edc86444ab63c4
-  - 583d795681594db0435e7fbc4d196e19edfef358
-  - a72281f338bd3ea9b790b77145de108c97281f20
-  - 3a1004578cf0a9cdc4a55dff934df1cc9ae5e5de
+  - ea38b73ccd804d8e024897309fbbef1b7a53769f
+  - 9a3df530a778808303a32d178bb57ea4e449fa8a
+  - 5c2b07fa17527089d807dc3111203a4702b8bc98
+  - b0ae997ad41227fc067b8205f1b6a11c091e5e6b
+  - 4be92a67d5f572a53af2c2ab48df702328a880fd
+  - 7db55d7b655e1ec3b090cb3c6615e42b54ad67cb
+  - e2eecc710dc9d60807896e600a4cf394458ae4f3
+  - ab3f9103015b997dacf91ec5840bd0bff5fd0c24
+  - 660b39a8e78a737df1f2390c21a1c38f001ce91b
+  - 9f718646479f5a2a54ff48bc66e9b34b403f22bf
