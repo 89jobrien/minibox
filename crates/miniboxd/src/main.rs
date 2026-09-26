@@ -717,7 +717,7 @@ async fn build_handler_deps(
     let deps = match suite {
         #[cfg(target_os = "linux")]
         AdapterSuite::Native => {
-            let native_network = resolve_native_network()?;
+            let native_network = resolve_native_network().await?;
             build_native_handler_dependencies(
                 Arc::clone(&state),
                 &paths.data_dir,
@@ -788,14 +788,21 @@ async fn build_handler_deps(
 
 #[cfg(target_os = "linux")]
 // qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
-fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
-    // TODO(feature-idea-05): reject unknown MINIBOX_NETWORK_MODE values instead of silently
-    // selecting NoopNetwork for misspelled configuration.
+async fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
     const DEFAULT_NETWORK_MODE: &str = "none";
     let mode =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
+    let provider = native_network_provider(&mode).await?;
     info!(network_mode = %mode, "network provider selected");
-    match mode.as_str() {
+    Ok(provider)
+}
+
+#[cfg(target_os = "linux")]
+async fn native_network_provider(
+    mode: &str,
+) -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
+    match mode {
+        "none" => Ok(Arc::new(NoopNetwork::new())),
         #[cfg(feature = "cni")]
         "bridge" => {
             let cni_path =
@@ -827,7 +834,13 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
                     .context("TailnetNetwork init failed")?,
             ))
         }
-        _ => Ok(Arc::new(NoopNetwork::new())),
+        #[cfg(not(feature = "tailnet"))]
+        "tailnet" => anyhow::bail!(
+            "MINIBOX_NETWORK_MODE=tailnet requires miniboxd to be built with the `tailnet` feature"
+        ),
+        other => anyhow::bail!(
+            "invalid MINIBOX_NETWORK_MODE={other:?}; expected one of: none, bridge, host, tailnet"
+        ),
     }
 }
 
@@ -1438,6 +1451,36 @@ mod tests {
         assert!(
             deps.build.image_builder.is_some(),
             "native suite should wire image build"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn native_network_provider_rejects_unknown_mode() {
+        let error = native_network_provider("brdige")
+            .await
+            .expect_err("unknown network mode must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid MINIBOX_NETWORK_MODE=\"brdige\""),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(all(target_os = "linux", not(feature = "tailnet")))]
+    async fn native_network_provider_rejects_unavailable_tailnet_mode() {
+        let error = native_network_provider("tailnet")
+            .await
+            .expect_err("tailnet requires the tailnet feature");
+
+        assert!(
+            error
+                .to_string()
+                .contains("requires miniboxd to be built with the `tailnet` feature"),
+            "unexpected error: {error}"
         );
     }
 

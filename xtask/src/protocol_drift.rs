@@ -157,6 +157,11 @@ struct HookToolInput {
     file_path: Option<PathBuf>,
 }
 
+#[derive(Debug, Deserialize)]
+struct HookPatchInput {
+    tool_input: String,
+}
+
 /// Compares normalized contract-surface hashes with the protocol lockfile.
 ///
 /// Can update the lockfile, skip unrelated hook events, or emit detected drift as SARIF.
@@ -471,11 +476,46 @@ fn read_hook_file_path() -> Result<Option<PathBuf>> {
         return Ok(None);
     }
 
-    let hook_input: HookInput =
-        serde_json::from_str(&input).context("failed to parse hook input JSON")?;
-    Ok(hook_input
-        .tool_input
-        .and_then(|tool_input| tool_input.file_path))
+    parse_hook_file_path(&input)
+}
+
+fn parse_hook_file_path(input: &str) -> Result<Option<PathBuf>> {
+    match serde_json::from_str::<HookInput>(input) {
+        Ok(hook_input) => Ok(hook_input
+            .tool_input
+            .and_then(|tool_input| tool_input.file_path)),
+        Err(hook_input_error) => {
+            let patch = serde_json::from_str::<HookPatchInput>(input)
+                .map(|hook_input| hook_input.tool_input)
+                .or_else(|_| serde_json::from_str::<String>(input))
+                .unwrap_or_else(|_| input.to_owned());
+
+            extract_apply_patch_file_path(&patch).map(Some).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "failed to parse hook input as JSON, JSON-object-wrapped apply-patch payload, JSON-string-wrapped apply-patch payload, or apply-patch payload: {hook_input_error}"
+                )
+            })
+        }
+    }
+}
+
+fn extract_apply_patch_file_path(input: &str) -> Option<PathBuf> {
+    const FILE_DIRECTIVES: [&str; 3] = ["*** Update File: ", "*** Add File: ", "*** Delete File: "];
+
+    if !input.lines().any(|line| line == "*** Begin Patch")
+        || !input.lines().any(|line| line == "*** End Patch")
+    {
+        return None;
+    }
+
+    input.lines().find_map(|line| {
+        FILE_DIRECTIVES.iter().find_map(|prefix| {
+            line.strip_prefix(prefix)
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+        })
+    })
 }
 
 fn is_tracked_surface_path(root: &Path, path: &Path) -> bool {
@@ -539,6 +579,84 @@ mod tests {
         let after = normalize_contract_source("pub enum Wire { Request, Response }\n");
 
         assert_ne!(hash_contract(&before), hash_contract(&after));
+    }
+
+    #[test]
+    fn parses_json_hook_file_path() {
+        let path =
+            parse_hook_file_path(r#"{"tool_input":{"file_path":"xtask/src/protocol_drift.rs"}}"#)
+                .unwrap();
+
+        assert_eq!(path, Some(PathBuf::from("xtask/src/protocol_drift.rs")));
+    }
+
+    #[test]
+    fn parses_first_apply_patch_file_path() {
+        let patch = concat!(
+            "*** Begin Patch\n",
+            "*** Add File: added.rs\n",
+            "contents\n",
+            "*** Update File: ignored.rs\n",
+            "*** End Patch\n",
+        );
+
+        let path = parse_hook_file_path(patch).unwrap();
+
+        assert_eq!(path, Some(PathBuf::from("added.rs")));
+    }
+
+    #[test]
+    fn parses_json_string_wrapped_apply_patch_file_path() {
+        let patch = concat!(
+            "*** Begin Patch\n",
+            "*** Update File: /Users/joe/dev/minibox/crates/minibox-core/src/protocol.rs\n",
+            "@@\n",
+            "*** End Patch\n",
+        );
+        let wrapped_patch = serde_json::to_string(patch).unwrap();
+
+        let path = parse_hook_file_path(&wrapped_patch).unwrap();
+
+        assert_eq!(
+            path,
+            Some(PathBuf::from(
+                "/Users/joe/dev/minibox/crates/minibox-core/src/protocol.rs"
+            ))
+        );
+    }
+
+    #[test]
+    fn parses_json_object_wrapped_apply_patch_file_path() {
+        let input = r#"{"tool_input":"*** Begin Patch\n*** Update File: /repo/xtask/src/protocol_drift.rs\n@@\n*** End Patch\n"}"#;
+
+        let path = parse_hook_file_path(input).unwrap();
+
+        assert_eq!(
+            path,
+            Some(PathBuf::from("/repo/xtask/src/protocol_drift.rs"))
+        );
+    }
+
+    #[test]
+    fn rejects_unrecognized_hook_input() {
+        let error = parse_hook_file_path("not JSON or an apply patch").unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to parse hook input as JSON")
+        );
+    }
+
+    #[test]
+    fn rejects_json_string_that_is_not_an_apply_patch() {
+        let error = parse_hook_file_path(r#""not an apply patch""#).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("JSON-string-wrapped apply-patch payload")
+        );
     }
 
     #[test]
