@@ -117,8 +117,30 @@ With the `cni` feature and bridge mode, `MINIBOX_CNI_PATH` and
 - Socket permissions default to `0600`; group/mode overrides are operator-controlled.
 - Container state is persisted and reconciled at startup, but running processes are not reattached
   as managed child processes.
-- Production checkpoint wiring currently uses `NoopVmCheckpoint`.
 - VZ requires a separate main-thread/GCD startup path and remains nonfunctional at VM boot.
+
+## Checkpointing is not implemented
+
+`mbx snapshot save`, `mbx snapshot restore`, and `mbx snapshot list` all fail. No adapter in this
+workspace implements the `VmCheckpoint` port, so every production wiring site installs
+`NoopVmCheckpoint`, which rejects all three operations with
+`checkpoint: not supported by this adapter`. The daemon surfaces that as a protocol `Error`, and
+the CLI exits non-zero with:
+
+```text
+error: save_snapshot: checkpoint: not supported by this adapter
+```
+
+This is deliberate rather than a stub awaiting a fix. No snapshot file is ever written, and `list`
+reports an error instead of an empty list — an empty list would claim the daemon inspected real
+state and found no snapshots, which it cannot do. The protocol types
+(`SaveSnapshot`/`RestoreSnapshot`/`ListSnapshots`, `SnapshotInfo`,
+`BackendCapability::Checkpoint`) are defined and reserved; no adapter declares the capability.
+
+Adding real checkpointing requires an adapter-specific implementation in `minibox`, `smolbox`,
+`macbox`, or `winbox` that can snapshot and restore a live container or VM, plus a
+`BackendCapability::Checkpoint` declaration on that adapter. See
+`crates/minibox-domain/src/checkpoint.rs` for the port.
 
 ## Development and testing
 
