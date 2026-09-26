@@ -41,6 +41,17 @@ impl NetworkConfigList {
         Ok(parsed)
     }
 
+    /// Validate this list's `cniVersion` against the crate's single source
+    /// of truth, returning the matched supported version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CniError::UnsupportedSpecVersion`] when the file's
+    /// `cniVersion` is not one the crate supports.
+    pub fn checked_spec_version(&self) -> Result<&'static str, CniError> {
+        crate::version::validate_spec_version(&self.cni_version)
+    }
+
     /// Run the full ADD chain in plugin order, threading `prevResult`
     /// between plugins. On mid-chain failure, rolls back (`DEL` in
     /// reverse) the already-succeeded plugins before returning the error.
@@ -48,7 +59,8 @@ impl NetworkConfigList {
     /// # Errors
     ///
     /// Returns the first plugin failure encountered, after best-effort
-    /// rollback of any plugins that had already succeeded.
+    /// rollback of any plugins that had already succeeded. Rejects an
+    /// unsupported `cniVersion` before spawning anything.
     #[tracing::instrument(skip(self), fields(network = %self.name, plugin_count = self.plugins.len()))]
     pub async fn add(
         &self,
@@ -57,6 +69,7 @@ impl NetworkConfigList {
         container_id: &str,
         ifname: &str,
     ) -> Result<crate::result::CniResult, CniError> {
+        self.checked_spec_version()?;
         let mut prev_result: Option<serde_json::Value> = None;
         let mut succeeded: Vec<&PluginConfig> = Vec::new();
 
@@ -113,7 +126,9 @@ impl NetworkConfigList {
     /// Run the DEL chain in reverse plugin order. Individual plugin DEL
     /// failures are logged and do not short-circuit remaining teardown
     /// steps — matches the CNI spec's expectation that DEL is idempotent
-    /// and best-effort.
+    /// and best-effort. An unsupported `cniVersion` is still rejected
+    /// outright, because that is a misconfiguration rather than a
+    /// teardown failure.
     #[tracing::instrument(skip(self), fields(network = %self.name, plugin_count = self.plugins.len()))]
     pub async fn del(
         &self,
@@ -122,6 +137,7 @@ impl NetworkConfigList {
         container_id: &str,
         ifname: &str,
     ) -> Result<(), CniError> {
+        self.checked_spec_version()?;
         for plugin in self.plugins.iter().rev() {
             if let Err(err) =
                 crate::exec::exec_plugin(cni_path, plugin, "DEL", netns, container_id, ifname, None)
@@ -342,5 +358,58 @@ mod tests {
             second_marker.exists(),
             "the succeeding plugin's DEL should still have run"
         );
+    }
+
+    fn conflist_with_version(cni_version: &str) -> NetworkConfigList {
+        NetworkConfigList {
+            cni_version: cni_version.to_string(),
+            name: "minibox0".to_string(),
+            plugins: vec![PluginConfig {
+                plugin_type: "does-not-exist".to_string(),
+                raw: serde_json::json!({"type": "does-not-exist"}),
+            }],
+        }
+    }
+
+    #[test]
+    fn checked_spec_version_accepts_the_crate_constant() {
+        let list = conflist_with_version(crate::version::CNI_SPEC_VERSION);
+        assert_eq!(
+            list.checked_spec_version()
+                .expect("crate constant accepted"),
+            crate::version::CNI_SPEC_VERSION
+        );
+    }
+
+    #[test]
+    fn checked_spec_version_rejects_an_unsupported_version() {
+        let list = conflist_with_version("0.3.1");
+        assert!(matches!(
+            list.checked_spec_version(),
+            Err(CniError::UnsupportedSpecVersion { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn add_rejects_an_unsupported_conflist_version_before_spawning_a_plugin() {
+        // No plugin binaries exist anywhere: reaching plugin lookup would
+        // produce PluginNotFound. Getting UnsupportedSpecVersion instead
+        // proves the version gate runs first.
+        let list = conflist_with_version("0.3.1");
+        let result = list.add(&[], "/fake/netns", "container-1", "eth0").await;
+        assert!(matches!(
+            result,
+            Err(CniError::UnsupportedSpecVersion { .. })
+        ));
+    }
+
+    #[tokio::test]
+    async fn del_rejects_an_unsupported_conflist_version_before_spawning_a_plugin() {
+        let list = conflist_with_version("0.3.1");
+        let result = list.del(&[], "/fake/netns", "container-1", "eth0").await;
+        assert!(matches!(
+            result,
+            Err(CniError::UnsupportedSpecVersion { .. })
+        ));
     }
 }
