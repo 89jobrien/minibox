@@ -16,7 +16,7 @@ generated: 2026-09-16
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-09-21
+Last updated: 2026-09-26
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
