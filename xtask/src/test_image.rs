@@ -15,7 +15,7 @@ use std::{
 use tempfile::TempDir;
 
 use crate::{
-    utils::{cargo_binary_path, cargo_target_dir, workspace_root},
+    utils::{self, Profile, cargo_binary_path, cargo_target_dir, workspace_root},
     xconfig::XConfig,
 };
 
@@ -142,7 +142,7 @@ fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, Path
     let cc = "aarch64-linux-musl-gcc";
 
     // -- miniboxd binary --
-    let miniboxd_bin = cargo_binary_path(&target_base, Some(target), "debug", "miniboxd");
+    let miniboxd_bin = cargo_binary_path(&target_base, Some(target), Profile::Debug, "miniboxd");
     if force || !miniboxd_bin.exists() {
         println!("  cargo build miniboxd ...");
         run_cross(&["build", "--target", target, "-p", "miniboxd"], cc, target)?;
@@ -151,7 +151,7 @@ fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, Path
     }
 
     // -- mbx (CLI) binary --
-    let cli_bin = cargo_binary_path(&target_base, Some(target), "debug", "mbx");
+    let cli_bin = cargo_binary_path(&target_base, Some(target), Profile::Debug, "mbx");
     if force || !cli_bin.exists() {
         println!("  cargo build mbx ...");
         run_cross(
@@ -258,7 +258,7 @@ fn build_test_binary(
     }
 
     // Fallback: glob deps dir for a binary matching the test name prefix
-    let deps_dir = target_base.join(target).join("debug").join("deps");
+    let deps_dir = utils::deps_dir(target_base, Some(target), Profile::Debug);
     let prefix = test_name.replace('-', "_");
     if deps_dir.exists() {
         for entry in
