@@ -10,6 +10,9 @@ use std::{
     process::Command,
 };
 
+#[cfg(target_os = "linux")]
+use crate::utils;
+
 /// Run cgroup v2 integration tests under a properly delegated cgroup hierarchy.
 ///
 /// Requires Linux + root. Replaces `scripts/run-cgroup-tests.sh` and
@@ -68,7 +71,7 @@ pub fn run_cgroup_tests(root: &Path) -> Result<()> {
     }
 
     // Find the test binary (newest cgroup_tests-* in deps/).
-    let test_bin = find_test_binary(root)?;
+    let test_bin = find_test_binary()?;
     eprintln!("Test binary: {}", test_bin.display());
 
     // 6. Spawn a child that joins runner-leaf via pre_exec, then execs the test binary.
@@ -149,16 +152,21 @@ fn cleanup_cgroup(dir: &Path) {
 }
 
 #[cfg(target_os = "linux")]
-fn find_test_binary(root: &Path) -> Result<PathBuf> {
-    // Build runs with --release; check release/deps first then fall back to debug/deps.
-    let deps_release = root.join("target/release/deps");
-    if deps_release.exists() {
-        if let Ok(bin) = find_in_deps(&deps_release) {
+fn find_test_binary() -> Result<PathBuf> {
+    // The build above runs with --release, so prefer release and fall back to
+    // debug. Both are resolved through the shared helpers so a custom
+    // CARGO_TARGET_DIR is honoured.
+    for deps in utils::deps_dirs(&utils::cargo_target_dir(), None, &utils::PREFER_RELEASE) {
+        if deps.exists()
+            && let Ok(bin) = find_in_deps(&deps)
+        {
             return Ok(bin);
         }
     }
-    let deps_debug = root.join("target/debug/deps");
-    find_in_deps(&deps_debug)
+    bail!(
+        "no cgroup_tests binary found under {}",
+        utils::cargo_target_dir().display()
+    )
 }
 
 #[cfg(target_os = "linux")]

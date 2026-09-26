@@ -10,6 +10,8 @@
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
+use crate::utils::{self, Profile};
+
 // ---------------------------------------------------------------------------
 // Ports
 // ---------------------------------------------------------------------------
@@ -17,7 +19,7 @@ use std::path::Path;
 /// Cross-compile miniboxd + test binaries to a musl target.
 pub trait Compiler {
     /// Compile binaries for the given musl target triple.
-    /// Outputs land in `cargo_target/<target>/debug/` and `deps/`.
+    /// Outputs land in the debug profile directory under `cargo_target/<target>`.
     fn compile(&self, target: &str) -> Result<()>;
 }
 
@@ -235,8 +237,8 @@ pub fn run_pipeline(
     let tests_dir = rootfs.join("tests");
     std::fs::create_dir_all(&tests_dir).context("creating rootfs/tests")?;
 
-    let deps_dir = cargo_target.join(target).join("debug").join("deps");
-    let bin_dir = cargo_target.join(target).join("debug");
+    let bin_dir = utils::profile_dir(cargo_target, Some(target), Profile::Debug);
+    let deps_dir = utils::deps_dir(cargo_target, Some(target), Profile::Debug);
 
     let test_suites = &[
         "cgroup_tests",
@@ -434,9 +436,9 @@ mod tests {
     fn setup_vm_dirs(vm_dir: &Path, cargo_target: &Path, target: &str) {
         let rootfs = vm_dir.join("rootfs");
         std::fs::create_dir_all(rootfs.join("tests")).ok();
-        let deps_dir = cargo_target.join(target).join("debug").join("deps");
+        let bin_dir = utils::profile_dir(cargo_target, Some(target), Profile::Debug);
+        let deps_dir = utils::deps_dir(cargo_target, Some(target), Profile::Debug);
         std::fs::create_dir_all(&deps_dir).ok();
-        let bin_dir = cargo_target.join(target).join("debug");
         std::fs::create_dir_all(&bin_dir).ok();
         // kernel placeholder
         let boot_dir = vm_dir.join("boot");
