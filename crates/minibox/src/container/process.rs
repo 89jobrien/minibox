@@ -40,7 +40,7 @@ pub struct ContainerConfig {
     pub pre_exec_hooks: Vec<HookSpec>,
     /// Bind mounts applied inside the container's mount namespace before `pivot_root`.
     pub mounts: Vec<minibox_core::domain::BindMount>,
-    /// If `true`, call `capset(2)` with all capabilities set before `execvp`.
+    /// If `true`, call `capset(2)` with all capabilities set before `execve`.
     pub privileged: bool,
     /// Optional PTY configuration for interactive containers.
     ///
@@ -231,7 +231,7 @@ pub fn run_hooks(
 ///
 /// Uses `capset(2)` with `LINUX_CAPABILITY_VERSION_3` to set a wide but
 /// deliberately bounded set of capabilities in `permitted`, `effective`, and
-/// `inheritable`. Called inside the child process before `execvp` when
+/// `inheritable`. Called inside the child process before `execve` when
 /// `config.privileged` is true.
 ///
 /// # Excluded capabilities (host-escape tier)
@@ -315,7 +315,7 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
 /// Initialise the container environment inside the cloned child process.
 ///
 /// Called immediately after `clone(2)` returns in the child. Performs all
-/// setup steps before `execvp` replaces the process image:
+/// setup steps before `execve` replaces the process image:
 ///
 /// 1. Set the UTS hostname (requires `CLONE_NEWUTS`).
 /// 2. Add the child to its cgroup by writing `"0"` to `cgroup.procs` (the
@@ -328,7 +328,8 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
 ///    grant all Linux capabilities via `capset(2)`.
 /// 6. Call [`close_extra_fds`] to release any file descriptors > 2 that
 ///    leaked from the parent across the clone boundary.
-/// 7. Build the `argv` vector and call `execvp` to exec the user command.
+/// 7. Build the `argv` and `envp` vectors and call `execve` to exec the user
+///    command. `envp` comes only from `config.env` (see [`build_envp`]).
 ///
 /// On any error the caller is expected to call `libc::_exit(127)` so the
 /// process terminates without running Rust destructors.
@@ -419,13 +420,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         );
     }
 
-    let mut envp: Vec<CString> = Vec::with_capacity(config.env.len());
-    for kv in &config.env {
-        envp.push(
-            CString::new(kv.as_str())
-                .map_err(|_| ProcessError::SpawnFailed(format!("invalid env var: {kv}")))?,
-        );
-    }
+    let envp = build_envp(&config.env)?;
 
     debug!(command = %config.command, "container: execve");
 
@@ -434,8 +429,26 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         source,
     })?;
 
-    // execvp never returns on success.
+    // execve never returns on success.
     unreachable!()
+}
+
+/// Build the `envp` vector passed to `execve` from the container's declared
+/// environment.
+///
+/// Security invariant: `envp` is built **only** from `declared` — never from
+/// `std::env::vars()` or any other host-environment source. `execvp` (or an
+/// `envp` seeded from the daemon's environment) would leak every API key and
+/// secret the daemon holds into every container.
+fn build_envp(declared: &[String]) -> anyhow::Result<Vec<CString>> {
+    declared
+        .iter()
+        .map(|kv| {
+            CString::new(kv.as_str()).map_err(|_| {
+                anyhow::Error::from(ProcessError::SpawnFailed(format!("invalid env var: {kv}")))
+            })
+        })
+        .collect()
 }
 
 /// Add the calling process to the cgroup at `cgroup_path`.
@@ -624,6 +637,166 @@ mod tests {
             0,
             "CAP_BPF must be retained"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Invariant 6 — Environment isolation (replaces a source-string test)
+    // -----------------------------------------------------------------------
+
+    /// `envp` is built only from the container's declared variables.
+    #[test]
+    fn build_envp_contains_only_declared_vars() {
+        let declared = vec!["PATH=/bin".to_string(), "FOO=bar".to_string()];
+        let envp = build_envp(&declared).expect("valid env vars must build");
+
+        let rendered: Vec<String> = envp
+            .iter()
+            .map(|c| c.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(rendered, vec!["PATH=/bin", "FOO=bar"]);
+
+        // A host secret that exists in this process must not appear.
+        // SAFETY: single-threaded test body; no concurrent env mutation.
+        unsafe { std::env::set_var("MINIBOX_HOST_SECRET_CANARY", "leaked") };
+        let envp = build_envp(&declared).expect("valid env vars must build");
+        let rendered: Vec<String> = envp
+            .iter()
+            .map(|c| c.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !rendered.iter().any(|kv| kv.contains("CANARY")),
+            "host environment leaked into envp: {rendered:?}"
+        );
+        // SAFETY: see above.
+        unsafe { std::env::remove_var("MINIBOX_HOST_SECRET_CANARY") };
+    }
+
+    /// An empty declaration yields an empty `envp` — not an inherited one.
+    ///
+    /// An empty `envp` passed to `execve` gives the container *no* environment,
+    /// which is the correct outcome when nothing is declared. Inheriting the
+    /// daemon's environment here is precisely the leak this guards against.
+    #[test]
+    fn build_envp_empty_declaration_yields_no_inherited_env() {
+        let envp = build_envp(&[]).expect("empty env builds");
+        assert!(
+            envp.is_empty(),
+            "an empty declaration must produce an empty envp, not an inherited one"
+        );
+    }
+
+    /// A NUL byte in a declared variable is rejected rather than silently
+    /// truncating the value (which would smuggle extra env past the check).
+    #[test]
+    fn build_envp_rejects_nul_bytes() {
+        let declared = vec!["EVIL=ok\0INJECTED=bad".to_string()];
+        let err = build_envp(&declared).expect_err("embedded NUL must be rejected");
+        assert!(
+            err.to_string().contains("invalid env var"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Invariant 5 — FD-leak prevention (replaces a source-string test)
+    // -----------------------------------------------------------------------
+
+    /// `close_extra_fds` really closes descriptors above stderr, and really
+    /// leaves 0/1/2 open.
+    ///
+    /// Runs in a forked child so that closing the test runner's own descriptors
+    /// cannot corrupt the harness. The child reports its verdict through the
+    /// exit status.
+    ///
+    /// SAFETY: the assertions inside the child only touch descriptors the child
+    /// itself opened, plus an explicit dup of stderr onto a known slot.
+    #[cfg(unix)]
+    #[test]
+    fn close_extra_fds_closes_fds_above_stderr_and_keeps_stdio() {
+        // SAFETY: this test body performs no env mutation and runs before any
+        // forking test in the same process; `fork` is used immediately below.
+        unsafe {
+            let pid = libc::fork();
+            assert!(pid >= 0, "fork failed");
+
+            if pid == 0 {
+                // ---- child ----
+                let code = child_fd_probe();
+                libc::_exit(code);
+            }
+
+            // ---- parent ----
+            let mut status: libc::c_int = 0;
+            assert_eq!(libc::waitpid(pid, &mut status, 0), pid, "waitpid failed");
+            assert!(libc::WIFEXITED(status), "child did not exit normally");
+            assert_eq!(
+                libc::WEXITSTATUS(status),
+                0,
+                "close_extra_fds left the descriptor table in the wrong state"
+            );
+        }
+    }
+
+    /// Child half of [`close_extra_fds_closes_fds_above_stderr_and_keeps_stdio`].
+    ///
+    /// Opens a handful of descriptors above stderr, parks one at a known high
+    /// slot via `dup2`, calls `close_extra_fds`, then verifies the real
+    /// descriptor table.
+    ///
+    /// Returns a process exit code: 0 = invariant held, 1 = leaked fd, 2 = stdio
+    /// was closed, 3 = probe setup failed.
+    ///
+    /// # Safety
+    ///
+    /// Runs in a freshly forked child (see the caller). Every `libc` call here
+    /// operates only on descriptors the child itself opened, or on the inherited
+    /// stdio slots, and no pointer outlives the call. The child never returns —
+    /// it `_exit`s — so no Rust destructor or allocator state is touched.
+    #[cfg(unix)]
+    unsafe fn child_fd_probe() -> libc::c_int {
+        unsafe {
+            // Open several descriptors above stderr.
+            let opened: Vec<libc::c_int> = (0..4)
+                .filter_map(|_| {
+                    let fd = libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC);
+                    (fd >= 0).then_some(fd)
+                })
+                .collect();
+            if opened.len() < 4 {
+                return 3;
+            }
+
+            // Park a descriptor at a high, predictable slot so the check does
+            // not depend on allocation order.
+            const HIGH_FD: libc::c_int = 900;
+            if libc::dup2(opened[0], HIGH_FD) < 0 {
+                return 3;
+            }
+
+            close_extra_fds();
+
+            // Invariant: the high descriptor is gone.
+            if libc::fcntl(HIGH_FD, libc::F_GETFD) >= 0 {
+                return 1;
+            }
+
+            // Invariant: every descriptor we opened above stderr is gone.
+            for &fd in &opened {
+                if libc::fcntl(fd, libc::F_GETFD) >= 0 {
+                    return 1;
+                }
+            }
+
+            // Invariant: stdio survived. If stdin/stdout/stderr had been closed
+            // the kernel could hand one of them back to us, so check explicitly.
+            for fd in 0..3 {
+                if libc::fcntl(fd, libc::F_GETFD) < 0 {
+                    return 2;
+                }
+            }
+
+            0
+        }
     }
 }
 

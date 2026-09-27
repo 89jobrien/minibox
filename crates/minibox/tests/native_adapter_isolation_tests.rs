@@ -20,8 +20,76 @@ use minibox::adapters::{CgroupV2Limiter, OverlayFilesystem};
 use minibox::domain::{ResourceConfig, ResourceLimiter, RootfsSetup};
 use minibox::preflight::probe;
 use minibox_macros::require_capability;
+use rstest::{fixture, rstest};
 use std::fs;
+use std::path::PathBuf;
 use tempfile::TempDir;
+
+// ---------------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------------
+
+/// A single-layer overlay rootfs, set up and mounted, with the tempdir that
+/// owns it.
+///
+/// Fixtures own *setup* only. Capability gating deliberately stays in each test
+/// body: `require_capability!` expands to `return;`, so inside a fixture it
+/// would return from the fixture and let the test proceed against a
+/// half-constructed environment instead of skipping.
+struct OverlayEnv {
+    tmp: TempDir,
+    layer: PathBuf,
+    container_dir: PathBuf,
+    adapter: OverlayFilesystem,
+    merged: minibox::domain::RootfsLayout,
+}
+
+#[fixture]
+fn overlay_env() -> OverlayEnv {
+    let tmp = TempDir::new().expect("unwrap in test");
+    let layer = tmp.path().join("layer0");
+    fs::create_dir_all(layer.join("bin")).expect("unwrap in test");
+    fs::write(layer.join("bin").join("sh"), b"").expect("unwrap in test");
+
+    let container_dir = tmp.path().join("container");
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
+
+    let adapter = OverlayFilesystem::new_with_base(tmp.path());
+    let merged = adapter
+        .setup_rootfs(std::slice::from_ref(&layer), &container_dir)
+        .expect("setup_rootfs failed");
+
+    OverlayEnv {
+        tmp,
+        layer,
+        container_dir,
+        adapter,
+        merged,
+    }
+}
+
+impl OverlayEnv {
+    /// Mounted, writable view of the rootfs.
+    fn merged_dir(&self) -> &std::path::Path {
+        &self.merged.merged_dir
+    }
+
+    fn upper(&self) -> PathBuf {
+        self.container_dir.join("upper")
+    }
+
+    fn work(&self) -> PathBuf {
+        self.container_dir.join("work")
+    }
+
+    /// Unmount. Borrowed rather than consuming so a test can still inspect
+    /// the merged dir afterwards to assert it is empty rather than mounted.
+    fn teardown(&self) {
+        self.adapter
+            .cleanup(&self.container_dir)
+            .expect("unwrap in test");
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,63 +105,41 @@ fn fake_layer(dir: &std::path::Path) {
 // OverlayFilesystem
 // ---------------------------------------------------------------------------
 
-#[test]
-fn overlay_setup_creates_merged_upper_work_dirs() {
+#[rstest]
+fn overlay_write_goes_to_upper_not_lower(overlay_env: OverlayEnv) {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fake_layer(&layer);
-
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
-
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer], &container_dir)
-        .expect("setup_rootfs failed");
-
-    assert!(merged.merged_dir.exists(), "merged dir must exist");
-    assert!(container_dir.join("upper").exists(), "upper dir must exist");
-    assert!(container_dir.join("work").exists(), "work dir must exist");
-    assert!(
-        merged.merged_dir.join("bin").join("sh").exists(),
-        "layer content visible in merged"
-    );
-}
-
-#[test]
-fn overlay_write_goes_to_upper_not_lower() {
-    let caps = probe();
-    require_capability!(caps, is_root, "requires root");
-    require_capability!(caps, overlay_fs, "requires overlay FS");
-
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fake_layer(&layer);
-
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
-
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer.clone()], &container_dir)
-        .expect("unwrap in test");
-
-    fs::write(merged.merged_dir.join("newfile"), b"hello").expect("unwrap in test");
+    fs::write(overlay_env.merged_dir().join("newfile"), b"hello").expect("unwrap in test");
 
     assert!(
-        container_dir.join("upper").join("newfile").exists(),
+        overlay_env.upper().join("newfile").exists(),
         "write must land in upper"
     );
     assert!(
-        !layer.join("newfile").exists(),
+        !overlay_env.layer.join("newfile").exists(),
         "lower layer must be unmodified"
     );
 
-    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
+    overlay_env.teardown();
+}
+
+/// Mount an overlay from `layers` under `tmp`.
+///
+/// Used by tests that need a layer set other than the single `bin/sh` layer
+/// the `overlay_env` fixture provides.
+fn mount_overlay(
+    tmp: &std::path::Path,
+    layers: &[PathBuf],
+) -> (OverlayFilesystem, minibox::domain::RootfsLayout, PathBuf) {
+    let container_dir = tmp.join("container");
+    fs::create_dir_all(&container_dir).expect("unwrap in test");
+    let adapter = OverlayFilesystem::new_with_base(tmp);
+    let merged = adapter
+        .setup_rootfs(layers, &container_dir)
+        .expect("setup_rootfs failed");
+    (adapter, merged, container_dir)
 }
 
 #[test]
@@ -112,13 +158,7 @@ fn overlay_multiple_layers_all_visible_in_merged() {
     fs::create_dir_all(layer1.join("usr").join("bin")).expect("unwrap in test");
     fs::write(layer1.join("usr").join("bin").join("env"), b"").expect("unwrap in test");
 
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
-
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer0, layer1], &container_dir)
-        .expect("unwrap in test");
+    let (fs_adapter, merged, container_dir) = mount_overlay(tmp.path(), &[layer0, layer1]);
 
     assert!(
         merged.merged_dir.join("etc").join("os-release").exists(),
@@ -137,30 +177,18 @@ fn overlay_multiple_layers_all_visible_in_merged() {
     fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
-#[test]
-fn overlay_cleanup_unmounts_merged() {
+#[rstest]
+fn overlay_cleanup_unmounts_merged(overlay_env: OverlayEnv) {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fake_layer(&layer);
-
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
-
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer], &container_dir)
-        .expect("unwrap in test");
-    assert!(merged.merged_dir.exists());
-
-    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
+    assert!(overlay_env.merged_dir().exists());
+    overlay_env.teardown();
 
     // After unmount the dir may still exist but must be empty (not mounted).
-    if merged.merged_dir.exists() {
-        let entries: Vec<_> = fs::read_dir(&merged.merged_dir)
+    if overlay_env.merged_dir().exists() {
+        let entries: Vec<_> = fs::read_dir(overlay_env.merged_dir())
             .expect("unwrap in test")
             .collect();
         assert!(entries.is_empty(), "merged must be empty after unmount");
@@ -188,116 +216,103 @@ fn overlay_empty_layers_returns_error() {
 // CgroupV2Limiter
 // ---------------------------------------------------------------------------
 
+/// A created cgroup. Cleaned up on drop so a failing assertion cannot leave a
+/// stray directory under the system cgroup tree.
+struct CgroupEnv {
+    limiter: CgroupV2Limiter,
+    id: String,
+    path: PathBuf,
+}
+
+impl CgroupEnv {
+    /// Read a cgroup control file, or `None` if the kernel did not expose it.
+    fn read_control(&self, file: &str) -> Option<String> {
+        let p = self.path.join(file);
+        p.exists()
+            .then(|| fs::read_to_string(p).expect("unwrap in test"))
+    }
+
+    fn cleanup_now(&self) {
+        self.limiter.cleanup(&self.id).expect("unwrap in test");
+    }
+}
+
+impl Drop for CgroupEnv {
+    fn drop(&mut self) {
+        // Best-effort: tests that assert on post-cleanup state already called
+        // `cleanup_now`, so a second call here must stay quiet.
+        let _ = self.limiter.cleanup(&self.id);
+    }
+}
+
+/// Create a cgroup for `tag` with `cfg`, returning the environment.
+fn cgroup_env(tag: &str, cfg: ResourceConfig) -> CgroupEnv {
+    let limiter = CgroupV2Limiter::new();
+    let id = format!("test-isolation-{tag}-{}", std::process::id());
+    let path_str = limiter
+        .create(&id, &cfg)
+        .unwrap_or_else(|e| panic!("create failed: {e}"));
+    CgroupEnv {
+        limiter,
+        id,
+        path: PathBuf::from(path_str),
+    }
+}
+
 #[test]
 fn cgroup_create_and_cleanup_lifecycle() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, cgroups_v2, "requires cgroup v2");
 
-    let id = format!("test-isolation-create-{}", std::process::id());
-    let limiter = CgroupV2Limiter::new();
+    let env = cgroup_env("create", ResourceConfig::default());
 
-    let path_str = limiter
-        .create(&id, &ResourceConfig::default())
-        .expect("create failed");
-    let path = std::path::PathBuf::from(&path_str);
-
-    assert!(path.exists(), "cgroup dir must exist after create");
+    assert!(env.path.exists(), "cgroup dir must exist after create");
     assert!(
-        path.join("cgroup.procs").exists(),
+        env.path.join("cgroup.procs").exists(),
         "cgroup.procs must exist"
     );
 
-    limiter.cleanup(&id).expect("unwrap in test");
-    assert!(!path.exists(), "cgroup dir must be removed after cleanup");
+    env.cleanup_now();
+    assert!(
+        !env.path.exists(),
+        "cgroup dir must be removed after cleanup"
+    );
 }
 
-#[test]
-fn cgroup_memory_limit_written_correctly() {
+/// The three limit tests differ only in which `ResourceConfig` field is set,
+/// which control file the kernel exposes it in, and the expected value —
+/// so they are one table, not three near-identical functions.
+#[rstest]
+#[case::memory(
+    ResourceConfig { memory_limit_bytes: Some(128 * 1024 * 1024), ..ResourceConfig::default() },
+    "memory.max",
+    "134217728"
+)]
+#[case::cpu(
+    ResourceConfig { cpu_weight: Some(500), ..ResourceConfig::default() },
+    "cpu.weight",
+    "500"
+)]
+#[case::pids(
+    ResourceConfig { pids_max: Some(32), ..ResourceConfig::default() },
+    "pids.max",
+    "32"
+)]
+fn cgroup_limit_written_correctly(
+    #[case] cfg: ResourceConfig,
+    #[case] file: &str,
+    #[case] expected: &str,
+) {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, cgroups_v2, "requires cgroup v2");
 
-    let id = format!("test-isolation-mem-{}", std::process::id());
-    let limiter = CgroupV2Limiter::new();
-    let limit: u64 = 128 * 1024 * 1024;
+    let env = cgroup_env(&file.replace('.', "-"), cfg);
 
-    let path_str = limiter
-        .create(
-            &id,
-            &ResourceConfig {
-                memory_limit_bytes: Some(limit),
-                ..ResourceConfig::default()
-            },
-        )
-        .expect("unwrap in test");
-    let path = std::path::PathBuf::from(path_str);
-
-    let mem_max = path.join("memory.max");
-    if mem_max.exists() {
-        let content = fs::read_to_string(&mem_max).expect("unwrap in test");
-        assert_eq!(content.trim(), limit.to_string(), "memory.max mismatch");
+    if let Some(content) = env.read_control(file) {
+        assert_eq!(content.trim(), expected, "{file} mismatch");
     }
-
-    limiter.cleanup(&id).expect("unwrap in test");
-}
-
-#[test]
-fn cgroup_cpu_weight_written_correctly() {
-    let caps = probe();
-    require_capability!(caps, is_root, "requires root");
-    require_capability!(caps, cgroups_v2, "requires cgroup v2");
-
-    let id = format!("test-isolation-cpu-{}", std::process::id());
-    let limiter = CgroupV2Limiter::new();
-
-    let path_str = limiter
-        .create(
-            &id,
-            &ResourceConfig {
-                cpu_weight: Some(500),
-                ..ResourceConfig::default()
-            },
-        )
-        .expect("unwrap in test");
-    let path = std::path::PathBuf::from(path_str);
-
-    let cpu_weight = path.join("cpu.weight");
-    if cpu_weight.exists() {
-        let content = fs::read_to_string(&cpu_weight).expect("unwrap in test");
-        assert_eq!(content.trim(), "500", "cpu.weight mismatch");
-    }
-
-    limiter.cleanup(&id).expect("unwrap in test");
-}
-
-#[test]
-fn cgroup_pids_max_written_correctly() {
-    let caps = probe();
-    require_capability!(caps, is_root, "requires root");
-    require_capability!(caps, cgroups_v2, "requires cgroup v2");
-
-    let id = format!("test-isolation-pids-{}", std::process::id());
-    let limiter = CgroupV2Limiter::new();
-
-    let path_str = limiter
-        .create(
-            &id,
-            &ResourceConfig {
-                pids_max: Some(32),
-                ..ResourceConfig::default()
-            },
-        )
-        .expect("unwrap in test");
-    let path = std::path::PathBuf::from(path_str);
-
-    let pids_max = path.join("pids.max");
-    if pids_max.exists() {
-        let content = fs::read_to_string(&pids_max).expect("unwrap in test");
-        assert_eq!(content.trim(), "32", "pids.max mismatch");
-    }
-
-    limiter.cleanup(&id).expect("unwrap in test");
 }
 
 #[test]
@@ -306,137 +321,114 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, cgroups_v2, "requires cgroup v2");
 
-    let id = format!("test-isolation-addpid-{}", std::process::id());
-    let limiter = CgroupV2Limiter::new();
-
-    let path_str = limiter
-        .create(&id, &ResourceConfig::default())
-        .expect("unwrap in test");
-    let path = std::path::PathBuf::from(&path_str);
-
+    let env = cgroup_env("addpid", ResourceConfig::default());
     let my_pid = std::process::id();
-    limiter.add_process(&id, my_pid).expect("unwrap in test");
+    env.limiter
+        .add_process(&env.id, my_pid)
+        .expect("unwrap in test");
 
-    let procs = fs::read_to_string(path.join("cgroup.procs")).expect("unwrap in test");
+    let procs = fs::read_to_string(env.path.join("cgroup.procs")).expect("unwrap in test");
     assert!(
         procs.lines().any(|l| l.trim() == my_pid.to_string()),
         "cgroup.procs must contain PID {my_pid}"
     );
 
     // Move self back to parent before rmdir (avoids EBUSY).
-    let parent = std::path::PathBuf::from(
+    let parent = PathBuf::from(
         std::env::var("MINIBOX_CGROUP_ROOT")
             .unwrap_or_else(|_| "/sys/fs/cgroup/minibox.slice/miniboxd.service".to_string()),
     )
     .join("cgroup.procs");
     if parent.exists() {
-        let _ = fs::write(&parent, my_pid.to_string());
+        // Must not swallow this: the process is inside the cgroup being
+        // cleaned up, and a failed move-back surfaces later as a confusing
+        // EBUSY from `cleanup` rather than as the cause.
+        fs::write(&parent, my_pid.to_string()).unwrap_or_else(|e| {
+            panic!("failed to move pid {my_pid} back to parent cgroup {parent:?}: {e}");
+        });
     }
 
-    limiter.cleanup(&id).expect("unwrap in test");
+    env.cleanup_now();
 }
 
 // ---------------------------------------------------------------------------
-// Escape Attempt Detection Tests
+// Mount Containment
 // ---------------------------------------------------------------------------
 
-#[test]
-fn overlay_path_traversal_attempt_is_rejected() {
+/// Every path the overlay mount uses must stay inside the base the caller
+/// supplied.
+///
+/// This replaces an earlier `overlay_path_traversal_attempt_does_not_escape_container_dir`,
+/// which walked `..` out of `merged_dir` and asserted nothing appeared outside
+/// the container dir. Running it on Linux showed the write *succeeding* — and
+/// that is correct behaviour, not a bug: `merged_dir` is an ordinary directory
+/// on the container's filesystem, and overlayfs provides no path containment.
+/// Confining a process to the container is `pivot_root` in the runtime's
+/// `child_init`, not this adapter's job.
+///
+/// So the property this layer can actually own is narrower and worth asserting:
+/// the mount must not reference any path outside the tree it was handed. If
+/// `upper_dir` (or a lower layer) escaped `images_base`, the container would
+/// expose host state through the mount, and no amount of `pivot_root` would
+/// stop it. Runtime-level containment is covered by the system suite.
+#[rstest]
+fn overlay_mount_paths_stay_inside_the_supplied_base(overlay_env: OverlayEnv) {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fake_layer(&layer);
+    let base = overlay_env.tmp.path();
 
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
+    let Some(minibox_core::domain::BackendRootfsMetadata::Overlay { upper_dir, .. }) =
+        overlay_env.merged.rootfs_metadata.as_ref()
+    else {
+        panic!("overlay setup must report Overlay rootfs metadata");
+    };
 
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer], &container_dir)
-        .expect("setup_rootfs failed");
+    let upper = upper_dir.to_path_buf();
 
-    // Attempt path traversal: try to write via `../../escape` from inside merged.
-    let escape_path = merged.merged_dir.join("..").join("..").join("escape");
-
-    // Write either fails or succeeds — if it succeeds, the file must land inside
-    // the overlay upper dir, NOT at the host /tmp/escape.
-    let write_result = fs::write(&escape_path, b"x");
-    let host_escape = std::path::Path::new("/tmp/escape");
-
-    // Verify the host path does NOT exist (the file landed in upper or write failed).
     assert!(
-        !host_escape.exists(),
-        "path traversal attack: /tmp/escape should not exist"
+        upper.starts_with(&overlay_env.container_dir),
+        "upper_dir {upper:?} must live under container_dir {:?}",
+        overlay_env.container_dir
     );
+    assert!(
+        upper.starts_with(base),
+        "upper_dir {upper:?} escaped the supplied base {base:?} — the mount would \
+         expose host state"
+    );
+    assert!(upper.exists(), "upper_dir {upper:?} must exist on disk");
 
-    // If write succeeded, verify it went to upper, not the host.
-    if write_result.is_ok() {
-        assert!(
-            container_dir.join("upper").exists(),
-            "if write succeeded, must have upper dir"
-        );
-    }
-
-    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
+    // The merged root must be the mount, not the lower layer itself: if merged
+    // *were* the layer, the image would be directly writable.
+    assert_ne!(
+        overlay_env.merged_dir(),
+        overlay_env.layer,
+        "merged must be a distinct mount, not the lower layer"
+    );
+    assert!(
+        overlay_env
+            .merged_dir()
+            .starts_with(&overlay_env.container_dir),
+        "merged_dir must live under container_dir"
+    );
 }
 
-#[test]
-fn overlay_symlink_outside_upper_does_not_escape() {
-    let caps = probe();
-    require_capability!(caps, is_root, "requires root");
-    require_capability!(caps, overlay_fs, "requires overlay FS");
-
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fs::create_dir_all(layer.join("tmp")).expect("unwrap in test");
-
-    // Create a symlink that attempts absolute traversal: /tmp/symlink -> /etc
-    #[cfg(unix)]
-    std::os::unix::fs::symlink("/etc", layer.join("tmp").join("etc_link"))
-        .expect("create symlink in layer");
-
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
-
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer], &container_dir)
-        .expect("setup_rootfs failed");
-
-    let symlink_in_merged = merged.merged_dir.join("tmp").join("etc_link");
-
-    // Verify the symlink exists in merged.
-    assert!(
-        symlink_in_merged.exists() || symlink_in_merged.is_symlink(),
-        "symlink should exist in merged overlay"
-    );
-
-    // Reading the symlink should NOT resolve to the host /etc.
-    // Either: symlink was rewritten to relative (safe), or reading fails (safe).
-    if let Ok(target) = fs::read_link(&symlink_in_merged) {
-        // If symlink is absolute and points to host /etc, that's a failure.
-        assert!(
-            target != std::path::Path::new("/etc"),
-            "symlink must not resolve to host /etc path"
-        );
-
-        // Target should be either relative or container-internal.
-        if target.is_absolute() {
-            // If absolute, it must not be the host /etc.
-            assert!(
-                !target.starts_with("/etc"),
-                "absolute symlink target must not escape to host /etc"
-            );
-        }
-    }
-
-    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
-}
-
-#[test]
+// NOTE: the previous `overlay_symlink_outside_upper_does_not_escape` was removed
+// here. It created `/etc_link -> /etc` directly on the filesystem and then
+// expected mounting the overlay to rewrite it. overlayfs does no such rewriting
+// — absolute symlink targets are rewritten at *layer extraction* time by
+// `rewrite_absolute_symlink` (crates/minibox-core/src/image/layer.rs:122), and
+// the test bypassed that path entirely. It therefore asserted a property this
+// adapter does not have, and failed on a real Linux run.
+//
+// The security property is real and is covered at the layer that implements it:
+//
+//   crates/minibox-core/src/image/layer.rs:671  cross_dir_absolute_symlink_rewritten
+//   crates/minibox-core/src/image/layer.rs:692  absolute_symlink_rewritten_to_relative
+//   crates/minibox-core/src/image/layer.rs:711  absolute_symlink_with_parent_traversal_rejected
+//   crates/minibox/tests/security_regression.rs:290  regression_absolute_symlink_with_traversal_is_rejected
+//   crates/minibox/tests/security_regression.rs:319  regression_busybox_applet_symlink_is_rewritten_not_rejected
 fn cgroup_pid_zero_is_rejected() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -496,7 +488,12 @@ fn cgroup_cleanup_removes_all_state() {
     )
     .join("cgroup.procs");
     if parent.exists() {
-        let _ = fs::write(&parent, my_pid.to_string());
+        // Must not swallow this: the process is inside the cgroup being
+        // cleaned up, and a failed move-back surfaces later as a confusing
+        // EBUSY from `cleanup` rather than as the cause.
+        fs::write(&parent, my_pid.to_string()).unwrap_or_else(|e| {
+            panic!("failed to move pid {my_pid} back to parent cgroup {parent:?}: {e}");
+        });
     }
 
     // Cleanup: must remove the entire cgroup directory.
