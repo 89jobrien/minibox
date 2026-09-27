@@ -143,6 +143,53 @@ and root-required tests add more on top.
 
 ---
 
+## macOS Colima Image-Pipeline Dogfood
+
+The following ignored/manual system recipe exercises create/run -> commit ->
+build -> push through the real daemon. It requires a Colima instance using the
+`containerd` runtime (and therefore `nerdctl`) plus an unauthenticated registry
+listening at `localhost:5000` inside the VM.
+
+```sh
+cargo build -p miniboxd -p mbx
+colima status
+colima ssh -- nerdctl version
+colima ssh -- nerdctl inspect minibox-dogfood-registry >/dev/null 2>&1 || \
+  colima ssh -- nerdctl run -d --name minibox-dogfood-registry \
+    -p 5000:5000 registry:2
+
+rm -rf /tmp/minibox-colima-dogfood
+mkdir -p /tmp/minibox-colima-dogfood/{data,run,context}
+printf 'FROM dogfood/commit:latest\nRUN echo build-ok > /build-ok\n' \
+  > /tmp/minibox-colima-dogfood/context/Dockerfile
+
+MINIBOX_ADAPTER=colima \
+MINIBOX_DATA_DIR=/tmp/minibox-colima-dogfood/data \
+MINIBOX_RUN_DIR=/tmp/minibox-colima-dogfood/run \
+target/debug/miniboxd >/tmp/minibox-colima-dogfood/daemon.log 2>&1 &
+DAEMON_PID=$!
+trap 'kill "$DAEMON_PID"' EXIT
+export MINIBOX_SOCKET_PATH=/tmp/minibox-colima-dogfood/run/miniboxd.sock
+
+target/debug/mbx pull alpine
+target/debug/mbx run alpine --name dogfood-source -- \
+  /bin/sh -c 'echo commit-ok > /commit-ok'
+target/debug/mbx commit dogfood-source dogfood/commit:latest
+
+printf '%s\n' \
+  '{"type":"Build","dockerfile":"FROM dogfood/commit:latest\\nRUN echo build-ok > /build-ok\\n","context_path":"/tmp/minibox-colima-dogfood/context","tag":"localhost:5000/dogfood/build:latest","build_args":[],"no_cache":true}' \
+  | nc -U "$MINIBOX_SOCKET_PATH"
+printf '%s\n' \
+  '{"type":"Push","image_ref":"localhost:5000/dogfood/build:latest","credentials":{"type":"Anonymous"}}' \
+  | nc -U "$MINIBOX_SOCKET_PATH"
+```
+
+Both raw protocol calls must return a `Success` response. The recipe uses raw
+newline-delimited JSON only because `mbx` does not yet expose `build` or `push`
+subcommands.
+
+---
+
 ## Test Helpers
 
 **`minibox::testing`** (behind `test-utils` feature):

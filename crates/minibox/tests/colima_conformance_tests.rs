@@ -65,16 +65,17 @@ use std::sync::Arc;
 /// Build a Colima backend descriptor for testing.
 fn colima_backend_descriptor() -> BackendDescriptor {
     BackendDescriptor::new("colima")
+        .with_capability(BackendCapability::Commit)
+        .with_capability(BackendCapability::BuildFromContext)
+        .with_capability(BackendCapability::PushToRegistry)
 }
 
 // ---------------------------------------------------------------------------
 // Conformance tests
 // ---------------------------------------------------------------------------
 
-/// Colima backend declares no commit/build/push capabilities, since:
-/// - Commit: no overlay upperdir exposed by nerdctl/lima
-/// - BuildFromContext: no Dockerfile support wired into the adapter
-/// - PushToRegistry: no direct push implementation yet
+/// Colima declares the local image pipeline capabilities wired by
+/// `macbox::build_colima_handler_dependencies`.
 ///
 /// Image pulling (has_image, pull_image) are ImageRegistry trait methods,
 /// not BackendCapability flags.
@@ -84,20 +85,20 @@ fn colima_backend_declares_expected_capabilities() {
 
     assert_eq!(backend.name, "colima", "backend name must be 'colima'");
     assert!(
-        !backend.capabilities.supports(BackendCapability::Commit),
-        "Colima does not support Commit (no overlay upperdir from nerdctl)"
+        backend.capabilities.supports(BackendCapability::Commit),
+        "Colima exposes commit through its persisted overlay metadata"
     );
     assert!(
-        !backend
+        backend
             .capabilities
             .supports(BackendCapability::BuildFromContext),
-        "Colima does not support BuildFromContext (no Dockerfile support wired)"
+        "Colima wires the shared Dockerfile builder"
     );
     assert!(
-        !backend
+        backend
             .capabilities
             .supports(BackendCapability::PushToRegistry),
-        "Colima does not support PushToRegistry (no direct push implementation)"
+        "Colima wires the nerdctl-backed image pusher"
     );
 }
 

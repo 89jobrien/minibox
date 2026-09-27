@@ -694,12 +694,48 @@ mod tests {
             "commit adapter should be wired"
         );
         assert!(
+            deps.build
+                .commit_adapter
+                .as_ref()
+                .and_then(|adapter| {
+                    adapter
+                        .as_any()
+                        .downcast_ref::<minibox::adapters::OverlayCommitAdapter>()
+                })
+                .is_some(),
+            "Colima create/run exposes overlay metadata to OverlayCommitAdapter"
+        );
+        assert!(
             deps.build.image_builder.is_some(),
             "image builder should be wired"
         );
         assert!(
+            deps.build
+                .image_builder
+                .as_ref()
+                .and_then(|adapter| {
+                    adapter
+                        .as_any()
+                        .downcast_ref::<minibox::adapters::MiniboxImageBuilder>()
+                })
+                .is_some(),
+            "Colima should wire MiniboxImageBuilder"
+        );
+        assert!(
             deps.build.image_pusher.is_some(),
             "image pusher should be wired"
+        );
+        assert!(
+            deps.build
+                .image_pusher
+                .as_ref()
+                .and_then(|adapter| {
+                    adapter
+                        .as_any()
+                        .downcast_ref::<minibox::adapters::ColimaImagePusher>()
+                })
+                .is_some(),
+            "Colima should wire ColimaImagePusher"
         );
     }
 }
