@@ -1218,6 +1218,14 @@ mod tests {
     #[cfg(unix)]
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    #[cfg(unix)]
+    fn assert_adapter<T: std::any::Any>(actual: &dyn std::any::Any, adapter: &str, seam: &str) {
+        assert!(
+            actual.is::<T>(),
+            "{adapter} must wire the expected {seam} adapter"
+        );
+    }
+
     #[test]
     #[cfg(unix)]
     fn resolve_data_dir_non_root_uses_home() {
@@ -1390,7 +1398,7 @@ mod tests {
 
     #[tokio::test]
     #[cfg(target_os = "linux")]
-    async fn native_suite_wires_local_push_commit_and_build_adapters() {
+    async fn native_suite_wires_every_supported_adapter_seam() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let data_dir = temp_dir.path().to_path_buf();
         let images_dir = data_dir.join("images");
@@ -1423,17 +1431,72 @@ mod tests {
         )
         .expect("build native handler dependencies");
 
+        let image_ref = minibox_core::image::reference::ImageRef::parse("alpine:latest")
+            .expect("parse image reference");
+        assert_adapter::<minibox_core::adapters::DockerHubRegistry>(
+            deps.image.registry_router.route(&image_ref).as_any(),
+            "native",
+            "registry",
+        );
+        assert_adapter::<minibox::adapters::OverlayFilesystem>(
+            deps.lifecycle.filesystem.as_any(),
+            "native",
+            "filesystem",
+        );
+        assert_adapter::<minibox::adapters::NoopNetwork>(
+            deps.lifecycle.network_provider.as_any(),
+            "native",
+            "network",
+        );
+        assert_adapter::<minibox::adapters::CgroupV2Limiter>(
+            deps.lifecycle.resource_limiter.as_any(),
+            "native",
+            "limiter",
+        );
+        assert_adapter::<minibox::adapters::LinuxNamespaceRuntime>(
+            deps.lifecycle.runtime.as_any(),
+            "native",
+            "runtime",
+        );
+
         assert!(
             deps.build.image_pusher.is_some(),
             "native suite should wire image push"
+        );
+        assert_adapter::<minibox::adapters::OciPushAdapter>(
+            deps.build
+                .image_pusher
+                .as_ref()
+                .expect("native pusher")
+                .as_any(),
+            "native",
+            "push",
         );
         assert!(
             deps.build.commit_adapter.is_some(),
             "native suite should wire container commit"
         );
+        assert_adapter::<minibox::adapters::OverlayCommitAdapter>(
+            deps.build
+                .commit_adapter
+                .as_ref()
+                .expect("native committer")
+                .as_any(),
+            "native",
+            "commit",
+        );
         assert!(
             deps.build.image_builder.is_some(),
             "native suite should wire image build"
+        );
+        assert_adapter::<minibox::adapters::MiniboxImageBuilder>(
+            deps.build
+                .image_builder
+                .as_ref()
+                .expect("native builder")
+                .as_any(),
+            "native",
+            "build",
         );
     }
 
@@ -1516,7 +1579,7 @@ mod tests {
 
     #[tokio::test]
     #[cfg(target_os = "linux")]
-    async fn gke_suite_wires_oci_image_pusher() {
+    async fn gke_suite_wires_every_supported_adapter_seam() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
         let data_dir = temp_dir.path().to_path_buf();
         let images_dir = data_dir.join("images");
@@ -1550,14 +1613,138 @@ mod tests {
             Err(e) => panic!("gke deps: {e}"),
         };
 
+        let image_ref = minibox_core::image::reference::ImageRef::parse("alpine:latest")
+            .expect("parse image reference");
+        assert_adapter::<minibox_core::adapters::DockerHubRegistry>(
+            deps.image.registry_router.route(&image_ref).as_any(),
+            "gke",
+            "registry",
+        );
+        assert_adapter::<minibox::adapters::CopyFilesystem>(
+            deps.lifecycle.filesystem.as_any(),
+            "gke",
+            "filesystem",
+        );
+        assert_adapter::<minibox::adapters::NoopNetwork>(
+            deps.lifecycle.network_provider.as_any(),
+            "gke",
+            "network",
+        );
+        assert_adapter::<minibox::adapters::NoopLimiter>(
+            deps.lifecycle.resource_limiter.as_any(),
+            "gke",
+            "limiter",
+        );
+        assert_adapter::<minibox::adapters::ProotRuntime>(
+            deps.lifecycle.runtime.as_any(),
+            "gke",
+            "runtime",
+        );
+
         assert!(
             deps.build.image_pusher.is_some(),
             "gke suite should wire OCI image pusher"
+        );
+        assert_adapter::<minibox::adapters::OciPushAdapter>(
+            deps.build
+                .image_pusher
+                .as_ref()
+                .expect("GKE pusher")
+                .as_any(),
+            "gke",
+            "push",
         );
         // GKE uses CopyFilesystem — overlay commit is not available
         assert!(deps.build.commit_adapter.is_none());
         // No image builder wired for GKE
         assert!(deps.build.image_builder.is_none());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn colima_suite_wires_every_supported_adapter_seam() {
+        let temp_dir = tempfile::TempDir::new().expect("create temp dir");
+        let data_dir = temp_dir.path().to_path_buf();
+        let image_store = ImageStore::new(data_dir.join("images")).expect("create ImageStore");
+        let state = Arc::new(DaemonState::new(image_store, &data_dir));
+        let lease_service = Arc::new(
+            DiskLeaseService::new(data_dir.join("leases.json"))
+                .await
+                .expect("create DiskLeaseService"),
+        );
+        let image_gc: Arc<dyn ImageGarbageCollector> =
+            Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
+        let executor: minibox::adapters::LimaExecutor =
+            Arc::new(|_args: &[&str]| Ok(String::new()));
+        let spawner: minibox::adapters::LimaSpawner = Arc::new(|_args: &[&str]| {
+            Err(anyhow::anyhow!("spawner should not run in wiring test"))
+        });
+
+        let deps = macbox::build_colima_handler_dependencies(
+            state,
+            data_dir.clone(),
+            data_dir.join("containers"),
+            data_dir.join("run/containers"),
+            image_gc,
+            executor,
+            spawner,
+        )
+        .expect("build Colima handler dependencies");
+        let image_ref = minibox_core::image::reference::ImageRef::parse("alpine:latest")
+            .expect("parse image reference");
+
+        assert_adapter::<minibox::adapters::ColimaRegistry>(
+            deps.image.registry_router.route(&image_ref).as_any(),
+            "colima",
+            "registry",
+        );
+        assert_adapter::<minibox::adapters::ColimaFilesystem>(
+            deps.lifecycle.filesystem.as_any(),
+            "colima",
+            "filesystem",
+        );
+        assert_adapter::<minibox::adapters::NoopNetwork>(
+            deps.lifecycle.network_provider.as_any(),
+            "colima",
+            "network",
+        );
+        assert_adapter::<minibox::adapters::ColimaLimiter>(
+            deps.lifecycle.resource_limiter.as_any(),
+            "colima",
+            "limiter",
+        );
+        assert_adapter::<minibox::adapters::ColimaRuntime>(
+            deps.lifecycle.runtime.as_any(),
+            "colima",
+            "runtime",
+        );
+        assert_adapter::<minibox::adapters::ColimaContainerCommitter>(
+            deps.build
+                .commit_adapter
+                .as_ref()
+                .expect("Colima committer")
+                .as_any(),
+            "colima",
+            "commit",
+        );
+        assert_adapter::<minibox::adapters::MiniboxImageBuilder>(
+            deps.build
+                .image_builder
+                .as_ref()
+                .expect("Colima builder")
+                .as_any(),
+            "colima",
+            "build",
+        );
+        assert_adapter::<minibox::adapters::ColimaImagePusher>(
+            deps.build
+                .image_pusher
+                .as_ref()
+                .expect("Colima pusher")
+                .as_any(),
+            "colima",
+            "push",
+        );
     }
 }
 

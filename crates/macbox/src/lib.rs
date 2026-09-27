@@ -68,9 +68,10 @@ pub fn build_colima_handler_dependencies(
     let registry = Arc::new(ColimaRegistry::new().with_executor(executor.clone()));
     let registry_port: DynImageRegistry = registry.clone();
     let image_loader: DynImageLoader = registry;
-    let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
+    let commit_adapter = minibox::adapters::colima_container_committer(
         Arc::clone(&state.image_store),
-        Arc::clone(&state) as minibox::container_state::StateHandle,
+        data_dir.join("exports"),
+        executor.clone(),
     );
     let registry_router = Arc::new(HostnameRegistryRouter::new(
         registry_port,
