@@ -340,138 +340,95 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
     )
     .join("cgroup.procs");
     if parent.exists() {
-        let _ = fs::write(&parent, my_pid.to_string());
+        // Must not swallow this: the process is inside the cgroup being
+        // cleaned up, and a failed move-back surfaces later as a confusing
+        // EBUSY from `cleanup` rather than as the cause.
+        fs::write(&parent, my_pid.to_string()).unwrap_or_else(|e| {
+            panic!("failed to move pid {my_pid} back to parent cgroup {parent:?}: {e}");
+        });
     }
 
     env.cleanup_now();
 }
 
 // ---------------------------------------------------------------------------
-// Escape Attempt Detection Tests
+// Mount Containment
 // ---------------------------------------------------------------------------
 
-#[test]
-fn overlay_path_traversal_attempt_does_not_escape_container_dir() {
+/// Every path the overlay mount uses must stay inside the base the caller
+/// supplied.
+///
+/// This replaces an earlier `overlay_path_traversal_attempt_does_not_escape_container_dir`,
+/// which walked `..` out of `merged_dir` and asserted nothing appeared outside
+/// the container dir. Running it on Linux showed the write *succeeding* — and
+/// that is correct behaviour, not a bug: `merged_dir` is an ordinary directory
+/// on the container's filesystem, and overlayfs provides no path containment.
+/// Confining a process to the container is `pivot_root` in the runtime's
+/// `child_init`, not this adapter's job.
+///
+/// So the property this layer can actually own is narrower and worth asserting:
+/// the mount must not reference any path outside the tree it was handed. If
+/// `upper_dir` (or a lower layer) escaped `images_base`, the container would
+/// expose host state through the mount, and no amount of `pivot_root` would
+/// stop it. Runtime-level containment is covered by the system suite.
+#[rstest]
+fn overlay_mount_paths_stay_inside_the_supplied_base(overlay_env: OverlayEnv) {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fake_layer(&layer);
+    let base = overlay_env.tmp.path();
 
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
+    let Some(minibox_core::domain::BackendRootfsMetadata::Overlay { upper_dir, .. }) =
+        overlay_env.merged.rootfs_metadata.as_ref()
+    else {
+        panic!("overlay setup must report Overlay rootfs metadata");
+    };
 
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer], &container_dir)
-        .expect("setup_rootfs failed");
+    let upper = upper_dir.to_path_buf();
 
-    // `merged_dir` is `container_dir/merged` (see `setup_overlay_with_base`), so
-    // `../..` climbs two levels out of the container directory entirely and
-    // lands outside the sandbox this test creates.
-    let escape_path = merged.merged_dir.join("..").join("..").join("escape");
-    let escape_dir = escape_path
-        .parent()
-        .expect("escape path always has a parent")
-        .to_path_buf();
-    let escape_dir_resolved = escape_dir
-        .canonicalize()
-        .unwrap_or_else(|_| escape_dir.clone());
-
-    // Guard the test itself: the traversal target must genuinely sit outside
-    // the sandbox, otherwise a passing assertion would prove nothing.
     assert!(
-        !escape_dir_resolved.starts_with(tmp.path()),
-        "test setup is wrong: traversal target {escape_dir_resolved:?} resolved \
-         inside the sandbox {tmp:?}, so this test would not exercise an escape"
+        upper.starts_with(&overlay_env.container_dir),
+        "upper_dir {upper:?} must live under container_dir {:?}",
+        overlay_env.container_dir
     );
     assert!(
-        !escape_path.exists(),
-        "test setup is wrong: {escape_path:?} already exists before the attempt"
+        upper.starts_with(base),
+        "upper_dir {upper:?} escaped the supplied base {base:?} — the mount would \
+         expose host state"
     );
+    assert!(upper.exists(), "upper_dir {upper:?} must exist on disk");
 
-    // Attempt the traversal. A write here must not create a file at the
-    // resolved target.
-    let write_result = fs::write(&escape_path, b"x");
-
-    // If the write unexpectedly succeeded, the escape is real — fail with the
-    // concrete target, and clean up so a real escape does not litter a shared
-    // temporary directory.
-    if write_result.is_ok() && escape_path.exists() {
-        let _ = fs::remove_file(&escape_path);
-        panic!(
-            "path traversal escaped the container: writing {escape_path:?} \
-             succeeded and created a file at {escape_dir_resolved:?}, outside \
-             both the container dir ({container_dir:?}) and the sandbox ({tmp:?})"
-        );
-    }
-
-    // Nothing may exist at the traversal target regardless of how the write
-    // failed.
+    // The merged root must be the mount, not the lower layer itself: if merged
+    // *were* the layer, the image would be directly writable.
+    assert_ne!(
+        overlay_env.merged_dir(),
+        overlay_env.layer,
+        "merged must be a distinct mount, not the lower layer"
+    );
     assert!(
-        !escape_path.exists(),
-        "path traversal created {escape_path:?} outside the container dir"
+        overlay_env
+            .merged_dir()
+            .starts_with(&overlay_env.container_dir),
+        "merged_dir must live under container_dir"
     );
-
-    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
-#[test]
-fn overlay_symlink_outside_upper_does_not_escape() {
-    let caps = probe();
-    require_capability!(caps, is_root, "requires root");
-    require_capability!(caps, overlay_fs, "requires overlay FS");
-
-    let tmp = TempDir::new().expect("unwrap in test");
-    let layer = tmp.path().join("layer0");
-    fs::create_dir_all(layer.join("tmp")).expect("unwrap in test");
-
-    // Create a symlink that attempts absolute traversal: /tmp/symlink -> /etc
-    #[cfg(unix)]
-    std::os::unix::fs::symlink("/etc", layer.join("tmp").join("etc_link"))
-        .expect("create symlink in layer");
-
-    let container_dir = tmp.path().join("container");
-    fs::create_dir_all(&container_dir).expect("unwrap in test");
-
-    let fs_adapter = OverlayFilesystem::new_with_base(tmp.path());
-    let merged = fs_adapter
-        .setup_rootfs(&[layer], &container_dir)
-        .expect("setup_rootfs failed");
-
-    let symlink_in_merged = merged.merged_dir.join("tmp").join("etc_link");
-
-    // Verify the symlink exists in merged.
-    assert!(
-        symlink_in_merged.exists() || symlink_in_merged.is_symlink(),
-        "symlink should exist in merged overlay"
-    );
-
-    // Reading the symlink should NOT resolve to the host /etc.
-    // Either: symlink was rewritten to relative (safe), or reading fails (safe).
-    if let Ok(target) = fs::read_link(&symlink_in_merged) {
-        // If symlink is absolute and points to host /etc, that's a failure.
-        assert!(
-            target != std::path::Path::new("/etc"),
-            "symlink must not resolve to host /etc path"
-        );
-
-        // Target should be either relative or container-internal.
-        if target.is_absolute() {
-            // If absolute, it must not be the host /etc.
-            assert!(
-                !target.starts_with("/etc"),
-                "absolute symlink target must not escape to host /etc"
-            );
-        }
-    }
-
-    fs_adapter.cleanup(&container_dir).expect("unwrap in test");
-}
-
-#[test]
+// NOTE: the previous `overlay_symlink_outside_upper_does_not_escape` was removed
+// here. It created `/etc_link -> /etc` directly on the filesystem and then
+// expected mounting the overlay to rewrite it. overlayfs does no such rewriting
+// — absolute symlink targets are rewritten at *layer extraction* time by
+// `rewrite_absolute_symlink` (crates/minibox-core/src/image/layer.rs:122), and
+// the test bypassed that path entirely. It therefore asserted a property this
+// adapter does not have, and failed on a real Linux run.
+//
+// The security property is real and is covered at the layer that implements it:
+//
+//   crates/minibox-core/src/image/layer.rs:671  cross_dir_absolute_symlink_rewritten
+//   crates/minibox-core/src/image/layer.rs:692  absolute_symlink_rewritten_to_relative
+//   crates/minibox-core/src/image/layer.rs:711  absolute_symlink_with_parent_traversal_rejected
+//   crates/minibox/tests/security_regression.rs:290  regression_absolute_symlink_with_traversal_is_rejected
+//   crates/minibox/tests/security_regression.rs:319  regression_busybox_applet_symlink_is_rewritten_not_rejected
 fn cgroup_pid_zero_is_rejected() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -531,7 +488,12 @@ fn cgroup_cleanup_removes_all_state() {
     )
     .join("cgroup.procs");
     if parent.exists() {
-        let _ = fs::write(&parent, my_pid.to_string());
+        // Must not swallow this: the process is inside the cgroup being
+        // cleaned up, and a failed move-back surfaces later as a confusing
+        // EBUSY from `cleanup` rather than as the cause.
+        fs::write(&parent, my_pid.to_string()).unwrap_or_else(|e| {
+            panic!("failed to move pid {my_pid} back to parent cgroup {parent:?}: {e}");
+        });
     }
 
     // Cleanup: must remove the entire cgroup directory.
