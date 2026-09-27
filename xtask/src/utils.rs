@@ -42,6 +42,32 @@ pub fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+/// Workspace-relative location of the canonical adapter registry source.
+///
+/// The registry moved from `crates/miniboxd/` to `crates/minibox-core/` so the
+/// daemon and `mbx doctor` share one table instead of two drifting copies.
+/// Every xtask module that parses the registry must resolve it through
+/// [`adapter_registry_path`] or [`adapter_registry_path_in`] — hard-coding the
+/// path is exactly how these callers started reporting zero adapters after the
+/// move.
+pub const ADAPTER_REGISTRY_RELPATH: &str = "crates/minibox-core/src/adapter_registry.rs";
+
+/// Absolute path to the canonical adapter registry source in this workspace.
+pub fn adapter_registry_path() -> PathBuf {
+    adapter_registry_path_in(&workspace_root())
+}
+
+/// Absolute path to the adapter registry source under an arbitrary workspace
+/// root.
+///
+/// The context-snapshot tests build a scratch repository and run the real
+/// collector against it, so a caller that receives a `root` must use this
+/// rather than [`adapter_registry_path`], which always points at the real
+/// workspace.
+pub fn adapter_registry_path_in(root: &Path) -> PathBuf {
+    root.join(ADAPTER_REGISTRY_RELPATH)
+}
+
 /// Returns the Cargo target directory, respecting `CARGO_TARGET_DIR` if set.
 ///
 /// Relative values are anchored at the workspace root. When the variable is
@@ -101,6 +127,33 @@ mod tests {
     use std::{ffi::OsString, fs, sync::Mutex};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    /// Regression guard: the registry moved from `crates/miniboxd/` to
+    /// `crates/minibox-core/` so the daemon and `mbx doctor` share one table.
+    /// Several xtask modules read this path to build context and docs-audit
+    /// facts, and two of them guarded the read with `if path.exists()` — so a
+    /// wrong path there did not fail loudly, it silently reported zero
+    /// adapters. Assert the file is actually there.
+    #[test]
+    fn adapter_registry_path_points_at_the_real_registry() {
+        let path = adapter_registry_path();
+        assert!(
+            path.is_file(),
+            "adapter registry not found at {} — update ADAPTER_REGISTRY_RELPATH \
+             if the registry moved again",
+            path.display()
+        );
+    }
+
+    /// The relpath must stay workspace-relative so it can be joined onto a
+    /// different root (the context snapshot tests build a scratch repo).
+    #[test]
+    fn adapter_registry_relpath_is_relative() {
+        assert!(
+            Path::new(ADAPTER_REGISTRY_RELPATH).is_relative(),
+            "ADAPTER_REGISTRY_RELPATH must be relative: {ADAPTER_REGISTRY_RELPATH}"
+        );
+    }
 
     struct EnvGuard {
         original: Option<OsString>,

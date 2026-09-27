@@ -60,7 +60,7 @@ When adding a new platform adapter (e.g., `winbox`, `vf` wired-up):
 
 ```text
 1. Implement the required ports under the owning runtime/platform adapter module.
-2. Add adapter metadata and parsing in `crates/miniboxd/src/adapter_registry.rs`.
+2. Add adapter metadata and parsing in `crates/minibox-core/src/adapter_registry.rs`.
 3. Add complete `HandlerDependencies` composition in `crates/miniboxd/src/main.rs`.
 4. Gate Linux-specific code with #[cfg(target_os = "linux")]
 5. Add mock/stub for tests: adapters/mocks.rs pattern

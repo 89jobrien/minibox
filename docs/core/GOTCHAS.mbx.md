@@ -5,7 +5,7 @@ sources:
   - crates/minibox-macros
   - crates/minibox-core/src/protocol.rs
   - crates/miniboxd/src/main.rs
-  - crates/miniboxd/src/adapter_registry.rs
+  - crates/minibox-core/src/adapter_registry.rs
   - crates/minibox/src/container/process.rs
   - crates/minibox/src/container/filesystem.rs
   - crates/minibox/src/adapters/limiter.rs
@@ -16,7 +16,7 @@ generated: 2026-09-16
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -98,7 +98,7 @@ For Rust coding conventions see `.claude/rules/rust-patterns.md`.
 
 ## Adapters (`MINIBOX_ADAPTER`)
 
-Selection logic is centralized in `crates/miniboxd/src/adapter_registry.rs`; read that
+Selection logic is centralized in `crates/minibox-core/src/adapter_registry.rs`; read that
 file's module doc for the authoritative flow. Summary, grounded in the current code:
 
 - **Valid values** (`adapter_registry::VALID_ADAPTERS`): `native`, `gke`, `colima`, `smolvm`,

@@ -113,8 +113,9 @@ fn run_context(
     validate_manifest(&manifest)?;
     let manifest_sha256 = hex::encode(Sha256::digest(manifest_source.as_bytes()));
 
-    let registry_source =
-        repository.read_utf8(&root.join("crates/miniboxd/src/adapter_registry.rs"))?;
+    // `root` is the workspace being inspected, which is a scratch repo in the
+    // snapshot tests — not necessarily this workspace. Hence the `_in` variant.
+    let registry_source = repository.read_utf8(&crate::utils::adapter_registry_path_in(&root))?;
     let registry = parse_adapter_registry(&registry_source)?;
     let mut workspace = collect_workspace(runner, repository, &root)?;
     attach_workspace_fact_evidence(&mut workspace);
@@ -566,7 +567,7 @@ fn build_evidence(
         (
             "source:adapter_registry",
             EvidenceKind::RustSource,
-            "crates/miniboxd/src/adapter_registry.rs",
+            crate::utils::ADAPTER_REGISTRY_RELPATH,
             EvidenceStatus::Collected,
             None,
         ),
@@ -777,7 +778,23 @@ mod tests {
 
         let temp = tempfile::tempdir().expect("temporary workspace should be created");
         let root = temp.path();
-        for directory in ["sample/src", "xtask", "crates/miniboxd/src"] {
+        // `crates/minibox-core/src` is where the adapter registry lives; the
+        // fixture must materialise it or the registry write below has no parent
+        // directory. Derive it from the shared relpath so this cannot drift
+        // from where the collector actually looks.
+        let registry_dir = crate::utils::adapter_registry_path_in(root)
+            .parent()
+            .expect("registry path should have a parent")
+            .strip_prefix(root)
+            .expect("registry should live under the fixture root")
+            .to_path_buf();
+        let mut directories = vec![
+            std::path::PathBuf::from("sample/src"),
+            std::path::PathBuf::from("xtask"),
+            std::path::PathBuf::from("crates/miniboxd/src"),
+        ];
+        directories.push(registry_dir);
+        for directory in directories {
             std::fs::create_dir_all(root.join(directory))
                 .expect("fixture directory should be created");
         }
@@ -861,7 +878,7 @@ required_in_ci = true
         )
         .expect("context manifest should be written");
         std::fs::write(
-            root.join("crates/miniboxd/src/adapter_registry.rs"),
+            root.join(crate::utils::ADAPTER_REGISTRY_RELPATH),
             r#"pub enum AdapterSuite { Native, SmolVm, Krun }
 impl AdapterSuite { pub const fn as_str(&self) -> &str { match self { Self::Native => "native", Self::SmolVm => "smolvm", Self::Krun => "krun" } } }
 pub const VALID_ADAPTERS: &[&str] = &["native", "smolvm", "krun"];

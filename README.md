@@ -56,6 +56,10 @@ toolchain and environment before building — see
 [`DEVELOPMENT.md`](DEVELOPMENT.md). For per-environment usage workflows (systemd, GKE,
 WSL2, and macOS adapters) see [`USAGE.md`](USAGE.md).
 
+Anyone installing minibox (not just contributors) should run `mbx doctor` first. It is
+built into the binary, needs no cargo or workspace, and reports whether this host can
+actually run containers. It exits non-zero if a check fails.
+
 ```bash
 # Build
 cargo build --release
@@ -73,8 +77,9 @@ sudo ./target/release/mbx logs <id>
 sudo ./target/release/mbx stop <id>
 sudo ./target/release/mbx rm <id>
 
-# Check compiled adapter info (no daemon needed)
+# Check whether this host can run containers (built in; no cargo needed)
 ./target/release/mbx doctor
+./target/release/mbx doctor --json    # same report as data
 ```
 
 ---
@@ -259,7 +264,9 @@ the harness is built.
 cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
 cargo xtask prepush          # release build + release nextest + conformance
 just --list                  # all available recipes
-mbx doctor                   # preflight: show compiled adapters and capabilities
+mbx doctor                   # runtime preflight: host, adapters, daemon, storage
+mbx doctor --tools           # ...plus the contributor toolchain probes
+cargo xtask doctor           # toolchain readiness for building and testing
 ```
 
 See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.

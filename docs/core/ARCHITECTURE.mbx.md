@@ -164,7 +164,7 @@ wired suites.
 
 All `build_*_handler_dependencies` functions live in
 `crates/miniboxd/src/main.rs`. Adapter selection logic is in
-`crates/miniboxd/src/adapter_registry.rs:adapter_from_env`.
+`crates/minibox-core/src/adapter_registry.rs:adapter_from_env`.
 
 | Suite                         | Wired in miniboxd                   | `MINIBOX_ADAPTER` value | Platform     |
 | ----------------------------- | ----------------------------------- | ----------------------- | ------------ |

@@ -4,7 +4,7 @@ sources:
   - xtask/src/main.rs
   - Justfile
   - scripts
-  - crates/miniboxd/src/adapter_registry.rs
+  - crates/minibox-core/src/adapter_registry.rs
 generated: 2026-09-16
 ---
 
@@ -114,7 +114,7 @@ Set `RUST_LOG=debug` for verbose tracing output.
 
 Adapter selection is handled entirely inside `miniboxd` — no wrapper script or
 external env setup is required. The daemon reads `MINIBOX_ADAPTER` at startup and
-applies its own fallback logic (see `crates/miniboxd/src/adapter_registry.rs`):
+applies its own fallback logic (see `crates/minibox-core/src/adapter_registry.rs`):
 
 - **Unset** (default): tries `smolvm`; falls back to `native` on Linux or
   `krun` on macOS if the `smolvm` binary is not on `PATH`.
@@ -212,24 +212,50 @@ just coverage                # HTML report at target/llvm-cov/html/
 
 ### Preflight / Doctor (canonical entry points)
 
+Two commands, two audiences. Neither shells out to the other.
+
 ```bash
-cargo xtask doctor           # CANONICAL: tool checks + env + Linux system caps
-mbx doctor                   # adapter diagnostics + delegates to cargo xtask doctor
+mbx doctor                   # RUNTIME: can this host run containers?
+mbx doctor --tools           # ...plus the contributor toolchain probes
+cargo xtask doctor           # TOOLCHAIN: can I build and test this repo?
 ```
 
-`cargo xtask doctor` is the authoritative preflight command. It checks:
+`mbx doctor` is fully built into the binary — no `cargo`, no workspace, no
+subprocess. It works from a release tarball, which is the point: a user who
+installed minibox has no dev toolchain, and a diagnostic that needs one is
+useless to them. It checks:
+
+- Host identity and virtualization support (Hypervisor.framework on macOS,
+  `/dev/kvm` on Linux)
+- Daemon socket presence, and whether it answers a real protocol round-trip
+- Which adapters are compiled in, whether their external binaries are on
+  `PATH`, and which adapter the environment would actually select — including
+  a hard failure for an invalid `MINIBOX_ADAPTER` override
+- CNI plugin availability for `--network bridge`
+- Data and run directory resolution, and whether they are writable
+
+It exits non-zero if any check fails, so it works in CI and shell conditionals.
+`--json` emits the same report as data.
+
+`cargo xtask doctor` covers contributor readiness and is the authoritative
+command for it. It checks:
 
 - Required tools on PATH: `cargo`, `just`, `rustup`, `cargo-nextest`
 - Advisory tools: `gh`, `op` (warn, not fail)
 - `CARGO_TARGET_DIR` env var (advisory)
 - Linux-only: cgroups v2 unified hierarchy, overlay FS, kernel >= 5.0
 
-`mbx doctor` runs `cargo xtask doctor` first, then shows compiled adapter-suite
-diagnostics. Use daemon startup logs to confirm the adapter actually selected for
-the current platform and environment.
+`mbx doctor --tools` surfaces the same toolchain probes alongside the runtime
+report, for contributors who want one command.
+
+The adapter table lives in exactly one place,
+`crates/minibox-core/src/adapter_registry.rs`, and `miniboxd` re-exports it. The
+daemon and `mbx doctor` therefore cannot disagree about which adapters exist or
+which one gets selected.
 
 `scripts/preflight.nu` is a lightweight SessionStart hook — it runs at shell startup
-to surface obvious missing deps. It is not a substitute for `cargo xtask doctor`.
+to surface obvious missing deps. It is not a substitute for `mbx doctor` or
+`cargo xtask doctor`.
 
 ### Full pipeline
 

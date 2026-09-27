@@ -37,7 +37,7 @@ generated: 2026-09-16
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 ---
 
@@ -203,7 +203,7 @@ Key implementation sites backing the "Yes" entries above:
   `MiniboxImageBuilder`.
 - **`smolvm` adapter** is the **default on Unix** when
   `MINIBOX_ADAPTER` is unset and the `smolvm` binary is present on
-  PATH (see `crates/miniboxd/src/adapter_registry.rs`). Falls back
+  PATH (see `crates/minibox-core/src/adapter_registry.rs`). Falls back
   to `native` on Linux or `krun` on macOS when the binary is
   absent. Not available on Windows (`cfg!(unix)`). Lightweight Linux
   VMs with subsecond boot

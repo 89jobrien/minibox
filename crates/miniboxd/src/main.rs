@@ -331,11 +331,11 @@ struct DaemonPaths {
 
 #[cfg(unix)]
 fn resolve_paths() -> DaemonPaths {
-    let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map_or_else(|_| resolve_default_data_dir(), PathBuf::from);
-
-    let run_dir =
-        std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| resolve_default_run_dir(), PathBuf::from);
+    // Path resolution lives in `minibox_core::doctor` so `mbx doctor` reports
+    // the directories the daemon will actually use, not a re-derivation that
+    // can drift. Env overrides are handled inside those functions.
+    let data_dir = minibox_core::doctor::resolve_data_dir();
+    let run_dir = minibox_core::doctor::resolve_run_dir();
 
     let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
         .map_or_else(|_| run_dir.join("miniboxd.sock"), PathBuf::from);
@@ -351,53 +351,6 @@ fn resolve_paths() -> DaemonPaths {
         images_dir,
         containers_dir,
         run_containers_dir,
-    }
-}
-
-#[cfg(unix)]
-fn resolve_default_data_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        macbox::paths::data_dir()
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let uid = nix::unistd::getuid().as_raw();
-        resolve_data_dir_for_uid(uid)
-    }
-}
-
-#[cfg(unix)]
-fn resolve_default_run_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        macbox::paths::run_dir()
-    }
-    #[cfg(target_os = "linux")]
-    {
-        PathBuf::from("/run/minibox")
-    }
-}
-
-/// Resolve the image/container data directory based on effective UID (Linux).
-///
-/// Resolution order:
-/// 1. `MINIBOX_DATA_DIR` env var (explicit override) — handled by caller
-/// 2. `~/.minibox/cache/` if uid is non-root
-/// 3. `/var/lib/minibox/` if uid is root
-#[cfg(unix)]
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
-    if let Ok(explicit) = std::env::var("MINIBOX_DATA_DIR") {
-        return PathBuf::from(explicit);
-    }
-    if uid == 0 {
-        PathBuf::from("/var/lib/minibox")
-    } else {
-        std::env::var("HOME").map_or_else(
-            |_| PathBuf::from("/var/lib/minibox"),
-            |h| PathBuf::from(h).join(".minibox/cache"),
-        )
     }
 }
 
@@ -1328,7 +1281,7 @@ mod tests {
             std::env::remove_var("MINIBOX_DATA_DIR");
             std::env::set_var("HOME", "/home/testuser");
         }
-        let dir = resolve_data_dir_for_uid(1000);
+        let dir = minibox_core::doctor::resolve_data_dir_for_uid(1000);
         unsafe {
             std::env::remove_var("HOME");
         }
@@ -1342,7 +1295,7 @@ mod tests {
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
         }
-        let dir = resolve_data_dir_for_uid(0);
+        let dir = minibox_core::doctor::resolve_data_dir_for_uid(0);
         assert_eq!(dir, PathBuf::from("/var/lib/minibox"));
     }
 
@@ -1353,8 +1306,8 @@ mod tests {
         unsafe {
             std::env::set_var("MINIBOX_DATA_DIR", "/custom/path");
         }
-        let dir_non_root = resolve_data_dir_for_uid(1000);
-        let dir_root = resolve_data_dir_for_uid(0);
+        let dir_non_root = minibox_core::doctor::resolve_data_dir_for_uid(1000);
+        let dir_root = minibox_core::doctor::resolve_data_dir_for_uid(0);
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
         }

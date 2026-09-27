@@ -24,8 +24,8 @@ This document provides practical usage workflows for `minibox` across local Linu
 # Build
 cargo build --release
 
-# Optional host sanity check
-cargo xtask doctor
+# Host sanity check — built into mbx, no cargo required
+./target/release/mbx doctor
 
 # Start daemon (requires root for native)
 sudo ./target/release/miniboxd

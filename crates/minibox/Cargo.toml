@@ -47,6 +47,7 @@ opentelemetry_sdk    = { workspace = true, optional = true }
 opentelemetry-otlp   = { workspace = true, optional = true }
 tracing-opentelemetry = { workspace = true, optional = true }
 cap-std = "3"
+cap-fs-ext = "3"
 
 [features]
 ## Test infrastructure: mocks, fixtures, conformance helpers.

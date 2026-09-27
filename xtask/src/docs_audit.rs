@@ -97,7 +97,7 @@ fn code_facts(root: &Path) -> Result<BTreeMap<String, String>> {
     }
 
     // adapter_suites: parse AdapterSuite enum variants
-    let registry_path = crates_dir.join("miniboxd/src/adapter_registry.rs");
+    let registry_path = crate::utils::adapter_registry_path();
     if registry_path.exists() {
         let content =
             std::fs::read_to_string(&registry_path).context("read adapter_registry.rs")?;
@@ -457,7 +457,7 @@ fn check_coverage(root: &Path) -> Result<Vec<CoverageGap>> {
     let fm_path = root.join("docs/core/FEATURE_MATRIX.mbx.md");
     let fm_content = std::fs::read_to_string(&fm_path).unwrap_or_default();
 
-    let registry_path = crates_dir.join("miniboxd/src/adapter_registry.rs");
+    let registry_path = crate::utils::adapter_registry_path();
     if registry_path.exists() {
         let content = std::fs::read_to_string(&registry_path)?;
         let suites = parse_enum_variants(&content, "AdapterSuite");

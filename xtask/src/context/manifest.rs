@@ -784,9 +784,8 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .expect("xtask should have a workspace root");
-        let live_source =
-            std::fs::read_to_string(root.join("crates/miniboxd/src/adapter_registry.rs"))
-                .expect("live adapter registry should be readable");
+        let live_source = std::fs::read_to_string(crate::utils::adapter_registry_path())
+            .expect("live adapter registry should be readable");
         let live_registry =
             parse_adapter_registry(&live_source).expect("live adapter registry should parse");
         let live_manifest = load_manifest(root).expect("live manifest should load");

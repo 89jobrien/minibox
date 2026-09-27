@@ -411,11 +411,27 @@ enum Commands {
         container_id: String,
     },
 
-    /// Show adapter suite diagnostics (no daemon connection required).
+    /// Check that this host can run containers, and report what it found.
     ///
-    /// Prints which adapter suites are compiled into this build, which would
-    /// be selected given the current environment, and basic platform info.
-    Doctor,
+    /// Runs entirely inside this binary — no daemon connection, no build
+    /// tools, no workspace. Reports host identity, virtualization support,
+    /// which adapter would be selected and whether its binaries are present,
+    /// CNI plugin availability, and daemon reachability.
+    ///
+    /// Exits non-zero if any check fails, so it works in CI and shell
+    /// conditionals.
+    Doctor {
+        /// Also probe the development toolchain (cargo, just, rustup, gh, op).
+        ///
+        /// Off by default: a user running a release binary has none of these,
+        /// and their absence says nothing about whether minibox works.
+        #[arg(long)]
+        tools: bool,
+
+        /// Emit the report as JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Open a read-only terminal dashboard: live container table + event log.
     #[cfg(feature = "tui")]
@@ -709,7 +725,17 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             }
         },
 
-        Commands::Doctor => into_cli(commands::doctor::execute()),
+        Commands::Doctor { tools, json } => {
+            let format = if json {
+                commands::doctor::Format::Json
+            } else {
+                commands::doctor::Format::Text
+            };
+            match into_cli(commands::doctor::execute(tools, format).await)? {
+                0 => Ok(()),
+                code => std::process::exit(code),
+            }
+        }
 
         #[cfg(feature = "tui")]
         Commands::Tui => into_cli(commands::tui::execute().await),

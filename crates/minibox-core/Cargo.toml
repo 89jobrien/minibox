@@ -28,6 +28,9 @@ fuzzing = []
 # ~108 transitive dependencies for local-only container management builds.
 # See issue #447.
 registry = ["dep:reqwest"]
+# Marks the Apple Virtualization.framework adapter as available in
+# `adapter_registry::all_adapters()`. Forwarded by miniboxd's own `vz` feature.
+vz = []
 
 [dependencies]
 minibox-domain = { workspace = true }
@@ -54,6 +57,7 @@ flate2 = { workspace = true }
 tokio-util = { workspace = true }
 pin-project-lite = { workspace = true }
 slashcrux = { workspace = true }
+dirs = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

@@ -9,6 +9,42 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `mbx doctor` is now a built-in runtime health check. It no longer shells out to
+  `cargo xtask doctor`, so it works from a release binary with no cargo, workspace, or
+  Rust toolchain present — which is the only environment most users have. It reports host
+  identity and virtualization support (Hypervisor.framework on macOS, `/dev/kvm` on
+  Linux), daemon socket reachability via a real protocol round-trip, which adapters are
+  compiled in and whether their external binaries are on `PATH`, which adapter the
+  environment would actually select, CNI plugin presence, and data/run directory
+  resolution and writability.
+- `mbx doctor --tools` adds the contributor toolchain probes (cargo, cargo-nextest, just,
+  rustup, gh, op) as an opt-in section.
+- `mbx doctor --json` emits the report as data. It is serialised from the same structure
+  the text renderer walks, so the two outputs cannot disagree about what was checked.
+- `mbx doctor` exits non-zero when any check fails, making it usable in CI and shell
+  conditionals.
+- `minibox_core::preflight::effective_uid` exposes the process UID that
+  `HostCapabilities::is_root` already depended on.
+
+### Changed
+
+- The adapter registry moved from `crates/miniboxd/src/adapter_registry.rs` to
+  `crates/minibox-core/src/adapter_registry.rs`; `miniboxd` re-exports it, so all existing
+  `miniboxd::adapter_registry::*` call sites are unchanged. The table was duplicated
+  between `miniboxd` and `mbx`, and the copies had already drifted — `mbx doctor` silently
+  omitted the `vz` adapter.
+- Data and run directory resolution moved to `minibox_core::doctor` (`resolve_data_dir`,
+  `resolve_data_dir_for_uid`, `resolve_run_dir`) and is now shared by `miniboxd` startup
+  and `mbx doctor`, so the doctor reports the paths the daemon will actually use.
+- xtask's several hard-coded copies of the adapter-registry path now resolve through
+  `xtask::utils::adapter_registry_path` / `adapter_registry_path_in`. Two of those callers
+  guarded the read with `if path.exists()`, so a stale path degraded silently to zero
+  reported adapters instead of failing.
+- Docs that described `mbx doctor` as delegating to `cargo xtask doctor` now describe the
+  split: `mbx doctor` for runtime health, `cargo xtask doctor` for toolchain readiness.
+
 ## [v0.32.0] - 2026-08-15
 
 ### Security
