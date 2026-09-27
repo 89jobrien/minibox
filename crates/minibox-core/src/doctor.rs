@@ -733,6 +733,7 @@ pub async fn run(options: Options) -> Report {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -889,6 +890,7 @@ mod tests {
     // ----- selection -----
 
     #[test]
+    #[serial]
     fn selection_check_passes_for_valid_override() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -900,6 +902,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn selection_check_fails_for_garbage_override() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -916,6 +919,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn selection_check_fails_for_unavailable_override() {
         if cfg!(target_os = "linux") {
             return; // all adapters available on Linux
@@ -932,6 +936,7 @@ mod tests {
     // ----- path resolution shared with the daemon -----
 
     #[test]
+    #[serial]
     fn data_dir_honours_explicit_override() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -943,6 +948,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn data_dir_ignores_empty_override() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -957,6 +963,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn data_dir_for_uid_uses_home_for_non_root() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -971,6 +978,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn data_dir_for_uid_uses_var_lib_for_root() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -982,6 +990,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn data_dir_for_uid_honours_env_override_for_both_uids() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.
@@ -995,6 +1004,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn run_dir_honours_explicit_override() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: serialized by ENV_LOCK.

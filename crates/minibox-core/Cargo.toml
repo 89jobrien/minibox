@@ -66,6 +66,9 @@ libc = { workspace = true }
 minibox-core = { path = ".", features = ["test-utils"] }
 wiremock = { workspace = true }
 proptest = "1"
+# adapter_registry tests mutate MINIBOX_ADAPTER, which is process-global and
+# therefore racy under the default parallel test runner.
+serial_test = { workspace = true }
 base64 = { workspace = true }
 insta = { workspace = true }
 tempfile = { workspace = true }

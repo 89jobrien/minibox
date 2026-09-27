@@ -352,6 +352,7 @@ pub fn warn_if_native_without_root() {
 )]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     // Serialize env-var-mutating tests to prevent parallel races.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -477,6 +478,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn adapter_from_env_defaults_to_smolvm_or_fallback() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -495,6 +497,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn adapter_from_env_explicit_smolvm_is_honoured() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -509,6 +512,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn adapter_from_env_prefers_smolvm_when_probe_succeeds() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -521,6 +525,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn adapter_from_env_falls_back_when_probe_fails() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -538,6 +543,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn adapter_from_env_explicit_krun_is_honoured() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -555,6 +561,7 @@ mod tests {
     /// probe fails, the requested adapter must be selected, not the fallback
     /// (issue #80 regression guard for the documented contract).
     #[test]
+    #[serial]
     fn explicit_adapter_does_not_fall_back_when_smolvm_probe_fails() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -578,6 +585,7 @@ mod tests {
     /// must be a hard error — never a silent fallback.
     #[test]
     #[cfg(target_os = "macos")]
+    #[serial]
     fn explicit_unavailable_adapter_errors_instead_of_falling_back() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK
@@ -597,6 +605,7 @@ mod tests {
     /// requested, selection must land on krun, not error or pick native.
     #[test]
     #[cfg(target_os = "macos")]
+    #[serial]
     fn macos_fallback_is_krun() {
         assert_eq!(FALLBACK_ADAPTER_SUITE, "krun");
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
@@ -871,6 +880,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn adapter_from_env_rejects_unknown() {
         let _guard = ENV_LOCK.lock().expect("env lock poisoned");
         // SAFETY: env var mutation serialized by ENV_LOCK

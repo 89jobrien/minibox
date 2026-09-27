@@ -1650,6 +1650,10 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
 /// Used to re-stage files after `cargo fmt` without sweeping in unrelated
 /// working-tree changes. See [`restage_staged_rust`] for why the glob form of
 /// this is wrong.
+/// Staged `.rs` / `.toml` paths (excluding `Cargo.lock`). Matching the
+/// extension case-sensitively is intentional: the re-stage pathspec must not
+/// pick up `.RS` or other case variants a filesystem may report.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn staged_rust_paths(sh: &Shell) -> Result<Vec<String>> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
@@ -1674,6 +1678,7 @@ fn staged_rust_paths(sh: &Shell) -> Result<Vec<String>> {
 ///
 /// Files that rustfmt reformatted but that were *not* staged are deliberately
 /// left dirty and reported, rather than being added silently.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn restage_staged_rust(sh: &Shell, staged_before: &[String]) -> Result<Vec<String>> {
     if staged_before.is_empty() {
         return Ok(Vec::new());
