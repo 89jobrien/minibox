@@ -1,14 +1,11 @@
 //! Linux cgroup v2 integration-test setup and execution.
 
 #[cfg(target_os = "linux")]
+use crate::utils::{cargo_target_dir_for, find_test_binary};
+#[cfg(target_os = "linux")]
 use anyhow::{Context, Result, bail};
 #[cfg(target_os = "linux")]
-use std::{
-    fs,
-    os::unix::process::CommandExt,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{fs, os::unix::process::CommandExt, path::Path, process::Command};
 
 /// Run cgroup v2 integration tests under a properly delegated cgroup hierarchy.
 ///
@@ -68,7 +65,9 @@ pub fn run_cgroup_tests(root: &Path) -> Result<()> {
     }
 
     // Find the test binary (newest cgroup_tests-* in deps/).
-    let test_bin = find_test_binary(root)?;
+    let target_dir = cargo_target_dir_for(root)?;
+    let test_bin = find_test_binary(&target_dir.join("release/deps"), "cgroup_tests")
+        .context("could not find cgroup_tests release binary")?;
     eprintln!("Test binary: {}", test_bin.display());
 
     // 6. Spawn a child that joins runner-leaf via pre_exec, then execs the test binary.
@@ -146,44 +145,6 @@ fn cleanup_cgroup(dir: &Path) {
         }
     }
     let _ = fs::remove_dir(dir);
-}
-
-#[cfg(target_os = "linux")]
-fn find_test_binary(root: &Path) -> Result<PathBuf> {
-    // Build runs with --release; check release/deps first then fall back to debug/deps.
-    let deps_release = root.join("target/release/deps");
-    if deps_release.exists() {
-        if let Ok(bin) = find_in_deps(&deps_release) {
-            return Ok(bin);
-        }
-    }
-    let deps_debug = root.join("target/debug/deps");
-    find_in_deps(&deps_debug)
-}
-
-#[cfg(target_os = "linux")]
-fn find_in_deps(deps: &Path) -> Result<PathBuf> {
-    let mut candidates: Vec<_> = fs::read_dir(deps)
-        .with_context(|| format!("read_dir {}", deps.display()))?
-        .flatten()
-        .filter(|e| {
-            let name = e.file_name();
-            let s = name.to_string_lossy();
-            s.starts_with("cgroup_tests-")
-                && !s.ends_with(".d")
-                && e.file_type().ok().is_some_and(|t| t.is_file())
-        })
-        .collect();
-    candidates.sort_by_key(|e| {
-        e.metadata()
-            .and_then(|m| m.modified())
-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
-    });
-    candidates
-        .into_iter()
-        .last()
-        .map(|e| e.path())
-        .ok_or_else(|| anyhow::anyhow!("could not find cgroup_tests binary in {}", deps.display()))
 }
 
 /// Stub for non-Linux platforms.

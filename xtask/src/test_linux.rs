@@ -244,35 +244,18 @@ pub fn run_pipeline(
         "sandbox_tests",
     ];
     for suite in test_suites {
-        if let Ok(entries) = std::fs::read_dir(&deps_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name();
-                let name_str = name.to_string_lossy();
-                if !name_str.starts_with(suite) || name_str.contains('.') {
-                    continue;
-                }
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if entry
-                        .metadata()
-                        .is_ok_and(|m| m.permissions().mode() & 0o111 == 0)
-                    {
-                        continue;
-                    }
-                }
-                let dest = tests_dir.join(&*name_str);
-                std::fs::copy(entry.path(), &dest)
-                    .with_context(|| format!("copying {name_str}"))?;
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))
-                        .context("chmod test binary")?;
-                }
-                println!("  staged  {name_str}");
-                break;
+        if let Some(binary) = crate::utils::find_test_binary(&deps_dir, suite) {
+            let name = binary.file_name().context("test binary filename")?;
+            let dest = tests_dir.join(name);
+            std::fs::copy(&binary, &dest)
+                .with_context(|| format!("copying {}", binary.display()))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755))
+                    .context("chmod test binary")?;
             }
+            println!("  staged  {}", name.to_string_lossy());
         }
     }
 

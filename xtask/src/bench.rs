@@ -132,7 +132,7 @@ pub fn bench(sh: &Shell, root: &Path, opts: &BenchOpts) -> Result<()> {
     let history_dir = results_dir.join("history");
     fs::create_dir_all(&history_dir).context("create bench/results/history")?;
 
-    let criterion_dir = root.join("target/criterion");
+    let criterion_dir = crate::utils::cargo_target_dir_for(root)?.join("criterion");
 
     if !opts.skip_bench {
         eprintln!("$ cargo bench -p minibox-bench");

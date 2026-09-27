@@ -5,12 +5,7 @@
 //! Each hop:
 //!   1. Optionally verifies CI is green on the source branch via `gh run list`.
 //!   2. Checks out the target branch.
-//!   3. Runs `git merge --no-ff <source>`.
-//!
-// TODO(#473): consider squash-merging chain branches during integration to eliminate
-// duplicate commit messages. Currently 13/100 recent commits are duplicates
-// because chain branches are cherry-picked then merged without squash. Each
-// chain tag appears exactly 2x in history. See patterns_2026_06_16.md.
+//!   3. Squash-merges the source into one promotion commit.
 //!   4. Reports result; stops on failure.
 
 use anyhow::{Context, Result, bail};
@@ -73,6 +68,8 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
         return Ok(());
     }
 
+    ensure_clean_worktree(&sh)?;
+
     // Remember which branch we started on so we can give a clean error message.
     let original_branch = current_branch(&sh)?;
 
@@ -95,13 +92,12 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
             }
         }
 
-        // Check out target and merge source.
+        // Check out target and squash source into one promotion commit.
         checkout(&sh, tgt).with_context(|| format!("failed to check out {tgt}"))?;
 
-        let result = cmd!(sh, "git merge --no-ff {src}").run();
-        if let Err(e) = result {
-            // Restore original branch before bailing.
-            let _ = checkout(&sh, &original_branch);
+        if let Err(e) = squash_merge(&sh, src, tgt) {
+            reset_failed_squash(&sh).context("failed to clean up squash merge")?;
+            checkout(&sh, &original_branch).context("failed to restore original branch")?;
             bail!("merge {src} → {tgt} failed: {e}");
         }
 
@@ -117,6 +113,45 @@ pub fn run(root: &Path, from: Option<Tier>, to: Option<Tier>, dry_run: bool) -> 
         to_tier.branch()
     );
     Ok(())
+}
+
+const fn merge_args(source: &str) -> [&str; 3] {
+    ["merge", "--squash", source]
+}
+
+fn squash_merge(sh: &Shell, source: &str, target: &str) -> Result<()> {
+    let args = merge_args(source);
+    cmd!(sh, "git {args...}")
+        .run()
+        .with_context(|| format!("git merge --squash {source}"))?;
+
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .read()
+        .context("git diff --cached --name-only")?;
+    if staged.trim().is_empty() {
+        return Ok(());
+    }
+
+    let message = format!("promote: {source} -> {target}");
+    cmd!(sh, "git commit -m {message}")
+        .run()
+        .with_context(|| format!("git commit promotion {source} -> {target}"))
+}
+
+fn ensure_clean_worktree(sh: &Shell) -> Result<()> {
+    let status = cmd!(sh, "git status --porcelain")
+        .read()
+        .context("git status --porcelain")?;
+    if !status.trim().is_empty() {
+        bail!("worktree must be clean before promotion");
+    }
+    Ok(())
+}
+
+fn reset_failed_squash(sh: &Shell) -> Result<()> {
+    cmd!(sh, "git reset --merge HEAD")
+        .run()
+        .context("git reset --merge HEAD")
 }
 
 /// Return the current git branch name.
@@ -164,6 +199,26 @@ fn check_ci_green(sh: &Shell, branch: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
+
+    fn git(root: &Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .expect("git command must start");
+        assert!(
+            output.status.success(),
+            "git {args:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("git output must be UTF-8")
+    }
+
+    #[test]
+    fn promotion_merge_args_use_squash_mode() {
+        assert_eq!(merge_args("develop"), ["merge", "--squash", "develop"]);
+    }
 
     #[test]
     fn tier_from_str_develop() {
@@ -212,6 +267,98 @@ mod tests {
             .map(|i| (PIPELINE[i], PIPELINE[i + 1]))
             .collect();
         assert_eq!(hops, vec![("staging", "release"), ("release", "main"),]);
+    }
+
+    #[test]
+    fn promotion_squashes_source_history_into_one_commit() {
+        let repo = tempfile::tempdir().expect("temporary repository");
+        let root = repo.path();
+        git(root, &["init", "--initial-branch=develop"]);
+        git(root, &["config", "user.name", "xtask test"]);
+        git(root, &["config", "user.email", "xtask@example.invalid"]);
+        git(root, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(root.join("base.txt"), "base\n").expect("write base fixture");
+        git(root, &["add", "base.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        git(root, &["branch", "staging"]);
+        std::fs::write(root.join("feature.txt"), "feature\n").expect("write feature fixture");
+        git(root, &["add", "feature.txt"]);
+        git(root, &["commit", "-m", "feature commit"]);
+
+        run(
+            root,
+            Tier::from_str("develop"),
+            Tier::from_str("staging"),
+            false,
+        )
+        .expect("promotion must succeed");
+
+        let subjects = git(root, &["log", "staging", "--format=%s"]);
+        assert_eq!(subjects.lines().count(), 2);
+        assert_eq!(subjects.lines().next(), Some("promote: develop -> staging"));
+        assert!(!subjects.contains("feature commit"));
+    }
+
+    #[test]
+    fn promotion_refuses_to_commit_preexisting_changes() {
+        let repo = tempfile::tempdir().expect("temporary repository");
+        let root = repo.path();
+        git(root, &["init", "--initial-branch=develop"]);
+        git(root, &["config", "user.name", "xtask test"]);
+        git(root, &["config", "user.email", "xtask@example.invalid"]);
+        git(root, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(root.join("base.txt"), "base\n").expect("write base fixture");
+        git(root, &["add", "base.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        git(root, &["branch", "staging"]);
+        std::fs::write(root.join("feature.txt"), "feature\n").expect("write feature fixture");
+        git(root, &["add", "feature.txt"]);
+        git(root, &["commit", "-m", "feature commit"]);
+        std::fs::write(root.join("local.txt"), "local\n").expect("write local fixture");
+        git(root, &["add", "local.txt"]);
+
+        let error = run(
+            root,
+            Tier::from_str("develop"),
+            Tier::from_str("staging"),
+            false,
+        )
+        .expect_err("dirty worktree must block promotion");
+
+        assert!(error.to_string().contains("worktree must be clean"));
+        assert_eq!(git(root, &["branch", "--show-current"]).trim(), "develop");
+        assert_eq!(git(root, &["log", "staging", "--format=%s"]).trim(), "base");
+    }
+
+    #[test]
+    fn failed_squash_restores_original_branch_and_clean_tree() {
+        let repo = tempfile::tempdir().expect("temporary repository");
+        let root = repo.path();
+        git(root, &["init", "--initial-branch=develop"]);
+        git(root, &["config", "user.name", "xtask test"]);
+        git(root, &["config", "user.email", "xtask@example.invalid"]);
+        git(root, &["config", "commit.gpgsign", "false"]);
+        std::fs::write(root.join("shared.txt"), "base\n").expect("write base fixture");
+        git(root, &["add", "shared.txt"]);
+        git(root, &["commit", "-m", "base"]);
+        git(root, &["branch", "staging"]);
+        std::fs::write(root.join("shared.txt"), "develop\n").expect("write develop fixture");
+        git(root, &["commit", "-am", "develop change"]);
+        git(root, &["checkout", "staging"]);
+        std::fs::write(root.join("shared.txt"), "staging\n").expect("write staging fixture");
+        git(root, &["commit", "-am", "staging change"]);
+        git(root, &["checkout", "develop"]);
+
+        run(
+            root,
+            Tier::from_str("develop"),
+            Tier::from_str("staging"),
+            false,
+        )
+        .expect_err("conflicting squash must fail");
+
+        assert_eq!(git(root, &["branch", "--show-current"]).trim(), "develop");
+        assert!(git(root, &["status", "--porcelain"]).trim().is_empty());
     }
 
     #[test]

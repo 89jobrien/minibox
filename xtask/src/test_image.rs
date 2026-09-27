@@ -35,11 +35,7 @@ pub fn default_test_image_dir() -> PathBuf {
 #[allow(dead_code)]
 pub fn test_linux(sh: &Shell) -> Result<()> {
     // Find the scripts dir relative to workspace root
-    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .context("xtask parent")?
-        .parent()
-        .context("workspace root")?;
+    let workspace_root = crate::utils::workspace_root()?;
     let build_script = workspace_root.join("scripts").join("build-test-image.nu");
 
     // 1. Build image inside Colima via Nu script
@@ -68,7 +64,7 @@ pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
     fs::create_dir_all(&out_dir)
         .with_context(|| format!("creating output dir {}", out_dir.display()))?;
 
-    if !force && is_up_to_date(&tar_path)? {
+    if !force && is_up_to_date(&tar_path, workspace_root)? {
         println!(
             "test image up-to-date ({}); use --force to rebuild",
             tar_path.display()
@@ -80,7 +76,7 @@ pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
     let staging = staging_tmp.path().to_path_buf();
 
     // 1. Cross-compile binaries
-    let binaries = cross_compile_binaries(target, force)?;
+    let binaries = cross_compile_binaries(workspace_root, target, force)?;
 
     // 2. Fetch Alpine base layer
     println!("[2/4] fetching Alpine {ALPINE_TAG} {ALPINE_ARCH} layer …");
@@ -113,7 +109,7 @@ pub fn build_test_image(workspace_root: &Path, force: bool) -> Result<()> {
 
 /// Returns true if the tarball is newer than all .rs sources in the workspace.
 // qual:allow(iosp) reason: "cache check mixes fs reads with control flow"
-fn is_up_to_date(tar_path: &Path) -> Result<bool> {
+fn is_up_to_date(tar_path: &Path, workspace_root: &Path) -> Result<bool> {
     if !tar_path.exists() {
         return Ok(false);
     }
@@ -124,11 +120,6 @@ fn is_up_to_date(tar_path: &Path) -> Result<bool> {
         .context("mtime")?;
 
     // Walk workspace crates dir looking for .rs files
-    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .context("xtask parent")?
-        .parent()
-        .context("workspace root")?;
     let crates_dir = workspace_root.join("crates");
 
     let newest_src = find_newest_rs_mtime(&crates_dir)?;
@@ -162,9 +153,12 @@ fn find_newest_rs_mtime(dir: &Path) -> Result<Option<std::time::SystemTime>> {
 // Cross-compilation
 // ---------------------------------------------------------------------------
 
-fn cross_compile_binaries(target: &str, force: bool) -> Result<Vec<(String, PathBuf)>> {
-    let target_base =
-        std::env::var("CARGO_TARGET_DIR").map_or_else(|_| PathBuf::from("target"), PathBuf::from);
+fn cross_compile_binaries(
+    workspace_root: &Path,
+    target: &str,
+    force: bool,
+) -> Result<Vec<(String, PathBuf)>> {
+    let target_base = crate::utils::cargo_target_dir_for(workspace_root)?;
 
     println!("[1/4] cross-compiling for {target} ...");
 
@@ -280,8 +274,8 @@ fn build_test_binary(
             && let Some(exe) = msg.get("executable").and_then(|e| e.as_str())
         {
             let p = PathBuf::from(exe);
-            if p.exists() {
-                return Ok(p);
+            if let Ok(binary) = crate::utils::require_binary(&p) {
+                return Ok(binary);
             }
         }
     }
@@ -289,18 +283,8 @@ fn build_test_binary(
     // Fallback: glob deps dir for a binary matching the test name prefix
     let deps_dir = target_base.join(target).join("debug").join("deps");
     let prefix = test_name.replace('-', "_");
-    if deps_dir.exists() {
-        for entry in
-            fs::read_dir(&deps_dir).with_context(|| format!("read_dir {}", deps_dir.display()))?
-        {
-            let entry = entry.context("dir entry")?;
-            let fname = entry.file_name();
-            let fname = fname.to_string_lossy();
-            // Binary name: <test_name>-<hash> with no extension
-            if fname.starts_with(&prefix) && !fname.contains('.') && entry.path().is_file() {
-                return Ok(entry.path());
-            }
-        }
+    if let Some(binary) = crate::utils::find_test_binary(&deps_dir, &prefix) {
+        return Ok(binary);
     }
 
     bail!(
@@ -787,7 +771,7 @@ mod tests {
     fn is_up_to_date_returns_false_for_missing_tar() {
         let tmp = tempdir().expect("tempdir");
         let tar = tmp.path().join("nonexistent.tar");
-        assert!(!is_up_to_date(&tar).unwrap());
+        assert!(!is_up_to_date(&tar, tmp.path()).unwrap());
     }
 
     #[test]

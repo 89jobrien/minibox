@@ -6,7 +6,10 @@ use std::{fs, path::Path};
 use xshell::{Shell, cmd};
 
 use crate::checkpoint::{self, FileCheckpointStore, GateId, GitTreeProbe};
-use crate::{borrow_fixtures, bump, docs_audit, docs_lint, utils::cargo_target_dir};
+use crate::{
+    borrow_fixtures, bump, docs_audit, docs_lint,
+    utils::{cargo_target_dir, find_test_binary},
+};
 
 /// Run a gate body with checkpoint skip/record logic.
 ///
@@ -601,20 +604,14 @@ pub fn test_integration(sh: &Shell) -> Result<()> {
     .run()
     .context("failed to build integration_tests binary")?;
 
-    let target = cargo_target_dir();
+    let target = cargo_target_dir()?;
     let bin_dir = target.join("release");
 
-    let cgroup_bin = find_test_binary(
-        &target.join("release/deps").to_string_lossy(),
-        "cgroup_tests",
-    )
-    .context("could not locate cgroup_tests binary")?;
+    let cgroup_bin = find_test_binary(&target.join("release/deps"), "cgroup_tests")
+        .context("could not locate cgroup_tests binary")?;
 
-    let integration_bin = find_test_binary(
-        &target.join("release/deps").to_string_lossy(),
-        "integration_tests",
-    )
-    .context("could not locate integration_tests binary")?;
+    let integration_bin = find_test_binary(&target.join("release/deps"), "integration_tests")
+        .context("could not locate integration_tests binary")?;
 
     cmd!(
         sh,
@@ -673,12 +670,9 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
     .run()
     .context("failed to build system test binary")?;
 
-    let target = cargo_target_dir();
-    let binary = find_test_binary(
-        &target.join("release/deps").to_string_lossy(),
-        "system_tests",
-    )
-    .context("could not locate system test binary in target/release/deps")?;
+    let target = cargo_target_dir()?;
+    let binary = find_test_binary(&target.join("release/deps"), "system_tests")
+        .context("could not locate system test binary in target/release/deps")?;
 
     let bin_dir = target.join("release");
     cmd!(
@@ -703,12 +697,9 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
     .run()
     .context("failed to build sandbox test binary")?;
 
-    let target = cargo_target_dir();
-    let binary = find_test_binary(
-        &target.join("release/deps").to_string_lossy(),
-        "sandbox_tests",
-    )
-    .context("could not locate sandbox test binary in target/release/deps")?;
+    let target = cargo_target_dir()?;
+    let binary = find_test_binary(&target.join("release/deps"), "sandbox_tests")
+        .context("could not locate sandbox test binary in target/release/deps")?;
 
     let bin_dir = target.join("release");
     cmd!(
@@ -730,7 +721,7 @@ pub fn test_sandbox(sh: &Shell) -> Result<()> {
 /// Pass `--lcov-only` to skip HTML (faster, for CI).
 /// Pass `--html-only` to skip lcov (default for local dev).
 pub fn coverage(sh: &Shell, open: bool, lcov_only: bool, html_only: bool) -> Result<()> {
-    let cov_dir = sh.current_dir().join("target/coverage");
+    let cov_dir = cargo_target_dir()?.join("coverage");
     std::fs::create_dir_all(&cov_dir).context("create target/coverage dir")?;
 
     if !lcov_only {
@@ -1963,21 +1954,4 @@ pub fn check_no_unwrap(sh: &Shell, strict: bool) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// Find the most recently modified test binary matching a name prefix (no `.d` extension)
-pub fn find_test_binary(deps_dir: &str, prefix: &str) -> Option<std::path::PathBuf> {
-    let dir = Path::new(deps_dir);
-    let mut candidates: Vec<_> = fs::read_dir(dir)
-        .ok()?
-        .filter_map(std::result::Result::ok)
-        .filter(|e| {
-            let name = e.file_name();
-            let name = name.to_string_lossy();
-            let is_file = e.file_type().is_ok_and(|t| t.is_file());
-            name.starts_with(prefix) && !name.ends_with(".d") && is_file
-        })
-        .collect();
-    candidates.sort_by_key(|e| e.metadata().ok()?.modified().ok());
-    candidates.last().map(std::fs::DirEntry::path)
 }

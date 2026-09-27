@@ -177,8 +177,7 @@ fn run_ephemeral(
     target: &str,
     ci_gate_smolfile: &str,
 ) -> Result<()> {
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map_or_else(|_| workspace_root.join("target"), PathBuf::from);
+    let target_dir = crate::utils::cargo_target_dir_for(workspace_root)?;
 
     // 1. Cross-compile
     if opts.skip_build {
@@ -550,35 +549,16 @@ fn build_test_script(
         println!("  (skipping cgroup_tests/system_tests/sandbox_tests — unprivileged backend)");
     }
 
-    let mut found = Vec::new();
-    if deps_dir.exists() {
-        for entry in std::fs::read_dir(deps_dir).context("reading deps dir")? {
-            let entry = entry.context("dir entry")?;
-            let name = entry.file_name();
-            let name_str = name.to_string_lossy();
-            // Test binaries: <suite_name>-<hash> with no extension
-            for suite in &suites {
-                let prefix = suite.replace('-', "_");
-                if name_str.starts_with(&prefix) && !name_str.contains('.') {
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        if entry
-                            .metadata()
-                            .is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
-                        {
-                            found.push((suite.to_string(), name_str.to_string()));
-                        }
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        found.push((suite.to_string(), name_str.to_string()));
-                    }
-                    break;
-                }
-            }
-        }
-    }
+    let found: Vec<_> = suites
+        .iter()
+        .filter_map(|suite| {
+            let prefix = suite.replace('-', "_");
+            crate::utils::find_test_binary(deps_dir, &prefix).and_then(|path| {
+                path.file_name()
+                    .map(|name| (suite.to_string(), name.to_string_lossy().into_owned()))
+            })
+        })
+        .collect();
 
     if found.is_empty() {
         bail!(
