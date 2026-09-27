@@ -12,7 +12,7 @@ A minimal, standalone repro isolating `VZLinuxBootLoader` from all of minibox's 
 configuration (no virtiofs, no vsock, no serial port — just boot loader + memory + cpu)
 reproduces the exact same failure the code once shipped against:
 
-```
+```text
 VM start FAILED: Internal Virtualization error. The virtual machine failed to start.
 (domain=VZErrorDomain code=1)
 ```
@@ -56,7 +56,9 @@ transition, no error, guest reachable in ~25s).
 ## Approved Approach
 
 Revert commit `00ee4427` (`drop(vz): remove VZ adapter and all associated code`, issue
-#305, 2026-05-07) to restore the prior working implementation verbatim, then re-validate
+
+## 305, 2026-05-07) to restore the prior working implementation verbatim, then re-validate
+
 its isolation test suite and GCD main-queue dispatch workarounds against the current OS
 build before wiring it back in as a selectable (non-default) adapter — rewriting from
 scratch is explicitly rejected: the removed code was functionally complete (10 isolation
@@ -65,7 +67,7 @@ until the Apple regression hit) and re-deriving it would re-introduce the same
 GCD/dispatch-queue bugs that were already solved and documented in commits `b53c7c68`,
 `db4caf04`, `97e99eed`, `d9491053`.
 
-## Crate Ownership
+### Crate Ownership
 
 - **Owner crate**: `macbox` — already owns all macOS-only adapter code (`krun`, `paths`,
   `preflight`); `vz` is restored as a sibling module, feature-gated behind `vz` (mirrors
@@ -73,17 +75,17 @@ GCD/dispatch-queue bugs that were already solved and documented in commits `b53c
 - **Affected crates**: `miniboxd` (composition root wiring, `AdapterSuite` enum,
   `adapter_registry.rs`), `xtask`/`Justfile` (restore `test-vz-isolation` recipe).
 
-## Public API
+### Public API
 
 Restored verbatim from `00ee4427^` — no new names invented, no signature changes.
 
-### Traits
+#### Traits
 
 No new traits. `Vz*` types implement the existing domain ports:
 `ContainerRuntime`, `ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`
 (`minibox_core::domain`).
 
-### Types
+#### Types
 
 ```rust
 // crates/macbox/src/vz/adapter.rs
@@ -99,7 +101,7 @@ pub struct VzVm { /* ... */ }
 pub struct VzProxy { /* wraps vsock stream */ }
 ```
 
-### Functions
+#### Functions
 
 ```rust
 // crates/macbox/src/vz/vsock.rs
@@ -135,7 +137,7 @@ pub enum AdapterSuite {
 }
 ```
 
-## Data Flow
+### Data Flow
 
 1. Source: `mbx` CLI request -> daemon Unix socket -> `HandlerDependencies` dispatch.
 2. Transform: handler builds a `DaemonRequest`, opens a vsock connection to the running
@@ -144,7 +146,7 @@ pub enum AdapterSuite {
    cgroups inside the VM) and streams `DaemonResponse` values back over vsock; the host
    adapter forwards the terminal response to the CLI.
 
-## Hexagonal Boundaries
+### Hexagonal Boundaries
 
 - **Port** (trait): `ContainerRuntime`, `ImageRegistry`, `FilesystemProvider`,
   `ResourceLimiter` in `minibox_core::domain` — unchanged, already exist.
@@ -152,7 +154,7 @@ pub enum AdapterSuite {
   `crates/macbox/src/vz/adapter.rs` — restored, forward to `VzVm` over vsock exactly as
   `KrunRuntime`/etc. forward to libkrun.
 
-## Out of Scope
+### Out of Scope
 
 - Making `vz` the default macOS adapter — stays opt-in via `MINIBOX_ADAPTER=vz` until it
   has a track record across more than one machine/OS build.
@@ -163,7 +165,7 @@ pub enum AdapterSuite {
 - New capabilities beyond what the removed implementation had (e.g. no attempt to add
   `exec`/`logs` support beyond whatever the original `Vz*` adapters already provided).
 
-## Risk
+### Risk
 
 - [ ] Breaking API changes: **no** — pure restoration, existing adapters/selection
       behavior for `native`/`gke`/`colima`/`smolvm`/`krun` untouched; `vz` is additive and
@@ -176,7 +178,7 @@ pub enum AdapterSuite {
       scheme (`vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation",
 "dep:objc2-virtualization"]`).
 
-## Validation Plan (pre-merge, not part of the API surface)
+### Validation Plan (pre-merge, not part of the API surface)
 
 1. [x] Restore `crates/macbox/src/vz/*` and `start_vz`/`vz_main` from `00ee4427^`,
        adapted to ~3.5 months of protocol/domain drift (`51bbce1d`, `5469ff25`, `50ba968e`).

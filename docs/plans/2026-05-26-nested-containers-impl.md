@@ -170,7 +170,7 @@ configurable max depth (default 4).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox nesting    -> all green
    cargo clippy -p minibox -- -D warnings  -> zero warnings
    ```
@@ -202,7 +202,7 @@ configurable max depth (default 4).
 
 2. Verify:
 
-   ```
+   ```text
    cargo check -p minibox               -> OK
    cargo clippy -p minibox -- -D warnings -> zero warnings
    ```
@@ -322,7 +322,7 @@ configurable max depth (default 4).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox cgroup    -> all green
    cargo clippy -p minibox -- -D warnings -> zero warnings
    ```
@@ -512,7 +512,7 @@ configurable max depth (default 4).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox filesystem -> all green
    cargo clippy -p minibox -- -D warnings  -> zero warnings
    ```
@@ -532,6 +532,7 @@ configurable max depth (default 4).
    263-278) with a call to the new function:
 
    Replace:
+
    ```rust
    // Mount devtmpfs inside new_root.
    // SECURITY: Mount with nosuid and noexec to prevent privilege escalation
@@ -552,6 +553,7 @@ configurable max depth (default 4).
    ```
 
    With:
+
    ```rust
    // Set up /dev with tmpfs + mknod (works at any nesting depth).
    setup_container_dev(new_root)
@@ -560,7 +562,7 @@ configurable max depth (default 4).
 
 2. Verify:
 
-   ```
+   ```text
    cargo check -p minibox               -> OK
    cargo clippy -p minibox -- -D warnings -> zero warnings
    ```
@@ -699,7 +701,7 @@ configurable max depth (default 4).
 
 4. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox nesting -> all green
    cargo clippy -p minibox -- -D warnings -> zero warnings
    ```
@@ -810,7 +812,7 @@ configurable max depth (default 4).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox filesystem -> all green
    cargo clippy -p minibox -- -D warnings  -> zero warnings
    ```
@@ -849,7 +851,7 @@ configurable max depth (default 4).
 
 2. Verify:
 
-   ```
+   ```text
    cargo check -p minibox               -> OK
    cargo clippy -p minibox -- -D warnings -> zero warnings
    ```
@@ -886,13 +888,14 @@ configurable max depth (default 4).
    ```
 
    In `probe()`:
+
    ```rust
    nested_overlay: crate::container::nesting::supports_nested_overlay(),
    ```
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox preflight -> all green
    cargo clippy -p minibox -- -D warnings -> zero warnings
    ```
@@ -994,7 +997,7 @@ configurable max depth (default 4).
 
 2. Verify:
 
-   ```
+   ```text
    cargo check -p miniboxd --tests       -> OK
    cargo clippy -p miniboxd -- -D warnings -> zero warnings
    ```

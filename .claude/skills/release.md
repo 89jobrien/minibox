@@ -71,6 +71,7 @@ Semantic versioning — MAJOR.MINOR.PATCH:
 - **PATCH**: Bug fixes, security patches, performance improvements
 
 Examples:
+
 - New `exec` command → MINOR bump, v0.4.0 → v0.5.0
 - Security fix in tar extraction → PATCH bump, v0.4.0 → v0.4.1
 - Protocol-breaking change → MAJOR bump, v0.4.0 → v1.0.0
@@ -90,18 +91,22 @@ Add a section to `CHANGELOG.md`:
 ## [0.5.0] - 2026-03-21
 
 ### Added
+
 - `exec` command: run commands in existing containers
 - `winbox` adapter suite for Windows HCS
 
 ### Fixed
+
 - Absolute symlink rewrite in layer.rs for busybox applet links
 - cgroup.procs PID 0 validation
 
 ### Security
+
 - Stricter path validation in overlay filesystem setup
 - SO_PEERCRED check rejects non-root UIDs before any deserialization
 
 ### Changed
+
 - Benchmark results saved to `bench/results/bench.jsonl` as append-only history
 ```
 

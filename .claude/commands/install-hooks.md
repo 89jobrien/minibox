@@ -14,6 +14,7 @@ Error if `.git/hooks/` does not exist.
 Write these three files (overwrite if present):
 
 **pre-commit** — runs fmt-check + clippy + release build:
+
 ```sh
 #!/bin/sh
 set -e
@@ -21,6 +22,7 @@ just pre-commit
 ```
 
 **pre-push** — runs nextest + coverage:
+
 ```sh
 #!/bin/sh
 set -e
@@ -28,6 +30,7 @@ just prepush
 ```
 
 **commit-msg** — warns if message does not match conventional commits pattern:
+
 ```sh
 #!/bin/sh
 MSG=$(cat "$1")

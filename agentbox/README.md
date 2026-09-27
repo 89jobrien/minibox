@@ -10,7 +10,7 @@ message generation — all backed by the Claude Agent SDK.
 
 Subcommand CLI with two modes:
 
-```
+```text
 agentbox council [--base main] [--mode core|extensive] [--no-synthesis]
 agentbox meta-agent [--no-synthesis] <task description>
 ```
@@ -29,14 +29,14 @@ them concurrently, and synthesises the results.
 
 Standalone commit message generator.
 
-```
+```text
 mbx-commit-msg [-a] [-c] [-y]
 ```
 
-| Flag | Effect                                              |
-| ---- | --------------------------------------------------- |
-| `-a` | Stage all changes (`git add -A`) before generating  |
-| `-c` | Prompt to commit with the generated message         |
+| Flag | Effect                                                  |
+| ---- | ------------------------------------------------------- |
+| `-a` | Stage all changes (`git add -A`) before generating      |
+| `-c` | Prompt to commit with the generated message             |
 | `-y` | Skip confirmation and commit immediately (implies `-c`) |
 
 Produces conventional commit messages (`type(scope): description`) matching the
@@ -44,7 +44,7 @@ repository's existing style.
 
 ## Architecture
 
-```
+```text
 cmd/
   agentbox/         CLI entry point (council + meta-agent subcommands)
   mbx-commit-msg/   Standalone commit message tool
@@ -70,9 +70,9 @@ retry and provider-chain fallback for standalone completions.
 
 All runs write telemetry and reports to `~/.minibox/`:
 
-| Path                            | Format  | Content                        |
-| ------------------------------- | ------- | ------------------------------ |
-| `~/.minibox/agent-runs.jsonl`   | JSONL   | Run records (id, timing, args) |
+| Path                            | Format   | Content                        |
+| ------------------------------- | -------- | ------------------------------ |
+| `~/.minibox/agent-runs.jsonl`   | JSONL    | Run records (id, timing, args) |
 | `~/.minibox/ai-logs/<sha>-*.md` | Markdown | Full role outputs + synthesis  |
 
 ## Requirements
@@ -84,7 +84,7 @@ All runs write telemetry and reports to `~/.minibox/`:
 
 ## Build
 
-```
+```text
 cd agentbox
 go build -o bin/agentbox ./cmd/agentbox
 go build -o bin/mbx-commit-msg ./cmd/mbx-commit-msg
@@ -92,6 +92,6 @@ go build -o bin/mbx-commit-msg ./cmd/mbx-commit-msg
 
 ## Test
 
-```
+```text
 go test ./...
 ```

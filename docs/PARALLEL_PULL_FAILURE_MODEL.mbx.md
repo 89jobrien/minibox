@@ -24,29 +24,29 @@ Rust error types involved.
 
 The primary error type for network and registry failures:
 
-| Variant | When raised |
-| --- | --- |
-| `RegistryError::Network(reqwest::Error)` | Any `reqwest` transport failure |
-| `RegistryError::AuthFailed { image, message }` | HTTP non-2xx from auth endpoint |
-| `RegistryError::ManifestFetch { name, tag, message }` | HTTP non-2xx from manifest endpoint |
-| `RegistryError::BlobFetch { digest, message }` | HTTP non-2xx from blob endpoint |
-| `RegistryError::NoPlatformManifest { platform }` | Multi-arch list has no matching entry |
-| `RegistryError::ManifestNestingTooDeep` | Manifest list depth exceeds 2 levels |
-| `RegistryError::LayerTask { digest, source: JoinError }` | Tokio task panicked or was cancelled |
-| `RegistryError::Other(String)` | Size-limit violations and other ad-hoc errors |
+| Variant                                                  | When raised                                   |
+| -------------------------------------------------------- | --------------------------------------------- |
+| `RegistryError::Network(reqwest::Error)`                 | Any `reqwest` transport failure               |
+| `RegistryError::AuthFailed { image, message }`           | HTTP non-2xx from auth endpoint               |
+| `RegistryError::ManifestFetch { name, tag, message }`    | HTTP non-2xx from manifest endpoint           |
+| `RegistryError::BlobFetch { digest, message }`           | HTTP non-2xx from blob endpoint               |
+| `RegistryError::NoPlatformManifest { platform }`         | Multi-arch list has no matching entry         |
+| `RegistryError::ManifestNestingTooDeep`                  | Manifest list depth exceeds 2 levels          |
+| `RegistryError::LayerTask { digest, source: JoinError }` | Tokio task panicked or was cancelled          |
+| `RegistryError::Other(String)`                           | Size-limit violations and other ad-hoc errors |
 
 ### `ImageError` (`crates/minibox-core/src/error.rs`)
 
 Raised inside `extract_and_verify_layer` (sync, runs in `spawn_blocking`):
 
-| Variant | When raised |
-| --- | --- |
+| Variant                                                   | When raised                                   |
+| --------------------------------------------------------- | --------------------------------------------- |
 | `ImageError::DigestMismatch { digest, expected, actual }` | SHA-256 of downloaded blob != manifest digest |
-| `ImageError::LayerExtract(String)` | `extract_layer` returns an error |
-| `ImageError::DeviceNodeRejected { entry }` | Tar entry is a block/char device |
-| `ImageError::SymlinkTraversalRejected { entry, target }` | Symlink target escapes container root |
-| `ImageError::StoreWrite { path, source }` | I/O error writing to the layer store |
-| `ImageError::Io(std::io::Error)` | Other I/O errors during extraction |
+| `ImageError::LayerExtract(String)`                        | `extract_layer` returns an error              |
+| `ImageError::DeviceNodeRejected { entry }`                | Tar entry is a block/char device              |
+| `ImageError::SymlinkTraversalRejected { entry, target }`  | Symlink target escapes container root         |
+| `ImageError::StoreWrite { path, source }`                 | I/O error writing to the layer store          |
+| `ImageError::Io(std::io::Error)`                          | Other I/O errors during extraction            |
 
 ---
 
@@ -172,7 +172,7 @@ on the next attempt.
    returned immediately.
 2. `LimitedStream::poll_next` counts bytes as they arrive. When `consumed > MAX_LAYER_SIZE`
    it returns `io::Error::new(io::ErrorKind::InvalidData, "layer stream exceeded size limit
-   ...")`. This surfaces through `StreamReader` and `SyncIoBridge` as an `io::Error`, which
+...")`. This surfaces through `StreamReader` and `SyncIoBridge` as an `io::Error`, which
    becomes `ImageError::LayerExtract` or `ImageError::Io`.
 
 **Propagation:** Fail-fast as above. `pull_image` aborts.
@@ -228,7 +228,7 @@ used if `join_next` itself returns a `JoinError` at the outer level (the task ma
 `pull_image` uses **fail-fast** semantics: the drain loop calls
 `result.with_context(..)?` which returns from `pull_image` on the first layer error.
 
-```
+```text
 while let Some(join_result) = join_set.join_next().await {
     let (digest, result) = join_result.map_err(|e| RegistryError::LayerTask { .. })?;
     result.with_context(|| format!("layer digest {digest}"))?;  // <-- fail-fast
@@ -245,13 +245,13 @@ layer 4. Layers 1–3 are on disk and will be reused (cache-hit) on the next pul
 
 ## Cleanup Details
 
-| Situation | `*.tmp` dir | Final `layer_dir` | Manifest |
-| --- | --- | --- | --- |
-| Extraction error | Removed by `cleanup_tmp_dir` | Not created | Not written |
-| Digest mismatch | Removed by `cleanup_tmp_dir` | Not created | Not written |
-| Rename succeeds | Renamed to `layer_dir` | Present | Written after all layers |
-| Rename fails, dir already exists | `*.tmp` removed | Pre-existing dir kept | Written after all layers |
-| Layer already cached (dir exists) | Not created | Not touched | Written after all layers |
+| Situation                         | `*.tmp` dir                  | Final `layer_dir`     | Manifest                 |
+| --------------------------------- | ---------------------------- | --------------------- | ------------------------ |
+| Extraction error                  | Removed by `cleanup_tmp_dir` | Not created           | Not written              |
+| Digest mismatch                   | Removed by `cleanup_tmp_dir` | Not created           | Not written              |
+| Rename succeeds                   | Renamed to `layer_dir`       | Present               | Written after all layers |
+| Rename fails, dir already exists  | `*.tmp` removed              | Pre-existing dir kept | Written after all layers |
+| Layer already cached (dir exists) | Not created                  | Not touched           | Written after all layers |
 
 The `cleanup_tmp_dir` function (`registry.rs` line 311) is best-effort: failure to remove a
 stale `.tmp` directory is logged at `warn!` level but does not propagate.
@@ -279,7 +279,7 @@ stale `.tmp` directory is logged at `warn!` level but does not propagate.
 
 ## Call Graph (simplified)
 
-```
+```text
 pull_image
   authenticate -> RegistryError::AuthFailed / Network
   get_manifest  -> RegistryError::ManifestFetch / NoPlatformManifest / Other

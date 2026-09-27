@@ -25,7 +25,7 @@ Primary source files:
 The image store root is supplied by the caller at `ImageStore::new(base_dir)`. All paths below
 are relative to `base_dir`.
 
-```
+```text
 {base_dir}/
   {safe_name}/              # image name with '/' replaced by '_'
     {tag}/
@@ -42,7 +42,7 @@ are relative to `base_dir`.
 Example absolute paths for `library/ubuntu:22.04`, layer digest
 `sha256:abc123...`:
 
-```
+```text
 /var/lib/minibox/images/library_ubuntu/22.04/manifest.json
 /var/lib/minibox/images/library_ubuntu/22.04/layers/sha256_abc123.../   # Complete
 /var/lib/minibox/images/library_ubuntu/22.04/layers/sha256_abc123....tmp/  # Downloading
@@ -74,16 +74,16 @@ Cross-device renames would fail with `EXDEV`; no fallback copy-then-delete is im
 
 ### State definitions
 
-| State          | Files on disk                       | Description                                              |
-| -------------- | ----------------------------------- | -------------------------------------------------------- |
-| `Absent`       | Neither `dest/` nor `dest.tmp/`     | Layer has never been pulled, or was fully cleaned up.    |
-| `Downloading`  | `dest.tmp/` exists; `dest/` absent  | Extraction in progress (or process died mid-pull).       |
-| `Complete`     | `dest/` exists; `dest.tmp/` absent  | Layer extracted, digest verified, rename committed.      |
-| `Failed`       | `dest.tmp/` may exist; `dest/` absent | Extraction or digest check failed; cleanup attempted.  |
+| State         | Files on disk                         | Description                                           |
+| ------------- | ------------------------------------- | ----------------------------------------------------- |
+| `Absent`      | Neither `dest/` nor `dest.tmp/`       | Layer has never been pulled, or was fully cleaned up. |
+| `Downloading` | `dest.tmp/` exists; `dest/` absent    | Extraction in progress (or process died mid-pull).    |
+| `Complete`    | `dest/` exists; `dest.tmp/` absent    | Layer extracted, digest verified, rename committed.   |
+| `Failed`      | `dest.tmp/` may exist; `dest/` absent | Extraction or digest check failed; cleanup attempted. |
 
 ### Transition table
 
-```
+```text
 Absent
   → Downloading  trigger: create_dir_all(tmp_dir)               registry.rs:642
                  invariant: tmp_dir did not exist (stale one removed first at registry.rs:639)
@@ -235,6 +235,7 @@ if let Some(content_length) = resp.headers().get("content-length")
 Source: `registry.rs:462-472`.
 
 This check uses **short-circuit evaluation**:
+
 - If `Content-Length` is absent: no rejection (the check is skipped entirely).
 - If `Content-Length` is present but unparseable: no rejection.
 - If `Content-Length` is present, parseable, and `> MAX_LAYER_SIZE`: rejected immediately,
@@ -267,6 +268,7 @@ exactly `MAX_LAYER_SIZE` bytes is allowed; `MAX_LAYER_SIZE + 1` bytes triggers t
   created; it takes precedence over everything.
 
 Precedence order (highest to lowest):
+
 1. Content-Length header exceeds `MAX_LAYER_SIZE` → rejected in `pull_layer_response`.
 2. Inner stream `io::Error` → forwarded immediately.
 3. `consumed > MAX_LAYER_SIZE` after a chunk → `InvalidData` error from `LimitedStream`.
@@ -284,7 +286,7 @@ during extraction.
 
 Byte flow (`registry.rs:619-625`):
 
-```
+```text
 HTTP response
   → LimitedStream           (wire-byte cap)
   → StreamReader            (async → sync boundary)
@@ -326,22 +328,22 @@ a gz/tar error and a digest mismatch, and the mismatch is the more actionable ro
 
 ### Summary of cleanup guarantees
 
-| Outcome                     | tmp_dir after return        | layer_dir after return |
-| --------------------------- | --------------------------- | ---------------------- |
-| Digest mismatch             | Removed (best-effort)       | Never created          |
-| Extraction error            | Removed (best-effort)       | Never created          |
-| Success                     | Does not exist (renamed)    | Exists, complete       |
-| Rename race (loser path)    | Removed                     | Exists (created by winner) |
-| Rename fails, dir missing   | Removed (best-effort)       | Never created          |
+| Outcome                   | tmp_dir after return     | layer_dir after return     |
+| ------------------------- | ------------------------ | -------------------------- |
+| Digest mismatch           | Removed (best-effort)    | Never created              |
+| Extraction error          | Removed (best-effort)    | Never created              |
+| Success                   | Does not exist (renamed) | Exists, complete           |
+| Rename race (loser path)  | Removed                  | Exists (created by winner) |
+| Rename fails, dir missing | Removed (best-effort)    | Never created              |
 
 ---
 
 ## Implementation Gaps and Proposed Improvements
 
-| Gap | Location | Proposed resolution |
-| --- | -------- | ------------------- |
-| No re-verification of cached layer contents | `registry.rs:587`, `mod.rs:250` | Store a `.digest` sentinel file at rename time; check it on cache hit. |
-| Concurrent multi-daemon tmp dir races | `registry.rs:638-643` | Use `fcntl`/`flock` on a per-digest `.lock` file before creating tmp dir. |
-| Stale tmp dir removal may fail silently | `registry.rs:639-641` | Current behavior: removal failure aborts the pull with an error. This is correct but should be documented in the error message. |
-| No EXDEV fallback for cross-device rename | `registry.rs:694` | Document the same-filesystem assumption explicitly in `ImageStore::new` docs; add a runtime assert or early check. |
-| `store_layer` (non-verified path) has no tmp dir | `mod.rs:197-222` | `store_layer` writes directly to `dest/` with no atomicity. A partial extraction leaves a corrupt `dest/`. Only `store_layer_verified` and `pull_image` use the tmp/rename pattern. This is a correctness gap for any caller using `store_layer` directly. |
+| Gap                                              | Location                        | Proposed resolution                                                                                                                                                                                                                                        |
+| ------------------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No re-verification of cached layer contents      | `registry.rs:587`, `mod.rs:250` | Store a `.digest` sentinel file at rename time; check it on cache hit.                                                                                                                                                                                     |
+| Concurrent multi-daemon tmp dir races            | `registry.rs:638-643`           | Use `fcntl`/`flock` on a per-digest `.lock` file before creating tmp dir.                                                                                                                                                                                  |
+| Stale tmp dir removal may fail silently          | `registry.rs:639-641`           | Current behavior: removal failure aborts the pull with an error. This is correct but should be documented in the error message.                                                                                                                            |
+| No EXDEV fallback for cross-device rename        | `registry.rs:694`               | Document the same-filesystem assumption explicitly in `ImageStore::new` docs; add a runtime assert or early check.                                                                                                                                         |
+| `store_layer` (non-verified path) has no tmp dir | `mod.rs:197-222`                | `store_layer` writes directly to `dest/` with no atomicity. A partial extraction leaves a corrupt `dest/`. Only `store_layer_verified` and `pull_image` use the tmp/rename pattern. This is a correctness gap for any caller using `store_layer` directly. |

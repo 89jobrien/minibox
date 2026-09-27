@@ -12,16 +12,16 @@ security, correctness, and cleanup categories.
 These issues describe fixes that are already present in the current codebase.
 Close with a comment citing the evidence.
 
-| Issue | Title | Evidence |
-|-------|-------|----------|
-| #310 | bound daemon request frames | `bounded_read_line` at `server.rs:177` uses `fill_buf()` + size check before buffering |
-| #311 | redact sensitive daemon request logs | `server.rs:294` logs only `request.type_tag()`; `server.rs:304` logs byte length only |
-| #330 | exclude container_id from digest | `DigestProjection` at `execution_manifest.rs:185` already excludes `container_id` |
-| #331 | populate layer_digests with content digests | `handler.rs:882-884` extracts digest from `file_name` via `replacen('_', ":", 1)` |
-| #332 | update ContainerRecord with manifest info | `state.rs:568` has `set_manifest_info`; called at `handler.rs:993` and `handler.rs:1094` |
-| #333 | deserialize manifest as typed struct | `handler.rs:3228` deserializes as `ExecutionManifest`, re-serializes to `Value` |
-| #334 | replace expect() with documented invariant | `execution_manifest.rs:146-149` has SAFETY comment explaining infallibility |
-| #335 item 2 | add PartialEq to ExecutionPolicy | `execution_policy.rs:22` already derives `PartialEq` |
+| Issue       | Title                                       | Evidence                                                                                 |
+| ----------- | ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| #310        | bound daemon request frames                 | `bounded_read_line` at `server.rs:177` uses `fill_buf()` + size check before buffering   |
+| #311        | redact sensitive daemon request logs        | `server.rs:294` logs only `request.type_tag()`; `server.rs:304` logs byte length only    |
+| #330        | exclude container_id from digest            | `DigestProjection` at `execution_manifest.rs:185` already excludes `container_id`        |
+| #331        | populate layer_digests with content digests | `handler.rs:882-884` extracts digest from `file_name` via `replacen('_', ":", 1)`        |
+| #332        | update ContainerRecord with manifest info   | `state.rs:568` has `set_manifest_info`; called at `handler.rs:993` and `handler.rs:1094` |
+| #333        | deserialize manifest as typed struct        | `handler.rs:3228` deserializes as `ExecutionManifest`, re-serializes to `Value`          |
+| #334        | replace expect() with documented invariant  | `execution_manifest.rs:146-149` has SAFETY comment explaining infallibility              |
+| #335 item 2 | add PartialEq to ExecutionPolicy            | `execution_policy.rs:22` already derives `PartialEq`                                     |
 
 ## Architecture
 
@@ -155,7 +155,7 @@ dual enforcement model (manifest declaration + streaming aggregate).
 
 #### 1f. Verify
 
-```
+```text
 cargo nextest run -p minibox-core -- registry
 cargo nextest run -p minibox -- ghcr
 cargo clippy --workspace -- -D warnings
@@ -219,16 +219,16 @@ Commit: `fix(registry): enforce total image pull size limit (fixes #319)`
 
 Tasks 1-4 are independent. Recommended parallel grouping:
 
-| Slot | Tasks | Rationale |
-|------|-------|-----------|
-| A | Task 0 + Task 1 | Security fix, close resolved issues |
-| B | Task 2 + Task 3 + Task 4 | Cleanup, no overlapping files |
+| Slot | Tasks                    | Rationale                           |
+| ---- | ------------------------ | ----------------------------------- |
+| A    | Task 0 + Task 1          | Security fix, close resolved issues |
+| B    | Task 2 + Task 3 + Task 4 | Cleanup, no overlapping files       |
 
 ## Post-Completion
 
 After all tasks land on main:
 
-```
+```text
 cargo check --tests --workspace  # zero warnings
 cargo clippy --workspace -- -D warnings  # zero warnings
 ```

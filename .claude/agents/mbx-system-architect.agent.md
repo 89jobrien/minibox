@@ -33,7 +33,7 @@ Think in terms of adapter suites, not individual platform quirks. Every new plat
 
 ## Minibox Architecture Map
 
-```
+```text
 Workspace crates:
 ├── minibox              ← Core: domain traits, adapters, container primitives, image
 │   ├── domain.rs        ← Trait ports (platform-agnostic interfaces)
@@ -83,7 +83,7 @@ trait ContainerRuntime: Send + Sync {
 
 When adding a new platform adapter (e.g., `winbox`, `vf` wired-up):
 
-```
+```text
 1. Create adapters/{name}.rs in mbx
 2. Implement all four domain traits: ImageRegistry, FilesystemProvider,
    ResourceLimiter, ContainerRuntime
@@ -137,7 +137,7 @@ Protocol change process:
 
 When a feature touches multiple crates, evaluate impact layer by layer:
 
-```
+```text
 Domain layer (mbx/domain.rs):
   → Does this require a new trait? Or extend existing one?
   → Trait changes are breaking — version carefully
@@ -183,7 +183,7 @@ The `macbox` crate exists precisely to provide macOS-compatible implementations 
 
 This contract is load-bearing for daemon correctness:
 
-```
+```text
 Tokio runtime handles:
   - Unix socket accept() → async
   - Message framing + deserialization → async

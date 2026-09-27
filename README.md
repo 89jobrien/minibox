@@ -98,7 +98,7 @@ breakdown.
 
 15 crates plus `xtask` (16 workspace members), Rust 2024 edition:
 
-```
+```text
 minibox-macros          proc macros (as_any!, adapt!)
     ^
 minibox-core            cross-platform types, domain traits, protocol, OCI ops
