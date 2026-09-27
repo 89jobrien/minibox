@@ -204,16 +204,12 @@ pub fn fix(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
+        let staged_before = staged_rust_paths(sh)?;
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
-        // Re-stage any files rustfmt modified so the commit includes the formatted versions.
-        // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
-        // `cargo fmt` only ever touches `.rs` files — restrict the re-stage
-        // pathspec accordingly so this doesn't sweep in unrelated files that
-        // happened to already be dirty in the working tree (docs, HANDOFF
-        // state, checkpoint files, etc.) into the commit being made.
-        cmd!(sh, "git add -u -- *.rs :!.worktrees")
-            .run()
-            .context("git add -u after fmt failed")?;
+        // Re-stage only the .rs files that were already staged, so rustfmt's
+        // output lands in this commit without pulling in unrelated dirty files.
+        // See `restage_staged_rust` for why the `*.rs` glob is not equivalent.
+        restage_staged_rust(sh, &staged_before)?;
         auto_bump(sh)?;
         cmd!(
             sh,
@@ -221,10 +217,14 @@ pub fn fix(sh: &Shell) -> Result<()> {
         )
         .run()
         .context("clippy --fix failed")?;
-        // Re-stage any files clippy --fix modified.
-        cmd!(sh, "git add -u -- . :!.worktrees")
-            .run()
-            .context("git add -u after clippy --fix failed")?;
+        // Re-stage any files clippy --fix modified, restricted to paths already
+        // staged so unrelated dirty files stay out of the commit.
+        let to_restage = staged_rust_paths(sh)?;
+        if !to_restage.is_empty() {
+            cmd!(sh, "git add -u -- {to_restage...}")
+                .run()
+                .context("git add -u after clippy --fix failed")?;
+        }
     }
 
     eprintln!("fix gate passed");
@@ -239,14 +239,12 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
+        let staged_before = staged_rust_paths(sh)?;
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
-        // `cargo fmt` only ever touches `.rs` files — restrict the re-stage
-        // pathspec accordingly so this doesn't sweep in unrelated files that
-        // happened to already be dirty in the working tree (docs, HANDOFF
-        // state, checkpoint files, etc.) into the commit being made.
-        cmd!(sh, "git add -u -- *.rs :!.worktrees")
-            .run()
-            .context("git add -u after fmt failed")?;
+        // Re-stage only the .rs files that were already staged, so rustfmt's
+        // output lands in this commit without pulling in unrelated dirty files.
+        // See `restage_staged_rust` for why the `*.rs` glob is not equivalent.
+        restage_staged_rust(sh, &staged_before)?;
         cmd!(
             sh,
             "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
@@ -1644,13 +1642,74 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn staged_rust_files(sh: &Shell) -> Result<bool> {
+    Ok(!staged_rust_paths(sh)?.is_empty())
+}
+
+/// Exact list of staged `.rs` / `.toml` paths (excluding `Cargo.lock`).
+///
+/// Used to re-stage files after `cargo fmt` without sweeping in unrelated
+/// working-tree changes. See [`restage_staged_rust`] for why the glob form of
+/// this is wrong.
+fn staged_rust_paths(sh: &Shell) -> Result<Vec<String>> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);
     Ok(staged
         .lines()
-        .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
+        .filter(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && *l != "Cargo.lock")
+        .map(str::to_string)
+        .collect())
+}
+
+/// Re-stage exactly the `.rs` files that were already staged, so formatting
+/// changes to them land in the commit being made.
+///
+/// **Do not replace this with `git add -u -- *.rs`.** That pathspec is matched
+/// against every tracked file, so it stages *all* dirty `.rs` files in the
+/// working tree — not just the ones rustfmt touched. When another agent (or a
+/// parallel worktree) has uncommitted `.rs` edits, that silently sweeps their
+/// in-progress work into the commit, which is how a commit came to include an
+/// unfinished refactor that did not compile.
+///
+/// Files that rustfmt reformatted but that were *not* staged are deliberately
+/// left dirty and reported, rather than being added silently.
+fn restage_staged_rust(sh: &Shell, staged_before: &[String]) -> Result<Vec<String>> {
+    if staged_before.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Snapshot which tracked .rs files are dirty after fmt, to spot files
+    // rustfmt touched that were not part of the commit.
+    let after = cmd!(sh, "git diff --name-only")
+        .output()
+        .context("git diff failed")?;
+    let after = String::from_utf8_lossy(&after.stdout);
+    let unstaged_rust: Vec<&str> = after
+        .lines()
+        .filter(|l| l.ends_with(".rs") && !staged_before.iter().any(|s| s == l))
+        .collect();
+
+    let paths: Vec<&str> = staged_before
+        .iter()
+        .filter(|p| p.ends_with(".rs"))
+        .map(String::as_str)
+        .collect();
+    if !paths.is_empty() {
+        cmd!(sh, "git add -u -- {paths...}")
+            .run()
+            .context("re-staging formatted files failed")?;
+    }
+
+    if !unstaged_rust.is_empty() {
+        eprintln!(
+            "note: cargo fmt also reformatted {} unstaged .rs file(s) left out of this commit: {}",
+            unstaged_rust.len(),
+            unstaged_rust.join(", ")
+        );
+    }
+
+    Ok(unstaged_rust.iter().map(|s| (*s).to_string()).collect())
 }
 
 /// Auto-bump workspace version based on staged Rust changes.
