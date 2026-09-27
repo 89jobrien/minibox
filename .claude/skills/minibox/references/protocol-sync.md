@@ -23,7 +23,7 @@ Read both files and collect every `DaemonRequest` variant name.
 
 Use the Grep tool:
 
-```
+```text
 pattern: "^\s+\w+\s*\{" or enum variant lines inside DaemonRequest
 files: crates/minibox-core/src/protocol.rs, crates/mbx/src/protocol.rs
 ```
@@ -88,7 +88,7 @@ test cases construct it. A count of 0 is a coverage gap — flag it.
 
 Also grep the broader workspace for any other test files that construct `DaemonRequest`:
 
-```
+```text
 pattern: DaemonRequest::
 path: crates/
 glob: **/*test*.rs
@@ -100,7 +100,7 @@ glob: **/*test*.rs
 
 Output a markdown table with one row per `DaemonRequest` variant:
 
-```
+```text
 | Variant | core/protocol.rs | mbx/protocol.rs | server.rs | handler.rs | CLI | tests |
 |---------|-----------------|-----------------|-----------|------------|-----|-------|
 | RunContainer | OK | OK | OK | OK | OK | 12 tests |

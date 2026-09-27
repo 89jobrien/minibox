@@ -256,7 +256,7 @@ already `[workspace.dependencies]`. No new external dependencies.
    `/v2/<image>/blobs/<digest>` mock per layer — copy the JSON bodies from the existing pull
    tests, parameterized by digest/size. `client` uses
    `RegistryClient::for_test(&format!("{}/token", uri), &format!("{}/v2", uri))?
-   .with_pinned_platform(TargetPlatform::linux_amd64())` (Task 2 API).
+.with_pinned_platform(TargetPlatform::linux_amd64())` (Task 2 API).
 
 2. Test: `#[tokio::test]` — `BenchRegistry::serve("bench/img", "latest", vec![layer])` with a
    Task 3 fixture layer, then `client().pull_image("bench/img", "latest", &store)` into an
@@ -302,14 +302,14 @@ already `[workspace.dependencies]`. No new external dependencies.
      dep's `test-utils` feature).
    - `trait_dispatch.rs`: the four direct-vs-trait-object pairs (registry, filesystem,
      limiter, runtime). DELETE `arc_clone` and `downcast_to_concrete` entirely.
-   Update `criterion_group!`/`criterion_main!` registrations to match each file's contents.
+     Update `criterion_group!`/`criterion_main!` registrations to match each file's contents.
 2. Delete `crates/minibox/benches/trait_overhead.rs`, its `[[bench]]` section (including
    `required-features`), and the criterion entry in `[dev-dependencies]` of
    `crates/minibox/Cargo.toml`. `crates/minibox/benches/` must now be gone entirely.
 3. Add both `[[bench]]` sections (`harness = false`) to minibox-bench Cargo.toml.
 4. Verify:
 
-   ```
+   ```text
    cargo bench -p minibox-bench --bench daemon_dispatch -- --test   → exit 0
    cargo bench -p minibox-bench --bench trait_dispatch -- --test    → exit 0
    cargo check -p minibox --all-targets                             → clean (no bench refs)
@@ -329,13 +329,14 @@ already `[workspace.dependencies]`. No new external dependencies.
    over a spec grid, pre-building each layer once outside the timing loop and extracting into
    a fresh `TempDir` per iteration (`iter_batched` with `BatchSize::PerIteration`):
 
-   | scenario                | spec                                              |
-   | ----------------------- | ------------------------------------------------- |
-   | `extract_small_many`    | 1024 files x 4 KiB, depth 4 (~4 MiB)              |
-   | `extract_large_few`     | 4 files x 8 MiB, depth 1 (~32 MiB)                |
-   | `extract_deep_tree`     | 512 files x 16 KiB, depth 16 (~8 MiB)             |
+   | scenario             | spec                                  |
+   | -------------------- | ------------------------------------- |
+   | `extract_small_many` | 1024 files x 4 KiB, depth 4 (~4 MiB)  |
+   | `extract_large_few`  | 4 files x 8 MiB, depth 1 (~32 MiB)    |
+   | `extract_deep_tree`  | 512 files x 16 KiB, depth 16 (~8 MiB) |
 
    Group name: `layer_extract`. `[[bench]] name = "layer_extract"`, `harness = false`.
+
 2. Verify: bench test-mode run exits 0; clippy clean.
 3. Umbrella unit: `feat(minibox-bench): layer extraction hot-path bench`.
 
@@ -439,6 +440,7 @@ jobrien-vm as root for a smoke pass. Umbrella commit
 
    Tests: default env is `"local"`; `--check --env hosted --threshold 20` parses; unknown
    flags are ignored with a warning (consistent with existing xtask arg style).
+
 2. `pub fn bench(sh: &Shell, root: &Path, opts: &BenchOpts) -> Result<()>` (was
    `(sh, root)`); main.rs dispatch arm (line ~202) becomes
    `Some("bench") => bench::bench(&sh, root, &bench::parse_bench_args(&argv[2..]))`.
@@ -481,6 +483,7 @@ jobrien-vm as root for a smoke pass. Umbrella commit
    `regressed = current_mean_ns > baseline_mean_ns * (1.0 + t / 100.0)`; scenario in baseline
    but missing from latest → synthetic `regressed = true` delta (inventory collapse); scenario
    only in latest → not regressed (informational).
+
 2. Wire into `bench()`: after writing results, when `opts.check`, load
    `bench/baseline.{env}.json`; if absent, print bootstrap notice and pass; else print a delta
    table and `bail!` listing regressed scenarios if any. When `opts.save_baseline`, copy the
@@ -553,7 +556,7 @@ bench-hosted:
   runs-on: ubuntu-latest
   steps:
     - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable   # match the toolchain step used by existing jobs
+    - uses: dtolnay/rust-toolchain@stable # match the toolchain step used by existing jobs
     - run: cargo xtask bench --check --env hosted
     - uses: actions/upload-artifact@v4
       if: always()

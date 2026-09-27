@@ -17,10 +17,12 @@ Data lines match: `<fn> <expr> <impl> <traits> <methods> <status> <dep-tree>`
 where each metric is `used/total`, status is `!` (unsafe), `:)` (forbids_unsafe), or `?` (no_forbid).
 
 For each data line:
+
 1. Strip ANSI codes
 2. Parse the 5 `used/total` ratios and the status symbol
 3. Extract crate name and version from the dep-tree column (last token = version, rest = name)
 4. Output a row: name | version | status | fn_used | expr_used | expr_total
 
 Display as a table. Suggest follow-on filters:
+
 - `where status == "unsafe" | sort-by expr_used desc` for highest-risk crates

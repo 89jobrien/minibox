@@ -11,11 +11,13 @@ Run CI watch for the current or specified branch.
 
 1. Run `cargo xtask ci-watch` (pass `--branch <name>` if provided in `$ARGUMENTS`)
 2. If xtask is unavailable, fallback — aggregate all workflows for the HEAD commit:
+
    ```bash
    BRANCH=$(git branch --show-current)
    gh run list --branch "$BRANCH" --limit 15 \
      --json databaseId,headSha,workflowName,status,conclusion
    ```
+
    Filter to runs matching the latest `headSha`, report status for each workflow,
    and watch any that haven't completed.
 

@@ -37,7 +37,7 @@ cargo deny check           # license + advisory audit
 
 ### Commit style
 
-```
+```text
 type(scope): short imperative description (#issue)
 ```
 
