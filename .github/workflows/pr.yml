@@ -16,10 +16,13 @@ jobs:
       daemon: ${{ steps.dc.outputs.daemon }}
       cli: ${{ steps.dc.outputs.cli }}
       runtime: ${{ steps.dc.outputs.runtime }}
+      macbox: ${{ steps.dc.outputs.macbox }}
+      winbox: ${{ steps.dc.outputs.winbox }}
       conformance: ${{ steps.dc.outputs.conformance }}
       xtask: ${{ steps.dc.outputs.xtask }}
       docs: ${{ steps.dc.outputs.docs }}
       workflows: ${{ steps.dc.outputs.workflows }}
+      workspace: ${{ steps.dc.outputs.workspace }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -73,7 +76,10 @@ jobs:
       needs.detect-changes.outputs.daemon == 'true' ||
       needs.detect-changes.outputs.cli == 'true' ||
       needs.detect-changes.outputs.runtime == 'true' ||
-      needs.detect-changes.outputs.xtask == 'true'
+      needs.detect-changes.outputs.macbox == 'true' ||
+      needs.detect-changes.outputs.winbox == 'true' ||
+      needs.detect-changes.outputs.xtask == 'true' ||
+      needs.detect-changes.outputs.workspace == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -89,7 +95,10 @@ jobs:
       needs.detect-changes.outputs.core == 'true' ||
       needs.detect-changes.outputs.daemon == 'true' ||
       needs.detect-changes.outputs.cli == 'true' ||
-      needs.detect-changes.outputs.runtime == 'true'
+      needs.detect-changes.outputs.runtime == 'true' ||
+      needs.detect-changes.outputs.macbox == 'true' ||
+      needs.detect-changes.outputs.winbox == 'true' ||
+      needs.detect-changes.outputs.workspace == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -109,7 +118,10 @@ jobs:
       needs.detect-changes.outputs.daemon == 'true' ||
       needs.detect-changes.outputs.cli == 'true' ||
       needs.detect-changes.outputs.runtime == 'true' ||
-      needs.detect-changes.outputs.xtask == 'true'
+      needs.detect-changes.outputs.macbox == 'true' ||
+      needs.detect-changes.outputs.winbox == 'true' ||
+      needs.detect-changes.outputs.xtask == 'true' ||
+      needs.detect-changes.outputs.workspace == 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable

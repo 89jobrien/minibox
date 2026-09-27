@@ -341,7 +341,7 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn overlay_path_traversal_attempt_is_rejected() {
+fn overlay_path_traversal_attempt_does_not_escape_container_dir() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
@@ -358,27 +358,52 @@ fn overlay_path_traversal_attempt_is_rejected() {
         .setup_rootfs(&[layer], &container_dir)
         .expect("setup_rootfs failed");
 
-    // Attempt path traversal: try to write via `../../escape` from inside merged.
+    // `merged_dir` is `container_dir/merged` (see `setup_overlay_with_base`), so
+    // `../..` climbs two levels out of the container directory entirely and
+    // lands outside the sandbox this test creates.
     let escape_path = merged.merged_dir.join("..").join("..").join("escape");
+    let escape_dir = escape_path
+        .parent()
+        .expect("escape path always has a parent")
+        .to_path_buf();
+    let escape_dir_resolved = escape_dir
+        .canonicalize()
+        .unwrap_or_else(|_| escape_dir.clone());
 
-    // Write either fails or succeeds — if it succeeds, the file must land inside
-    // the overlay upper dir, NOT at the host /tmp/escape.
-    let write_result = fs::write(&escape_path, b"x");
-    let host_escape = std::path::Path::new("/tmp/escape");
-
-    // Verify the host path does NOT exist (the file landed in upper or write failed).
+    // Guard the test itself: the traversal target must genuinely sit outside
+    // the sandbox, otherwise a passing assertion would prove nothing.
     assert!(
-        !host_escape.exists(),
-        "path traversal attack: /tmp/escape should not exist"
+        !escape_dir_resolved.starts_with(tmp.path()),
+        "test setup is wrong: traversal target {escape_dir_resolved:?} resolved \
+         inside the sandbox {tmp:?}, so this test would not exercise an escape"
+    );
+    assert!(
+        !escape_path.exists(),
+        "test setup is wrong: {escape_path:?} already exists before the attempt"
     );
 
-    // If write succeeded, verify it went to upper, not the host.
-    if write_result.is_ok() {
-        assert!(
-            container_dir.join("upper").exists(),
-            "if write succeeded, must have upper dir"
+    // Attempt the traversal. A write here must not create a file at the
+    // resolved target.
+    let write_result = fs::write(&escape_path, b"x");
+
+    // If the write unexpectedly succeeded, the escape is real — fail with the
+    // concrete target, and clean up so a real escape does not litter a shared
+    // temporary directory.
+    if write_result.is_ok() && escape_path.exists() {
+        let _ = fs::remove_file(&escape_path);
+        panic!(
+            "path traversal escaped the container: writing {escape_path:?} \
+             succeeded and created a file at {escape_dir_resolved:?}, outside \
+             both the container dir ({container_dir:?}) and the sandbox ({tmp:?})"
         );
     }
+
+    // Nothing may exist at the traversal target regardless of how the write
+    // failed.
+    assert!(
+        !escape_path.exists(),
+        "path traversal created {escape_path:?} outside the container dir"
+    );
 
     fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }

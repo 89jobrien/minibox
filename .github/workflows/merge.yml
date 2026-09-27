@@ -33,8 +33,11 @@ jobs:
       daemon: ${{ steps.dc.outputs.daemon }}
       cli: ${{ steps.dc.outputs.cli }}
       runtime: ${{ steps.dc.outputs.runtime }}
+      macbox: ${{ steps.dc.outputs.macbox }}
+      winbox: ${{ steps.dc.outputs.winbox }}
       xtask: ${{ steps.dc.outputs.xtask }}
       workflows: ${{ steps.dc.outputs.workflows }}
+      workspace: ${{ steps.dc.outputs.workspace }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -55,7 +58,10 @@ jobs:
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true' ||
         needs.detect-changes.outputs.runtime == 'true' ||
-        needs.detect-changes.outputs.xtask == 'true'
+        needs.detect-changes.outputs.macbox == 'true' ||
+        needs.detect-changes.outputs.winbox == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true' ||
+        needs.detect-changes.outputs.workspace == 'true'
       )
     steps:
       - uses: actions/checkout@v5
@@ -95,7 +101,10 @@ jobs:
         needs.detect-changes.outputs.daemon == 'true' ||
         needs.detect-changes.outputs.cli == 'true' ||
         needs.detect-changes.outputs.runtime == 'true' ||
-        needs.detect-changes.outputs.xtask == 'true'
+        needs.detect-changes.outputs.macbox == 'true' ||
+        needs.detect-changes.outputs.winbox == 'true' ||
+        needs.detect-changes.outputs.xtask == 'true' ||
+        needs.detect-changes.outputs.workspace == 'true'
       )
     steps:
       - uses: actions/checkout@v5
