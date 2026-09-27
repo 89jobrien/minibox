@@ -32,7 +32,7 @@ generated: 2026-08-22
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-08-22
+Last updated: 2026-09-27
 
 ---
 

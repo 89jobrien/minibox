@@ -13,7 +13,7 @@ generated: 2026-08-22
 
 # Minibox Roadmap
 
-Last updated: 2026-08-22
+Last updated: 2026-09-27
 
 ## Engineering Priorities
 
