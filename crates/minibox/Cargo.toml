@@ -90,6 +90,7 @@ required-features = ["registry"]
 
 [dev-dependencies]
 proptest = "1"
+rstest = { workspace = true }
 wiremock = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
