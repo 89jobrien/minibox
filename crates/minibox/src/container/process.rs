@@ -576,6 +576,43 @@ fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()
         format!("0 {} {}\n", mapping.host_gid, mapping.size),
     )
     .with_context(|| format!("write exclusive gid_map for child {pid}"))?;
+
+    // Read the maps back rather than trusting the writes. A successful write
+    // means the kernel accepted the mapping, so this is confirmation rather
+    // than a second source of truth — but the contents are the only direct
+    // evidence of which UID range a container actually received, and they are
+    // what an operator needs when asking "why is my container running as the
+    // wrong user".
+    //
+    // Compare token-wise, not as raw strings: the kernel renders these files
+    // with each field padded to a fixed width, so a correctly installed map
+    // reads back as "0     165536      65536" rather than the "0 165536 65536"
+    // that was written. String equality would flag every healthy container.
+    // A mismatch is logged at warn without failing the spawn, so a diagnostic
+    // never becomes a new failure mode.
+    let applied_uid = std::fs::read_to_string(proc_dir.join("uid_map")).unwrap_or_default();
+    let applied_gid = std::fs::read_to_string(proc_dir.join("gid_map")).unwrap_or_default();
+    let expected_uid = format!("0 {} {}", mapping.host_uid, mapping.size);
+    let expected_gid = format!("0 {} {}", mapping.host_gid, mapping.size);
+    let same = |applied: &str, expected: &str| -> bool {
+        applied.split_whitespace().eq(expected.split_whitespace())
+    };
+    if same(&applied_uid, &expected_uid) && same(&applied_gid, &expected_gid) {
+        info!(
+            pid,
+            host_uid = mapping.host_uid,
+            host_gid = mapping.host_gid,
+            size = mapping.size,
+            "container: user namespace UID/GID maps installed"
+        );
+    } else {
+        warn!(
+            pid,
+            expected = expected_uid,
+            actual = applied_uid.trim(),
+            "container: installed uid_map does not match the requested range"
+        );
+    }
     Ok(())
 }
 
