@@ -34,7 +34,7 @@ use super::RequestError;
 use anyhow::{Context as _, Result};
 use base64::Engine;
 use minibox_core::client::DaemonClient;
-use minibox_core::domain::{BindMount, NetworkMode, UidRangeMode};
+use minibox_core::domain::{BindMount, NetworkMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};
 #[cfg(test)]
@@ -59,7 +59,6 @@ pub struct RunOpts {
     pub cpu_weight: Option<u64>,
     pub network: String,
     pub privileged: bool,
-    pub uid_range_mode: UidRangeMode,
     pub volumes: Vec<String>,
     pub mount_specs: Vec<String>,
     pub name: Option<String>,
@@ -86,7 +85,6 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         cpu_weight,
         network,
         privileged,
-        uid_range_mode,
         volumes,
         mount_specs,
         name,
@@ -130,7 +128,6 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         network: Some(network_mode),
         mounts,
         privileged,
-        shared_uid_range: uid_range_mode == UidRangeMode::Shared,
         env,
         name,
         tty,
@@ -247,7 +244,6 @@ mod tests {
                 cpu_weight: None,
                 network: "none".to_string(),
                 privileged: false,
-                uid_range_mode: UidRangeMode::Exclusive,
                 volumes: vec![],
                 mount_specs: vec![],
                 name: None,

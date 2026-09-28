@@ -31,13 +31,6 @@ pub struct RunParams {
     pub mounts: Vec<BindMount>,
     /// Whether privileged execution is requested.
     pub privileged: bool,
-    /// Explicit opt-in to a shared host UID/GID range.
-    ///
-    /// `false` (the default) gives the container an *exclusive* UID range, so
-    /// host UIDs are never shared between containers. `true` opts into the
-    /// shared range, which is only correct for single-container or
-    /// deliberately-coordinated setups.
-    pub shared_uid_range: bool,
     /// Environment variables in `KEY=VALUE` form.
     pub env: Vec<String>,
     /// Optional human-readable container name.

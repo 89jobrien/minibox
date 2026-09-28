@@ -314,7 +314,6 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
                         env,
                         mounts,
                         privileged: priv_,
-                        shared_uid_range: false,
                         name,
                         tty,
                         entrypoint: ep,

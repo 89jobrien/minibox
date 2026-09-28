@@ -1516,7 +1516,6 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
         None,
             mounts: vec![],
             privileged: false,
-            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,

@@ -61,7 +61,6 @@ fn default_spawn_config() -> ContainerSpawnConfig {
         skip_network_namespace: false,
         mounts: vec![],
         privileged: false,
-        uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
         image_ref: None,
     }
 }

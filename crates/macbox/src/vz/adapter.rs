@@ -197,7 +197,6 @@ impl ContainerRuntime for VzRuntime {
             execution_context: None,
             platform: None,
             cgroup_parent: None,
-            shared_uid_range: false,
         };
 
         let responses = call_agent(&self.vm, &req)

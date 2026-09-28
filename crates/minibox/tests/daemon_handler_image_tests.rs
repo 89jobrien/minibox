@@ -1482,7 +1482,6 @@ async fn test_handle_run_invalid_platform_returns_error() {
             network: None,
             mounts: vec![],
             privileged: false,
-            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: Some("not/a/valid/platform/triple".to_string()),

@@ -245,7 +245,6 @@ async fn test_handle_run_invalid_image_ref_returns_error() {
             network: None,
             mounts: vec![],
             privileged: false,
-            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,
