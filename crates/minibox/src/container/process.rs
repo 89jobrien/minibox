@@ -552,6 +552,35 @@ fn build_envp(declared: &[String]) -> anyhow::Result<Vec<CString>> {
         .collect()
 }
 
+/// Extract the `Uid:` and `Gid:` credential lines from `/proc/<pid>/status`.
+///
+/// Each line carries four ids: real, effective, saved-set, and filesystem.
+/// The filesystem (fourth) column is the one that decides whether file
+/// creation works — a container whose fsgid has no representation in the
+/// enclosing namespace fails `open(2)` with `EOVERFLOW` when it tries to
+/// create a file, even though its `uid_map` and `gid_map` read back
+/// correctly. Reading them back from the map files is therefore not
+/// sufficient evidence that the child can actually write to disk.
+///
+/// Returns `(uid_line, gid_line)` with the raw four-column text, or `None`
+/// for either if the line is absent.
+#[cfg(target_os = "linux")]
+fn read_child_credentials(pid: i32) -> (Option<String>, Option<String>) {
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else {
+        return (None, None);
+    };
+    let mut uid = None;
+    let mut gid = None;
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("Uid:") {
+            uid = Some(rest.split_whitespace().collect::<Vec<_>>().join(" "));
+        } else if let Some(rest) = line.strip_prefix("Gid:") {
+            gid = Some(rest.split_whitespace().collect::<Vec<_>>().join(" "));
+        }
+    }
+    (uid, gid)
+}
+
 /// Install the user-namespace UID/GID maps for a freshly cloned child.
 ///
 /// Called in the **parent**, after `clone(2)` returns and before the child is
@@ -603,12 +632,20 @@ fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()
     let same = |applied: &str, expected: &str| -> bool {
         applied.split_whitespace().eq(expected.split_whitespace())
     };
+    // The child's own view of its credentials, captured while it is still
+    // parked on the barrier. The map files describe what was *requested*;
+    // these describe what the kernel actually gave the process. The fourth
+    // column of each line is the filesystem id, which is the one that decides
+    // whether the container can create files at all.
+    let (creds_uid, creds_gid) = read_child_credentials(pid);
     if same(&applied_uid, &expected_uid) && same(&applied_gid, &expected_gid) {
         info!(
             pid,
             host_uid = mapping.host_uid,
             host_gid = mapping.host_gid,
             size = mapping.size,
+            child_uid = creds_uid.as_deref().unwrap_or("unreadable"),
+            child_gid = creds_gid.as_deref().unwrap_or("unreadable"),
             "container: user namespace UID/GID maps installed"
         );
     } else {
@@ -616,6 +653,8 @@ fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()
             pid,
             expected = expected_uid,
             actual = applied_uid.trim(),
+            child_uid = creds_uid.as_deref().unwrap_or("unreadable"),
+            child_gid = creds_gid.as_deref().unwrap_or("unreadable"),
             "container: installed uid_map does not match the requested range"
         );
     }
