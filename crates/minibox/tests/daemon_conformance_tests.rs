@@ -89,6 +89,7 @@ async fn handle_run_once(
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,
@@ -370,6 +371,7 @@ mod conformance {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -395,6 +397,7 @@ mod conformance {
             skip_network_namespace: false,
             mounts: vec![],    // placeholder — Task 6 replaces this
             privileged: false, // placeholder — Task 6 replaces this
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -1244,6 +1247,7 @@ mod runtime_conformance {
             skip_network_namespace: false,
             mounts: vec![],
             privileged: false,
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -1287,6 +1291,7 @@ mod runtime_conformance {
             skip_network_namespace: false,
             mounts: vec![],
             privileged: false,
+            uid_range_mode: minibox::domain::UidRangeMode::Exclusive,
             image_ref: None,
         };
 
@@ -1749,6 +1754,7 @@ mod krun_suite {
                 network: None,
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 env: vec![],
                 name: None,
                 platform: None,
@@ -1823,6 +1829,7 @@ mod krun_suite {
                 network: None,
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 env: vec![],
                 name: None,
                 platform: None,
@@ -2696,6 +2703,7 @@ mod policy_conformance {
                 network: None,
                 mounts: mounts,
                 privileged: privileged,
+                shared_uid_range: false,
                 env: vec![],
                 name: None,
                 platform: None,

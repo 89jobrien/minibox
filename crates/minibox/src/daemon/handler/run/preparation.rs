@@ -2,7 +2,7 @@
 
 use anyhow::{Context as _, Result};
 use minibox_core::domain::{
-    ContainerHooks, ContainerSpawnConfig, DomainError, NetworkMode, ResourceConfig,
+    ContainerHooks, ContainerSpawnConfig, DomainError, NetworkMode, ResourceConfig, UidRangeMode,
 };
 use minibox_core::image::reference::ImageRef;
 use std::path::PathBuf;
@@ -36,6 +36,7 @@ pub(super) async fn prepare_run(
         network,
         mounts,
         privileged,
+        shared_uid_range,
         env,
         name,
         platform,
@@ -251,6 +252,11 @@ pub(super) async fn prepare_run(
         skip_network_namespace: skip_net_ns,
         mounts: mounts.clone(),
         privileged,
+        uid_range_mode: if shared_uid_range {
+            UidRangeMode::Shared
+        } else {
+            UidRangeMode::Exclusive
+        },
         image_ref: Some(image_label.clone()),
     };
 

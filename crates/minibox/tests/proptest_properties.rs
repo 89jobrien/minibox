@@ -181,6 +181,7 @@ proptest! {
                 env: vec![],
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 name: None,
                 tty: false,
                 entrypoint: None,

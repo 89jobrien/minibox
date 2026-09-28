@@ -220,6 +220,74 @@ fn setup_tmpfs_fallback(image_layers: &[PathBuf], container_dir: &Path) -> anyho
 }
 
 // ---------------------------------------------------------------------------
+// Ephemeral runtime directories
+// ---------------------------------------------------------------------------
+
+fn setup_runtime_directories(new_root: &Path) -> anyhow::Result<()> {
+    use minibox_core::domain::{VarRunMountStrategy, var_run_mount_strategy};
+
+    let run_dir = new_root.join("run");
+    fs::create_dir_all(&run_dir).with_context(|| format!("create {}", run_dir.display()))?;
+    mount(
+        Some("tmpfs"),
+        &run_dir,
+        Some("tmpfs"),
+        MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+        Some("mode=0755"),
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs-run".into(),
+        target: run_dir.display().to_string(),
+        source,
+    })
+    .context("mount fresh tmpfs at container /run")?;
+
+    let var_dir = new_root.join("var");
+    let var_run = var_dir.join("run");
+    fs::create_dir_all(&var_dir).with_context(|| format!("create {}", var_dir.display()))?;
+    let metadata = fs::symlink_metadata(&var_run).ok();
+    let points_to_run = metadata.as_ref().is_some_and(|meta| {
+        meta.file_type().is_symlink()
+            && fs::read_link(&var_run)
+                .is_ok_and(|target| target == Path::new("../run") || target == Path::new("/run"))
+    });
+    match var_run_mount_strategy(
+        metadata.is_some(),
+        metadata
+            .as_ref()
+            .is_some_and(|meta| meta.file_type().is_symlink()),
+        points_to_run,
+    ) {
+        VarRunMountStrategy::ExistingSymlink => {}
+        VarRunMountStrategy::BindToRun => {
+            if metadata.as_ref().is_some_and(|meta| !meta.is_dir()) {
+                fs::remove_file(&var_run)
+                    .with_context(|| format!("replace stale {} symlink", var_run.display()))?;
+                fs::create_dir_all(&var_run)
+                    .with_context(|| format!("create {}", var_run.display()))?;
+            }
+            mount(
+                Some(&run_dir),
+                &var_run,
+                None::<&str>,
+                MsFlags::MS_BIND | MsFlags::MS_REC,
+                None::<&str>,
+            )
+            .map_err(|source| FilesystemError::Mount {
+                fs: "bind-run".into(),
+                target: var_run.display().to_string(),
+                source,
+            })?;
+        }
+        VarRunMountStrategy::CreateSymlink => {
+            std::os::unix::fs::symlink("../run", &var_run)
+                .with_context(|| format!("create {} -> ../run", var_run.display()))?;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // pivot_root (child process)
 // ---------------------------------------------------------------------------
 
@@ -278,6 +346,10 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
         target: new_root.display().to_string(),
         source,
     })?;
+
+    // Hide image-provided PID files before init starts. Both systemd and
+    // non-systemd images receive a fresh /run, with /var/run pointing at it.
+    setup_runtime_directories(new_root).context("pivot_root: setup runtime directories")?;
 
     // Mount proc inside new_root.
     // SECURITY: Mount with nosuid, nodev, noexec flags
@@ -892,6 +964,50 @@ mod tests {
         assert!(require_idmapped_mount_kernel("6.10.3-custom").is_ok());
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fresh_run_tmpfs_hides_stale_pid_files_for_directory_var_run() {
+        // SAFETY: geteuid only reads the current process credentials.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+        let rootfs = TempDir::new().expect("rootfs");
+        std::fs::create_dir_all(rootfs.path().join("run")).expect("create run");
+        std::fs::create_dir_all(rootfs.path().join("var/run")).expect("create var run");
+        std::fs::write(rootfs.path().join("run/systemd.pid"), b"1").expect("write systemd pid");
+        std::fs::write(rootfs.path().join("var/run/dockerd.pid"), b"2").expect("write dockerd pid");
+
+        setup_runtime_directories(rootfs.path()).expect("setup runtime directories");
+
+        assert!(!rootfs.path().join("run/systemd.pid").exists());
+        assert!(!rootfs.path().join("var/run/dockerd.pid").exists());
+        let _ = umount2(
+            rootfs.path().join("var/run").as_path(),
+            MntFlags::MNT_DETACH,
+        );
+        let _ = umount2(rootfs.path().join("run").as_path(), MntFlags::MNT_DETACH);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fresh_run_tmpfs_works_with_systemd_var_run_symlink() {
+        // SAFETY: geteuid only reads the current process credentials.
+        if unsafe { libc::geteuid() } != 0 {
+            return;
+        }
+        let rootfs = TempDir::new().expect("rootfs");
+        std::fs::create_dir_all(rootfs.path().join("run")).expect("create run");
+        std::fs::create_dir_all(rootfs.path().join("var")).expect("create var");
+        std::fs::write(rootfs.path().join("run/containerd.pid"), b"3").expect("write pid");
+        std::os::unix::fs::symlink("../run", rootfs.path().join("var/run"))
+            .expect("create var run symlink");
+
+        setup_runtime_directories(rootfs.path()).expect("setup runtime directories");
+
+        assert!(!rootfs.path().join("var/run/containerd.pid").exists());
+        let _ = umount2(rootfs.path().join("run").as_path(), MntFlags::MNT_DETACH);
+    }
+
     // ── apply_bind_mounts ────────────────────────────────────────────────────
     // These tests require Linux (MS_BIND is Linux-only) and root.
     // Run with: sudo cargo test -p minibox container::filesystem::tests
@@ -908,6 +1024,7 @@ mod tests {
         fn apply_bind_mounts_mounts_directory() {
             // SAFETY: geteuid() is a pure read of the process credential with no
             // side effects; always safe to call.
+            // SAFETY: geteuid only reads the current process credentials.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -944,6 +1061,7 @@ mod tests {
         fn apply_bind_mounts_read_only() {
             // SAFETY: geteuid() is a pure read of the process credential with no
             // side effects; always safe to call.
+            // SAFETY: geteuid only reads the current process credentials.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }
@@ -1044,6 +1162,7 @@ mod tests {
         fn apply_bind_mounts_creates_target_dir() {
             // SAFETY: geteuid() is a pure read of the process credential with no
             // side effects; always safe to call.
+            // SAFETY: geteuid only reads the current process credentials.
             if unsafe { libc::geteuid() } != 0 {
                 return;
             }

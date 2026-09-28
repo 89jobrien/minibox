@@ -180,6 +180,7 @@ async fn test_spawn_failure_after_successful_setup_and_limits() {
         skip_network_namespace: false,
         mounts: vec![],    // placeholder — Task 6 replaces this
         privileged: false, // placeholder — Task 6 replaces this
+        uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
         image_ref: None,
     };
 
