@@ -510,7 +510,19 @@ fn parse_volume(input: &str) -> Result<Instruction> {
     if paths.is_empty() {
         bail!("VOLUME requires at least one path");
     }
-    Ok(Instruction::Volume(paths))
+    // Reject non-absolute and traversing volume paths. Without this a
+    // `VOLUME ../../etc` instruction parses cleanly and flows into the image
+    // config as a legitimate mount point.
+    let validated = paths
+        .iter()
+        .map(|path| {
+            let raw = path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("VOLUME path is not valid UTF-8: {path:?}"))?;
+            super::volume::validate_volume_path(raw)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Instruction::Volume(validated))
 }
 
 fn parse_key_value_pairs(
@@ -808,5 +820,36 @@ mod tests {
         assert!(
             matches!(&instructions[1], Instruction::From { image, tag, .. } if image == "${BASE}" && tag == "3.21")
         );
+    }
+
+    /// A VOLUME path must be a plain container-absolute path. Anything that
+    /// escapes the image root is rejected at parse time rather than becoming a
+    /// mount point in the committed config.
+    #[test]
+    fn parse_volume_rejects_unsafe_paths() {
+        for dockerfile in [
+            "FROM scratch\nVOLUME ../data\n",
+            "FROM scratch\nVOLUME [\"../../etc\"]\n",
+            "FROM scratch\nVOLUME /ok ../escape\n",
+        ] {
+            let error = parse(dockerfile).expect_err("traversal path must be rejected");
+            assert!(
+                error.to_string().to_lowercase().contains("volume"),
+                "error should name the offending VOLUME: {error:#}"
+            );
+        }
+    }
+
+    /// Valid absolute paths still parse — the guard must not reject ordinary
+    /// volume declarations.
+    #[test]
+    fn parse_volume_accepts_plain_absolute_paths() {
+        let instructions =
+            parse("FROM scratch\nVOLUME /data /var/lib/thing\n").expect("absolute paths are valid");
+        assert!(matches!(
+            &instructions[1],
+            Instruction::Volume(paths)
+                if paths == &[PathBuf::from("/data"), PathBuf::from("/var/lib/thing")]
+        ));
     }
 }

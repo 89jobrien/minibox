@@ -520,6 +520,9 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::WorkflowComplete {
             final_phase: PhaseOutcome::Succeeded,
         },
+        DaemonResponse::CapabilityMatrix {
+            matrix: minibox_core::domain::capability_matrix(),
+        },
     ];
 
     for v in &terminal_variants {
