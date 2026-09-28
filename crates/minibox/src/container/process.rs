@@ -10,7 +10,7 @@ use crate::error::ProcessError;
 use anyhow::Context;
 use minibox_core::domain::{HookSpec, SpawnResult};
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::execve;
+use nix::unistd::{Gid, Uid, execve};
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
 use std::path::PathBuf;
@@ -146,6 +146,31 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
                 libc::_exit(127);
             }
             libc::close(sync_read_raw);
+        }
+
+        // Now that the map exists, re-resolve our credentials against it.
+        //
+        // ruid/euid/suid/fsuid are fixed at clone(2), at which point the new
+        // user namespace's map is still empty, so they were all assigned the
+        // overflow uid (65534). Writing uid_map afterwards does not change
+        // them: it makes the *files* interpret correctly for later lookups, but
+        // this process's already-assigned ids stay unmapped. The observable
+        // symptom is that opening any file for write fails with EOVERFLOW,
+        // because the filesystem cannot represent an unmapped owner.
+        //
+        // So the map write is necessary but not sufficient — the child has to
+        // reset all four credential slots to 0 (namespace-local) itself, which
+        // is what makes it root inside the container. This is the same step
+        // runc performs after the parent signals that mapping is complete.
+        //
+        // gid first: setresuid can drop the privilege needed to change groups,
+        // and the parent has already written setgroups=deny, so nothing can
+        // widen group access afterwards.
+        if nix::unistd::setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0)).is_err()
+            || nix::unistd::setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0)).is_err()
+        {
+            error!("container: failed to apply namespace credentials");
+            unsafe { libc::_exit(127) };
         }
 
         // Redirect stdout and stderr to the write end of the pipe.
@@ -425,6 +450,28 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
 /// process terminates without running Rust destructors.
 // qual:allow(complexity) reason: "child init sequence — must be linear and auditable"
 fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
+    // 0. Record the credentials this process actually holds, from the inside.
+    //    The parent reads /proc/<pid>/status, but that renders ids in the
+    //    *reader's* user namespace, so it cannot distinguish "the map was
+    //    applied and the ids happen to be 0" from "the map was never applied".
+    //    These getters are unambiguous -- they report this process's own view.
+    //    The filesystem (fsuid/fsgid) column is the one that decides whether
+    //    the container can create files at all.
+    //
+    //    This is a diagnostic for #526; it observes and changes nothing.
+    //
+    //    fsuid/fsgid are not reported: `libc` does not bind `getfsuid`/
+    //    `getfsgid`, and neither is needed here because nothing in this crate
+    //    calls `setfsuid`/`setfsgid`, so the filesystem ids always equal the
+    //    effective ones.
+    debug!(
+        uid = unsafe { libc::getuid() },
+        gid = unsafe { libc::getgid() },
+        euid = unsafe { libc::geteuid() },
+        egid = unsafe { libc::getegid() },
+        "container: child credentials after entering namespace"
+    );
+
     // 1. Set hostname (requires UTS namespace).
     debug!(hostname = %config.hostname, "container: setting hostname");
     nix::unistd::sethostname(&config.hostname).map_err(|e| {
