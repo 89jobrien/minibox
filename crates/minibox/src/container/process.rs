@@ -17,6 +17,17 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
 
+/// Concrete host ID range installed in a container user namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UidMapping {
+    /// First host UID mapped to container UID zero.
+    pub host_uid: u32,
+    /// First host GID mapped to container GID zero.
+    pub host_gid: u32,
+    /// Number of contiguous IDs in both maps.
+    pub size: u32,
+}
+
 /// All information required to launch a containerised process.
 #[derive(Debug, Clone)]
 pub struct ContainerConfig {
@@ -42,6 +53,8 @@ pub struct ContainerConfig {
     pub mounts: Vec<minibox_core::domain::BindMount>,
     /// If `true`, call `capset(2)` with all capabilities set before `execve`.
     pub privileged: bool,
+    /// Host IDs mapped to container IDs 0..size in the user namespace.
+    pub uid_mapping: UidMapping,
     /// Optional PTY configuration for interactive containers.
     ///
     /// When `Some`, the daemon should attempt to allocate a PTY pair via the
@@ -96,12 +109,44 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     };
 
     let capture_output = config.capture_output;
+    let uid_mapping = config.uid_mapping;
     let ns_config = config.namespace_config.clone();
+
+    // Parent/child barrier: the child must not proceed — in particular must not
+    // reach `execve` — until the parent has installed the UID/GID maps. Without
+    // this the child could `exec` while its user namespace is still unmapped,
+    // and every UID in the container image would resolve to the unmapped
+    // overflow UID.
+    let (sync_read, sync_write) = nix::unistd::pipe2(OFlag::O_CLOEXEC)
+        .context("creating user namespace synchronization pipe")?;
+    let sync_read_raw = sync_read.as_raw_fd();
+    let sync_write_raw = sync_write.as_raw_fd();
+    // Take full manual control of the fd lifetimes, for the same reason as the
+    // capture pipe above: dropping either OwnedFd here would close the fd for
+    // both parent and child after clone(2).
+    std::mem::forget(sync_read);
+    std::mem::forget(sync_write);
+
     let pid = clone_with_namespaces(&ns_config, move || {
         // ----------------------------------------------------------------
         // Everything here runs in the child process.
         // We must not return; we must either exec or call _exit.
         // ----------------------------------------------------------------
+
+        // Block until the parent has written uid_map/gid_map. This must happen
+        // before anything that observes our credentials, and before the
+        // descriptor sweep in `child_init` closes the sync pipe's descriptor.
+        // SAFETY: both fds are valid descriptors inherited across clone(2);
+        // their OwnedFds were forgotten before the clone so no other owner will
+        // close them. read/write/close are async-signal-safe.
+        unsafe {
+            libc::close(sync_write_raw);
+            let mut ready = 0u8;
+            if libc::read(sync_read_raw, (&raw mut ready).cast(), 1) != 1 {
+                libc::_exit(127);
+            }
+            libc::close(sync_read_raw);
+        }
 
         // Redirect stdout and stderr to the write end of the pipe.
         if capture_output && write_fd_raw >= 0 {
@@ -133,8 +178,11 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     .with_context(|| "failed to spawn container process");
 
     if let Err(ref _e) = pid {
-        // Clone failed — the forgotten OwnedFds were never consumed by a
-        // child (no child was created). Close both raw FDs to prevent leaks.
+        // Clone failed — no child was created, so neither the sync pipe's nor
+        // the capture pipe's forgotten OwnedFds were ever consumed. Close all
+        // four raw FDs to prevent leaks.
+        unsafe { libc::close(sync_read_raw) };
+        unsafe { libc::close(sync_write_raw) };
         if capture_output && read_fd_raw >= 0 {
             unsafe { libc::close(read_fd_raw) };
             unsafe { libc::close(write_fd_raw) };
@@ -142,6 +190,38 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     }
 
     let pid = pid?;
+
+    // Parent: install the user-namespace UID/GID maps. This must happen from
+    // the parent — only a process *outside* the new user namespace may write
+    // uid_map/gid_map, and the child is blocked on the sync pipe until we do.
+    //
+    // The cgroup is deliberately NOT written here: `child_init` already adds
+    // the child to its cgroup from the inside via `add_self_to_cgroup`, which
+    // is develop's mechanism and is required because the child's PID inside its
+    // new PID namespace need not match the PID the parent sees. Writing
+    // cgroup.procs from both sides would be redundant.
+    unsafe { libc::close(sync_read_raw) };
+    if let Err(error) = configure_child_isolation(pid.as_raw(), uid_mapping) {
+        // The child is parked on the sync pipe; it will never be released, so
+        // reap it rather than leaking a live process.
+        unsafe { libc::close(sync_write_raw) };
+        let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGKILL);
+        let _ = waitpid(pid, None);
+        if capture_output && read_fd_raw >= 0 {
+            unsafe { libc::close(read_fd_raw) };
+            unsafe { libc::close(write_fd_raw) };
+        }
+        return Err(error);
+    }
+    let ready = [1u8];
+    let write_result = unsafe { libc::write(sync_write_raw, ready.as_ptr().cast(), 1) };
+    unsafe { libc::close(sync_write_raw) };
+    if write_result != 1 {
+        anyhow::bail!(
+            "failed to release user namespace child: {}",
+            std::io::Error::last_os_error()
+        );
+    }
 
     // Parent: close the write end so the read end gets EOF when the child exits.
     if capture_output && write_fd_raw >= 0 {
@@ -381,8 +461,12 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
 
     // TODO(feature-idea-14): add and verify a default capability drop policy plus
     // no_new_privs for unprivileged containers; keep privileged mode an explicit relaxation.
-    // TODO(feature-idea-16): add user-namespace setup with uid_map/gid_map and the
-    // storage, networking, and cgroup support required for rootless operation.
+    // TODO(feature-idea-16): the user namespace and its uid_map/gid_map are now
+    // installed (see `configure_child_isolation`), but the storage, networking,
+    // and cgroup support required for genuinely *rootless* operation are not.
+    // Writing a non-identity map requires the daemon to hold CAP_SETUID in the
+    // parent user namespace, so an unprivileged daemon still cannot create
+    // containers.
     // TODO(feature-idea-17): extend the mount-only seccomp filter into a documented,
     // configurable syscall profile for container workloads.
     // TODO(feature-idea-18): add end-to-end security regressions for capability drops,
@@ -460,6 +544,39 @@ fn build_envp(declared: &[String]) -> anyhow::Result<Vec<CString>> {
             })
         })
         .collect()
+}
+
+/// Install the user-namespace UID/GID maps for a freshly cloned child.
+///
+/// Called in the **parent**, after `clone(2)` returns and before the child is
+/// released from the sync barrier. Only a process outside the new user
+/// namespace may write these files, so this cannot be done from `child_init`.
+///
+/// The three writes are ordered because the kernel requires them in this
+/// sequence: `setgroups` must be set to `deny` before an unprivileged writer
+/// may populate `gid_map` (writing `allow` would let the child re-enable
+/// `setgroups(2)` and escape the GID translation).
+///
+/// A single-line map (`0 <host_id> <size>`) translates container IDs `0..size`
+/// to `host_id..host_id+size`. Using one contiguous range rather than an
+/// identity map is what keeps two containers from sharing host UIDs when they
+/// are given different ranges.
+#[cfg(target_os = "linux")]
+fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()> {
+    let proc_dir = std::path::PathBuf::from(format!("/proc/{pid}"));
+    std::fs::write(proc_dir.join("setgroups"), "deny\n")
+        .with_context(|| format!("disable setgroups for child {pid}"))?;
+    std::fs::write(
+        proc_dir.join("uid_map"),
+        format!("0 {} {}\n", mapping.host_uid, mapping.size),
+    )
+    .with_context(|| format!("write exclusive uid_map for child {pid}"))?;
+    std::fs::write(
+        proc_dir.join("gid_map"),
+        format!("0 {} {}\n", mapping.host_gid, mapping.size),
+    )
+    .with_context(|| format!("write exclusive gid_map for child {pid}"))?;
+    Ok(())
 }
 
 /// Add the calling process to the cgroup at `cgroup_path`.
