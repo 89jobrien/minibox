@@ -169,7 +169,13 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
         const EXEC_FAILURE_EXIT_CODE: i32 = 127;
         if let Err(e) = child_init(config) {
-            error!(error = %e, "container: child init failed");
+            // `?e` (Debug), not `%e` (Display). anyhow's Display prints only the
+            // outermost context, so `%e` collapses a failure to "child:
+            // <context>" and discards the errno and the whole chain — every
+            // mount target, path, and io::Error underneath. child_init's
+            // failures are the ones you most need to diagnose and they were
+            // the least diagnosable. Matches `error = ?e` in adapters/exec.rs.
+            error!(error = ?e, "container: child init failed");
             unsafe { libc::_exit(EXEC_FAILURE_EXIT_CODE) };
         }
         // exec replaces the process image, so we never reach here.

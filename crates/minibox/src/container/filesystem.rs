@@ -385,7 +385,7 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
         source,
     })?;
 
-    // Set up /dev with tmpfs + mknod (works at any nesting depth).
+    // Set up /dev with tmpfs + bind mounts (required for a user-namespace child).
     setup_container_dev(new_root).with_context(|| "pivot_root: setup_container_dev")?;
 
     // Create the put_old directory for the old root.
@@ -680,11 +680,17 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
 // Re-use cross-platform types from fs_util.
 use crate::fs_util::{default_dev_symlinks, default_device_nodes};
 
-/// Set up /dev inside the container rootfs using tmpfs + mknod.
+/// Set up /dev inside the container rootfs using tmpfs + bind mounts.
 ///
 /// Called in the child init path after `CLONE_NEWNS`, before `pivot_root`.
-/// Uses the same approach as runc/libcontainer: tmpfs mount + explicit
-/// mknod calls. Works reliably at any nesting depth.
+/// Mounts a tmpfs at /dev and binds the host's device nodes into it. Bind
+/// mounts are used rather than `mknod` because the child runs in a user
+/// namespace, where device-node creation is denied by the kernel. This is the
+/// same approach runc/libcontainer take for unprivileged containers.
+///
+/// The child's mount namespace is already detached from the host's by the
+/// time this runs — `pivot_root_to` makes `/` `MS_PRIVATE` before calling in
+/// here — so the binds do not propagate outward.
 pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
     let dev_dir = rootfs.join("dev");
     fs::create_dir_all(&dev_dir).ok();
@@ -704,17 +710,51 @@ pub fn setup_container_dev(rootfs: &Path) -> anyhow::Result<()> {
     })
     .with_context(|| "setup_container_dev: mount tmpfs at /dev")?;
 
-    // Create device nodes
+    // Populate /dev.
+    //
+    // mknod(2) is not usable here. The child is cloned with CLONE_NEWUSER —
+    // `NamespaceConfig::to_clone_flags` sets it unconditionally, with no field
+    // to disable it — and the kernel refuses to create device nodes inside a
+    // user namespace regardless of the caller's capabilities. mknod("/dev/null")
+    // therefore fails before pivot_root is ever reached, and because the
+    // failure happens in the child it surfaces only as exit code 127.
+    //
+    // Binding the host's device node into the container's tmpfs /dev is what
+    // runc and podman do for unprivileged containers: it requires no special
+    // privilege and yields identical device semantics.
+    //
+    // One consequence: the node's permission bits are the host's, not
+    // `node.mode` from the table. Chmod after a bind mount is not an option —
+    // the mount shares the inode, so it would change the host's /dev too. The
+    // table stays the authoritative statement of *which* devices are exposed,
+    // which is the part that matters for isolation.
     for node in default_device_nodes() {
         let path = dev_dir.join(node.name);
-        let dev = nix::sys::stat::makedev(u64::from(node.major), u64::from(node.minor));
-        nix::sys::stat::mknod(
+        let host_path = Path::new("/dev").join(node.name);
+
+        // bind(2) requires an existing mount point and a fresh tmpfs has none,
+        // so create a placeholder first.
+        fs::File::create(&path)
+            .with_context(|| format!("create bind target for /dev/{}", node.name))?;
+
+        if let Err(source) = mount(
+            Some(&host_path),
             &path,
-            nix::sys::stat::SFlag::S_IFCHR,
-            nix::sys::stat::Mode::from_bits_truncate(node.mode),
-            dev,
-        )
-        .with_context(|| format!("mknod /dev/{}", node.name))?;
+            None::<&str>,
+            MsFlags::MS_BIND,
+            None::<&str>,
+        ) {
+            // Drop the placeholder. Leaving a regular file where a device is
+            // expected converts a loud failure here into a silent one that
+            // surfaces much later as a confusing I/O error.
+            let _ = fs::remove_file(&path);
+            return Err(FilesystemError::Mount {
+                fs: host_path.display().to_string(),
+                target: path.display().to_string(),
+                source,
+            })
+            .with_context(|| format!("bind host device /dev/{}", node.name));
+        }
     }
 
     // Create /dev/pts and mount devpts
