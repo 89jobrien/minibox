@@ -127,7 +127,7 @@ pub(super) async fn stop_inner(id: &str, state: &Arc<DaemonState>) -> Result<()>
         .update_container_state(id, ContainerState::Stopped)
         .await
     {
-        warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+        warn!(container_id = %id, error = ?e, "state: failed to mark container Stopped");
     }
     Ok(())
 }

@@ -139,7 +139,7 @@ pub async fn handle_update(
             Err(e) => {
                 warn!(
                     image = %ref_str,
-                    error = %e,
+                    error = ?e,
                     "handle_update: pull failed"
                 );
                 format!("error: {e:#}")
@@ -208,7 +208,7 @@ pub async fn handle_update(
                 Err(e) => {
                     warn!(
                         container_id = %id,
-                        error = %e,
+                        error = ?e,
                         "handle_update: failed to stop container — continuing"
                     );
                     continue;
@@ -240,7 +240,7 @@ pub async fn handle_update(
                     Err(e) => {
                         warn!(
                             container_id = %id,
-                            error = %e,
+                            error = ?e,
                             "handle_update: failed to restart container — stopped but not re-run"
                         );
                     }

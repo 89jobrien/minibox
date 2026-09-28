@@ -176,7 +176,7 @@ pub fn setup_overlay_or_tmpfs(
         Ok(merged) => Ok(merged),
         Err(e) if allow_tmpfs_fallback => {
             warn!(
-                error = %e,
+                error = ?e,
                 "filesystem: overlay mount failed, falling back to tmpfs copy"
             );
             setup_tmpfs_fallback(image_layers, container_dir)

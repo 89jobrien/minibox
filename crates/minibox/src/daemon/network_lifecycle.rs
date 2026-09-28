@@ -44,7 +44,7 @@ impl NetworkLifecycle {
         if let Err(e) = self.provider.cleanup(container_id).await {
             warn!(
                 container_id = %container_id,
-                error = %e,
+                error = ?e,
                 "network: cleanup failed"
             );
         }

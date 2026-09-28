@@ -323,7 +323,7 @@ where
             Err(e) => {
                 warn!(
                     max = MAX_REQUEST_SIZE,
-                    error = %e,
+                    error = ?e,
                     "rejecting oversized or malformed request"
                 );
                 let error_response = DaemonResponse::Error {

@@ -190,7 +190,7 @@ pub async fn handle_load_image(
             )
         }
         Err(e) => {
-            error!(error = %e, "load_image: failed");
+            error!(error = ?e, "load_image: failed");
             (
                 "error",
                 DaemonResponse::Error {

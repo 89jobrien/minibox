@@ -264,7 +264,7 @@ pub async fn handle_pipeline(
             ) {
                 warn!(
                     container_id = %container_id,
-                    error = %e,
+                    error = ?e,
                     "handle_pipeline: failed to store trace (non-fatal)"
                 );
             }

@@ -373,7 +373,7 @@ impl DaemonState {
             match repo.load_containers() {
                 Ok(r) => r,
                 Err(e) => {
-                    warn!(error = %e, "state: repository load failed, starting fresh");
+                    warn!(error = ?e, "state: repository load failed, starting fresh");
                     return;
                 }
             }
@@ -476,7 +476,7 @@ impl DaemonState {
 
         if let Some(repo) = &self.repository {
             if let Err(e) = repo.save_containers(&map) {
-                warn!(error = %e, "state: repository save failed");
+                warn!(error = ?e, "state: repository save failed");
             }
             return;
         }

@@ -399,7 +399,7 @@ async fn daemon_wait_for_exit(p: WaitParams) {
         .wait_for_exit(runtime_id.as_deref(), pid)
         .await
         .unwrap_or_else(|e| {
-            warn!(container_id = %id, error = %e, "container: wait_for_exit error");
+            warn!(container_id = %id, error = ?e, "container: wait_for_exit error");
             -1
         });
     info!(container_id = %id, exit_code = exit_code, "container: exited");
@@ -408,7 +408,7 @@ async fn daemon_wait_for_exit(p: WaitParams) {
     if !_post_exit_hooks.is_empty() {
         use crate::container::process::run_hooks;
         if let Err(e) = run_hooks(&_post_exit_hooks, &_rootfs, Some(exit_code)) {
-            warn!(container_id = %id, error = %e, "container: post-exit hooks error");
+            warn!(container_id = %id, error = ?e, "container: post-exit hooks error");
         }
     }
 
@@ -431,7 +431,7 @@ async fn daemon_wait_for_exit(p: WaitParams) {
         .update_container_state(id, ContainerState::Stopped)
         .await
     {
-        warn!(container_id = %id, error = %e, "state: failed to mark container Stopped");
+        warn!(container_id = %id, error = ?e, "state: failed to mark container Stopped");
     }
 }
 

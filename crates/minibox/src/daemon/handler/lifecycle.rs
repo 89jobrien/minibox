@@ -106,7 +106,7 @@ async fn toggle_freeze(params: FreezeParams) -> DaemonResponse {
         };
     }
     if let Err(e) = state.update_container_state(&id, new_state).await {
-        warn!(container_id = %id, error = %e, "{warn_msg}");
+        warn!(container_id = %id, error = ?e, "{warn_msg}");
     }
     info!(container_id = %id, "{log_msg}");
     if is_pause {

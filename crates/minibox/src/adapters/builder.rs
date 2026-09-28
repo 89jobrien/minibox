@@ -650,7 +650,7 @@ async fn execute_run_step(
     {
         warn!(
             step = ctx.step_num,
-            error = %e,
+            error = ?e,
             "build: rootfs cleanup failed after RUN step"
         );
     }

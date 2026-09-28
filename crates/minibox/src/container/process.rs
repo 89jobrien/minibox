@@ -308,7 +308,7 @@ pub fn run_hooks(
                     std::thread::sleep(Duration::from_millis(HOOK_POLL_INTERVAL_MS));
                 }
                 Err(e) => {
-                    warn!(command = %hook.command, error = %e, "lifecycle hook wait error");
+                    warn!(command = %hook.command, error = ?e, "lifecycle hook wait error");
                     break;
                 }
             }
