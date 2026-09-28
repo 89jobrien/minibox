@@ -122,6 +122,7 @@ pub fn build_request(params: SandboxBuildParams<'_>) -> Result<DaemonRequest> {
         network: Some(network_mode),
         mounts,
         privileged: false,
+        shared_uid_range: false,
         env: vec![],
         name: None,
         tty: false,

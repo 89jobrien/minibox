@@ -341,6 +341,9 @@ pub(super) async fn run_from_params(
         network: creation_params.network,
         mounts: creation_params.mounts.clone(),
         privileged: creation_params.privileged,
+        // Resumed containers keep the exclusive UID range; sharing host UIDs
+        // requires an explicit opt-in via RunParams::shared_uid_range.
+        shared_uid_range: false,
         env: creation_params.env.clone(),
         name: creation_params.name.clone(),
         platform: creation_params.platform.clone(),

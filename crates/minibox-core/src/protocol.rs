@@ -146,6 +146,9 @@ pub enum DaemonRequest {
         /// needs `CAP_SYS_ADMIN`, `CAP_NET_ADMIN`, etc. to create namespaces.
         #[serde(default)]
         privileged: bool,
+        /// Reuse one host UID/GID range instead of the secure exclusive default.
+        #[serde(default)]
+        shared_uid_range: bool,
         /// Optional human-readable name for the container.
         ///
         /// When set, the container can be referenced by name in `stop` and `rm`
@@ -935,6 +938,7 @@ pub struct TestRunDefaults {
     pub network: Option<crate::domain::NetworkMode>,
     pub mounts: Vec<crate::domain::BindMount>,
     pub privileged: bool,
+    pub shared_uid_range: bool,
     pub env: Vec<String>,
     pub name: Option<String>,
     pub tty: bool,
@@ -959,6 +963,7 @@ impl Default for TestRunDefaults {
             network: None,
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             tty: false,
@@ -987,6 +992,7 @@ impl TestRunDefaults {
             network: self.network,
             mounts: self.mounts,
             privileged: self.privileged,
+            shared_uid_range: self.shared_uid_range,
             env: self.env,
             name: self.name,
             tty: self.tty,
@@ -1556,6 +1562,7 @@ mod tests {
             network: None,
             mounts: vec![],
             privileged: true,
+            shared_uid_range: false,
             env: vec![],
             name: None,
             tty: false,
@@ -1717,6 +1724,7 @@ mod tests {
             env: vec!["FOO=bar".to_string()],
             mounts: vec![],
             privileged: false,
+            shared_uid_range: false,
             name: Some("my-container".to_string()),
             tty: false,
             entrypoint: None,
@@ -1942,6 +1950,7 @@ mod tests {
                 env: vec!["SECRET=hunter2".into()],
                 mounts: vec![],
                 privileged: false,
+                shared_uid_range: false,
                 name: None,
                 tty: false,
                 entrypoint: None,
