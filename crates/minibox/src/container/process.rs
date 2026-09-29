@@ -110,6 +110,7 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
     let capture_output = config.capture_output;
     let uid_mapping = config.uid_mapping;
+    let cgroup_path = config.cgroup_path.clone();
     let ns_config = config.namespace_config.clone();
 
     // Parent/child barrier: the child must not proceed — in particular must not
@@ -222,17 +223,36 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
     let pid = pid?;
 
-    // Parent: install the user-namespace UID/GID maps. This must happen from
-    // the parent — only a process *outside* the new user namespace may write
-    // uid_map/gid_map, and the child is blocked on the sync pipe until we do.
+    // Parent-side setup that must succeed before the child is released. Both
+    // writes land in something the child cannot write to itself, which is
+    // exactly why the child does neither.
     //
-    // The cgroup is deliberately NOT written here: `child_init` already adds
-    // the child to its cgroup from the inside via `add_self_to_cgroup`, which
-    // is develop's mechanism and is required because the child's PID inside its
-    // new PID namespace need not match the PID the parent sees. Writing
-    // cgroup.procs from both sides would be redundant.
+    // - uid_map/gid_map may only be written by a process *outside* the new user
+    //   namespace, i.e. by us.
+    // - cgroup.procs. The child's cgroup namespace is the *initial* one, because
+    //   NamespaceConfig::to_clone_flags never sets CLONE_NEWCGROUP. Adding a
+    //   process to a cgroup requires privilege over the user namespace that
+    //   owns the cgroup namespace -- the parent's, not the child's new one -- so
+    //   the child gets EPERM however privileged it is inside its own namespace.
+    //   Holding PID 1 in its own PID namespace does not help, and never did
+    //   under a user namespace. We use the PID clone(2) returned, which is the
+    //   one valid in this namespace.
+    //
+    // The child is still parked on the sync pipe at this point, so if either
+    // step fails it can be killed and reaped rather than left half-configured
+    // and unaccounted for.
+    let parent_setup = configure_child_isolation(pid.as_raw(), uid_mapping).and_then(|()| {
+        let procs_file = cgroup_path.join("cgroup.procs");
+        std::fs::write(&procs_file, format!("{}\n", pid.as_raw()))
+            .map_err(|source| crate::error::CgroupError::AddProcessFailed {
+                pid: pid.as_raw() as u32,
+                path: procs_file.display().to_string(),
+                source,
+            })
+            .map_err(anyhow::Error::from)
+    });
     unsafe { libc::close(sync_read_raw) };
-    if let Err(error) = configure_child_isolation(pid.as_raw(), uid_mapping) {
+    if let Err(error) = parent_setup {
         // The child is parked on the sync pipe; it will never be released, so
         // reap it rather than leaking a live process.
         unsafe { libc::close(sync_write_raw) };
@@ -481,10 +501,14 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         ))
     })?;
 
-    // 2. Add ourselves to the cgroup so resource limits apply.
-    //    We write PID 0 which the kernel interprets as "current process"
-    //    for cgroup.procs.
-    add_self_to_cgroup(&config.cgroup_path).with_context(|| "child: add_self_to_cgroup")?;
+    // 2. Join the cgroup. This happens in the parent, immediately after
+    //    clone(2) and before this child is released from the sync barrier --
+    //    see the `parent_setup` block in `spawn_container_process`. The child
+    //    cannot do it: the cgroup namespace is the initial one, owned by the
+    //    parent user namespace, and adding a process to a cgroup requires
+    //    privilege in that namespace rather than in the child's own. Writing
+    //    PID 0 from in here returns EPERM, so this step is deliberately absent
+    //    from `child_init` rather than merely reordered.
 
     // 3. Apply bind mounts into the overlay rootfs before pivot_root.
     //    These mounts live inside this child's new mount namespace (CLONE_NEWNS).
@@ -705,24 +729,6 @@ fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()
             "container: installed uid_map does not match the requested range"
         );
     }
-    Ok(())
-}
-
-/// Add the calling process to the cgroup at `cgroup_path`.
-///
-/// Writes `"0\n"` to `cgroup.procs`; the kernel interprets PID 0 as the
-/// calling process. This is the correct mechanism to use from inside the
-/// child after `clone(2)`, because the child's PID inside its new PID
-/// namespace may differ from the PID visible to the parent.
-fn add_self_to_cgroup(cgroup_path: &std::path::Path) -> anyhow::Result<()> {
-    let procs_file = cgroup_path.join("cgroup.procs");
-    std::fs::write(&procs_file, "0\n").map_err(|source| {
-        crate::error::CgroupError::AddProcessFailed {
-            pid: 0,
-            path: procs_file.display().to_string(),
-            source,
-        }
-    })?;
     Ok(())
 }
 
