@@ -113,6 +113,16 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     let cgroup_path = config.cgroup_path.clone();
     let ns_config = config.namespace_config.clone();
 
+    // ---- Parent phase 1: before clone -------------------------------------
+    // Operations the child must *inherit*. The mount namespace is copied at
+    // clone(2), so anything created afterwards is invisible to the child, and
+    // a mount namespace created alongside a new user namespace holds its
+    // inherited mounts locked -- the child cannot graft onto them even with a
+    // full capability set in its own namespace. Both reasons force these to
+    // happen here rather than in `child_init`.
+    crate::container::filesystem::bind_rootfs_mount_point(&config.rootfs)
+        .context("parent: make rootfs a mount point")?;
+
     // Parent/child barrier: the child must not proceed — in particular must not
     // reach `execve` — until the parent has installed the UID/GID maps. Without
     // this the child could `exec` while its user namespace is still unmapped,
@@ -223,9 +233,10 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
     let pid = pid?;
 
-    // Parent-side setup that must succeed before the child is released. Both
-    // writes land in something the child cannot write to itself, which is
-    // exactly why the child does neither.
+    // ---- Parent phase 2: after clone, before the barrier releases ---------
+    // Operations that target the child's own PID, so they cannot happen before
+    // clone. Both land somewhere the child cannot write to itself, which is
+    // exactly why the child does neither: it is in a user namespace.
     //
     // - uid_map/gid_map may only be written by a process *outside* the new user
     //   namespace, i.e. by us.
@@ -234,7 +245,7 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     //   process to a cgroup requires privilege over the user namespace that
     //   owns the cgroup namespace -- the parent's, not the child's new one -- so
     //   the child gets EPERM however privileged it is inside its own namespace.
-    //   Holding PID 1 in its own PID namespace does not help, and never did
+    //   Holding PID 1 in its own PID namespace does not help and never did
     //   under a user namespace. We use the PID clone(2) returned, which is the
     //   one valid in this namespace.
     //
@@ -489,6 +500,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         gid = unsafe { libc::getgid() },
         euid = unsafe { libc::geteuid() },
         egid = unsafe { libc::getegid() },
+        cap_eff = read_cap_eff().unwrap_or_else(|| "unreadable".to_string()),
         "container: child credentials after entering namespace"
     );
 
@@ -730,6 +742,24 @@ fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()
         );
     }
     Ok(())
+}
+
+/// Read `CapEff` from `/proc/self/status` as a hex string.
+///
+/// The effective capability set is what decides whether the child can perform
+/// the privileged setup in `child_init` -- `mount`, `pivot_root`, `sethostname`
+/// all need capabilities in the namespaces it owns. Credentials alone are not
+/// sufficient evidence, and a zero set here explains an `EACCES` that the uid
+/// and gid columns would otherwise rule out.
+#[cfg(target_os = "linux")]
+fn read_cap_eff() -> Option<String> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("CapEff:"))?
+        .split_whitespace()
+        .next()
+        .map(str::to_string)
 }
 
 /// Close all file descriptors with index >= 3 (i.e., everything except

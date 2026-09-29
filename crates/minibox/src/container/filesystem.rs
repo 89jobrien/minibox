@@ -333,19 +333,9 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
         source,
     })?;
 
-    // Bind-mount new_root onto itself to make it a discrete mount point.
-    mount(
-        Some(new_root),
-        new_root,
-        None::<&str>,
-        MsFlags::MS_BIND | MsFlags::MS_REC,
-        None::<&str>,
-    )
-    .map_err(|source| FilesystemError::Mount {
-        fs: "bind".into(),
-        target: new_root.display().to_string(),
-        source,
-    })?;
+    // new_root is already a discrete mount point: the parent made it so before
+    // clone, via `bind_rootfs_mount_point`. See that function for why it cannot
+    // be done from here.
 
     // Hide image-provided PID files before init starts. Both systemd and
     // non-systemd images receive a fresh /run, with /var/run pointing at it.
@@ -673,6 +663,46 @@ fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path
     }
 }
 
+/// Make `new_root` a discrete mount point so `pivot_root(2)` will accept it.
+///
+/// `pivot_root` requires the new root to be a mount point and the old root to
+/// be one too. A bind mount of the directory onto itself satisfies both without
+/// changing what is visible.
+///
+/// **Must be called in the parent, before `clone`.** Two independent reasons,
+/// and both are load-bearing:
+///
+/// 1. The mount namespace is copied at `clone`. A bind created afterwards
+///    lands in the parent's namespace and the child never sees it, so
+///    `pivot_root` would still find `new_root` to be a plain directory.
+///
+/// 2. A mount namespace created together with a new user namespace inherits
+///    its mounts *locked*, in groups that cannot be unmounted or grafted onto
+///    individually. The overlay is such an inherited mount by the time the
+///    child runs, so bind-mounting onto it from inside is refused with
+///    `EACCES` -- even though the child is root in its own user namespace and
+///    holds a full capability set there, which is the confusing part of the
+///    symptom. In the parent the overlay is not locked, so the operation
+///    succeeds and the child inherits the result.
+///
+/// Stacking this on top of the overlay means `merged` carries two mounts, so
+/// [`cleanup_mounts`] drains the stack rather than unmounting once.
+pub fn bind_rootfs_mount_point(new_root: &Path) -> anyhow::Result<()> {
+    mount(
+        Some(new_root),
+        new_root,
+        None::<&str>,
+        MsFlags::MS_BIND | MsFlags::MS_REC,
+        None::<&str>,
+    )
+    .map_err(|source| FilesystemError::Mount {
+        fs: "bind".into(),
+        target: new_root.display().to_string(),
+        source,
+    })?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // /dev setup (tmpfs + mknod, runc-compatible)
 // ---------------------------------------------------------------------------
@@ -815,11 +845,18 @@ pub fn cleanup_mounts(container_dir: &Path) -> anyhow::Result<()> {
     let merged = container_dir.join("merged");
     if merged.exists() {
         debug!(merged = %merged.display(), "filesystem: unmounting overlay");
-        if let Err(e) = umount2(&merged, MntFlags::MNT_DETACH) {
-            warn!(
+        // `merged` can carry a stack: the overlay itself, plus the
+        // self-bind added by `bind_rootfs_mount_point`. Drain it rather than
+        // unmounting once, or the container directory cannot be removed.
+        // Bounded so a pathological stack cannot spin.
+        for attempt in 0..4 {
+            if umount2(&merged, MntFlags::MNT_DETACH).is_err() {
+                break;
+            }
+            debug!(
                 merged = %merged.display(),
-                error = %e,
-                "filesystem: failed to unmount overlay"
+                attempt,
+                "filesystem: unmounted stacked mount"
             );
         }
     }
