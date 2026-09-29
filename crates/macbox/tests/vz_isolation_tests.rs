@@ -370,6 +370,7 @@ mod suite {
         fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
     );
 
+    /// Runs the vz isolation tests workflow.
     pub async fn run() -> bool {
         let tests: &[TestCase] = &[
             ("vz_container_can_list_rootfs", || {

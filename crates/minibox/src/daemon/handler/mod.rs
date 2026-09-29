@@ -7,7 +7,10 @@
 // TODO(#116): raise coverage on handler and lifecycle/error paths
 //! Complexity exceptions are centralized in this module's `rustqual.toml`.
 //! Function-level complexity suppressions are prohibited by a regression test
-//! so policy changes remain explicit and reviewable.
+//! so policy changes remain explicit and reviewable. Daemon boundary
+//! signatures that mirror protocol variants use narrow, per-handler
+//! parameter-count exceptions rather than weakening crate-wide quality
+//! thresholds.
 //!
 //! # Hexagonal Architecture
 //!

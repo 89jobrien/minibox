@@ -17,6 +17,9 @@ pub trait ContainerStateAccess: Send + Sync {
     /// Return the path to the container's overlay upper (writable) layer.
     async fn get_overlay_upper(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf>;
 
+    /// Return the mounted merged rootfs for a container commit snapshot.
+    async fn get_merged_rootfs(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf>;
+
     /// Return the image reference the container was started from.
     async fn get_source_image_ref(&self, container_id: &str) -> anyhow::Result<String>;
 }

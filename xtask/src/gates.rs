@@ -25,6 +25,108 @@ where
 /// Agent config directories that trigger agentlint.
 const AGENT_DIRS: &[&str] = &[".claude/", ".codex/", ".agents/", ".cursor/"];
 
+/// Features that cannot build on the current host, with the reason.
+///
+/// `cargo check --workspace` only builds default features, so a declared feature
+/// can rot indefinitely without anything noticing. That is how all three of
+/// `miniboxd`'s non-default paths went stale at once: `cni` constructed
+/// `minibox_cni::CniNetworkProvider` without `miniboxd` declaring the dependency,
+/// and `tailnet` referenced the external `tailbox` crate, which is not a
+/// workspace member, from a function that could not compile with the feature on.
+///
+/// Excluding a feature here costs coverage. Including one that cannot build costs
+/// CI. When genuinely unsure, exclude it and say why.
+#[cfg(target_os = "linux")]
+const HOST_EXCLUDED_FEATURES: &[(&str, &str)] =
+    &[("vz", "Virtualization.framework / objc2 are macOS-only")];
+
+#[cfg(not(target_os = "linux"))]
+const HOST_EXCLUDED_FEATURES: &[(&str, &str)] = &[];
+
+/// Every `(package, feature)` pair declared by a workspace member, excluding
+/// `default` and anything in [`HOST_EXCLUDED_FEATURES`].
+///
+/// Members that declare no `[features]` table contribute nothing, so this is
+/// cheap for the majority of the workspace.
+fn declared_feature_combinations(root: &Path) -> Result<Vec<(String, String)>> {
+    let workspace_manifest = root.join("Cargo.toml");
+    let raw = fs::read_to_string(&workspace_manifest)
+        .with_context(|| format!("read {}", workspace_manifest.display()))?;
+    let workspace: toml::Table = raw
+        .parse()
+        .with_context(|| format!("parse {}", workspace_manifest.display()))?;
+
+    let members = workspace
+        .get("workspace")
+        .and_then(toml::Value::as_table)
+        .and_then(|w| w.get("members"))
+        .and_then(toml::Value::as_array)
+        .context("workspace.members missing from the root manifest")?;
+
+    let mut combos = Vec::new();
+    for member in members.iter().filter_map(toml::Value::as_str) {
+        let member_manifest = root.join(member).join("Cargo.toml");
+        let Ok(raw) = fs::read_to_string(&member_manifest) else {
+            continue;
+        };
+        let Ok(manifest) = raw.parse::<toml::Table>() else {
+            continue;
+        };
+        let Some(features) = manifest.get("features").and_then(toml::Value::as_table) else {
+            continue;
+        };
+        let package = manifest
+            .get("package")
+            .and_then(toml::Value::as_table)
+            .and_then(|p| p.get("name"))
+            .and_then(toml::Value::as_str)
+            .unwrap_or(member);
+
+        for feature in features.keys() {
+            if feature == "default" {
+                continue;
+            }
+            if let Some((_, reason)) = HOST_EXCLUDED_FEATURES
+                .iter()
+                .find(|(excluded, _)| *excluded == feature.as_str())
+            {
+                eprintln!("feature matrix: skipping {package}/{feature} — {reason}");
+                continue;
+            }
+            combos.push((package.to_string(), feature.clone()));
+        }
+    }
+    Ok(combos)
+}
+
+/// Build every non-default feature of every workspace member.
+///
+/// A feature that is declared but never compiled is a claim, not a capability.
+/// This turns each claim into a compile so rot surfaces at the gate rather than
+/// in a deployment. Deliberately part of `verify` and not `lint`: it costs one
+/// `cargo check` per combination, which is not worth paying on every commit.
+fn feature_matrix(sh: &Shell, root: &Path) -> Result<()> {
+    let combos = declared_feature_combinations(root)?;
+    for (package, feature) in &combos {
+        eprintln!("feature matrix: cargo check -p {package} --features {feature}");
+        sh.cmd("cargo")
+            .args([
+                "check",
+                "-p",
+                package.as_str(),
+                "--features",
+                feature.as_str(),
+            ])
+            .run()
+            .with_context(|| format!("declared feature {package}/{feature} does not build"))?;
+    }
+    eprintln!("feature matrix passed: {} combination(s)", combos.len());
+    Ok(())
+}
+
+// TODO(feature-idea-02): extend agentlint with semantic checks for local paths, Cargo package
+// names, and documented xtask commands so stale agent guidance fails validation.
+
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
@@ -52,7 +154,7 @@ pub fn lint(sh: &Shell) -> Result<()> {
 }
 
 /// Read-only local verification gate: fmt check, workspace check, clippy,
-/// borrow fixtures, and docs lint. Does not modify files.
+/// feature matrix, borrow fixtures, and docs lint. Does not modify files.
 pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
     let sh = sh.clone();
     let root = root.to_path_buf();
@@ -67,6 +169,9 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
         cmd!(sh, "cargo check --workspace")
             .run()
             .context("cargo check --workspace failed")?;
+
+        eprintln!("--- verify: feature matrix ---");
+        feature_matrix(&sh, &root)?;
 
         eprintln!("--- verify: clippy ---");
         cmd!(
@@ -95,21 +200,17 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
 
 /// Fix gate: version bump + fmt + clippy --fix + re-stage (macOS-safe, fast)
 ///
-/// This mutates files and the git index. Use `pre-commit` for validation-only checks.
+/// This applies clippy fixes; `pre-commit` only formats/re-stages staged Rust and validates.
 pub fn fix(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
+        let staged_before = staged_rust_paths(sh)?;
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
-        // Re-stage any files rustfmt modified so the commit includes the formatted versions.
-        // Exclude .worktrees/ to avoid git trying to lock index files inside worktree .git files.
-        // `cargo fmt` only ever touches `.rs` files — restrict the re-stage
-        // pathspec accordingly so this doesn't sweep in unrelated files that
-        // happened to already be dirty in the working tree (docs, HANDOFF
-        // state, checkpoint files, etc.) into the commit being made.
-        cmd!(sh, "git add -u -- *.rs :!.worktrees")
-            .run()
-            .context("git add -u after fmt failed")?;
+        // Re-stage only the .rs files that were already staged, so rustfmt's
+        // output lands in this commit without pulling in unrelated dirty files.
+        // See `restage_staged_rust` for why the `*.rs` glob is not equivalent.
+        restage_staged_rust(sh, &staged_before)?;
         auto_bump(sh)?;
         cmd!(
             sh,
@@ -117,32 +218,34 @@ pub fn fix(sh: &Shell) -> Result<()> {
         )
         .run()
         .context("clippy --fix failed")?;
-        // Re-stage any files clippy --fix modified.
-        cmd!(sh, "git add -u -- . :!.worktrees")
-            .run()
-            .context("git add -u after clippy --fix failed")?;
+        // Re-stage any files clippy --fix modified, restricted to paths already
+        // staged so unrelated dirty files stay out of the commit.
+        let to_restage = staged_rust_paths(sh)?;
+        if !to_restage.is_empty() {
+            cmd!(sh, "git add -u -- {to_restage...}")
+                .run()
+                .context("git add -u after clippy --fix failed")?;
+        }
     }
 
     eprintln!("fix gate passed");
     Ok(())
 }
 
-/// Pre-commit gate: validation-only checks (macOS-safe, fast)
+/// Pre-commit gate: staged formatting, clippy, and repository checks (macOS-safe, fast).
 ///
-/// Never stages or edits files. Use `fix` for auto-formatting and clippy --fix.
+/// Formats and re-stages staged Rust files, but does not apply clippy fixes.
 /// Release build and conformance suite run at pre-push time, not here.
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
 
     if rust_staged {
+        let staged_before = staged_rust_paths(sh)?;
         cmd!(sh, "cargo fmt --all").run().context("fmt failed")?;
-        // `cargo fmt` only ever touches `.rs` files — restrict the re-stage
-        // pathspec accordingly so this doesn't sweep in unrelated files that
-        // happened to already be dirty in the working tree (docs, HANDOFF
-        // state, checkpoint files, etc.) into the commit being made.
-        cmd!(sh, "git add -u -- *.rs :!.worktrees")
-            .run()
-            .context("git add -u after fmt failed")?;
+        // Re-stage only the .rs files that were already staged, so rustfmt's
+        // output lands in this commit without pulling in unrelated dirty files.
+        // See `restage_staged_rust` for why the `*.rs` glob is not equivalent.
+        restage_staged_rust(sh, &staged_before)?;
         cmd!(
             sh,
             "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
@@ -531,8 +634,7 @@ pub fn test_turmoil(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-/// Property-based tests (proptest)
-/// Shuttle concurrency tests (deterministic random scheduling).
+/// Runs the Shuttle concurrency suite with deterministic random scheduling.
 pub fn test_shuttle(sh: &Shell) -> Result<()> {
     cmd!(
         sh,
@@ -543,6 +645,7 @@ pub fn test_shuttle(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Runs the gated release-mode property suites for minibox and its daemon.
 pub fn test_property(sh: &Shell) -> Result<()> {
     let root = sh.current_dir();
     let sh = sh.clone();
@@ -1005,6 +1108,33 @@ mod tests {
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
+    fn rustqual_parameter_policy_remains_strict() {
+        let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask manifest must be beneath workspace root");
+        let max_parameters = |path: &std::path::Path| {
+            let source = std::fs::read_to_string(path)
+                .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+            let config: toml::Value = toml::from_str(&source)
+                .unwrap_or_else(|error| panic!("parse {}: {error}", path.display()));
+            config["srp"]["max_parameters"]
+                .as_integer()
+                .unwrap_or_else(|| panic!("missing srp.max_parameters in {}", path.display()))
+        };
+
+        assert_eq!(
+            max_parameters(&workspace_root.join("rustqual.toml")),
+            5,
+            "workspace analysis must retain the strict global parameter threshold"
+        );
+        assert_eq!(
+            max_parameters(&workspace_root.join("crates/minibox/rustqual.toml")),
+            5,
+            "the minibox crate must retain the strict parameter threshold"
+        );
+    }
+
+    #[test]
     fn phase_2_skipped_true_values() {
         let _g = ENV_LOCK.lock().expect("env lock");
         for val in ["1", "true"] {
@@ -1089,7 +1219,7 @@ mod tests {
     }
 
     /// Tripwire: `test_unit` (the implementation of `cargo xtask test unit`,
-    /// the canonical "unit + conformance + property tests, any platform"
+    /// the canonical workspace library test command
     /// command per README.md/CLAUDE.md) must keep invoking `cargo nextest run
     /// --workspace --lib`, and the only crate ever excluded from that run must
     /// be the explicit, expected set below.
@@ -1594,13 +1724,79 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn staged_rust_files(sh: &Shell) -> Result<bool> {
+    Ok(!staged_rust_paths(sh)?.is_empty())
+}
+
+/// Exact list of staged `.rs` / `.toml` paths (excluding `Cargo.lock`).
+///
+/// Used to re-stage files after `cargo fmt` without sweeping in unrelated
+/// working-tree changes. See [`restage_staged_rust`] for why the glob form of
+/// this is wrong.
+/// Staged `.rs` / `.toml` paths (excluding `Cargo.lock`). Matching the
+/// extension case-sensitively is intentional: the re-stage pathspec must not
+/// pick up `.RS` or other case variants a filesystem may report.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+fn staged_rust_paths(sh: &Shell) -> Result<Vec<String>> {
     let staged = cmd!(sh, "git diff --cached --name-only")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);
     Ok(staged
         .lines()
-        .any(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && l != "Cargo.lock"))
+        .filter(|l| (l.ends_with(".rs") || l.ends_with(".toml")) && *l != "Cargo.lock")
+        .map(str::to_string)
+        .collect())
+}
+
+/// Re-stage exactly the `.rs` files that were already staged, so formatting
+/// changes to them land in the commit being made.
+///
+/// **Do not replace this with `git add -u -- *.rs`.** That pathspec is matched
+/// against every tracked file, so it stages *all* dirty `.rs` files in the
+/// working tree — not just the ones rustfmt touched. When another agent (or a
+/// parallel worktree) has uncommitted `.rs` edits, that silently sweeps their
+/// in-progress work into the commit, which is how a commit came to include an
+/// unfinished refactor that did not compile.
+///
+/// Files that rustfmt reformatted but that were *not* staged are deliberately
+/// left dirty and reported, rather than being added silently.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+fn restage_staged_rust(sh: &Shell, staged_before: &[String]) -> Result<Vec<String>> {
+    if staged_before.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Snapshot which tracked .rs files are dirty after fmt, to spot files
+    // rustfmt touched that were not part of the commit.
+    let after = cmd!(sh, "git diff --name-only")
+        .output()
+        .context("git diff failed")?;
+    let after = String::from_utf8_lossy(&after.stdout);
+    let unstaged_rust: Vec<&str> = after
+        .lines()
+        .filter(|l| l.ends_with(".rs") && !staged_before.iter().any(|s| s == l))
+        .collect();
+
+    let paths: Vec<&str> = staged_before
+        .iter()
+        .filter(|p| p.ends_with(".rs"))
+        .map(String::as_str)
+        .collect();
+    if !paths.is_empty() {
+        cmd!(sh, "git add -u -- {paths...}")
+            .run()
+            .context("re-staging formatted files failed")?;
+    }
+
+    if !unstaged_rust.is_empty() {
+        eprintln!(
+            "note: cargo fmt also reformatted {} unstaged .rs file(s) left out of this commit: {}",
+            unstaged_rust.len(),
+            unstaged_rust.join(", ")
+        );
+    }
+
+    Ok(unstaged_rust.iter().map(|s| (*s).to_string()).collect())
 }
 
 /// Auto-bump workspace version based on staged Rust changes.
@@ -1626,7 +1822,7 @@ fn auto_bump(sh: &Shell) -> Result<()> {
 
     let level = if has_new_rust { "minor" } else { "patch" };
     let root = sh.current_dir();
-    bump::bump(&root, level)?;
+    let _version = bump::bump(&root, level)?;
 
     cmd!(sh, "git add Cargo.toml")
         .run()

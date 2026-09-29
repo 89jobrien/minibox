@@ -125,6 +125,7 @@ pub fn parse_bench_args(rest: &[String]) -> BenchOpts {
 // Public entry point
 // ---------------------------------------------------------------------------
 
+/// Runs the selected benchmark groups and records their results.
 pub fn bench(sh: &Shell, root: &Path, opts: &BenchOpts) -> Result<()> {
     let history_limit: usize = 30;
 

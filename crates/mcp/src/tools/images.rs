@@ -15,8 +15,9 @@ pub async fn list_images(
     client: &MiniboxDaemonClient,
     policy: &AgentPolicy,
 ) -> Result<ImagesOutput> {
-    let call = policy.authorize_read(DaemonRequest::ListImages)?;
-    let result = client.call(call).await?;
+    let result = client
+        .call_limited(DaemonRequest::ListImages, policy.max_output_bytes)
+        .await?;
     result
         .responses
         .into_iter()
@@ -43,13 +44,18 @@ pub async fn pull_image(
     // Pull mutates daemon state (network fetch + disk write), so it sits
     // behind the same mutation gate as stop/rm.
     require_non_empty(&input.image, "image")?;
-    let request = DaemonRequest::Pull {
-        image: input.image,
-        tag: input.tag,
-        platform: input.platform,
-    };
-    let call = policy.authorize_mutation("minibox_pull", request)?;
-    let result = client.call(call).await?;
+    let request = policy.authorize_mutation(
+        "minibox_pull",
+        DaemonRequest::Pull {
+            image: input.image,
+            tag: input.tag,
+            platform: input.platform,
+        },
+    )?;
+
+    let (result, _) = client
+        .call_authorized(request, policy.max_output_bytes)
+        .await?;
     let message = result
         .responses
         .iter()

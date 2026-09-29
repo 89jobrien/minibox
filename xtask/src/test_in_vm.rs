@@ -16,7 +16,10 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::xconfig::XConfig;
+use crate::{
+    utils::{self, Profile},
+    xconfig::XConfig,
+};
 
 pub struct Options {
     /// Skip cross-compilation (assume binaries already built).
@@ -30,6 +33,7 @@ pub struct Options {
 }
 
 impl Options {
+    /// Parses runner flags and collects arguments after `--` for the test binaries.
     pub fn from_args(args: &[String]) -> Self {
         let smolfile = args
             .windows(2)
@@ -71,6 +75,9 @@ impl VmBackend {
     }
 }
 
+/// Selects an available VM backend and runs the Linux test suites inside it.
+///
+/// Persistent VMs run Cargo directly; ephemeral VMs run cross-compiled test binaries.
 pub fn run(workspace_root: &Path, opts: &Options) -> Result<()> {
     let cfg = XConfig::load(workspace_root)?;
     let target = &cfg.cross.target;
@@ -177,8 +184,7 @@ fn run_ephemeral(
     target: &str,
     ci_gate_smolfile: &str,
 ) -> Result<()> {
-    let target_dir = std::env::var("CARGO_TARGET_DIR")
-        .map_or_else(|_| workspace_root.join("target"), PathBuf::from);
+    let target_dir = utils::cargo_target_dir();
 
     // 1. Cross-compile
     if opts.skip_build {
@@ -189,7 +195,7 @@ fn run_ephemeral(
     }
 
     // 2. Locate test binaries
-    let deps_dir = target_dir.join(target).join("debug").join("deps");
+    let deps_dir = utils::deps_dir(&target_dir, Some(target), Profile::Debug);
     if !deps_dir.exists() {
         bail!(
             "deps dir not found: {}\nRun without --skip-build first.",

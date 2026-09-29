@@ -182,7 +182,7 @@ Branch: `feat/issue-358-workflow-step-types` (cut from `develop`)
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core    → all green
    cargo clippy -p minibox-core -- -D warnings   → zero warnings
    ```
@@ -326,7 +326,7 @@ Branch: `feat/issue-359-step-runner-registry` (cut from `develop`, depends on Ta
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core    → all green
    cargo clippy -p minibox-core -- -D warnings   → zero warnings
    ```
@@ -405,7 +405,7 @@ Branch: `feat/issue-361-step-retry-timeout` (cut from `develop`, depends on Task
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core    → all green
    cargo clippy -p minibox-core -- -D warnings   → zero warnings
    ```
@@ -497,7 +497,7 @@ Branch: `feat/issue-360-alias-state` (cut from `develop`, depends on Tasks 1 and
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core    → all green
    cargo clippy -p minibox-core -- -D warnings   → zero warnings
    ```
@@ -512,7 +512,7 @@ Branch: `feat/issue-360-alias-state` (cut from `develop`, depends on Tasks 1 and
 
 **Crate**: `minibox-core`, `miniboxd`
 **File(s)**: `crates/minibox-core/src/protocol.rs`,
-             `miniboxd/src/handler.rs` (or equivalent handler module)
+`miniboxd/src/handler.rs` (or equivalent handler module)
 **Run**: `cargo nextest run -p minibox-core -p miniboxd`
 
 Branch: `feat/issue-362-start-from-step` (cut from `develop`, depends on Tasks 1 and 4 merged)
@@ -596,7 +596,7 @@ Branch: `feat/issue-362-start-from-step` (cut from `develop`, depends on Tasks 1
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core    → all green
    cargo clippy -p minibox-core -- -D warnings   → zero warnings
    ```
@@ -797,7 +797,7 @@ Branch: `feat/issue-363-xtask-promote` (cut from `develop`, independent of Tasks
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p xtask    → all green
    cargo clippy -p xtask -- -D warnings   → zero warnings
    ```
@@ -895,7 +895,7 @@ Branch: `feat/issue-60-alias-namespace` (cut from `develop` in crux repo)
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-runtime -p crux-types    → all green
    cargo clippy -p crux-runtime -p crux-types -- -D warnings   → zero warnings
    ```
@@ -980,7 +980,7 @@ Branch: `feat/issue-59-if-guard-eval` (cut from `develop` in crux repo, depends 
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-runtime    → all green
    cargo clippy -p crux-runtime -- -D warnings   → zero warnings
    ```
@@ -1168,7 +1168,7 @@ Tasks 7–8)
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-script    → all green
    cargo clippy -p crux-script -- -D warnings   → zero warnings
    ```
@@ -1294,7 +1294,7 @@ Task 7 merged)
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p crux-runtime    → all green
    cargo clippy -p crux-runtime -- -D warnings   → zero warnings
    ```

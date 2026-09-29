@@ -1,9 +1,9 @@
 ---
 name: audit-plans
 description: Cross-check plans and status fields against git log to
-    find stale plan markings. Flags plans marked 'done' with no matching commits, and
-    plans marked 'open' that appear to have landed. Run before writing new plans or
-    at session start to understand true project state.
+  find stale plan markings. Flags plans marked 'done' with no matching commits, and
+  plans marked 'open' that appear to have landed. Run before writing new plans or
+  at session start to understand true project state.
 argument-hint: "path/to/plans/ | --deep | --since=YYYY-MM-DD"
 ---
 
@@ -34,9 +34,9 @@ For each plan with `status: done`:
 
 2. For each keyword, run:
 
-    ```bash
-    git -C /Users/joe/dev/minibox log --oneline --since="2026-01-01" | grep -i "<keyword>"
-    ```
+   ```bash
+   git -C /Users/joe/dev/minibox log --oneline --since="2026-01-01" | grep -i "<keyword>"
+   ```
 
 3. If **no keyword** returns any matching commits, flag the plan as **suspicious-done**
    (marked done but no evidence in git log).
@@ -96,7 +96,7 @@ Output two tables followed by a summary.
 
 **Summary line:**
 
-```
+```text
 Audited N plans/specs. Confirmed done: X. Suspicious done (stale?): Y.
 Suspicious open (landed?): Z. HANDOFF inconsistencies: W.
 Recommended: re-read flagged plans before writing new work.

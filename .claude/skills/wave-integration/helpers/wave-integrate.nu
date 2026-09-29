@@ -1,6 +1,6 @@
 #!/usr/bin/env nu
 # wave-integrate — sequential rebase + test + merge loop for parallel agent branches
-# Usage: wave-integrate [--branches "feat/a feat/b feat/c"] [--base main] [--dry-run]
+# Usage: wave-integrate [--branches "feat/a feat/b feat/c"] [--base develop] [--dry-run]
 #
 # Reads branches from --branches (space-separated) or from stdin (one per line).
 # Rebases each onto --base, runs cargo test --workspace, then merges to base.
@@ -13,7 +13,7 @@ def warn [msg: string] { print $"  (ansi yellow)!(ansi reset)  ($msg)" }
 
 def main [
     --branches: string = ""   # Space-separated branch list
-    --base: string = "main"   # Integration target branch
+    --base: string = "develop"   # Integration target branch
     --dry-run                 # Rebase and test but do not merge or commit
 ] {
     let repo_root = (git rev-parse --show-toplevel | str trim)
@@ -103,9 +103,9 @@ def main [
         }
         ok "Rebase clean"
 
-        # Run tests (xtask test-unit skips Linux-only e2e tests on macOS)
-        step "Running cargo xtask test-unit"
-        let test_r = (do { cargo xtask test-unit } | complete)
+        # Run workspace library tests; Linux-only suites remain separate.
+        step "Running cargo xtask test unit"
+        let test_r = (do { cargo xtask test unit } | complete)
         if $test_r.exit_code != 0 {
             fail "Tests failed after rebase"
             print ($test_r.stdout | lines | last 30 | str join "\n")
@@ -168,7 +168,7 @@ def main [
 
 ## Conflict Resolution Log
 
-| File | Branch | Main-side intent | Branch-side intent | Resolution |
+| File | Branch | Base-side intent | Branch-side intent | Resolution |
 |------|--------|-----------------|-------------------|------------|
 | _fill in_ | | | | |
 

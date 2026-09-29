@@ -1,15 +1,18 @@
 //! Cleanup tasks for build artifacts and leaked integration-test state.
 
 use anyhow::Result;
-use std::{fs, path::Path};
+use std::fs;
 use xshell::{Shell, cmd};
+
+use crate::utils::{self, PREFER_RELEASE};
 
 /// Remove non-critical build outputs (preserves incremental cache and registry)
 pub fn clean_artifacts(sh: &Shell) -> Result<()> {
-    for dir in &["target/debug", "target/release"] {
-        let p = Path::new(dir);
+    let target_dir = utils::cargo_target_dir();
+
+    for p in utils::profile_dirs(&target_dir, None, &PREFER_RELEASE) {
         if p.exists() {
-            for entry in fs::read_dir(p).into_iter().flatten().flatten() {
+            for entry in fs::read_dir(&p).into_iter().flatten().flatten() {
                 if entry.file_type().is_ok_and(|t| t.is_file()) {
                     fs::remove_file(entry.path()).ok();
                 }
@@ -17,10 +20,9 @@ pub fn clean_artifacts(sh: &Shell) -> Result<()> {
         }
     }
 
-    for dir in &["target/debug/deps", "target/release/deps"] {
-        let p = Path::new(dir);
+    for p in utils::deps_dirs(&target_dir, None, &PREFER_RELEASE) {
         if p.exists() {
-            for entry in fs::read_dir(p).into_iter().flatten().flatten() {
+            for entry in fs::read_dir(&p).into_iter().flatten().flatten() {
                 let path = entry.path();
                 let keep = path.extension().is_some_and(|e| e == "d");
                 if !keep && entry.file_type().is_ok_and(|t| t.is_file()) {
@@ -33,8 +35,9 @@ pub fn clean_artifacts(sh: &Shell) -> Result<()> {
     // Remove .dSYM bundles (macOS debug info directories)
     let _ = sh
         .cmd("find")
+        .arg(&target_dir)
         .args([
-            "target", "-type", "d", "-name", "*.dSYM", "-exec", "rm", "-rf", "{}", "+",
+            "-type", "d", "-name", "*.dSYM", "-exec", "rm", "-rf", "{}", "+",
         ])
         .ignore_status()
         .run();

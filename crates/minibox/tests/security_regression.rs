@@ -67,6 +67,16 @@ use std::io::Write;
 use tar::{Builder, EntryType, Header};
 use tempfile::TempDir;
 
+use minibox::adapters::MiniboxImageBuilder;
+use minibox::testing::mocks::{MockFilesystem, MockRegistry, MockRuntime};
+use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::domain::{BuildConfig, BuildContext, DynImageRegistry, ImageBuilder};
+use minibox_core::image::ImageStore;
+use minibox_core::progress::TokioProgressSink;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::mpsc;
+
 // ---------------------------------------------------------------------------
 // Tar archive builders
 // ---------------------------------------------------------------------------
@@ -382,107 +392,26 @@ fn regression_setuid_bits_stripped_on_extraction() {
 // Regression 5: FD-leak prevention — close_extra_fds (process.rs)
 // ---------------------------------------------------------------------------
 
-/// Verify that `close_extra_fds` in `process.rs` closes FDs above stderr.
-///
-/// This is a source-level invariant test: the function must exist and use
-/// `close_range(3, ...)` or `/proc/self/fd` fallback. We verify the source
-/// contains the expected syscall invocation so that refactors that remove or
-/// weaken FD closure are caught.
-///
-/// The actual FD closure is Linux-only (requires `/proc/self/fd` or
-/// `close_range` syscall) so we test the contract via source inspection.
-// Invariant: 5 — FD-Leak Prevention in Child Init
-#[test]
-fn regression_close_extra_fds_uses_close_range_syscall() {
-    let source = include_str!("../src/container/process.rs");
-
-    // Must use close_range starting from FD 3 (preserve stdin/stdout/stderr).
-    assert!(
-        source.contains("SYS_close_range"),
-        "close_extra_fds must use close_range syscall as fast path"
-    );
-    assert!(
-        source.contains("FIRST_NON_STDIO_FD: u32 = 3"),
-        "close_range must start from FD 3 (preserving stdin/stdout/stderr)"
-    );
-
-    // Must have /proc/self/fd fallback for older kernels.
-    assert!(
-        source.contains("/proc/self/fd"),
-        "close_extra_fds must fall back to /proc/self/fd scan"
-    );
-
-    // Must filter out FDs <= 2.
-    assert!(
-        source.contains("fd > 2"),
-        "fallback path must skip stdin/stdout/stderr (fd > 2 filter)"
-    );
-}
+// NOTE: the previous `regression_close_extra_fds_uses_close_range_syscall` test
+// asserted on `include_str!` source text. It has been replaced with a real
+// behavioural test in `crates/minibox/src/container/process.rs`
+// (`close_extra_fds_closes_fds_above_stderr` / `..._leaves_stdio_open`),
+// which fork a child, open real descriptors, call the real function, and assert
+// on the resulting descriptor table.
 
 // ---------------------------------------------------------------------------
 // Regression 6: Environment isolation — execve not execvp (process.rs)
 // ---------------------------------------------------------------------------
 
-/// Verify that `child_init` uses `execve` (explicit envp) instead of `execvp`
-/// (inherits host environment).
-///
-/// `execvp` would leak the daemon's entire environment into every container,
-/// exposing secrets, API keys, and host configuration. `execve` takes an
-/// explicit `envp` parameter built from `config.env`, ensuring only declared
-/// variables are visible inside the container.
-///
-/// This is a critical security invariant: if someone changes the exec call
-/// to `execvp`, this test must fail.
-// Invariant: 6 — Environment Isolation (execve not execvp)
-#[test]
-fn regression_child_init_uses_execve_not_execvp() {
-    let source = include_str!("../src/container/process.rs");
-
-    // child_init must call execve (with explicit envp).
-    assert!(
-        source.contains("execve(&cmd, &argv, &envp)"),
-        "child_init must use execve with explicit envp, not execvp"
-    );
-
-    // The source must NOT contain execvp calls (which inherit host env).
-    // We check for the nix crate's execvp function specifically.
-    let has_execvp_call = source.lines().any(|line| {
-        let trimmed = line.trim();
-        // Skip comments and string literals
-        !trimmed.starts_with("//")
-                && !trimmed.starts_with("///")
-                && !trimmed.starts_with("*")
-                && trimmed.contains("execvp(")
-                // Exclude references in comments about what NOT to do
-                && !trimmed.contains("not")
-                && !trimmed.contains("NOT")
-                && !trimmed.contains("Do not")
-    });
-    assert!(
-        !has_execvp_call,
-        "child_init must not use execvp — it leaks the host environment into containers"
-    );
-}
-
-/// Verify that the envp vector in child_init is built from `config.env`,
-/// not from `std::env::vars()` or any other host-environment source.
-// Invariant: 6 — Environment Isolation (execve not execvp)
-#[test]
-fn regression_envp_built_from_config_env_only() {
-    let source = include_str!("../src/container/process.rs");
-
-    // The envp must be constructed from config.env.
-    assert!(
-        source.contains("config.env"),
-        "envp must be built from config.env (container-declared variables only)"
-    );
-
-    // Must NOT read from the host environment.
-    assert!(
-        !source.contains("std::env::vars()"),
-        "child_init must not read host environment via std::env::vars()"
-    );
-}
+// NOTE: the previous `regression_child_init_uses_execve_not_execvp` and
+// `regression_envp_built_from_config_env_only` tests asserted on
+// `include_str!` source text. Notably `process.rs`'s own doc comments
+// contradicted them: comments at the `child_init` steps said "execvp" while the
+// code called `execve(&cmd, &argv, &envp)`. String-matching source could not
+// have caught that disagreement, and would have failed on a harmless comment
+// rewrite. They are replaced by `build_envp_*` behavioural tests in
+// `crates/minibox/src/container/process.rs`, which assert on the actual
+// `envp` vector handed to `execve`.
 
 // ---------------------------------------------------------------------------
 // Regression 7: Named pipe / FIFO rejection in tar extraction
@@ -545,253 +474,81 @@ fn regression_root_dot_entries_are_silently_skipped() {
 // Mutation audit: Invariant 10 — Request Size Limit
 // ---------------------------------------------------------------------------
 
-/// Verify that MAX_REQUEST_SIZE is defined and enforced in the daemon server.
-///
-/// Removing or raising this constant beyond 1 MB would allow malicious clients
-/// to exhaust daemon memory with oversized JSON payloads.
-///
-/// Guard location: `crates/minibox/src/daemon/server.rs` — `MAX_REQUEST_SIZE`.
-// Invariant: 10 — Request Size Limit
-#[test]
-fn mutation_audit_request_size_limit_exists() {
-    let source = include_str!("../src/daemon/server.rs");
+// NOTE: the previous `mutation_audit_request_size_limit_exists` test asserted on
+// `include_str!` source text. Real behavioural tests already exist in
+// `crates/minibox/src/daemon/server.rs`: oversized-request rejection, the
+// exact-boundary case, truncated-line handling, and a 2 MB payload. Deleting
+// the string match removes a rename-fragile duplicate, not coverage.
 
-    // The constant must exist.
-    assert!(
-        source.contains("MAX_REQUEST_SIZE"),
-        "MAX_REQUEST_SIZE constant must be defined in server.rs"
+/// A Dockerfile COPY source cannot escape the caller-provided build context.
+#[tokio::test]
+async fn regression_native_builder_rejects_copy_source_traversal() {
+    let temp = TempDir::new().expect("create temp dir");
+    let context = temp.path().join("context");
+    std::fs::create_dir(&context).expect("create context");
+    std::fs::write(
+        context.join("Dockerfile"),
+        "FROM scratch\nCOPY ../host-secret /secret\n",
+    )
+    .expect("write Dockerfile");
+    std::fs::write(temp.path().join("host-secret"), "secret").expect("write host secret");
+    let image_store =
+        Arc::new(ImageStore::new(temp.path().join("images")).expect("create image store"));
+    let builder = MiniboxImageBuilder::new(
+        Arc::clone(&image_store),
+        temp.path().join("data"),
+        Arc::new(MockFilesystem::new()),
+        Arc::new(MockRuntime::new()),
+        Arc::new(HostnameRegistryRouter::new(
+            Arc::new(MockRegistry::new()) as DynImageRegistry,
+            std::iter::empty::<(&str, DynImageRegistry)>(),
+        )),
     );
+    let (progress_tx, _progress_rx) = mpsc::channel(8);
 
-    // The constant must be used in bounded_read_line call.
-    assert!(
-        source.contains("bounded_read_line") && source.contains("MAX_REQUEST_SIZE"),
-        "MAX_REQUEST_SIZE must be passed to bounded_read_line"
-    );
+    let result = builder
+        .build_image(
+            &BuildContext {
+                directory: context,
+                dockerfile: PathBuf::from("Dockerfile"),
+            },
+            &BuildConfig {
+                tag: "security/traversal:latest".to_string(),
+                build_args: vec![],
+                no_cache: false,
+            },
+            TokioProgressSink::shared(progress_tx),
+        )
+        .await;
 
-    // The limit must be 1 MB (1_048_576 bytes). Detect if someone raises it.
-    assert!(
-        source.contains("1024 * 1024") || source.contains("1_048_576"),
-        "MAX_REQUEST_SIZE must be 1 MB (1024 * 1024 or 1_048_576)"
-    );
+    let error = result.expect_err("COPY traversal must be rejected");
+    assert!(error.to_string().contains("traversal"), "error: {error:#}");
+    assert!(!image_store.has_image("security/traversal", "latest"));
 }
 
 // ---------------------------------------------------------------------------
-// Mutation audit: Invariant 11 — Image Pull Resource Limits
+// Mutation audit: Invariants 1-4, 7, 11, 12
 // ---------------------------------------------------------------------------
-
-/// Verify that image pull size limit constants exist and are enforced in the
-/// registry client.
-///
-/// Removing these constants would allow unbounded manifest/layer downloads,
-/// enabling DoS via oversized image pulls.
-///
-/// Guard location: `crates/minibox-core/src/image/registry.rs`.
-// Invariant: 11 — Image Pull Resource Limits
-#[test]
-fn mutation_audit_image_pull_size_limits_exist() {
-    let source = include_str!("../../minibox-core/src/image/registry.rs");
-
-    // All three constants must exist.
-    assert!(
-        source.contains("MAX_MANIFEST_SIZE"),
-        "MAX_MANIFEST_SIZE constant must be defined in registry.rs"
-    );
-    assert!(
-        source.contains("MAX_LAYER_SIZE"),
-        "MAX_LAYER_SIZE constant must be defined in registry.rs"
-    );
-    assert!(
-        source.contains("MAX_TOTAL_IMAGE_SIZE"),
-        "MAX_TOTAL_IMAGE_SIZE constant must be defined in registry.rs"
-    );
-
-    // LimitedStream must exist as the enforcement mechanism.
-    assert!(
-        source.contains("LimitedStream"),
-        "LimitedStream streaming limiter must be present in registry.rs"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Mutation audit: Invariant 12 — Execution Manifest Integrity
-// ---------------------------------------------------------------------------
-
-/// Verify that execution manifest env var hashing and seal logic exist.
-///
-/// Removing the SHA-256 hashing of env values would expose secrets in
-/// plaintext in the manifest file. Removing seal() would break workload
-/// digest computation.
-///
-/// Guard location: `crates/minibox-domain/src/execution_manifest.rs`.
-// Invariant: 12 — Execution Manifest Integrity
-#[test]
-fn mutation_audit_execution_manifest_env_hashing() {
-    let source = include_str!("../../minibox-domain/src/execution_manifest.rs");
-
-    // Env values must be hashed with SHA-256, never stored as plaintext.
-    assert!(
-        source.contains("Sha256") || source.contains("sha2"),
-        "execution manifest must use SHA-256 for env value hashing"
-    );
-
-    // The seal() method must exist for workload digest computation.
-    assert!(
-        source.contains("fn seal("),
-        "ExecutionManifest must have a seal() method"
-    );
-
-    // The digest must exclude volatile fields.
-    assert!(
-        source.contains("workload_digest") && source.contains("created_at"),
-        "manifest must reference workload_digest and created_at fields"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Mutation audit: Invariant 1 — Zip Slip guard exists in source
-// ---------------------------------------------------------------------------
-
-/// Verify that `validate_tar_entry_path` exists and checks for `ParentDir`
-/// components in `layer.rs`.
-///
-/// The behavioral tests (regression_zip_slip_*) confirm the guard works.
-/// This test confirms the guard mechanism itself is present in source,
-/// catching refactors that might remove the function or its core check.
-///
-/// Guard location: `crates/minibox-core/src/image/layer.rs`.
-// Invariant: 1 — Zip Slip / Path Traversal Prevention
-#[test]
-fn mutation_audit_zip_slip_guard_exists() {
-    let source = include_str!("../../minibox-core/src/image/layer.rs");
-
-    // The validation function must exist.
-    assert!(
-        source.contains("fn validate_tar_entry_path"),
-        "validate_tar_entry_path function must exist in layer.rs"
-    );
-
-    // It must check for ParentDir components.
-    assert!(
-        source.contains("ParentDir"),
-        "validate_tar_entry_path must check for ParentDir (dotdot) components"
-    );
-
-    // It must be called during extraction.
-    assert!(
-        source.contains("validate_tar_entry_path(&entry_path"),
-        "validate_tar_entry_path must be called during layer extraction"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Mutation audit: Invariant 2 — Device node rejection guard exists in source
-// ---------------------------------------------------------------------------
-
-/// Verify that device node rejection logic exists in `layer.rs`.
-///
-/// Guard location: `crates/minibox-core/src/image/layer.rs`.
-// Invariant: 2 — Device Node Extraction Rejection
-#[test]
-fn mutation_audit_device_node_rejection_exists() {
-    let source = include_str!("../../minibox-core/src/image/layer.rs");
-
-    // Must reference Block and Char entry types for rejection.
-    assert!(
-        source.contains("Block") && source.contains("Char"),
-        "layer.rs must check for Block and Char entry types"
-    );
-
-    // Must reference the DeviceNodeRejected error.
-    assert!(
-        source.contains("DeviceNodeRejected"),
-        "layer.rs must return DeviceNodeRejected error for device nodes"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Mutation audit: Invariant 3 — Absolute symlink rewrite guard exists
-// ---------------------------------------------------------------------------
-
-/// Verify that absolute symlink rewriting and traversal rejection exist
-/// in `layer.rs`.
-///
-/// Guard location: `crates/minibox-core/src/image/layer.rs`.
-// Invariant: 3 — Absolute Symlink Host Leakage Prevention
-#[test]
-fn mutation_audit_symlink_rewrite_guard_exists() {
-    let source = include_str!("../../minibox-core/src/image/layer.rs");
-
-    // Must have the relative_path function for rewriting absolute targets.
-    assert!(
-        source.contains("fn relative_path"),
-        "relative_path function must exist in layer.rs for symlink rewriting"
-    );
-
-    // Must check for parent dir components in rewritten targets.
-    assert!(
-        source.contains("has_parent_dir_component"),
-        "has_parent_dir_component must be used to reject traversal in rewritten symlinks"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Mutation audit: Invariant 4 — Setuid bit stripping guard exists
-// ---------------------------------------------------------------------------
-
-/// Verify that setuid/setgid bit stripping logic exists in `layer.rs`.
-///
-/// The mode mask `0o777` strips bits above the permission triad (setuid,
-/// setgid, sticky). Removing this mask would allow privilege escalation
-/// via setuid binaries in OCI layers.
-///
-/// Guard location: `crates/minibox-core/src/image/layer.rs`.
-// Invariant: 4 — Setuid / Setgid Bit Stripping
-#[test]
-fn mutation_audit_setuid_strip_guard_exists() {
-    let source = include_str!("../../minibox-core/src/image/layer.rs");
-
-    // Must contain the 0o777 mode mask that strips setuid/setgid/sticky bits.
-    assert!(
-        source.contains("0o777"),
-        "layer.rs must contain 0o777 mode mask for setuid stripping"
-    );
-
-    // Must call set_mode on the header before unpacking.
-    assert!(
-        source.contains("set_mode"),
-        "layer.rs must call set_mode to apply the stripped mode"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Mutation audit: Invariant 7 — SO_PEERCRED guard called in handler
-// ---------------------------------------------------------------------------
-
-/// Verify that `is_authorized` is called in the connection handler in
-/// `server.rs`, not just defined.
-///
-/// The behavioral tests in `daemon_security_regression.rs` verify the
-/// function's logic. This test verifies the function is actually invoked
-/// in the request processing path.
-///
-/// Guard location: `crates/minibox/src/daemon/server.rs`.
-// Invariant: 7 — SO_PEERCRED Unix Socket Authentication
-#[test]
-fn mutation_audit_peercred_guard_called_in_handler() {
-    let source = include_str!("../src/daemon/server.rs");
-
-    // is_authorized must be called (not just defined).
-    let call_count = source.matches("is_authorized(").count();
-    // At least 2: 1 definition + 1 call site in handler.
-    assert!(
-        call_count >= 2,
-        "is_authorized must be called in the connection handler, \
-         found {call_count} occurrences (need >= 2: definition + call)"
-    );
-
-    // The handler must reject unauthorized connections.
-    assert!(
-        source.contains("!is_authorized("),
-        "connection handler must check !is_authorized to reject unauthorized clients"
-    );
-}
+//
+// The following source-string "mutation audit" tests were removed. Each one
+// asserted that a named identifier appears in a source file, while a real
+// behavioural test for the same invariant already existed:
+//
+//   removed test                                    real coverage
+//   ----------------------------------------------  ---------------------------------
+//   mutation_audit_request_size_limit_exists        server.rs:1406, :1427, :1693, :1751
+//   mutation_audit_image_pull_size_limits_exist     registry.rs:1544, :1573, :1720,
+//                                                   :1783, :2225-2331
+//   mutation_audit_execution_manifest_env_hashing   execution_manifest.rs:388, :399, :315
+//   mutation_audit_zip_slip_guard_exists            this file: regression_zip_slip_*
+//   mutation_audit_device_node_rejection_exists     this file: device node test
+//   mutation_audit_symlink_rewrite_guard_exists     this file: symlink rewrite test
+//   mutation_audit_setuid_strip_guard_exists        this file: setuid stripping test
+//   mutation_audit_peercred_guard_called_in_handler server.rs:1790 (truth table), :900
+//
+// A string match on a source file cannot detect a behavioural regression: it
+// passes when the code is broken but the identifier is still spelled the same
+// way, and it fails on a harmless comment or formatting change. Each removed
+// test also had a latent weakness — `mutation_audit_peercred_guard_called_in_handler`
+// counted `is_authorized(` occurrences and required `>= 2`, which is satisfied by
+// the definition alone plus a doc mention.

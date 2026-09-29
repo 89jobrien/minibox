@@ -31,7 +31,8 @@ Parse `$ARGUMENTS` for: `--base <branch>` (default: `main`).
 **Output format:**
 
 For each finding:
-```
+
+```text
 [SEVERITY] file.rs:42 — description
   Suggested fix: ...
 ```

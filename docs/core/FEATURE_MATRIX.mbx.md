@@ -1,13 +1,11 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/limiter.rs
-  - crates/minibox-domain/src/capability_matrix.rs
-  - crates/minibox-core/src/protocol.rs
-  - crates/mbx/src/commands/capabilities.rs
   - crates/minibox-domain/src/exec.rs
   - crates/minibox-core/src/events.rs
+  - crates/minibox-domain/src/events.rs
   - crates/minibox-core/src/image/registry.rs
   - crates/minibox/src/adapters/ghcr.rs
   - crates/minibox-core/src/image/gc.rs
@@ -25,33 +23,39 @@ sources:
   - crates/minibox/src/adapters/colima.rs
   - crates/minibox/src/adapters/smolvm.rs
   - crates/macbox/src/krun
+  - crates/macbox/tests/krun_conformance_tests.rs
+  - crates/macbox/tests/krun_adapter_conformance.rs
   - crates/macbox/src/vz
   - crates/minibox/src/adapters/docker_desktop.rs
   - crates/mcp
-generated: 2026-08-28
+  - crates/minibox-tui
+  - crates/mbx
+generated: 2026-09-16
 ---
 
 # Feature Matrix
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-08-28
+Last updated: 2026-09-29
 
 ---
 
 ## Adapter Suites
 
-| Adapter  | Platform                        | Status       | Crate   | Default?                          |
-| -------- | ------------------------------- | ------------ | ------- | --------------------------------- |
-| `native` | Linux only (x86_64/arm64) [^1]  | Production   | minibox | Fallback on Linux                 |
-| `gke`    | Linux only (GKE pods) [^2]      | Production   | minibox | --                                |
-| `colima` | Unix (macOS/Linux, Colima)      | Experimental | minibox | --                                |
-| `smolvm` | Unix (macOS/Linux, SmolVM) [^3] | Experimental | minibox | Yes (Unix; not available on Win)  |
-| `krun`   | Unix (macOS/Linux, krun)        | Experimental | macbox  | Fallback when smolvm absent [^4]  |
-| `vz`     | macOS only, `vz` feature [^5]   | Non-functional | macbox  | Opt-in only (`MINIBOX_ADAPTER=vz`) |
-| `winbox` | Windows                         | Stub         | winbox  | --                                |
+<!-- BEGIN GENERATED: adapter-suites -->
+| Adapter | Platforms | Maturity | Default roles |
+| --- | --- | --- | --- |
+| `colima` | `linux`, `macos` | Experimental | -- |
+| `gke` | `linux` | Production | -- |
+| `krun` | `linux`, `macos` | Experimental | `macos_fallback` |
+| `native` | `linux` | Production | `linux_fallback` |
+| `smolvm` | `linux`, `macos` | Experimental | `unix_default` |
+| `vz` | `macos` | Blocked | -- |
+| `winbox` | `windows` | Stub | -- |
+<!-- END GENERATED: adapter-suites -->
 
-[^1]: `native` requires root (UID 0). Rejected at startup if non-root. Linux only
+[^1]: `native` requires root (UID 0); daemon startup rejects non-root native selection. Linux only
       (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.
 [^2]: `gke` is Linux only (`cfg!(target_os = "linux")`). Unprivileged — no root required.
       Uses proot (ptrace) and copy-based filesystem instead of overlay.
@@ -75,28 +79,59 @@ Last updated: 2026-08-28
 
 ## Capability Matrix
 
-The canonical capability matrix is typed data in
-`crates/minibox-domain/src/capability_matrix.rs`; this document does not carry a
-second manually maintained copy. Query the running daemon through either CLI
-format:
-
-```console
-mbx capabilities
-mbx capabilities --json
-```
-
-The daemon endpoint is `DaemonRequest::GetCapabilities` and returns the
-versioned `DaemonResponse::CapabilityMatrix`. JSON consumers can query backend,
-capability, group, and support-level enums directly without parsing this
-document or human-readable CLI output. Support levels distinguish `supported`,
-`unsupported`, `limited`, and `provided_by` (VM, Lima VM, copy filesystem, or
-nerdctl). Existing protocol variant encodings are unchanged.
+<!-- BEGIN GENERATED: adapter-capabilities -->
+| Capability | `colima` | `gke` | `krun` | `native` | `smolvm` | `vz` | `winbox` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `admission_policy_gate` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `bind_mounts` | No | No | No | Yes | No | No | No |
+| `bridge_network` | No | No | No | Yes | No | No | No |
+| `build` | Yes | No | No | Yes | Yes | No | No |
+| `cgroups_v2` | Yes | No | No | Yes | Yes | Blocked | No |
+| `commit` | Yes | No | No | Yes | No | No | No |
+| `device_node_rejection` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
+| `dns` | No | No | No | Yes | No | Blocked | No |
+| `docker_hub_v2` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `environment_redaction` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `events` | No | Yes | No | Yes | No | No | No |
+| `exec` | Limited | No | No | Yes | No | No | No |
+| `execution_manifest` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `ghcr_io` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `ipc_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `layer_digest_verification` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `logs` | Limited | No | No | Yes | No | No | No |
+| `manifest_get_verify` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `mount_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `network_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `otlp_export` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `overlay_filesystem` | Yes | Limited | No | Yes | No | Blocked | No |
+| `parallel_layer_pull` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `pause_resume` | No | No | No | Yes | No | No | No |
+| `peer_credential_auth` | No | No | No | Yes | No | No | No |
+| `pid_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+| `pid_reconciliation` | No | No | No | Yes | No | No | No |
+| `port_forwarding` | No | No | No | Yes | No | Blocked | No |
+| `privileged_mode` | No | No | No | Yes | No | No | No |
+| `prune_rmi` | No | No | No | Yes | No | No | No |
+| `ps` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `pull` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `push` | Yes | Yes | No | Yes | No | No | No |
+| `request_frame_limits` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `restart` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `rm` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `run` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `setuid_stripping` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
+| `state_persistence` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `stop` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `structured_tracing` | Yes | Yes | Yes | Yes | Yes | Blocked | No |
+| `tar_path_validation` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
+| `uts_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
+<!-- END GENERATED: adapter-capabilities -->
 
 ---
 
 ## Source References for Capability Matrix
 
-Key implementation sites backing the typed support declarations:
+Key implementation sites backing the "Yes" entries above:
 
 | Feature area | Source |
 | --- | --- |
@@ -104,7 +139,7 @@ Key implementation sites backing the typed support declarations:
 | pause/resume (native, cgroup.freeze) | `crates/minibox/src/adapters/limiter.rs:CgroupV2Limiter` |
 | exec | `crates/minibox/src/daemon/handler/exec.rs`, `crates/minibox-domain/src/exec.rs:ExecRuntime` |
 | logs | `crates/minibox/src/daemon/handler/logs.rs` |
-| events | `crates/minibox-core/src/events.rs:EventSink`/`EventSource` |
+| events | `crates/minibox-domain/src/events.rs:EventSink`/`EventSource`; broker adapter in `minibox-core` |
 | Image pull (Docker Hub v2 + parallel layers) | `crates/minibox-core/src/image/registry.rs:pull_image` |
 | Image pull (ghcr.io) | `crates/minibox/src/adapters/ghcr.rs` |
 | prune/rmi | `crates/minibox-core/src/image/gc.rs:ImageGarbageCollector` |
@@ -135,6 +170,8 @@ Key implementation sites backing the typed support declarations:
 - `mbx` is the primary CLI and connects directly to the daemon Unix socket.
 - `minibox-crux-plugin` exposes a JSON-RPC stdio bridge for Crux workflows.
 - `minibox-mcp` exposes an MCP stdio server for agent workflows. Its first tool set wraps existing daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm; mutating or higher-risk run options are gated by MCP-specific policy environment variables.
+- `minibox-cli` optionally exposes `mbx tui` with `cargo build -p minibox-cli --features tui`;
+  the read-only dashboard implementation lives in `minibox-tui`.
 
 ---
 
@@ -162,11 +199,11 @@ Key implementation sites backing the typed support declarations:
   (see `crates/minibox/src/adapters/colima.rs:ColimaRuntime`).
   Exec and logs are limited because they go through Lima's SSH
   tunnel. Push, commit, and build are wired via
-  `ColimaImagePusher`, `OverlayCommitAdapter`, and
+  `ColimaImagePusher`, `ColimaContainerCommitter`, and
   `MiniboxImageBuilder`.
 - **`smolvm` adapter** is the **default on Unix** when
   `MINIBOX_ADAPTER` is unset and the `smolvm` binary is present on
-  PATH (see `crates/miniboxd/src/adapter_registry.rs`). Falls back
+  PATH (see `crates/minibox-core/src/adapter_registry.rs`). Falls back
   to `native` on Linux or `krun` on macOS when the binary is
   absent. Not available on Windows (`cfg!(unix)`). Lightweight Linux
   VMs with subsecond boot
@@ -177,7 +214,7 @@ Key implementation sites backing the typed support declarations:
   All four adapter ports (runtime, registry, filesystem, limiter)
   are wired into the daemon
   (see `crates/miniboxd/src/main.rs:build_krun_handler_dependencies`)
-  and pass 31 conformance tests. Acts as the fallback when
+  and pass 29 krun-specific conformance tests. Acts as the fallback when
   `smolvm` is unavailable.
 - **`vz` adapter** uses Apple's Virtualization.framework directly
   (see `crates/macbox/src/vz/`), communicating with the in-VM

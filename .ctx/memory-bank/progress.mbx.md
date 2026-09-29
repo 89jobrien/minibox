@@ -55,7 +55,7 @@
     - SHA-256 (never plaintext),
     - policy evaluation via `mbx verify`
 - **OTEL trace export**:
-    - full OTLP/gRPC exporter via opentelemetry 0.31,
+    - full OTLP/gRPC exporter via opentelemetry 0.32,
     - batch export, graceful fallback,
     - OtelGuard shutdown
     - Wired in miniboxd main.
@@ -79,12 +79,12 @@
 
 ### Testing infrastructure
 
-- ~1,467 tests total across all categories
-- ~728 inline unit tests + ~739 integration test files
+- 96 integration test files under `crates/*/tests/`
+- ~1,060 integration-test annotations + ~1,228 inline test annotations
 - 19 security regression tests pinning all 12 invariants
 - ~46 proptest property tests (protocol roundtrip, cgroup bounds, daemon state)
-- 28 conformance tests (backend-agnostic adapter trait contracts)
-- 11 borrow-reasoning fixtures (must-pass/must-fail)
+- 123 conformance tests (backend-agnostic adapter and port contracts)
+- 19 borrow-reasoning fixtures (must-pass/must-fail)
 - 15 e2e daemon+CLI tests (Linux+root)
 - 16 cgroup integration tests (Linux+root)
 - ~17 sandbox tests, 30 CLI subprocess tests
@@ -95,13 +95,9 @@
 
 ### CI pipeline
 
-- 8 GHA workflows:
-    - lint,
-    - test,
-    - conformance,
-    - protocol drift,
-    - nightly audit,
-    - release
+- 15 GHA workflows covering CI/PR/merge, macOS, conformance, context snapshots,
+  stability and protocol gates, clippy review, nightly audits, promotion, releases,
+  package publishing, and issue summaries
 - Self-hosted runner on VPS for Linux-specific tests
 - Pre-commit/pre-push local gates via cargo xtask
 
@@ -118,7 +114,7 @@
 - `cargo xtask musl-check` — new prepush gate catching `cfg(target_os = "linux")` build
   failures against the musl target before CI (1ae7528e)
 - `cargo xtask ci-watch` — watch GHA run status with job-level detail
-- `nu scripts/promote.nu` — branch cascade (develop->next->staging->main)
+- `cargo xtask promote` — branch cascade (develop->staging->release->main)
 
 ## Recently completed
 - **Protocol drift expectation fix** — xtask's expected surface registry updated to track the
@@ -163,7 +159,7 @@
   (4ce6ce9f).
 - **miette diagnostics** — rich CLI error rendering via miette; plan doc at
   docs/plans/2026-07-07-structured-errors-miette.md (cf37b05a).
-- **PR-based auto-promote CI** — cascade develop->next->staging->main via PR
+- **PR-based auto-promote CI** — cascade develop->staging->release->main via PR
   workflow (c1a16d8e).
 - **Open PR merge pass + final verification** — #462, #460, #459, #464, and
   #324 merged; open PR list empty. `cargo xtask verify` passed for task `t12`
@@ -201,7 +197,7 @@
 - macOS exec/logs via VM adapters — container run + stdout streaming works
   (smolvm/krun). `exec_runtime: None` on both means exec-into-running is
   unsupported. No historical log retrieval.
-- Merge develop -> next (pending CI green on develop)
+- Promote develop -> staging (pending CI green on develop)
 
 ## Not started / backlog
 
@@ -240,9 +236,9 @@
 - **CRI compliance**:
     - zero protobuf/gRPC
     - no RuntimeService/ImageService
-- **Aggregate image size limit**:
+- **Image pull size limits**:
     - per-layer 10 GiB enforced
-    - no total budget across layers in a single pull (Issue #319)
+    - aggregate 50 GiB budget enforced across each pull
 - **ValidatedPath newtype**:
     - all validation is function-call based (`validate_layer_path()`)
     - no type-level guarantee
@@ -263,6 +259,7 @@
   same 5 mock types (~62 duplicate occurrences via `dupehound scan`). Fix candidate:
   replace with `pub use minibox_core::adapters::mocks::{...}` re-export, consistent
   with `minibox`'s existing re-export-of-`minibox-core` convention. Filed as task t23.
-- CI coverage gaps — property tests, borrow fixtures, sandbox tests, CLI
-  subprocess tests, krun conformance not in any CI workflow
-- macOS VZ.framework — blocked by Apple bug on ARM64; adapter removed 2026-05-08
+- CI coverage gaps — sandbox tests and the feature-gated CLI subprocess suite are
+  not in any CI workflow
+- macOS VZ.framework — restored behind the opt-in `vz` feature, but VM boot remains
+  blocked by `VZLinuxBootLoader` failures on current macOS

@@ -173,7 +173,7 @@ impl BridgeNetwork {
         for pm in mappings {
             let proto = pm.protocol.to_string();
             let dport = pm.host_port.to_string();
-            let to_dest = format!("{container_ip}:{}", pm.container_port);
+            let to_dest = dnat_destination(container_ip, pm.container_port);
 
             // Check if rule already exists (idempotent)
             let check = Command::new("iptables")
@@ -235,6 +235,33 @@ impl BridgeNetwork {
     fn net_context_path(container_id: &str) -> std::path::PathBuf {
         std::path::Path::new("/run/minibox/net").join(format!("{container_id}.json"))
     }
+}
+
+/// Public DNS resolvers used when a container declares no `dns_servers`.
+const FALLBACK_DNS_SERVERS: [&str; 2] = ["8.8.8.8", "1.1.1.1"];
+
+/// Resolve the DNS server list for a container.
+///
+/// A container with no declared servers gets [`FALLBACK_DNS_SERVERS`]; otherwise
+/// the declared list is used verbatim, in order.
+fn resolve_dns_servers(configured: &[String]) -> Vec<String> {
+    if configured.is_empty() {
+        FALLBACK_DNS_SERVERS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect()
+    } else {
+        configured.to_vec()
+    }
+}
+
+/// Build the iptables `--to-destination` target for a DNAT rule.
+///
+/// Must be `container_ip:container_port` — iptables rejects any other shape, and
+/// a malformed value here silently produces a port mapping that forwards
+/// nowhere.
+fn dnat_destination(container_ip: &str, container_port: u16) -> String {
+    format!("{container_ip}:{container_port}")
 }
 
 fn run_cmd(args: &[&str]) -> Result<()> {
@@ -299,11 +326,7 @@ impl NetworkProvider for BridgeNetwork {
         let prefix_len = self.subnet.prefix_len();
 
         // Use DNS from config if provided, otherwise fall back to defaults.
-        let dns: Vec<String> = if config.dns_servers.is_empty() {
-            vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]
-        } else {
-            config.dns_servers.clone()
-        };
+        let dns = resolve_dns_servers(&config.dns_servers);
 
         // Apply port mappings before persisting context.
         self.apply_port_mappings(&container_ip.to_string(), &config.port_mappings)?;
@@ -719,50 +742,58 @@ mod tests {
 
     /// Issue #134: DNAT destination string format used by `apply_port_mappings`.
     ///
-    /// The iptables `--to-destination` argument must be `container_ip:container_port`.
-    /// This test verifies the format string without invoking any iptables binary.
+    /// Calls the real `dnat_destination` used to build the iptables
+    /// `--to-destination` argument.
     #[test]
     fn bridge_network_dnat_destination_format() {
-        let container_ip = "172.20.0.5";
-        let container_port: u16 = 8080;
-        // Exercise BridgeNetwork::net_context_path to confirm the SUT is involved.
-        let ctx_path = BridgeNetwork::net_context_path("test-ctr");
-        assert!(ctx_path.to_str().unwrap().contains("test-ctr"));
-        // Verify the DNAT to-destination format matches what apply_port_mappings produces.
-        let to_dest = format!("{container_ip}:{container_port}");
-        assert_eq!(to_dest, "172.20.0.5:8080");
+        assert_eq!(dnat_destination("172.20.0.5", 8080), "172.20.0.5:8080");
+        assert_eq!(dnat_destination("10.0.0.2", 1), "10.0.0.2:1");
+        assert_eq!(dnat_destination("10.0.0.2", 65535), "10.0.0.2:65535");
+
+        // The format is exactly one colon separating IP from port — a second
+        // colon or a missing one would make iptables reject the rule.
+        let dest = dnat_destination("172.20.0.5", 8080);
+        assert_eq!(
+            dest.matches(':').count(),
+            1,
+            "unexpected separator in {dest}"
+        );
+        let (ip, port) = dest.rsplit_once(':').expect("dnat destination has a colon");
+        assert_eq!(ip, "172.20.0.5");
+        assert_eq!(port.parse::<u16>().expect("port must parse"), 8080);
     }
 
-    /// Issue #134: DNS fallback must be 8.8.8.8 and 1.1.1.1 when no servers are configured.
+    /// Issue #134: DNS fallback must be the public resolvers when no servers are
+    /// configured. Calls the real `resolve_dns_servers`.
     #[test]
     fn bridge_network_dns_fallback_when_config_has_no_servers() {
-        // Exercise BridgeNetwork::veth_prefix as the SUT entry point.
-        let prefix = BridgeNetwork::veth_prefix("abc123def456");
-        assert_eq!(prefix.len(), 8, "veth prefix must be 8 chars");
-        // Verify the DNS fallback logic mirrors what the implementation produces.
-        let empty: Vec<String> = vec![];
-        let dns: Vec<String> = if empty.is_empty() {
+        assert_eq!(
+            resolve_dns_servers(&[]),
             vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]
-        } else {
-            empty.clone()
-        };
-        assert_eq!(dns, vec!["8.8.8.8", "1.1.1.1"]);
+        );
+        assert_eq!(
+            resolve_dns_servers(&[]),
+            FALLBACK_DNS_SERVERS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<Vec<_>>()
+        );
     }
 
-    /// Issue #134: DNS config is used verbatim when non-empty.
+    /// Issue #134: DNS config is used verbatim, in order, when non-empty.
     #[test]
     fn bridge_network_dns_config_used_verbatim_when_non_empty() {
-        // Exercise BridgeNetwork::veth_prefix as the SUT entry point.
-        let prefix = BridgeNetwork::veth_prefix("xyz789");
-        assert!(!prefix.is_empty(), "veth prefix must not be empty");
-        // Verify DNS config is passed through verbatim when non-empty.
-        let servers = vec!["1.0.0.1".to_string(), "9.9.9.9".to_string()];
-        let dns: Vec<String> = if servers.is_empty() {
-            vec!["8.8.8.8".to_string(), "1.1.1.1".to_string()]
-        } else {
-            servers.clone()
-        };
-        assert_eq!(dns, servers);
+        let configured = vec!["1.0.0.1".to_string(), "9.9.9.9".to_string()];
+        let resolved = resolve_dns_servers(&configured);
+        assert_eq!(
+            resolved, configured,
+            "declared DNS must pass through unchanged"
+        );
+        assert_eq!(resolved.len(), 2, "no fallback may be appended");
+
+        // A single-server config must not gain the fallback pair.
+        let single = vec!["192.168.1.1".to_string()];
+        assert_eq!(resolve_dns_servers(&single), single);
     }
 
     /// Issue #134: net context file path must be deterministic and container-scoped.

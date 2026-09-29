@@ -7,7 +7,7 @@ printing human-readable output.
 
 ## Commands
 
-```
+```text
 mbx pull <image> [--tag TAG] [--platform PLATFORM]
 mbx search <query> [--limit N] [--remote]
 mbx run [OPTIONS] <image> -- <command>
@@ -30,6 +30,9 @@ mbx snapshot restore <id> <name>
 mbx snapshot list <id>
 mbx diagnose <id>
 mbx doctor
+mbx manifest <id>
+mbx verify <id> --policy <path>
+mbx pipeline <run|list|show> ...
 ```
 
 ### `search`
@@ -41,7 +44,7 @@ returns an explicit unsupported error until registry discovery semantics are def
 
 ### `run` flags
 
-```
+```text
 --memory N          Memory limit in bytes (cgroups v2 memory.max)
 --cpu-weight N      CPU weight 1-10000 (cgroups v2 cpu.weight)
 --tag TAG           Image tag (default: latest)
@@ -56,6 +59,7 @@ returns an explicit unsupported error until registry discovery semantics are def
 -u USER             Run as user (e.g. nobody, 1000:1000)
 --rm                Remove container on exit
 --platform PLATFORM Target platform (e.g. linux/arm64)
+--cgroup-parent PATH Parent cgroup for native containers
 ```
 
 ## Ephemeral mode
@@ -75,6 +79,7 @@ newline-delimited `DaemonResponse` JSON object.
 | ------------------ | ------------------------------------------------------------- |
 | `subprocess-tests` | Enable integration tests that spawn a real `miniboxd` binary. |
 |                    | Run via `just test-cli-subprocess`.                           |
+| `tui`              | Enable the read-only `mbx tui` dashboard.                     |
 
 ## Building
 

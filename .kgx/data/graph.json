@@ -1,4 +1,402 @@
 {
-  "nodes": [],
-  "edges": []
+  "nodes": [
+    {
+      "id": "e32cc34d-0b2f-408a-8263-b61e4e5ce44f",
+      "name": "daemon client",
+      "type": "system",
+      "supporting_text": "DaemonClient uses a Unix socket for protocol requests and streaming responses (crates/minibox-core/src/client/socket.rs:30-81).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "101cf76e-fdd6-4686-bd16-c493805d51e9",
+      "name": "daemon protocol",
+      "type": "standard",
+      "supporting_text": "DaemonRequest and DaemonResponse define the tagged wire protocol (crates/minibox-core/src/protocol.rs:104-197,475-768).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "268a5d1b-488f-4a43-b802-a7a80db642d6",
+      "name": "daemon server",
+      "type": "system",
+      "supporting_text": "The daemon server authenticates, frames, and dispatches requests (crates/minibox/src/daemon/server.rs:162-403).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "bc2720bf-47c5-4ec3-9e78-634bd3382c73",
+      "name": "domain ports",
+      "type": "concept",
+      "supporting_text": "Runtime, filesystem, image, and networking traits are domain ports (crates/minibox-domain/src/runtime.rs:168-219).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "c0db5447-3bbf-4e70-85c1-c79c60037880",
+      "name": "handler dependencies",
+      "type": "concept",
+      "supporting_text": "HandlerDependencies groups injected ports for request handlers (crates/minibox/src/daemon/handler/mod.rs:155-282).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "2b3c1ff0-6c84-4cbb-99ce-9e8418029ed0",
+      "name": "hexagonal architecture",
+      "type": "concept",
+      "supporting_text": "Minibox uses hexagonal architecture with enforced dependency rings (xtask/src/architecture.rs:68-117).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "name": "macbox",
+      "type": "system",
+      "supporting_text": "Macbox provides macOS platform composition (crates/macbox/src/lib.rs:19-24).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "22b49672-2713-4827-af21-68358a3fae70",
+      "name": "mbx",
+      "type": "tool",
+      "supporting_text": "mbx constructs daemon protocol requests (crates/mbx/src/commands/run.rs:119-142).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "name": "minibox",
+      "type": "system",
+      "supporting_text": "Minibox contains the workspace runtime and tooling components (Cargo.toml:3-20).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "52719b0a-457e-4e7b-b1df-e984341b3704",
+      "name": "minibox core",
+      "type": "system",
+      "supporting_text": "minibox-core is the shared protocol and client layer (crates/minibox-core/src/lib.rs:29-76).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "8f161197-2d04-4a1d-9410-5e84d3c1d11e",
+      "name": "minibox crux plugin",
+      "type": "system",
+      "supporting_text": "minibox-crux-plugin translates Crux handlers into daemon requests (crates/minibox-crux-plugin/src/lib.rs:31-101).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "541d8d6e-c1b3-4185-8d06-1af4147b50a0",
+      "name": "minibox daemon",
+      "type": "system",
+      "supporting_text": "miniboxd is the daemon composition root (crates/miniboxd/src/main.rs:705-785).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "e717f989-c725-46e5-a433-1320bcade00d",
+      "name": "minibox domain",
+      "type": "system",
+      "supporting_text": "minibox-domain is the inner dependency ring and owns domain ports (crates/minibox-domain/src/lib.rs:21-62).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "908d1330-0781-4d41-b540-6ddde816b54c",
+      "name": "minibox mcp",
+      "type": "system",
+      "supporting_text": "minibox-mcp is a policy-gated MCP frontend over the daemon protocol (crates/mcp/src/lib.rs:36-43).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "name": "minibox runtime",
+      "type": "system",
+      "supporting_text": "The minibox crate owns daemon handlers, server, state, and runtime adapters (crates/minibox/src/lib.rs:43-81).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "55a1dbe2-6a25-47bc-9a8e-b5a29aba241f",
+      "name": "minibox testsuite",
+      "type": "system",
+      "supporting_text": "minibox-testsuite owns adapter and port conformance tests (crates/minibox-testsuite/src/lib.rs:33-142).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "6c323c9b-c97e-44e4-90ae-e04c4c71c788",
+      "name": "minibox tui",
+      "type": "system",
+      "supporting_text": "minibox-tui is a read-only daemon observer (crates/minibox-tui/src/lib.rs:1-9).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "9e37686e-6687-44e5-808c-e49bac878c43",
+      "name": "smolbox",
+      "type": "system",
+      "supporting_text": "Smolbox exposes smolvm and krun platform implementations (crates/smolbox/src/lib.rs:1-11).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "e646bca7-c787-4b10-ab04-df95b2a13596",
+      "name": "winbox",
+      "type": "system",
+      "supporting_text": "Winbox is the Windows platform stub (crates/winbox/src/lib.rs:44-57).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "b65dd825-1a0e-40db-9b5f-553a5e1a58c0",
+      "name": "xtask",
+      "type": "tool",
+      "supporting_text": "xtask orchestrates repository quality and test gates (xtask/src/gates.rs:58-101).",
+      "source_docs": [
+        "minibox-context-map-f5481a94"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "a50792ed-67bd-4e2e-898b-8dc9484f9de7",
+      "source": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "target": "2b3c1ff0-6c84-4cbb-99ce-9e8418029ed0",
+      "type": "implements",
+      "confidence": 1.0,
+      "supporting_text": "Minibox uses enforced hexagonal dependency rings (xtask/src/architecture.rs:68-117).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "59bf1642-6b89-4f3c-bc2b-81afdece3d0a",
+      "source": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "target": "e717f989-c725-46e5-a433-1320bcade00d",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "The workspace contains minibox-domain (Cargo.toml:4).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "ff7b1633-6a41-47cc-9049-57c1ed0070fc",
+      "source": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "target": "52719b0a-457e-4e7b-b1df-e984341b3704",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "The workspace contains minibox-core (Cargo.toml:5).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "7eb6ad74-d9ab-4675-a6ad-28a4acc46ec0",
+      "source": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "target": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "type": "contains",
+      "confidence": 1.0,
+      "supporting_text": "The workspace contains the minibox runtime crate (Cargo.toml:6).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "e4721422-4bf1-4371-931f-23be57226df0",
+      "source": "52719b0a-457e-4e7b-b1df-e984341b3704",
+      "target": "e717f989-c725-46e5-a433-1320bcade00d",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "minibox-core depends on minibox-domain (crates/minibox-core/Cargo.toml:32-56).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "5728c7fe-dcb1-429d-878f-38a1e6304b23",
+      "source": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "target": "52719b0a-457e-4e7b-b1df-e984341b3704",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "minibox depends on minibox-core (crates/minibox/Cargo.toml:50-73).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "4007fc66-129d-4de8-a829-da1082121f45",
+      "source": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "target": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "macbox depends on minibox (crates/macbox/Cargo.toml:11-20).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "4f372e2c-7ee5-41e2-b572-ea0a985bf820",
+      "source": "9e37686e-6687-44e5-808c-e49bac878c43",
+      "target": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "smolbox depends on macbox (crates/smolbox/Cargo.toml:8-12).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "f35b533c-b15c-40b6-8ea5-779abb4ea5d5",
+      "source": "e646bca7-c787-4b10-ab04-df95b2a13596",
+      "target": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "winbox depends on minibox (crates/winbox/Cargo.toml:8-20).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "a4bd336c-df72-4fcd-8271-749e5022fd54",
+      "source": "541d8d6e-c1b3-4185-8d06-1af4147b50a0",
+      "target": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "miniboxd depends on minibox (crates/miniboxd/Cargo.toml:31-52).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "1740fb18-dbb5-4c1d-bd0d-55d236063378",
+      "source": "541d8d6e-c1b3-4185-8d06-1af4147b50a0",
+      "target": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "miniboxd selects macbox platform composition (crates/miniboxd/src/main.rs:705-785).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "5f77214a-cf00-4c66-93ea-b84415afb9da",
+      "source": "541d8d6e-c1b3-4185-8d06-1af4147b50a0",
+      "target": "9e37686e-6687-44e5-808c-e49bac878c43",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "miniboxd selects smolbox platform composition (crates/miniboxd/src/main.rs:705-785).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "6dc0c4cf-3f22-42d0-bccf-2b20144bf56e",
+      "source": "541d8d6e-c1b3-4185-8d06-1af4147b50a0",
+      "target": "e646bca7-c787-4b10-ab04-df95b2a13596",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "miniboxd dispatches to winbox on Windows (crates/miniboxd/src/main.rs:41-46).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "537a5077-2f89-44a7-88c7-941d3696de44",
+      "source": "22b49672-2713-4827-af21-68358a3fae70",
+      "target": "e32cc34d-0b2f-408a-8263-b61e4e5ce44f",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "mbx uses the minibox-core client dependency (crates/mbx/Cargo.toml:16-18).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "4f335a92-2598-4034-ad20-3ff31b9e6be3",
+      "source": "e32cc34d-0b2f-408a-8263-b61e4e5ce44f",
+      "target": "101cf76e-fdd6-4686-bd16-c493805d51e9",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "DaemonClient writes protocol JSON and streams responses (crates/minibox-core/src/client/socket.rs:30-81).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "3d002f97-a968-4f51-ab76-b34915a8ef98",
+      "source": "268a5d1b-488f-4a43-b802-a7a80db642d6",
+      "target": "101cf76e-fdd6-4686-bd16-c493805d51e9",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "The daemon server deserializes and dispatches protocol requests (crates/minibox/src/daemon/server.rs:243-403).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "1df87985-9c7a-4076-9a1e-42d9849c3233",
+      "source": "268a5d1b-488f-4a43-b802-a7a80db642d6",
+      "target": "c0db5447-3bbf-4e70-85c1-c79c60037880",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "Server dispatch invokes handlers with HandlerDependencies (crates/minibox/src/daemon/server.rs:445-728).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "521dd840-52ff-4801-bf75-4bd496bd0b3f",
+      "source": "c0db5447-3bbf-4e70-85c1-c79c60037880",
+      "target": "bc2720bf-47c5-4ec3-9e78-634bd3382c73",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "HandlerDependencies injects runtime, filesystem, image, network, and related ports (crates/minibox/src/daemon/handler/mod.rs:155-282).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "3913f218-298b-4bde-9a8a-e36359a277f9",
+      "source": "908d1330-0781-4d41-b540-6ddde816b54c",
+      "target": "101cf76e-fdd6-4686-bd16-c493805d51e9",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "MCP tools translate calls into daemon requests (crates/mcp/src/tools/containers.rs:21-179).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "bbc32956-a6ca-423d-b95e-e79ca52d9485",
+      "source": "8f161197-2d04-4a1d-9410-5e84d3c1d11e",
+      "target": "101cf76e-fdd6-4686-bd16-c493805d51e9",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "The Crux plugin translates handlers into daemon requests (crates/minibox-crux-plugin/src/lib.rs:96-267).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "fa51db9a-a641-48c8-966e-eaeedf5a4bd1",
+      "source": "6c323c9b-c97e-44e4-90ae-e04c4c71c788",
+      "target": "101cf76e-fdd6-4686-bd16-c493805d51e9",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "The TUI consumes list and event daemon requests (crates/minibox-tui/src/event.rs:36-104).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "e21c5c21-5f83-40b0-9f5a-00111bbf755b",
+      "source": "55a1dbe2-6a25-47bc-9a8e-b5a29aba241f",
+      "target": "d3669816-db56-4913-af1e-dd38e6a22f80",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "minibox-testsuite depends on minibox (crates/minibox-testsuite/Cargo.toml:18-32).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "3aa0f2b9-8fbc-4e12-938e-242361ad5644",
+      "source": "55a1dbe2-6a25-47bc-9a8e-b5a29aba241f",
+      "target": "52719b0a-457e-4e7b-b1df-e984341b3704",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "minibox-testsuite depends on minibox-core (crates/minibox-testsuite/Cargo.toml:18-32).",
+      "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "906c0d56-6a66-44e7-86aa-9bc606a320ac",
+      "source": "b65dd825-1a0e-40db-9b5f-553a5e1a58c0",
+      "target": "55a1dbe2-6a25-47bc-9a8e-b5a29aba241f",
+      "type": "depends_on",
+      "confidence": 1.0,
+      "supporting_text": "xtask depends on minibox-testsuite (xtask/Cargo.toml:12-28).",
+      "source_doc": "minibox-context-map-f5481a94"
+    }
+  ]
 }

@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - Cargo.toml
   - crates/minibox-domain
@@ -19,7 +19,7 @@ sources:
   - crates/minibox-tui
   - crates/ail
   - xtask
-generated: 2026-08-26
+generated: 2026-09-16
 ---
 
 # Minibox Architecture Reference
@@ -49,7 +49,7 @@ generated: 2026-08-26
 <!-- fact:workspace_version=0.33.0 -->
 
 ```text
-minibox-macros          (proc-macro, ~300 LOC)
+minibox-macros          (declarative macros, ~300 LOC)
     ^
 minibox-domain          (lib) — pure values, policies, lifecycle events, and ports
     ^
@@ -57,17 +57,17 @@ minibox-core            (lib) — protocol, clients, OCI/image services, shared 
     ^
 minibox                 (lib, ~21.5k LOC) — Linux adapters, daemon handler/server/state, testing infra
     ^        ^        ^
-macbox   smolbox   winbox  (platform libs) — Colima | smolvm/krun | Windows stub
+macbox   smolbox   winbox  (platform libs) — krun/Colima/VZ | VM facades | Windows stub
     ^        ^        ^
 miniboxd                (bin+lib, ~1.6k LOC) — daemon entry point, adapter DI composition root
 
-mbx                     (bin, ~3.2k LOC) — CLI client, connects via Unix socket
+minibox-cli             (package, ~3.2k LOC) — `mbx` binary; optional TUI feature
 minibox-crux-plugin     (bin) — crux plugin host; exposes minibox ops over JSON-RPC stdio
 minibox-mcp             (lib+bin) — MCP stdio server; exposes safe agent tools over the daemon protocol
-minibox-testsuite       (bin, internal) — conformance test harness for adapter trait contracts
+minibox-testsuite       (lib+2 bins, internal) — conformance harness plus report runners
 minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
 minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
-minibox-tui             (bin) — read-only TUI dashboard (ratatui + crossterm), `mbx tui`
+minibox-tui             (lib) — read-only TUI dashboard (ratatui + crossterm), used by `mbx tui`
 ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
 ```
@@ -81,7 +81,7 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | minibox-core        | minibox-domain, minibox-macros                                |
 | minibox             | minibox-core, minibox-macros                                  |
 | macbox              | minibox, minibox-core                                         |
-| smolbox             | minibox, minibox-core                                         |
+| smolbox             | minibox, macbox                                               |
 | winbox              | minibox, minibox-core                                         |
 | miniboxd            | minibox, minibox-core (unix), macbox/smolbox (unix), winbox (windows) |
 | mbx                 | minibox-core                                                  |
@@ -109,16 +109,16 @@ remains a compatibility path to the same type identities.
 | -------------------- | ----------------------------------------------------- | --------------------------------------- |
 | `ImageRegistry`      | `has_image`, `pull_image`, `get_image_layers`         | All adapter suites                      |
 | `RegistryRouter`     | `route` (hostname -> registry)                        | All suites via `HostnameRegistryRouter` |
-| `ImageLoader`        | `load_image` (local tarball)                          | native, gke, colima                     |
+| `ImageLoader`        | `load_image` (local tarball)                          | native, gke, colima, smolvm             |
 | `FilesystemProvider` | supertrait: `RootfsSetup + ChildInit`                 | All suites                              |
 | `ResourceLimiter`    | `create`, `add_process`, `cleanup`                    | All suites (noop on gke/smolvm)         |
 | `ContainerRuntime`   | `capabilities`, `spawn_process`, `wait_for_exit`      | All suites                              |
 | `NetworkProvider`    | `setup`, `attach`, `cleanup`, `stats`                 | native (bridge/host/noop), others noop  |
-| `MetricsRecorder`    | `increment_counter`, `record_histogram`, `set_gauge`  | native, gke, smolvm                     |
+| `MetricsRecorder`    | `increment_counter`, `record_histogram`, `set_gauge`  | native, gke, smolvm, krun               |
 | `ExecRuntime`        | `run_in_container`                                    | native only                             |
-| `ImagePusher`        | `push_image`                                          | native, colima                          |
+| `ImagePusher`        | `push_image`                                          | native, gke, colima                     |
 | `ContainerCommitter` | `commit`                                              | native, colima                          |
-| `ImageBuilder`       | `build_image`                                         | native, colima                          |
+| `ImageBuilder`       | `build_image`                                         | native, colima, smolvm                  |
 | `VmCheckpoint`       | `save_snapshot`, `restore_snapshot`, `list_snapshots` | noop everywhere                         |
 | `PtyAllocator`       | `allocate`                                            | internal exec path                      |
 
@@ -139,7 +139,7 @@ Defined in `crates/minibox-domain/src/extensions.rs`.
 | ------------------ | :----: | :--: | :----: | :----: | :--: | :--: | :--: | :--: | :----: |
 | ImageRegistry      |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub |  --  |   --   |
 | RegistryRouter     |   Y    |  Y   |   Y    |   Y    |  Y   |  --  |  --  |  --  |   --   |
-| ImageLoader        |   Y    |  Y   |   Y    |  noop  | noop |  --  |  --  |  --  |   --   |
+| ImageLoader        |   Y    |  Y   |   Y    |   Y    | noop |  --  |  --  |  --  |   --   |
 | FilesystemProvider |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub | stub |  stub  |
 | ResourceLimiter    |   Y    | noop |   Y    |   Y    |  Y   | stub | stub | stub |  stub  |
 | ContainerRuntime   |   Y    |  Y   |   Y    |   Y    |  Y   | stub | stub | stub |  stub  |
@@ -151,19 +151,20 @@ Defined in `crates/minibox-domain/src/extensions.rs`.
 | ImageBuilder       |   Y    |  --  |   Y    |   Y    |  --  |  --  |  --  |  --  |   --   |
 | VmCheckpoint       |  noop  | noop |  noop  |  noop  | noop |  --  |  --  |  --  |   --   |
 
-Note: `vz` (VZ.framework) adapter was removed in 2026-05-08. See git history for prior state.
+VZ is a separate, feature-gated startup path rather than a normal dependency builder. It was
+restored after its 2026-05 removal but remains nonfunctional because Linux VM boot currently fails.
 
 Key: **Y** = real impl wired, **noop** = no-op wired, **stub** = returns Err (library only),
 **--** = not implemented
 
-\*krun constructs its own `NoOpMetricsRecorder` internally rather than accepting the shared
-broker — an inconsistency vs native/gke/smolvm.
+Krun receives the shared metrics recorder through the composition root, matching the other
+wired suites.
 
 ### Wiring Status
 
 All `build_*_handler_dependencies` functions live in
 `crates/miniboxd/src/main.rs`. Adapter selection logic is in
-`crates/miniboxd/src/adapter_registry.rs:adapter_from_env`.
+`crates/minibox-core/src/adapter_registry.rs:adapter_from_env`.
 
 | Suite                         | Wired in miniboxd                   | `MINIBOX_ADAPTER` value | Platform     |
 | ----------------------------- | ----------------------------------- | ----------------------- | ------------ |
@@ -172,6 +173,7 @@ All `build_*_handler_dependencies` functions live in
 | colima                        | `build_colima_handler_dependencies` | `colima`                | Unix         |
 | smolvm                        | `build_smolvm_handler_dependencies` | `smolvm` (default)      | Unix         |
 | krun                          | `build_krun_handler_dependencies`   | `krun` (fallback)       | Unix         |
+| vz                            | separate `vz_main`/`start_vz` path  | `vz` (feature-gated)    | macOS only   |
 | vf, hcs, wsl2, docker_desktop | **not wired**                       | --                      | library only |
 
 ---
@@ -201,11 +203,12 @@ HandlerDependencies
 |   +-- image_pusher: Option<DynImagePusher>
 |   +-- commit_adapter: Option<DynContainerCommitter>
 |   +-- image_builder: Option<DynImageBuilder>
-+-- EventDeps
++-- EventDeps (`events` field)
 |   +-- event_sink: Arc<dyn EventSink>
 |   +-- event_source: Arc<dyn EventSource>
 |   +-- metrics: DynMetricsRecorder
 +-- policy: ContainerPolicy
++-- execution_policy: Option<ExecutionPolicy>
 +-- checkpoint: DynVmCheckpoint
 ```
 
@@ -232,7 +235,7 @@ ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
 PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
 Manifest, VerifyResult, WorkflowComplete
 
-**Non-terminal** (streaming): ContainerOutput, ExecStarted, PushProgress,
+**Non-terminal** (streaming): ContainerCreated, ContainerOutput, ExecStarted, PushProgress,
 BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
 
 ---
@@ -289,16 +292,13 @@ serves as the attestation subject.
 
 ## Mock System
 
-Two locations with significant duplication:
+The canonical cross-platform mocks live in `minibox-core`; `minibox::testing::mocks` re-exports
+those shared doubles and adds handler-oriented helpers where needed:
 
 | Location                        | Style                        | Unique mocks                                                                       |
 | ------------------------------- | ---------------------------- | ---------------------------------------------------------------------------------- |
-| `minibox/src/adapters/mocks.rs` | `adapt!` macro               | `FailableFilesystemMock` runtime toggles                                           |
-| `minibox/src/testing/mocks/`    | manual impl, per-trait files | `MockImageBuilder`, `MockExecRuntime`, `MockImagePusher`, `MockContainerCommitter` |
-
-Duplicated across both: MockRegistry, MockFilesystem, MockLimiter, MockRuntime,
-MockNetwork. Minor API differences (Location A has `with_empty_layers` on
-MockRegistry; Location B has public state structs).
+| `minibox-core/src/adapters/mocks.rs` | canonical cross-platform doubles | Registry, filesystem, limiter, runtime, network, image build/push/commit |
+| `minibox/src/testing/mocks/` | compatibility re-exports | Handler test import surface |
 
 ---
 
@@ -336,9 +336,8 @@ See `docs/core/STATE_MODEL.mbx.md` for full detail.
 
 | Document                                                          | Purpose                                       |
 | ----------------------------------------------------------------- | --------------------------------------------- |
-| [`docs/FEATURE_MATRIX.mbx.md`](FEATURE_MATRIX.mbx.md)             | Per-adapter capability matrix (authoritative) |
-| [`docs/GOTCHAS.mbx.md`](GOTCHAS.mbx.md)                           | Non-obvious Rust/container/protocol pitfalls  |
-| [`docs/TEST_INFRASTRUCTURE.mbx.md`](TEST_INFRASTRUCTURE.mbx.md)   | Test categories, CI coverage, xtask commands  |
-| [`docs/STATE_MODEL.mbx.md`](STATE_MODEL.mbx.md)                   | Daemon persistence model and state machine    |
-| [`docs/SECURITY_INVARIANTS.mbx.md`](SECURITY_INVARIANTS.mbx.md)   | Security rules to preserve across changes     |
-| `docs/verifiable-execution.mbx.md` | Execution manifest format, attestation path (file removed — see Execution Manifest section above) |
+| [`FEATURE_MATRIX.mbx.md`](FEATURE_MATRIX.mbx.md)             | Per-adapter capability matrix (authoritative) |
+| [`GOTCHAS.mbx.md`](GOTCHAS.mbx.md)                           | Non-obvious Rust/container/protocol pitfalls  |
+| [`TEST_INFRASTRUCTURE.mbx.md`](TEST_INFRASTRUCTURE.mbx.md)   | Test categories, CI coverage, xtask commands  |
+| [`STATE_MODEL.mbx.md`](STATE_MODEL.mbx.md)                   | Daemon persistence model and state machine    |
+| [`SECURITY_INVARIANTS.mbx.md`](SECURITY_INVARIANTS.mbx.md)   | Security rules to preserve across changes     |

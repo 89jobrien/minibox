@@ -4,6 +4,9 @@ use minibox_core::client::DaemonClient;
 use minibox_core::protocol::{DaemonRequest, DaemonResponse};
 use std::path::Path;
 
+/// Requests image pruning and prints each removal plus the total reclaimed space.
+///
+/// In dry-run mode, reports the images and space that would be removed without deleting them.
 pub async fn execute(dry_run: bool, socket_path: &Path) -> anyhow::Result<()> {
     let client = DaemonClient::with_socket(socket_path);
     let mut stream = client

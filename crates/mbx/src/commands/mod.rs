@@ -120,12 +120,14 @@ pub async fn send_request(
     }
 }
 
+pub mod build;
 pub mod capabilities;
 pub mod commit;
 pub mod diagnose;
 pub mod doctor;
 pub mod events;
 pub mod exec;
+pub mod images;
 pub mod load;
 pub mod logs;
 pub mod manifest;
@@ -134,6 +136,7 @@ pub mod pipeline;
 pub mod prune;
 pub mod ps;
 pub mod pull;
+pub mod push;
 pub mod resume;
 pub mod rm;
 pub mod rmi;

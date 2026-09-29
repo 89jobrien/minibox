@@ -1,21 +1,14 @@
 # Active context
 
-**Current focus (2026-08-22):**
+**Current focus (2026-09-18):**
 
 `develop` branch. Most recent work (newest first):
 
-0. **Docs frontmatter backfill + freeze closure** (uncommitted as of this note) — all 19
-   `docs/core/*.mbx.md` files stamped with `source_sha`/`sources`/`generated` frontmatter
-   per the `docs` skill convention (verified via `nu .claude/skills/docs/scripts/doc-audit.nu`:
-   21/37 docs now stamped, no stale docs). Also closed GitHub issue #127 ("Freeze net-new
-   surface area until fundamentals stabilize") — 5 of 6 acceptance sub-issues were already
-   closed (#122 protocol, #114 state, #120 docs, #123 security, #117 support tiers, #133 CI
-   enforcement) and 1,300+ commits had landed since filing without the freeze being enforced
-   in practice; #116 (handler.rs coverage) remains open as the residual item. Also committed
-   `runtime_id` tracking on `ContainerRecord`/daemon state (2c75b559) and an image-label fix
-   stripping the `library/` cache-key prefix from user-facing `mbx run` output. Three known
-   doc-home collisions remain unresolved: `USAGE`, `TESTING`, `DEVELOPMENT` each exist both
-   at top level and under `docs/core/` — not yet reconciled.
+0. **Documentation and isolation design pass** (current worktree) — project docs, skills,
+   agent harnesses, mdBook crate pages, CLI references, and memory-bank facts are being synced
+   against the 17-member workspace at `f5481a94`. Three 2026-09-18 isolation documents define
+   proposed typed policy, admission, and environment-attestation work; they do not describe
+   implemented enforcement yet. The docs audit currently reports no home collisions.
 
 1. **Protocol drift expectation fix** (fe9bae3e) — `xtask::protocol_drift`'s expected surface
    list still had the pre-split single `domain-ports` entry after a prior session split it into
@@ -80,9 +73,9 @@
       overlay/cgroup blocked by smolvm CAP_SYS_ADMIN restriction
 - [ ] macOS exec/logs via VM adapters — run+stdout streaming works,
       exec-into-running unsupported
-- [ ] minibox-cni wiring into miniboxd adapter suites — crate exists, CNI protocol landed,
-      OTEL design plan drafted, but the daemon doesn't consume it yet
-- [ ] Merge develop -> next (pending CI green on develop)
+- [x] minibox-cni wiring into miniboxd — the native bridge path uses
+      `CniNetworkProvider` when miniboxd is built with the `cni` feature
+- [ ] Promote develop -> staging (pending CI green on develop)
 
 **Recently completed:**
 
@@ -104,7 +97,8 @@
 **Decisions (recent):**
 
 - All Python removed — scripts use Rust (rust-script) or Nushell
-- VZ.framework adapter removed (2026-05-08, Apple ARM64 bug)
+- VZ.framework adapter restored behind the opt-in `vz` feature; VM boot remains blocked
+  by the current macOS `VZLinuxBootLoader` failure
 - smolvm is default macOS adapter, krun is fallback
 - Stabilization freeze (#127) closed 2026-08-22 as substantially satisfied; #116
   (handler.rs coverage) remains open as the residual work item
@@ -120,7 +114,7 @@
 - fixture-consolidation (#355) blocked — duplicate test_fixtures.rs
 - CI coverage gaps for property tests, borrow fixtures, sandbox tests
 - `ACTIONS_RUNNER_READ_TOKEN` secret not yet set in GHA — bench runner preference inert
-- minibox-cni: crate exists and is tested but not yet wired into miniboxd's adapter suites —
-  scope of that wiring work not yet defined
+- minibox-cni is wired into native bridge networking behind the opt-in `cni` feature;
+  operational rollout and plugin packaging remain open
 
 _Update when the task or branch focus changes._

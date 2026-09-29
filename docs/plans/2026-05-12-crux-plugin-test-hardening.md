@@ -98,7 +98,8 @@ Eliminate flaky timing, reduce boilerplate, and close coverage gaps in
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo test -p minibox-crux-plugin    -> all 41 tests pass
    cargo clippy -p minibox-crux-plugin -- -D warnings  -> zero warnings
    ```
@@ -143,7 +144,8 @@ Eliminate flaky timing, reduce boilerplate, and close coverage gaps in
    `use std::time::Duration` import if now unused.
 
 5. Verify:
-   ```
+
+   ```text
    cargo test -p minibox-crux-plugin    -> all pass
    cargo clippy -p minibox-crux-plugin -- -D warnings  -> zero warnings
    ```
@@ -216,7 +218,8 @@ Eliminate flaky timing, reduce boilerplate, and close coverage gaps in
    ```
 
 3. Verify:
-   ```
+
+   ```text
    cargo test -p minibox-crux-plugin    -> all pass
    cargo clippy -p minibox-crux-plugin -- -D warnings  -> zero warnings
    ```
@@ -280,7 +283,8 @@ Eliminate flaky timing, reduce boilerplate, and close coverage gaps in
    ```
 
 2. Verify:
-   ```
+
+   ```text
    cargo test -p minibox-crux-plugin    -> all pass
    cargo clippy -p minibox-crux-plugin -- -D warnings  -> zero warnings
    ```
@@ -416,7 +420,8 @@ terminal variant.
    ```
 
 5. Verify:
-   ```
+
+   ```text
    cargo test -p minibox-crux-plugin    -> all pass
    cargo clippy -p minibox-crux-plugin -- -D warnings  -> zero warnings
    ```

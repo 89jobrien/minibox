@@ -67,7 +67,7 @@ pub async fn handle_logs(
             let line = match line_result.context("reading log line") {
                 Ok(l) => l,
                 Err(e) => {
-                    warn!(container_id = %id, error = %e, "handle_logs: read error");
+                    warn!(container_id = %id, error = ?e, "handle_logs: read error");
                     break;
                 }
             };
