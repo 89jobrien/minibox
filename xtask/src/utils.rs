@@ -206,7 +206,9 @@ mod tests {
 
     #[test]
     fn relative_cargo_target_dir_is_anchored_at_workspace_root() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _env = EnvGuard::set(Some(Path::new("artifacts/target")));
 
         assert_eq!(
@@ -217,7 +219,9 @@ mod tests {
 
     #[test]
     fn absolute_cargo_target_dir_is_unchanged() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let temp = tempfile::tempdir().expect("create temporary target directory");
         let _env = EnvGuard::set(Some(temp.path()));
 
@@ -226,7 +230,9 @@ mod tests {
 
     #[test]
     fn default_cargo_target_dir_is_under_workspace_root() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _env = EnvGuard::set(None);
 
         assert_eq!(cargo_target_dir(), workspace_root().join("target"));
@@ -234,7 +240,9 @@ mod tests {
 
     #[test]
     fn target_dir_is_identical_from_workspace_root_and_nested_subdirectory() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _env = EnvGuard::set(None);
 
         let nested = workspace_root().join("crates").join("minibox").join("src");
@@ -384,8 +392,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("create temporary target directory");
         let _release = write_artifact(temp.path(), "release/mbx");
 
-        let located = [Profile::Debug]
-            .iter()
+        let located = std::iter::once(&Profile::Debug)
             .map(|profile| cargo_binary_path(temp.path(), None, *profile, "mbx"))
             .find(|path| path.is_file());
 
@@ -413,8 +420,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("create temporary target directory");
         let expected = write_artifact(temp.path(), "x86_64-unknown-linux-musl/debug/miniboxd");
 
-        let located = [Profile::Debug]
-            .iter()
+        let located = std::iter::once(&Profile::Debug)
             .map(|profile| {
                 cargo_binary_path(
                     temp.path(),
@@ -430,7 +436,9 @@ mod tests {
 
     #[test]
     fn deps_dirs_honour_a_relative_cargo_target_dir() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // A relative CARGO_TARGET_DIR must resolve against the workspace root,
         // not the process working directory.
@@ -446,8 +454,7 @@ mod tests {
 
         let expected = write_artifact(temp.path(), "debug/mbx");
         let located = cargo_target_dir();
-        let located = [Profile::Debug]
-            .iter()
+        let located = std::iter::once(&Profile::Debug)
             .map(|profile| cargo_binary_path(&located, None, *profile, "mbx"))
             .find(|path| path.is_file());
 
@@ -456,7 +463,9 @@ mod tests {
 
     #[test]
     fn deps_dir_honours_a_relative_cargo_target_dir() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _env = EnvGuard::set(Some(Path::new("artifacts/nested/target")));
 
         assert_eq!(

@@ -503,7 +503,7 @@ crate::conformance_test! {
         assert_eq!(plain.kind, TestDeclarationKind::Function);
         assert_eq!(
             plain.stable_id,
-            format!("{}::sample/src/lib.rs::outer::plain::function", package_id)
+            format!("{package_id}::sample/src/lib.rs::outer::plain::function")
         );
 
         let async_case = declaration("async_case");
@@ -524,10 +524,7 @@ crate::conformance_test! {
         assert_eq!(macro_case.kind, TestDeclarationKind::MacroInvocation);
         assert_eq!(
             macro_case.stable_id,
-            format!(
-                "{}::sample/src/lib.rs::<root>::macro_case::macro_invocation",
-                package_id
-            )
+            format!("{package_id}::sample/src/lib.rs::<root>::macro_case::macro_invocation")
         );
 
         assert!(

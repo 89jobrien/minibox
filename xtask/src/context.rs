@@ -1315,7 +1315,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
         assert_eq!(current[0].status, ProfileStatus::Validated);
 
         let stale_dir = tempfile::tempdir().expect("stale evidence directory should exist");
-        let mut stale_key = key.clone();
+        let mut stale_key = key;
         stale_key.commit = "different".to_string();
         std::fs::write(
             stale_dir.path().join("windows.json"),

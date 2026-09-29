@@ -1604,8 +1604,7 @@ build = "build.rs"
             .expect("stale artifact should be written");
         }
 
-        let expected =
-            std::collections::BTreeMap::from([("native-linux".to_string(), baseline.clone())]);
+        let expected = std::collections::BTreeMap::from([("native-linux".to_string(), baseline)]);
         let packages = BTreeSet::from(["pkg".to_string()]);
         let imported = read_profile_evidence(evidence_dir.path(), &expected, &packages)
             .expect("well-formed evidence should import");

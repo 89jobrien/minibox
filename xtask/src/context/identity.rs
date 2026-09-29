@@ -159,7 +159,12 @@ mod tests {
     #[test]
     fn porcelain_parser_covers_rename_delete_and_unmerged_records() {
         let root = tempfile::tempdir().expect("root should be created");
-        let output = b"2 R. N... 100644 100644 100644 a b R100 new.rs\0old.rs\01 D. N... 100644 000000 000000 a 0 deleted.rs\0u UU N... 100644 100644 100644 100644 a b c conflict.rs\0";
+        // \x00 not \0: `-z` output is NUL-separated, so each record ends with a
+        // real NUL and is immediately followed by the next record's status
+        // letter. Written as `\01` this parses as the octal escape for byte
+        // 0x01, which would put a control character where the separator belongs
+        // and swallow the `1` of the following status.
+        let output = b"2 R. N... 100644 100644 100644 a b R100 new.rs\0old.rs\x001 D. N... 100644 000000 000000 a 0 deleted.rs\0u UU N... 100644 100644 100644 100644 a b c conflict.rs\0";
         let paths =
             parse_porcelain_v2_paths(root.path(), output).expect("identity records should parse");
         assert_eq!(
