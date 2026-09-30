@@ -3,6 +3,9 @@
 //! Defines the contract for network providers that implement container
 //! network isolation, bridge setup, and port forwarding.
 
+// TODO(feature-idea-33): make NetworkMode authoritative for every adapter, then add
+// deny-by-default egress policy and optional host-side secret mediation for supported backends.
+
 use super::AsAny;
 use anyhow::Result;
 use async_trait::async_trait;

@@ -4,8 +4,6 @@
 //! wired into consuming modules — they exist so the config schema is stable
 //! and ready when those modules adopt xconfig.
 
-#![allow(dead_code)]
-
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::Path;
@@ -17,7 +15,6 @@ pub struct XConfig {
     pub cross: Cross,
     pub dotenv: Dotenv,
     pub binaries: Binaries,
-    pub orchestration: Orchestration,
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,11 +44,6 @@ pub struct Dotenv {
 pub struct Binaries {
     pub agentbox_dir: String,
     pub agentbox_pkg: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Orchestration {
-    pub allowed_tools: String,
 }
 
 impl XConfig {

@@ -19,6 +19,9 @@ use std::{env, fmt, process::Command};
 const ALLOWED_TOOLS: &str = "Bash,Read,Write,Edit,Glob,Grep,Agent";
 const LOCAL_PROMPT: &str = "Run the daily orchestration workflow across all repos. Follow the /daily-orchestration skill exactly: pull all repos, analyze health, fix P0s, write Obsidian daily note, push. Do not prompt for confirmation — this is a non-interactive run.";
 
+/// Launches Claude for the local all-repository or CI single-repository daily workflow.
+///
+/// A dry run prints the resolved invocation and CI configuration without launching Claude.
 pub fn run(dry_run: bool, ci: bool) -> Result<()> {
     let config = if ci {
         RunConfig::ci_from_env()?

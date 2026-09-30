@@ -311,8 +311,6 @@ use minibox::adapters::{CopyFilesystem, NoopLimiter, ProotRuntime};
 use minibox_core::image::registry::RegistryClient;
 #[cfg(target_os = "linux")]
 use std::path::Path;
-#[cfg(all(target_os = "linux", feature = "tailnet"))]
-use tailbox::{TailnetConfig, TailnetNetwork};
 
 // ── Path resolution ───────────────────────────────────────────────────────
 
@@ -333,11 +331,11 @@ struct DaemonPaths {
 
 #[cfg(unix)]
 fn resolve_paths() -> DaemonPaths {
-    let data_dir = std::env::var("MINIBOX_DATA_DIR")
-        .map_or_else(|_| resolve_default_data_dir(), PathBuf::from);
-
-    let run_dir =
-        std::env::var("MINIBOX_RUN_DIR").map_or_else(|_| resolve_default_run_dir(), PathBuf::from);
+    // Path resolution lives in `minibox_core::doctor` so `mbx doctor` reports
+    // the directories the daemon will actually use, not a re-derivation that
+    // can drift. Env overrides are handled inside those functions.
+    let data_dir = minibox_core::doctor::resolve_data_dir();
+    let run_dir = minibox_core::doctor::resolve_run_dir();
 
     let socket_path = std::env::var("MINIBOX_SOCKET_PATH")
         .map_or_else(|_| run_dir.join("miniboxd.sock"), PathBuf::from);
@@ -353,53 +351,6 @@ fn resolve_paths() -> DaemonPaths {
         images_dir,
         containers_dir,
         run_containers_dir,
-    }
-}
-
-#[cfg(unix)]
-fn resolve_default_data_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        macbox::paths::data_dir()
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let uid = nix::unistd::getuid().as_raw();
-        resolve_data_dir_for_uid(uid)
-    }
-}
-
-#[cfg(unix)]
-fn resolve_default_run_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        macbox::paths::run_dir()
-    }
-    #[cfg(target_os = "linux")]
-    {
-        PathBuf::from("/run/minibox")
-    }
-}
-
-/// Resolve the image/container data directory based on effective UID (Linux).
-///
-/// Resolution order:
-/// 1. `MINIBOX_DATA_DIR` env var (explicit override) — handled by caller
-/// 2. `~/.minibox/cache/` if uid is non-root
-/// 3. `/var/lib/minibox/` if uid is root
-#[cfg(unix)]
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-fn resolve_data_dir_for_uid(uid: u32) -> PathBuf {
-    if let Ok(explicit) = std::env::var("MINIBOX_DATA_DIR") {
-        return PathBuf::from(explicit);
-    }
-    if uid == 0 {
-        PathBuf::from("/var/lib/minibox")
-    } else {
-        std::env::var("HOME").map_or_else(
-            |_| PathBuf::from("/var/lib/minibox"),
-            |h| PathBuf::from(h).join(".minibox/cache"),
-        )
     }
 }
 
@@ -784,18 +735,115 @@ async fn build_handler_deps(
     Ok(Arc::new(deps_inner))
 }
 
+// ── Network mode (MINIBOX_NETWORK_MODE) ───────────────────────────────────
+//
+// The accepted set is identical on every platform and feature combination, so
+// the enum and its parser carry no feature gates: only the target gate below,
+// which folds in `test` so these items exist in the test build on non-Linux
+// hosts too, where no provider-construction call site needs them.
+
+/// Network mode requested for the native adapter via `MINIBOX_NETWORK_MODE`.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NetworkMode {
+    /// No networking — every container gets a `NoopNetwork`.
+    None,
+    /// A bridged network: the CNI plugin provider when the `cni` feature is
+    /// compiled in, otherwise the built-in bridge provider.
+    Bridge,
+    /// The host network namespace.
+    Host,
+    /// A Tailscale tailnet (provider requires the `tailnet` feature).
+    Tailnet,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl NetworkMode {
+    /// Every `MINIBOX_NETWORK_MODE` value the daemon accepts.
+    pub const ALL: &[Self] = &[Self::None, Self::Bridge, Self::Host, Self::Tailnet];
+
+    /// The string identifier for this mode (matches `MINIBOX_NETWORK_MODE`).
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Bridge => "bridge",
+            Self::Host => "host",
+            Self::Tailnet => "tailnet",
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl std::fmt::Display for NetworkMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// `MINIBOX_NETWORK_MODE` value used when the variable is unset.
+#[cfg(any(target_os = "linux", test))]
+const DEFAULT_NETWORK_MODE: &str = "none";
+
+/// Parse a `MINIBOX_NETWORK_MODE` value into a [`NetworkMode`].
+///
+/// Matching is exact and case-sensitive. An unrecognized value — including the
+/// empty string — is a hard error naming the rejected value and the valid set;
+/// it never degrades to [`NetworkMode::None`], so a typo in a unit file or
+/// systemd drop-in surfaces at startup instead of silently isolating every
+/// container's network.
+#[cfg(any(target_os = "linux", test))]
+fn parse_network_mode(value: &str) -> Result<NetworkMode, UnknownNetworkModeError> {
+    match value {
+        "none" => Ok(NetworkMode::None),
+        "bridge" => Ok(NetworkMode::Bridge),
+        "host" => Ok(NetworkMode::Host),
+        "tailnet" => Ok(NetworkMode::Tailnet),
+        _ => Err(UnknownNetworkModeError {
+            requested: value.to_string(),
+        }),
+    }
+}
+
+/// Raised when `MINIBOX_NETWORK_MODE` holds a value the daemon does not accept.
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone)]
+struct UnknownNetworkModeError {
+    /// The rejected value, echoed back for the operator.
+    requested: String,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl std::fmt::Display for UnknownNetworkModeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let valid: Vec<&str> = NetworkMode::ALL
+            .iter()
+            .copied()
+            .map(NetworkMode::as_str)
+            .collect();
+        write!(
+            f,
+            "unknown MINIBOX_NETWORK_MODE value {:?}. Valid options: {}",
+            self.requested,
+            valid.join(", ")
+        )
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl std::error::Error for UnknownNetworkModeError {}
+
 // ── Native adapter (Linux only) ──────────────────────────────────────────
 
 #[cfg(target_os = "linux")]
 // qual:allow(iosp) reason: "env-based adapter selection: reads env + constructs providers"
 fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvider>> {
-    const DEFAULT_NETWORK_MODE: &str = "none";
-    let mode =
+    let raw =
         std::env::var("MINIBOX_NETWORK_MODE").unwrap_or_else(|_| DEFAULT_NETWORK_MODE.to_string());
+    let mode = parse_network_mode(&raw)?;
     info!(network_mode = %mode, "network provider selected");
-    match mode.as_str() {
+    match mode {
         #[cfg(feature = "cni")]
-        "bridge" => {
+        NetworkMode::Bridge => {
             let cni_path =
                 std::env::var("MINIBOX_CNI_PATH").unwrap_or_else(|_| "/opt/cni/bin".to_string());
             let cni_path: Vec<std::path::PathBuf> = std::env::split_paths(&cni_path).collect();
@@ -807,25 +855,20 @@ fn resolve_native_network() -> Result<Arc<dyn minibox_core::domain::NetworkProvi
             )))
         }
         #[cfg(not(feature = "cni"))]
-        "bridge" => Ok(Arc::new(
+        NetworkMode::Bridge => Ok(Arc::new(
             BridgeNetwork::new().context("BridgeNetwork init failed")?,
         )),
-        "host" => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
-        #[cfg(feature = "tailnet")]
-        "tailnet" => {
-            const DEFAULT_TAILNET_SECRET_NAME: &str = "tailscale-auth-key";
-            let tailnet_cfg = TailnetConfig {
-                auth_key: std::env::var("TAILSCALE_AUTH_KEY").ok(),
-                key_secret_name: std::env::var("MINIBOX_TAILNET_SECRET_NAME")
-                    .unwrap_or_else(|_| DEFAULT_TAILNET_SECRET_NAME.to_string()),
-            };
-            Ok(Arc::new(
-                TailnetNetwork::new(tailnet_cfg)
-                    .await
-                    .context("TailnetNetwork init failed")?,
-            ))
-        }
-        _ => Ok(Arc::new(NoopNetwork::new())),
+        NetworkMode::Host => Ok(Arc::new(minibox::adapters::network::HostNetwork::new())),
+        // `tailnet` parses on every build so an existing deployment config does not
+        // start failing at startup, but the provider lives in the external `tailbox`
+        // crate, which is not a dependency of this workspace. Report that plainly
+        // rather than quietly handing back a NoopNetwork the operator did not ask
+        // for. See the Features table in this crate's README.
+        NetworkMode::Tailnet => Err(anyhow::anyhow!(
+            "MINIBOX_NETWORK_MODE=tailnet is unavailable: the tailbox provider is not \
+             integrated in this build"
+        )),
+        NetworkMode::None => Ok(Arc::new(NoopNetwork::new())),
     }
 }
 
@@ -906,6 +949,9 @@ fn build_native_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -972,6 +1018,9 @@ fn build_gke_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -1092,6 +1141,9 @@ fn build_smolvm_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -1152,6 +1204,9 @@ fn build_krun_handler_dependencies(
         },
         policy: ContainerPolicy::default(),
         execution_policy: None,
+        // `VmCheckpoint` is a no-op for every adapter today: no adapter
+        // implements the port, so `mbx snapshot save|restore|list` fails with
+        // "not supported by this adapter" instead of pretending to persist state.
         checkpoint: Arc::new(minibox_core::domain::NoopVmCheckpoint),
     }))
 }
@@ -1226,7 +1281,7 @@ mod tests {
             std::env::remove_var("MINIBOX_DATA_DIR");
             std::env::set_var("HOME", "/home/testuser");
         }
-        let dir = resolve_data_dir_for_uid(1000);
+        let dir = minibox_core::doctor::resolve_data_dir_for_uid(1000);
         unsafe {
             std::env::remove_var("HOME");
         }
@@ -1240,7 +1295,7 @@ mod tests {
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
         }
-        let dir = resolve_data_dir_for_uid(0);
+        let dir = minibox_core::doctor::resolve_data_dir_for_uid(0);
         assert_eq!(dir, PathBuf::from("/var/lib/minibox"));
     }
 
@@ -1251,8 +1306,8 @@ mod tests {
         unsafe {
             std::env::set_var("MINIBOX_DATA_DIR", "/custom/path");
         }
-        let dir_non_root = resolve_data_dir_for_uid(1000);
-        let dir_root = resolve_data_dir_for_uid(0);
+        let dir_non_root = minibox_core::doctor::resolve_data_dir_for_uid(1000);
+        let dir_root = minibox_core::doctor::resolve_data_dir_for_uid(0);
         unsafe {
             std::env::remove_var("MINIBOX_DATA_DIR");
         }
@@ -1434,6 +1489,36 @@ mod tests {
         assert!(
             deps.build.image_builder.is_some(),
             "native suite should wire image build"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn native_network_provider_rejects_unknown_mode() {
+        let error = native_network_provider("brdige")
+            .await
+            .expect_err("unknown network mode must be rejected");
+
+        assert!(
+            error
+                .to_string()
+                .contains("invalid MINIBOX_NETWORK_MODE=\"brdige\""),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(all(target_os = "linux", not(feature = "tailnet")))]
+    async fn native_network_provider_rejects_unavailable_tailnet_mode() {
+        let error = native_network_provider("tailnet")
+            .await
+            .expect_err("tailnet requires the tailnet feature");
+
+        assert!(
+            error
+                .to_string()
+                .contains("requires miniboxd to be built with the `tailnet` feature"),
+            "unexpected error: {error}"
         );
     }
 
@@ -1722,5 +1807,118 @@ mod cli_args_tests {
     fn unknown_flags_are_ignored() {
         let cli = parse_cli_args(&args(&["--unknown-flag", "--adapter", "krun"]));
         assert_eq!(cli.adapter.as_deref(), Some("krun"));
+    }
+}
+
+// ── MINIBOX_NETWORK_MODE parsing tests ────────────────────────────────────
+
+#[cfg(test)]
+mod network_mode_tests {
+    use super::{DEFAULT_NETWORK_MODE, NetworkMode, parse_network_mode};
+
+    #[test]
+    fn parse_network_mode_none_maps_to_no_network() {
+        assert_eq!(
+            parse_network_mode("none").expect("none is a valid network mode"),
+            NetworkMode::None
+        );
+    }
+
+    #[test]
+    fn parse_network_mode_bridge_maps_to_bridge() {
+        assert_eq!(
+            parse_network_mode("bridge").expect("bridge is a valid network mode"),
+            NetworkMode::Bridge
+        );
+    }
+
+    #[test]
+    fn parse_network_mode_host_maps_to_host() {
+        assert_eq!(
+            parse_network_mode("host").expect("host is a valid network mode"),
+            NetworkMode::Host
+        );
+    }
+
+    #[test]
+    fn parse_network_mode_tailnet_maps_to_tailnet() {
+        assert_eq!(
+            parse_network_mode("tailnet").expect("tailnet is a valid network mode"),
+            NetworkMode::Tailnet
+        );
+    }
+
+    /// An absent `MINIBOX_NETWORK_MODE` must keep today's behaviour: the default
+    /// is a parseable mode, so the call site never has to special-case "unset".
+    #[test]
+    fn default_network_mode_constant_parses_to_no_network() {
+        assert_eq!(DEFAULT_NETWORK_MODE, NetworkMode::None.as_str());
+        assert_eq!(
+            parse_network_mode(DEFAULT_NETWORK_MODE).expect("default mode must parse"),
+            NetworkMode::None
+        );
+    }
+
+    /// Every mode the daemon advertises must round-trip back to its variant,
+    /// so the accepted set and the parser cannot drift apart.
+    #[test]
+    fn every_advertised_mode_round_trips() {
+        for mode in NetworkMode::ALL {
+            let parsed = parse_network_mode(mode.as_str())
+                .unwrap_or_else(|e| panic!("advertised mode {mode:?} must parse: {e}"));
+            assert_eq!(parsed, *mode);
+        }
+    }
+
+    #[test]
+    fn network_mode_as_str_matches_display() {
+        for mode in NetworkMode::ALL {
+            assert_eq!(mode.to_string(), mode.as_str());
+        }
+    }
+
+    #[test]
+    fn unknown_mode_is_rejected() {
+        let err = parse_network_mode("bogus").expect_err("unknown mode must be rejected");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bogus"),
+            "error must name the rejected value: {msg}"
+        );
+        assert!(
+            msg.contains("MINIBOX_NETWORK_MODE"),
+            "error must name the env var: {msg}"
+        );
+    }
+
+    /// A misspelled mode is the exact regression this guards: it must be a hard
+    /// error, never a silent `none` / NoopNetwork selection.
+    #[test]
+    fn misspelled_mode_is_rejected_not_defaulted() {
+        for misspelled in ["brige", "hosts", "None", " NONE", "none ", "tunnel"] {
+            let parsed = parse_network_mode(misspelled);
+            assert!(
+                parsed.is_err(),
+                "misspelled mode {misspelled:?} must be rejected, got {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rejected_mode_error_lists_every_valid_mode() {
+        let err = parse_network_mode("nope").expect_err("unknown mode must be rejected");
+        let msg = err.to_string();
+        for mode in NetworkMode::ALL {
+            assert!(
+                msg.contains(mode.as_str()),
+                "error must list valid mode {mode:?}: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_mode_is_rejected() {
+        let err = parse_network_mode("").expect_err("empty mode must be rejected");
+        assert!(err.to_string().contains("MINIBOX_NETWORK_MODE"));
     }
 }

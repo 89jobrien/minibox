@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="How minibox persists and reconciles container state across daemon restarts.">
+  <title>State Model &mdash; minibox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav aria-label="Primary">
+  <a href="index.html" class="brand"><span>mini</span>box</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="state-model.html" aria-current="page">State</a>
+  <a href="feature-matrix.html">Features</a>
+  <a href="crate-inventory.html">Crates</a>
+  <a href="crate-tiers.html">Tiers</a>
+  <a href="testing.html">Testing</a>
+  <a href="changelog.html">Changelog</a>
+  <a href="roadmap.html">Roadmap</a>
+  <a href="stability.html">Stability</a>
+</nav>
+
+<main id="main" class="page">
+  <header class="page-head"><span class="eyebrow">Runtime state</span><h1>State Persistence Model</h1><p class="lead">How <code>DaemonState</code> records and reconciles containers across daemon restarts.</p><div class="meta-row"><span class="meta">Atomic JSON persistence</span><span class="meta">Conservative reconciliation</span><span class="meta">Updated 2026-09-15</span></div></header>
+
+  <section class="card"><h2>Overview</h2><p><code>DaemonState</code> lives in <code>crates/minibox/src/daemon/state.rs</code> and is shared through <code>Arc&lt;RwLock&lt;...&gt;&gt;</code>. Every add, remove, state transition, and PID assignment triggers best-effort persistence. Writes use a sibling temporary file, mode <code>0o600</code> on POSIX, and atomic rename.</p></section>
+
+  <section class="card"><h2>What Survives a Restart</h2><table tabindex="0"><thead><tr><th>Data</th><th>Survives?</th><th>Notes</th></tr></thead><tbody>
+    <tr><td>Container records and persisted state</td><td class="status-ok">Yes</td><td>Loaded from <code>state.json</code>, then reconciled</td></tr>
+    <tr><td>Host PID</td><td>Conditional</td><td>Read for immediate reconciliation, then daemon PID tracking is cleared</td></tr>
+    <tr><td>Overlay mount</td><td class="status-err">No</td><td>The active mount is not recreated</td></tr>
+    <tr><td>Cgroup attachment</td><td class="status-err">No</td><td>Directories may remain, but state is not reattached</td></tr>
+    <tr><td>Bridge IP allocation</td><td class="status-err">No</td><td>The allocation map is in memory only</td></tr>
+  </tbody></table></section>
+
+  <section class="card"><h2>State File</h2><table tabindex="0"><thead><tr><th>Context</th><th>Path</th></tr></thead><tbody>
+    <tr><td>Explicit override</td><td><code>$MINIBOX_DATA_DIR/state.json</code></td></tr>
+    <tr><td>Linux root</td><td><code>/var/lib/minibox/state.json</code></td></tr>
+    <tr><td>Linux non-root</td><td><code>~/.minibox/cache/state.json</code></td></tr>
+    <tr><td>macOS</td><td><code>~/Library/Application Support/minibox/state.json</code>, with <code>/tmp</code> fallback in sandboxed/CI environments</td></tr>
+  </tbody></table>
+  <ol><li>Serialize the container map as formatted JSON.</li><li>Write <code>state.json.tmp</code>.</li><li>Set mode <code>0o600</code> on POSIX.</li><li>Rename it atomically to <code>state.json</code>.</li></ol><p>Failures are warned and do not crash the daemon.</p></section>
+
+  <section class="card"><h2>Startup Reconciliation</h2><table tabindex="0"><thead><tr><th>Persisted state</th><th>Condition</th><th>Reloaded state</th></tr></thead><tbody>
+    <tr><td><code>Created</code></td><td>Any</td><td><code>Stopped</code></td></tr>
+    <tr><td><code>Running</code></td><td>Any PID state, including alive</td><td><code>Orphaned</code></td></tr>
+    <tr><td><code>Paused</code></td><td>PID alive and <code>cgroup.freeze=1</code></td><td><code>Paused</code></td></tr>
+    <tr><td><code>Paused</code></td><td>Otherwise</td><td><code>Orphaned</code></td></tr>
+    <tr><td><code>Stopped</code>, <code>Failed</code>, or <code>Orphaned</code></td><td>Any</td><td>Unchanged</td></tr>
+  </tbody></table><p>A surviving Running process is still orphaned because the restarted daemon has no reaper attached. Paused is the only non-terminal state that may be retained, and only when both process liveness and freezer state are confirmed.</p></section>
+
+  <section>
+    <h2>Container State Machine</h2>
+    <p>Six states, and the CLI distinguishes all six. Four are the lifecycle; <code>Failed</code> and <code>Orphaned</code> are outcomes of it, marked below with a hatched rule rather than a colour of their own.</p>
+    <div class="state-rail" role="img" aria-label="The six-state container lifecycle, left to right. Created: the container exists but nothing is running, cyan. Running: green and marked live with a pulse. Paused: amber. Stopped: muted, a deliberate end rather than a failure. Failed: hatched red. Orphaned: hatched red, the process is gone but its persisted state was found on startup and could not be reattached.">
+      <div class="state" data-state="created">
+        <span class="state-name">Created</span>
+        <span class="state-ink"></span>
+        <p>Exists, nothing running. The state a container is in between <code>create</code> and its first successful <code>start</code>.</p>
+      </div>
+      <div class="state" data-state="running">
+        <span class="state-name">Running</span>
+        <span class="state-ink"></span>
+        <p>The only live state. <code>pause</code> suspends execution without losing the process, and <code>resume</code> returns to it.</p>
+      </div>
+      <div class="state" data-state="paused">
+        <span class="state-name">Paused</span>
+        <span class="state-ink"></span>
+        <p>Process retained, execution suspended. Survives a restart, and resumes into the same process where the platform allows it.</p>
+      </div>
+      <div class="state" data-state="stopped">
+        <span class="state-name">Stopped</span>
+        <span class="state-ink"></span>
+        <p>A deliberate end, not a failure. Reached through <code>stop</code> or a clean <code>exit</code>, and startable again.</p>
+      </div>
+      <div class="state" data-state="failed" data-outcome="true">
+        <span class="state-name">Failed</span>
+        <span class="state-ink"></span>
+        <p>An error during execution or startup. Terminal until the failure is cleared.</p>
+      </div>
+      <div class="state" data-state="orphaned" data-outcome="true">
+        <span class="state-name">Orphaned</span>
+        <span class="state-ink"></span>
+        <p>Found by startup reconciliation: persisted state existed but the PID did not. Not reattached.</p>
+      </div>
+    </div>
+    <div class="diagram"><img src="arch-state-machine.svg" alt="Container state machine including restart reconciliation to Orphaned"></div>
+  </section>
+
+  <section class="card"><h2>Persistence Port</h2><pre><code>pub trait StateRepository: Send + Sync + &#39;static {
+    fn load_containers(&amp;self) -&gt; Result&lt;HashMap&lt;String, ContainerRecord&gt;&gt;;
+    fn save_containers(&amp;self, containers: &amp;HashMap&lt;String, ContainerRecord&gt;) -&gt; Result&lt;()&gt;;
+}</code></pre><p><code>JsonFileRepository</code> is the production adapter. Tests use in-memory doubles or temporary directories. Both repository injection and the production raw-path constructor coexist by design.</p></section>
+
+  <section class="card"><h2>Not Reattached</h2><ul><li>Running processes and their reapers.</li><li>Bridge allocations, veth pairs, and iptables rules.</li><li>Active overlay mounts, though layer and upper directories remain on disk.</li></ul></section>
+</main>
+
+<footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+
+</body>
+</html>

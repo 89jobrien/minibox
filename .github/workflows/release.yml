@@ -10,9 +10,56 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  generate-changelog:
+    name: Generate release notes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      release_body: ${{ steps.git_cliff_stable.outputs.content || steps.git_cliff_nightly.outputs.content }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+
+      - name: Validate stable release tag
+        if: startsWith(github.ref_name, 'v')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid stable release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - name: Generate stable release notes
+        if: startsWith(github.ref_name, 'v')
+        id: git_cliff_stable
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
+        with:
+          version: v2.14.1
+          config: cliff.toml
+          args: --current --strip header --no-exec --github-repo ${{ github.repository }}
+        env:
+          OUTPUT: RELEASE_NOTES.md
+          GITHUB_REPO: ${{ github.repository }}
+
+      - name: Generate nightly release notes
+        if: startsWith(github.ref_name, 'nightly/')
+        id: git_cliff_nightly
+        uses: orhun/git-cliff-action@3d96a18cc4ec17e9dc69ddcc424ccafaf1f78ce2 # v4.9.0
+        with:
+          version: v2.14.1
+          config: cliff.toml
+          args: --current --tag-pattern '^nightly/[0-9]{8}$' --strip header --no-exec --github-repo ${{ github.repository }}
+        env:
+          OUTPUT: RELEASE_NOTES.md
+          GITHUB_REPO: ${{ github.repository }}
+
   publish-crates:
     name: Publish crates to crates.io
     runs-on: ubuntu-latest
+    needs: generate-changelog
     if: startsWith(github.ref_name, 'v')
 
     steps:
@@ -103,7 +150,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, generate-changelog]
     permissions:
       contents: write
 
@@ -120,6 +167,6 @@ jobs:
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: artifacts/*.tar.gz
-          generate_release_notes: true
+          body: ${{ needs.generate-changelog.outputs.release_body }}
           draft: false
           prerelease: ${{ startsWith(github.ref_name, 'nightly/') }}

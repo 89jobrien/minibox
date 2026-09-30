@@ -14,50 +14,50 @@ capability-gated skip reporting.
 
 ### Files to Modify
 
-| File | Purpose | Changes |
-|------|---------|---------|
-| `crates/minibox-core/src/domain.rs:1575` | `BackendCapability` enum (4 variants) | Add 8 new variants |
-| `crates/minibox/src/testing/backend/descriptor.rs` | `BackendDescriptor` struct | Add 9 factory fields + builders |
-| `crates/minibox/src/testing/capability.rs` | `ConformanceCapability` impls | Add 8 new capability structs |
-| `crates/minibox-testsuite/src/adapters/mod.rs` | Module registry + `all()` | Register 12 new modules |
-| `crates/minibox-testsuite/src/lib.rs` | Crate root | Expose `spoke` module |
-| `crates/minibox-testsuite/src/bin/run_conformance.rs` | Runner binary | Collect spoke tests |
-| `.github/workflows/conformance.yml` | CI workflow | Add 3 new jobs |
+| File                                                  | Purpose                               | Changes                         |
+| ----------------------------------------------------- | ------------------------------------- | ------------------------------- |
+| `crates/minibox-core/src/domain.rs:1575`              | `BackendCapability` enum (4 variants) | Add 8 new variants              |
+| `crates/minibox/src/testing/backend/descriptor.rs`    | `BackendDescriptor` struct            | Add 9 factory fields + builders |
+| `crates/minibox/src/testing/capability.rs`            | `ConformanceCapability` impls         | Add 8 new capability structs    |
+| `crates/minibox-testsuite/src/adapters/mod.rs`        | Module registry + `all()`             | Register 12 new modules         |
+| `crates/minibox-testsuite/src/lib.rs`                 | Crate root                            | Expose `spoke` module           |
+| `crates/minibox-testsuite/src/bin/run_conformance.rs` | Runner binary                         | Collect spoke tests             |
+| `.github/workflows/conformance.yml`                   | CI workflow                           | Add 3 new jobs                  |
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `crates/minibox-testsuite/src/adapters/filesystem.rs` | FilesystemProvider conformance |
-| `crates/minibox-testsuite/src/adapters/exec_runtime.rs` | ExecRuntime conformance |
-| `crates/minibox-testsuite/src/adapters/image_pusher.rs` | ImagePusher conformance |
+| File                                                           | Purpose                        |
+| -------------------------------------------------------------- | ------------------------------ |
+| `crates/minibox-testsuite/src/adapters/filesystem.rs`          | FilesystemProvider conformance |
+| `crates/minibox-testsuite/src/adapters/exec_runtime.rs`        | ExecRuntime conformance        |
+| `crates/minibox-testsuite/src/adapters/image_pusher.rs`        | ImagePusher conformance        |
 | `crates/minibox-testsuite/src/adapters/container_committer.rs` | ContainerCommitter conformance |
-| `crates/minibox-testsuite/src/adapters/image_builder.rs` | ImageBuilder conformance |
-| `crates/minibox-testsuite/src/adapters/network.rs` | NetworkProvider conformance |
-| `crates/minibox-testsuite/src/adapters/tty.rs` | TtyProvider conformance |
-| `crates/minibox-testsuite/src/adapters/pty.rs` | PtyAllocator conformance |
-| `crates/minibox-testsuite/src/adapters/vm_checkpoint.rs` | VmCheckpoint conformance |
-| `crates/minibox-testsuite/src/adapters/metrics.rs` | MetricsRecorder conformance |
-| `crates/minibox-testsuite/src/adapters/registry_router.rs` | RegistryRouter conformance |
-| `crates/minibox-testsuite/src/adapters/image_loader.rs` | ImageLoader conformance |
-| `crates/minibox-testsuite/src/spoke.rs` | Spoke registration API |
-| `crates/minibox/src/testing/mocks/tty.rs` | MockTtyProvider |
-| `crates/minibox/src/testing/mocks/vm_checkpoint.rs` | MockVmCheckpoint |
-| `crates/minibox/src/testing/mocks/metrics.rs` | MockMetricsRecorder |
-| `crates/minibox/src/testing/mocks/registry_router.rs` | MockRegistryRouter |
-| `crates/minibox/src/testing/mocks/image_loader.rs` | MockImageLoader |
+| `crates/minibox-testsuite/src/adapters/image_builder.rs`       | ImageBuilder conformance       |
+| `crates/minibox-testsuite/src/adapters/network.rs`             | NetworkProvider conformance    |
+| `crates/minibox-testsuite/src/adapters/tty.rs`                 | TtyProvider conformance        |
+| `crates/minibox-testsuite/src/adapters/pty.rs`                 | PtyAllocator conformance       |
+| `crates/minibox-testsuite/src/adapters/vm_checkpoint.rs`       | VmCheckpoint conformance       |
+| `crates/minibox-testsuite/src/adapters/metrics.rs`             | MetricsRecorder conformance    |
+| `crates/minibox-testsuite/src/adapters/registry_router.rs`     | RegistryRouter conformance     |
+| `crates/minibox-testsuite/src/adapters/image_loader.rs`        | ImageLoader conformance        |
+| `crates/minibox-testsuite/src/spoke.rs`                        | Spoke registration API         |
+| `crates/minibox/src/testing/mocks/tty.rs`                      | MockTtyProvider                |
+| `crates/minibox/src/testing/mocks/vm_checkpoint.rs`            | MockVmCheckpoint               |
+| `crates/minibox/src/testing/mocks/metrics.rs`                  | MockMetricsRecorder            |
+| `crates/minibox/src/testing/mocks/registry_router.rs`          | MockRegistryRouter             |
+| `crates/minibox/src/testing/mocks/image_loader.rs`             | MockImageLoader                |
 
 ### Dependencies (consumers of changed types)
 
-| File | Relationship |
-|------|--------------|
-| `crates/minibox/tests/conformance_commit.rs` | Constructs `BackendCapabilitySet` |
-| `crates/minibox/tests/conformance_push.rs` | Constructs `BackendCapabilitySet` |
-| `crates/minibox/tests/conformance_build.rs` | Constructs `BackendCapabilitySet` |
-| `crates/minibox/tests/conformance_snapshot.rs` | Uses `BackendCapability::Checkpoint` |
-| `crates/minibox/tests/smolvm_conformance_tests.rs` | Constructs `BackendCapabilitySet` |
-| `crates/minibox/tests/colima_conformance_tests.rs` | Constructs `BackendCapabilitySet` |
-| `crates/minibox-core/src/adapters/conformance.rs` | References `BackendCapability` |
+| File                                               | Relationship                         |
+| -------------------------------------------------- | ------------------------------------ |
+| `crates/minibox/tests/conformance_commit.rs`       | Constructs `BackendCapabilitySet`    |
+| `crates/minibox/tests/conformance_push.rs`         | Constructs `BackendCapabilitySet`    |
+| `crates/minibox/tests/conformance_build.rs`        | Constructs `BackendCapabilitySet`    |
+| `crates/minibox/tests/conformance_snapshot.rs`     | Uses `BackendCapability::Checkpoint` |
+| `crates/minibox/tests/smolvm_conformance_tests.rs` | Constructs `BackendCapabilitySet`    |
+| `crates/minibox/tests/colima_conformance_tests.rs` | Constructs `BackendCapabilitySet`    |
+| `crates/minibox-core/src/adapters/conformance.rs`  | References `BackendCapability`       |
 
 ### Risk
 
@@ -130,7 +130,7 @@ pub enum BackendCapability {
 
 2. Verify:
 
-```
+```text
 cargo check -p minibox-core              -> ok
 cargo clippy -p minibox-core -- -D warnings  -> zero warnings
 ```
@@ -284,7 +284,7 @@ fn all_new_capabilities_pass_when_supported() {
 
 3. Verify:
 
-```
+```text
 cargo nextest run -p minibox -- capability  -> all green
 cargo clippy -p minibox -- -D warnings      -> zero warnings
 ```
@@ -754,7 +754,6 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
 
 2. Register in `adapters/mod.rs`: add `pub mod filesystem;` and
    `tests.extend(filesystem::all());` in `all()`.
-
 3. Verify: `cargo check -p minibox-testsuite`
 4. Commit: `feat(minibox-testsuite): add filesystem conformance module`
 
@@ -1647,51 +1646,51 @@ pub fn all() -> Vec<Box<dyn ConformanceTest>> {
 1. Add three new jobs after the existing `conformance` job:
 
 ```yaml
-  property-tests:
-    name: property tests (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.conformance == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: run property tests
-        run: cargo xtask test-property
+property-tests:
+  name: property tests (${{ matrix.os }})
+  runs-on: ${{ matrix.os }}
+  needs: [detect-changes]
+  if: needs.detect-changes.outputs.conformance == 'true'
+  strategy:
+    fail-fast: false
+    matrix:
+      os: [ubuntu-latest, macos-latest]
+  steps:
+    - uses: actions/checkout@v5
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: run property tests
+      run: cargo xtask test-property
 
-  krun-conformance:
-    name: krun conformance
-    runs-on: macos-latest
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.conformance == 'true'
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: run krun conformance
-        run: cargo xtask test-krun-conformance
+krun-conformance:
+  name: krun conformance
+  runs-on: macos-latest
+  needs: [detect-changes]
+  if: needs.detect-changes.outputs.conformance == 'true'
+  steps:
+    - uses: actions/checkout@v5
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: run krun conformance
+      run: cargo xtask test-krun-conformance
 
-  cli-conformance:
-    name: cli conformance (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    needs: [detect-changes]
-    if: needs.detect-changes.outputs.conformance == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: build workspace
-        run: cargo build --workspace
-      - name: run cli conformance
-        run: cargo nextest run -p mbx --test conformance_cli
+cli-conformance:
+  name: cli conformance (${{ matrix.os }})
+  runs-on: ${{ matrix.os }}
+  needs: [detect-changes]
+  if: needs.detect-changes.outputs.conformance == 'true'
+  strategy:
+    fail-fast: false
+    matrix:
+      os: [ubuntu-latest, macos-latest]
+  steps:
+    - uses: actions/checkout@v5
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: build workspace
+      run: cargo build --workspace
+    - name: run cli conformance
+      run: cargo nextest run -p mbx --test conformance_cli
 ```
 
 2. Commit: `ci: add property, krun, and cli conformance jobs`
@@ -1714,6 +1713,7 @@ consumer files listed in Dependencies.
    raw structs).
 
 3. Verify: `cargo check --workspace`
+
 4. Commit: `feat(minibox): extend BackendDescriptor with 9 new adapter factories`
 
 ---

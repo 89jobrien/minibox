@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/network/bridge.rs
@@ -8,25 +8,28 @@ sources:
   - crates/minibox/src/adapters/docker_desktop.rs
   - Justfile
   - xtask/src/main.rs
-generated: 2026-08-26
+  - crates/minibox/src/daemon/telemetry
+  - crates/mcp
+  - crates/macbox/src/vz
+  - crates/macbox/tests/krun_conformance_tests.rs
+  - crates/macbox/tests/krun_adapter_conformance.rs
+  - crates/minibox/src/adapters/colima_commit.rs
+  - crates/minibox/src/adapters/colima_push.rs
+generated: 2026-09-16
 ---
 
 # Minibox Roadmap
 
-Last updated: 2026-08-26
+Last updated: 2026-09-29
 
 ## Engineering Priorities
 
 ### P0 -- Stability Gates
 
-- **Handler coverage >= 80%**: `crates/minibox/src/daemon/handler/` was at 67.5%
-  function / 55% line coverage. Recent work (exhaustive small-domain tests #342,
-  barrier-based race tests #344, roundtrip property tests #345, stream/transport
-  trait extraction #343, handler tests split by feature #320) has substantially
-  raised coverage. Exact current percentage TBD; error path tests (image pull
-  failure, empty image, registry unreachable) still have the best remaining ROI.
-- **Auth policy gate**: No daemon-side policy gate on bind mounts or
-  privileged mode. Any root client can mount arbitrary host paths.
+- **Handler coverage >= 80%**: met at **92.41% (207/224 functions)**. Continue adding error-path
+  tests when handler behavior changes.
+- **Auth policy gate**: implemented. `ContainerPolicy` and optional manifest-level
+  `ExecutionPolicy` are enforced by the run handler.
 
 ### P1 -- Platform Wiring
 
@@ -61,26 +64,33 @@ Last updated: 2026-08-26
 - **`just install-hooks` recipe**: One-command hook installation documented
   in onboarding (#293).
 - **krun daemon wiring**: `KrunRuntime`/`KrunRegistry`/`KrunFilesystem`/
-  `KrunLimiter` all wired in miniboxd. 31 conformance tests pass. krun is
+  `KrunLimiter` all wired in miniboxd. 29 krun-specific conformance tests pass. krun is
   the fallback when smolvm binary is absent; smolvm remains the primary default.
+- **Native bridge port forwarding and DNS**: DNAT mappings and in-container `resolv.conf`
+  configuration are implemented by `BridgeNetwork`.
+- **Dockerfile parser**: the supported instruction subset lives in
+  `crates/minibox-core/src/image/dockerfile.rs`.
+- **Image push/commit/build**: native supports all three; GKE has OCI push; Colima has
+  `ColimaImagePusher`, `ColimaContainerCommitter`, and image building.
+- **Observability**: OTLP tracing export and the Prometheus metrics endpoint are implemented
+  behind their feature flags.
+- **MCP server**: `minibox-mcp` provides the policy-gated stdio control surface.
+- **VZ adapter restored**: source is present behind the `vz` feature, but remains blocked by
+  `VZLinuxBootLoader` failure on current macOS.
 
 ### P2 -- Feature Gaps
 
-- **Networking hardening**: Bridge networking is wired but has limited test
-  coverage. Port forwarding and in-container DNS are not implemented.
+- **Networking hardening**: Bridge networking, port forwarding, and DNS are wired; broader
+  privileged integration coverage remains useful.
 - **Exec cross-platform**: `minibox exec` only works on native Linux
   adapter. GKE, Colima, and macOS adapters return errors.
-- **Dockerfile parser**: `MiniboxImageBuilder` exists but there is no
-  Dockerfile DSL.
-- **Push/commit hardening**: `OciPushAdapter` and `overlay_commit_adapter`
-  are native-only with limited test coverage.
+- **Push/commit hardening**: native, GKE push, and Colima paths exist; cross-adapter live
+  registry coverage remains limited.
 
 ### P3 -- Observability
 
-- **OTEL tracing**: Spec written (`docs/superpowers/specs/`), no
-  implementation yet. `otel` feature flag exists but is a no-op.
-- **Metrics endpoint**: `metrics` feature flag wired but Prometheus
-  endpoint coverage is minimal.
+- **OTEL tracing**: implemented with optional OTLP/gRPC export.
+- **Metrics endpoint**: implemented behind `metrics`; endpoint coverage can still improve.
 
 ---
 
@@ -90,24 +100,10 @@ This section tracks ideas for using minibox to run itself and AI tooling.
 
 ### Done
 
-- **`just dogfood`** — spins up an alpine container to validate runtime isolation,
-  then runs `cargo xtask test-unit`. Gates the unit test suite on the container
-  runtime proving itself healthy first.
+- **`just test-linux`** — builds the Linux dogfood image, loads it into minibox,
+  and runs the test workload inside a container.
 
 ### Planned
-
-#### 1. MCP Server — Claude controls minibox directly
-
-Build an MCP server that exposes minibox commands as Claude tools: `pull_image`,
-`run_container`, `ps`, `stop`, `rm`. Claude can then orchestrate containers in a
-real agent loop, exercising the daemon protocol, streaming output, and CLI
-end-to-end.
-
-**Why**: highest-leverage dogfood — Claude drives the runtime, surfaces UX
-friction in the protocol and error messages immediately.
-
-**Scope**: thin MCP wrapper around the Unix socket protocol (or the CLI). No new
-daemon features required.
 
 ---
 

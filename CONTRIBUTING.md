@@ -24,20 +24,20 @@ What replaces the freeze:
 
 ## Development Workflow
 
-See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the canonical developer
+See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the canonical developer
 workflow, command reference, and CI gate descriptions.
 
 ### Quick gates
 
 ```bash
-cargo xtask pre-commit     # fmt + clippy + release build (macOS-safe)
-cargo xtask test unit      # cross-platform unit and conformance subset
+cargo xtask pre-commit     # conditional fmt/clippy + architecture/docs checks
+cargo xtask test unit      # cross-platform workspace library tests
 cargo deny check           # license + advisory audit
 ```
 
 ### Commit style
 
-```
+```text
 type(scope): short imperative description (#issue)
 ```
 

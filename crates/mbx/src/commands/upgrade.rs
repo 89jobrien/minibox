@@ -44,6 +44,7 @@ pub trait ReleaseProvider: Send + Sync {
 
 /// Port: download bytes from a URL.
 pub trait AssetDownloader: Send + Sync {
+    /// Downloads the release asset at the supplied URL.
     fn download(&self, url: &str) -> impl std::future::Future<Output = Result<Vec<u8>>> + Send;
 }
 
@@ -207,6 +208,7 @@ pub struct GitHubReleaseProvider {
 }
 
 impl GitHubReleaseProvider {
+    /// Creates a release provider with the shared HTTP client configuration.
     pub fn new() -> Result<Self> {
         Ok(Self {
             client: build_client()?,
@@ -261,6 +263,7 @@ pub struct HttpAssetDownloader {
 }
 
 impl HttpAssetDownloader {
+    /// Creates an asset downloader with the shared HTTP client configuration.
     pub fn new() -> Result<Self> {
         Ok(Self {
             client: build_client()?,

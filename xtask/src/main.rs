@@ -17,6 +17,9 @@
 //! | `info`   | Introspection: metrics, context, detect-changes                |
 //! | (top)    | Gates, CI, cleanup, promotion, and other standalone commands   |
 
+// TODO(feature-idea-08): define xtask commands in one typed registry and generate dispatcher
+// metadata, help, schema, documentation, and compatibility aliases from it.
+
 use anyhow::{Result, bail};
 use std::env;
 use xshell::Shell;
@@ -27,8 +30,9 @@ mod borrow_fixtures;
 mod bump;
 mod cas;
 mod cgroup_tests;
+mod changelog;
 mod check_protocol_sites;
-pub mod checkpoint;
+mod checkpoint;
 mod ci_watch;
 mod cleanup;
 mod clippy_sarif;
@@ -63,12 +67,7 @@ fn main() -> Result<()> {
     let task = argv.get(1).cloned();
 
     let sh = Shell::new()?;
-    let root = sh.current_dir();
-    let root = root
-        .ancestors()
-        .find(|p| p.join("Cargo.lock").exists())
-        .unwrap_or(&root)
-        .to_path_buf();
+    let root = utils::workspace_root();
     let root = root.as_path();
     sh.change_dir(root);
 
@@ -120,8 +119,7 @@ fn main() -> Result<()> {
         }
         Some("test-linux") => {
             let cfg = xconfig::XConfig::load(root)?;
-            let target_base = std::env::var("CARGO_TARGET_DIR")
-                .map_or_else(|_| root.join("target"), std::path::PathBuf::from);
+            let target_base = utils::cargo_target_dir();
             let vm_dir = dirs::home_dir()
                 .unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
                 .join(".minibox")
@@ -154,8 +152,18 @@ fn main() -> Result<()> {
 
         // ── CI / promotion / orchestration ───────────────────────────
         Some("bump") => {
-            let level = env::args().nth(2).unwrap_or_else(|| "patch".to_string());
-            bump::bump(root, &level)
+            let args: Vec<String> = env::args().skip(2).collect();
+            let (level, with_changelog) = parse_bump_args(&args)?;
+            if with_changelog {
+                let Some(version) = bump::bump_with_changelog(root, level)? else {
+                    eprintln!("[minibox] no release entries; version and changelog unchanged");
+                    return Ok(());
+                };
+                eprintln!("[minibox] changelog updated for v{version}");
+            } else {
+                bump::bump(root, level)?;
+            }
+            Ok(())
         }
         Some("preflight") => {
             preflight::require_tools(&preflight::ProcessProbe, &["cargo", "cargo-nextest", "gh"])
@@ -325,7 +333,7 @@ fn cmd_test(sh: &Shell, root: &std::path::Path) -> Result<()> {
         eprintln!("Usage: cargo xtask test <suite>");
         eprintln!();
         eprintln!("Suites:");
-        eprintln!("  unit              unit + conformance tests (any platform)");
+        eprintln!("  unit              workspace library tests (any platform)");
         eprintln!("  conformance       commit+build+push conformance suite + reports");
         eprintln!("  krun-conformance  krun adapter conformance (HVF/KVM)");
         eprintln!("  turmoil           turmoil network simulation tests");
@@ -514,6 +522,7 @@ fn cmd_docs(sh: &Shell, root: &std::path::Path) -> Result<()> {
         eprintln!("  audit [--full] [--strict]   audit docs/core/ facts vs code");
         eprintln!("  lint [--sarif <path>]       validate frontmatter + status values");
         eprintln!("  update-date                 rewrite Last-updated stamp in FEATURE_MATRIX");
+        eprintln!("  sync-adapters               regenerate manifest-backed adapter tables");
         Ok(())
     }
 }
@@ -541,6 +550,7 @@ fn dispatch_docs(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
             docs_lint::lint_docs(root, sarif_path.as_deref())
         }
         "update-date" => feature_matrix_date::update_feature_matrix_date(root),
+        "sync-adapters" => context::sync_adapter_docs(root),
         other => bail!("unknown docs action: {other}"),
     }
 }
@@ -571,21 +581,21 @@ fn cmd_info(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> {
         eprintln!();
         eprintln!("Targets:");
         eprintln!("  metrics [--save]             aggregate crate count, test count, source lines");
-        eprintln!("  context [--save]             machine-readable repo context snapshot");
+        eprintln!("  context [--save] [--strict] [--validate-all] [--evidence-dir <path>]");
         eprintln!("  changes [<base-ref>]         classify changed paths; emit GHA outputs");
         Ok(())
     }
 }
 
-fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]) -> Result<()> {
+fn dispatch_info(_sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]) -> Result<()> {
     match sub {
         "metrics" => {
             let save = rest.iter().any(|a| a == "--save");
             collect_metrics::collect_metrics(root, save)
         }
         "context" => {
-            let save = rest.iter().any(|a| a == "--save");
-            context::context(sh, root, save)
+            let options = parse_info_context_args(rest)?;
+            context::context(root, &options)
         }
         "changes" => {
             let base_ref = changes_base_ref(rest);
@@ -593,6 +603,34 @@ fn dispatch_info(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String])
         }
         other => bail!("unknown info target: {other}"),
     }
+}
+
+fn parse_info_context_args(rest: &[String]) -> Result<context::ContextOptions> {
+    let mut options = context::ContextOptions::default();
+    let mut index = 0;
+
+    while index < rest.len() {
+        match rest[index].as_str() {
+            "--save" if !options.save => options.save = true,
+            "--strict" if !options.strict => options.strict = true,
+            "--validate-all" if !options.validate_all => options.validate_all = true,
+            "--evidence-dir" if options.evidence_dir.is_none() => {
+                index += 1;
+                let value = rest
+                    .get(index)
+                    .filter(|value| !value.starts_with("--"))
+                    .ok_or_else(|| anyhow::anyhow!("--evidence-dir requires a path"))?;
+                options.evidence_dir = Some(std::path::PathBuf::from(value));
+            }
+            _ => bail!(
+                "usage: cargo xtask info context [--save] [--strict] [--validate-all] \
+                 [--evidence-dir <path>]"
+            ),
+        }
+        index += 1;
+    }
+
+    Ok(options)
 }
 
 fn changes_base_ref(rest: &[String]) -> String {
@@ -617,6 +655,23 @@ fn info_alias_to_sub(cmd: &str) -> String {
 
 // ── Help ─────────────────────────────────────────────────────────────────────
 
+fn parse_bump_args(args: &[String]) -> Result<(&str, bool)> {
+    let usage = "usage: cargo xtask bump [patch|minor|major] [--changelog]";
+    match args {
+        [] => Ok(("patch", false)),
+        [flag] if flag == "--changelog" => Ok(("patch", true)),
+        [level] if matches!(level.as_str(), "patch" | "minor" | "major") => {
+            Ok((level.as_str(), false))
+        }
+        [level, flag]
+            if matches!(level.as_str(), "patch" | "minor" | "major") && flag == "--changelog" =>
+        {
+            Ok((level.as_str(), true))
+        }
+        _ => bail!(usage),
+    }
+}
+
 fn print_help() -> Result<()> {
     eprintln!("Usage: cargo xtask <command> [args...]");
     eprintln!();
@@ -630,7 +685,7 @@ fn print_help() -> Result<()> {
     eprintln!("  verify             read-only gate: fmt, clippy, check, borrow fixtures, docs");
     eprintln!("  lint               fmt-check + clippy + cargo check");
     eprintln!("  fix                fmt + clippy --fix + re-stage");
-    eprintln!("  pre-commit         validation-only pre-commit checks");
+    eprintln!("  pre-commit         staged fmt/clippy plus repository checks");
     eprintln!("  prepush            release build + lib tests + conformance");
     eprintln!("  agentlint [--all]  lint agent config files");
     eprintln!("  coverage [--open] [--lcov-only] [--html-only]");
@@ -644,10 +699,11 @@ fn print_help() -> Result<()> {
     eprintln!("  test-linux                     build + load + run tests in container");
     eprintln!();
     eprintln!("CI / promotion:");
-    eprintln!("  bump [patch|minor|major]       bump workspace version");
+    eprintln!("  bump [patch|minor|major] [--changelog]");
+    eprintln!("                       bump version and optionally insert release notes");
     eprintln!("  preflight                      check required tools");
     eprintln!("  doctor                         full preflight diagnostics");
-    eprintln!("  promote [--from <tier>] [--to <tier>] [--dry-run]");
+    eprintln!("  promote [--from <tier>] [--to <tier>] [--dry-run] [--skip-ci-check]");
     eprintln!("  ci-watch [--branch <name>]     watch latest GHA run");
     eprintln!("  daily-orchestration [--ci] [--dry-run]");
     eprintln!("  council [--base <ref>] [--mode core|extended] [--prod]");
@@ -732,10 +788,216 @@ mod dispatch_args_tests {
     }
 
     #[test]
+    fn info_context_args_parse_v3_options() {
+        assert_eq!(
+            parse_info_context_args(&[]).expect("empty args should use defaults"),
+            context::ContextOptions::default()
+        );
+        let parsed = parse_info_context_args(&[
+            "--save".to_string(),
+            "--strict".to_string(),
+            "--validate-all".to_string(),
+            "--evidence-dir".to_string(),
+            "artifacts/evidence".to_string(),
+        ])
+        .expect("all v3 options should parse");
+        assert!(parsed.save);
+        assert!(parsed.strict);
+        assert!(parsed.validate_all);
+        assert_eq!(
+            parsed.evidence_dir,
+            Some(std::path::PathBuf::from("artifacts/evidence"))
+        );
+
+        for invalid in [
+            vec!["--save".to_string(), "--save".to_string()],
+            vec!["--strict".to_string(), "--strict".to_string()],
+            vec!["--validate-all".to_string(), "--validate-all".to_string()],
+            vec!["--evidence-dir".to_string()],
+            vec!["--evidence-dir".to_string(), "--strict".to_string()],
+            vec!["positional".to_string()],
+            vec!["--unknown".to_string()],
+        ] {
+            assert!(
+                parse_info_context_args(&invalid).is_err(),
+                "accepted {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn bump_args_accept_level_and_changelog() {
+        let rest = vec!["minor".to_string(), "--changelog".to_string()];
+
+        let parsed = parse_bump_args(&rest).expect("valid bump arguments should parse");
+
+        assert_eq!(parsed, ("minor", true));
+    }
+
+    #[test]
+    fn bump_args_default_to_patch() {
+        assert_eq!(
+            parse_bump_args(&[]).expect("empty bump arguments should use defaults"),
+            ("patch", false)
+        );
+        assert_eq!(
+            parse_bump_args(&["--changelog".to_string()])
+                .expect("changelog-only arguments should use patch"),
+            ("patch", true)
+        );
+    }
+
+    #[test]
+    fn bump_args_reject_unknown_values() {
+        let error = parse_bump_args(&["banana".to_string()])
+            .expect_err("unknown bump levels must be rejected");
+
+        assert!(error.to_string().contains("usage: cargo xtask bump"));
+    }
+
+    #[test]
     fn check_alias_maps_protocol_sites_to_site_count_guard() {
         // The alias must map to the `check protocol-sites` sub, and no top-level
         // command may shadow it.
         assert!(is_check_alias("check-protocol-sites"));
         assert_eq!(check_alias_to_sub("check-protocol-sites"), "protocol-sites");
+    }
+    #[test]
+    fn context_cli_contract_documents_v3_flags() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../schema/cli.schema.json"))
+                .expect("CLI schema should parse");
+        let info_args =
+            &schema["\u{24}defs"]["commands"]["info"]["properties"]["args"]["properties"];
+        for flag in ["save", "strict", "validate_all", "evidence_dir"] {
+            assert!(info_args.get(flag).is_some(), "schema omits {flag:?}");
+        }
+        let docs_actions =
+            schema["\u{24}defs"]["commands"]["docs"]["properties"]["args"]["properties"]["action"]
+                ["enum"]
+                .as_array()
+                .expect("docs actions should be an enum");
+        assert!(docs_actions.iter().any(|action| action == "sync-adapters"));
+
+        let context_schema = &schema["\u{24}defs"]["contextSnapshot"];
+        assert_eq!(context_schema["properties"]["snapshot_version"]["const"], 3);
+        let context_schema_text =
+            serde_json::to_string(context_schema).expect("context schema should serialize");
+        for removed in [
+            "crate_assignments",
+            "file_assignments",
+            "task_slices",
+            "ci_workflows",
+            "recent_commits",
+        ] {
+            assert!(
+                !context_schema_text.contains(removed),
+                "v3 schema retains removed field {removed:?}"
+            );
+        }
+
+        let docs = include_str!("../../docs/core/XTASK_CLI.mbx.md");
+        for required in [
+            "--save",
+            "--strict",
+            "--validate-all",
+            "--evidence-dir",
+            "docs sync-adapters",
+            "Context snapshot v3",
+            "replaces snapshot v2",
+            "declared",
+            "observed",
+            "validation",
+            "current evidence",
+            "stale evidence",
+            "dirty-worktree fingerprint",
+            "JSON is emitted before",
+            "crate_assignments",
+            "file_assignments",
+            "task_slices",
+        ] {
+            assert!(docs.contains(required), "context v3 docs omit {required:?}");
+        }
+        assert!(docs.contains("--strict") && docs.contains("--validate-all --strict"));
+    }
+
+    #[test]
+    fn cli_schema_matches_promote_and_bump_contracts() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../schema/cli.schema.json"))
+                .expect("CLI schema should parse");
+        let commands = &schema["\u{24}defs"]["commands"];
+        let promote = commands["promote"]["properties"]["args"]["properties"].clone();
+        let tiers = promote["from"]["enum"]
+            .as_array()
+            .expect("promote tiers should be an enum");
+        assert_eq!(
+            tiers,
+            &promote::PIPELINE
+                .iter()
+                .map(|tier| serde_json::Value::String((*tier).to_string()))
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(promote["to"]["enum"], promote["from"]["enum"]);
+        assert!(promote.get("skip_ci_check").is_some());
+        assert!(
+            commands["bump"]["properties"]["args"]["properties"]
+                .get("changelog")
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn quality_gate_schema_declares_architecture_and_mutation_metadata() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../schema/cli.schema.json"))
+                .expect("CLI schema should parse");
+        let commands = &schema["\u{24}defs"]["commands"];
+        assert!(commands.get("architecture").is_some());
+        assert_eq!(commands["verify"]["mutatesWorkspace"], false);
+        assert_eq!(commands["lint"]["mutatesWorkspace"], false);
+        assert_eq!(commands["fix"]["mutatesWorkspace"], true);
+        assert_eq!(commands["pre-commit"]["mutatesWorkspace"], true);
+        assert_eq!(commands["prepush"]["mutatesWorkspace"], false);
+    }
+
+    #[test]
+    fn adapter_docs_have_one_owner_and_context_has_focused_children() {
+        let main = include_str!("main.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("main source should have a production section");
+        let audit = include_str!("docs_audit.rs")
+            .split("#[cfg(test)]")
+            .next()
+            .expect("audit source should have a production section");
+        for duplicate in ["DocsAdapterManifest", "render_docs_adapter_suites"] {
+            assert!(!main.contains(duplicate), "main retains {duplicate}");
+        }
+        assert!(
+            !audit.contains("AdapterDocsManifest"),
+            "docs audit retains a second manifest owner"
+        );
+        for child in [
+            "context/adapter_docs.rs",
+            "context/identity.rs",
+            "context/workspace.rs",
+            "context/evidence.rs",
+        ] {
+            assert!(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join(child)
+                    .is_file(),
+                "missing focused context child {child}"
+            );
+        }
+    }
+
+    #[test]
+    fn xtask_sources_do_not_use_broad_dead_code_allows() {
+        for source in [include_str!("context.rs"), include_str!("xconfig.rs")] {
+            assert!(!source.contains("#![allow(dead_code)]"));
+        }
     }
 }

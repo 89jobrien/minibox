@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Architectural roles, support commitments, and promotion policy for minibox crates.">
+    <title>Crate Tiers &mdash; minibox</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav aria-label="Primary">
+      <a href="index.html" class="brand"><span>mini</span>box</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State</a>
+      <a href="feature-matrix.html">Features</a>
+      <a href="crate-inventory.html">Crates</a>
+      <a href="crate-tiers.html" aria-current="page">Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head"><span class="eyebrow">Ownership policy</span><h1>Crate Tiers</h1><p class="lead">Architectural-role classification for all 17 Rust workspace members. Support commitment is a separate axis.</p><div class="meta-row"><span class="meta">Core</span><span class="meta">Platform</span><span class="meta">Experimental</span><span class="meta">Internal</span><span class="meta">Updated 2026-09-15</span></div></header>
+
+      <h2>Tier Definitions</h2>
+      <table tabindex="0"><thead><tr><th>Tier</th><th>Meaning</th><th>Change policy</th></tr></thead><tbody>
+        <tr><td><span class="pill pill-shipped">Core</span></td><td>Stable runtime and integration contract</td><td>Breaking external changes require semver treatment and migration notes</td></tr>
+        <tr><td><span class="pill pill-experimental">Platform</span></td><td>Execution-environment adapter suites</td><td>May evolve per platform; wired adapters require integration evidence</td></tr>
+        <tr><td><span class="pill pill-partial">Experimental</span></td><td>Unstable capability surfaces</td><td>No API stability guarantee</td></tr>
+        <tr><td><span class="pill pill-neutral">Internal</span></td><td>Tests, benchmarks, and development tooling</td><td>No external contract</td></tr>
+        <tr><td><span class="pill pill-neutral">External</span></td><td>Non-workspace artifact or separately governed integration</td><td>Outside the Rust API contract</td></tr>
+      </tbody></table>
+
+      <h2><span class="pill pill-shipped">Core</span> Tier</h2>
+      <table tabindex="0"><thead><tr><th>Crate</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>minibox-domain</code></td><td>Canonical pure domain values, policies, events, and ports</td></tr>
+        <tr><td><code>minibox-core</code></td><td>Protocol, client transport, OCI/image infrastructure, compatibility re-exports</td></tr>
+        <tr><td><code>minibox</code></td><td>Linux primitives, adapters, daemon handler/server/state</td></tr>
+        <tr><td><code>miniboxd</code></td><td>Daemon composition and platform dispatch</td></tr>
+        <tr><td><code>minibox-cli</code></td><td>Package containing the <code>mbx</code> UX</td></tr>
+        <tr><td><code>minibox-crux-plugin</code></td><td>JSON-RPC stdio integration surface</td></tr>
+        <tr><td><code>minibox-macros</code></td><td>Published declarative macro API</td></tr>
+      </tbody></table>
+
+      <h2><span class="pill pill-experimental">Platform</span> Tier</h2>
+      <table tabindex="0"><thead><tr><th>Crate</th><th>Target</th><th>Current status</th></tr></thead><tbody>
+        <tr><td><code>macbox</code></td><td>macOS composition</td><td>Colima composition; VZ source restored behind a feature but VM boot currently fails</td></tr>
+        <tr><td><code>smolbox</code></td><td>Unix VM adapters</td><td>smolvm and krun lifecycle paths work; both remain experimental adapters</td></tr>
+        <tr><td><code>winbox</code></td><td>Windows</td><td>Stub; startup returns an error unconditionally</td></tr>
+      </tbody></table>
+
+      <h2><span class="pill pill-partial">Experimental</span> Tier</h2>
+      <table tabindex="0"><thead><tr><th>Crate</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>minibox-mcp</code></td><td>Implemented, policy-gated MCP stdio tools</td></tr>
+        <tr><td><code>minibox-tui</code></td><td>Optional read-only dashboard</td></tr>
+        <tr><td><code>minibox-cni</code></td><td>Optional CNI execution for native networking</td></tr>
+        <tr><td><code>ail</code></td><td>Minimal agent-improvement-loop placeholder</td></tr>
+      </tbody></table>
+
+      <h2><span class="pill pill-neutral">Internal</span> Tier</h2>
+      <table tabindex="0"><thead><tr><th>Crate</th><th>Role</th></tr></thead><tbody>
+        <tr><td><code>xtask</code></td><td>Canonical project automation and grouped test/check commands</td></tr>
+        <tr><td><code>minibox-testsuite</code></td><td>Conformance harness and reports</td></tr>
+        <tr><td><code>minibox-bench</code></td><td>Criterion benchmarks and fixtures</td></tr>
+      </tbody></table>
+
+      <h2><span class="pill pill-neutral">External</span> Modules</h2>
+      <p>The repository contains an active <code>agentbox/</code> Go module with its own toolchain. It is not a Cargo workspace member and remains outside the Rust API contract.</p>
+
+      <h2>Publishing Policy</h2>
+      <p>The library-first crates.io set is <code>minibox-domain</code>, <code>minibox-core</code>, <code>minibox-macros</code>, <code>minibox-mcp</code>, <code>minibox-tui</code>, and the <code>minibox-cli</code> package. Other runtime, platform, CNI, test, benchmark, and tooling crates are not currently part of the crates.io contract.</p>
+
+      <h2>Stabilization Policy</h2>
+      <p>The net-new Core/Platform freeze was <strong>lifted on 2026-08-18</strong>. The six gates remain the standing promotion bar: canonical protocol ownership, handler coverage at or above 80%, adapter integration evidence, macOS pre-commit validation, <code>cargo xtask test unit</code>, and dependency/license audit.</p>
+      <div class="diagram"><img src="arch-promotion.svg" alt="Experimental crates may be promoted to Core or Platform after gates are met; Internal crates do not graduate"></div>
+      <p>Promotion follows the active <code>develop</code> &rarr; <code>staging</code> &rarr; <code>release</code> path. It requires test/coverage evidence, review, and an updated tier record.</p>
+    </main>
+
+    <footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+  </body>
+</html>

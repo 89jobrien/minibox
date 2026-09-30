@@ -15,15 +15,15 @@ explicit bounds.
 
 ### Crates affected
 
-| Crate | Change |
-|-------|--------|
+| Crate          | Change                                                            |
+| -------------- | ----------------------------------------------------------------- |
 | `minibox-core` | New `ValidatedPath` type + module; update domain trait signatures |
-| `minibox` | Update adapter impls; migrate validation logic to core |
-| `miniboxd` | New `config` module; `DaemonConfig`; TOML loader |
+| `minibox`      | Update adapter impls; migrate validation logic to core            |
+| `miniboxd`     | New `config` module; `DaemonConfig`; TOML loader                  |
 
 ### Data flow
 
-```
+```text
 User request (raw string paths)
   -> protocol deserialization (PathBuf)
   -> handler validates: ValidatedPath::new(path, base_dir)?
@@ -35,14 +35,14 @@ User request (raw string paths)
 
 **User-derived (change to `ValidatedPath`):**
 
-| Site | File | Rationale |
-|------|------|-----------|
-| `RootfsSetup::setup_rootfs` `image_layers` | `domain.rs:677` | From registry, could be tampered |
+| Site                                        | File            | Rationale                                  |
+| ------------------------------------------- | --------------- | ------------------------------------------ |
+| `RootfsSetup::setup_rootfs` `image_layers`  | `domain.rs:677` | From registry, could be tampered           |
 | `RootfsSetup::setup_rootfs` `container_dir` | `domain.rs:677` | Daemon-constructed but should be validated |
-| `BindMount::host_path` | `domain.rs:417` | User-supplied via protocol |
-| `BindMount::container_path` | `domain.rs:419` | User-supplied via protocol |
-| `ImageLoader::load_image` `path` | `domain.rs:606` | User-supplied |
-| `ImageRegistry::get_image_layers` return | `domain.rs:565` | Registry-derived layer paths |
+| `BindMount::host_path`                      | `domain.rs:417` | User-supplied via protocol                 |
+| `BindMount::container_path`                 | `domain.rs:419` | User-supplied via protocol                 |
+| `ImageLoader::load_image` `path`            | `domain.rs:606` | User-supplied                              |
+| `ImageRegistry::get_image_layers` return    | `domain.rs:565` | Registry-derived layer paths               |
 
 **Daemon-internal (change to `InternalPath`):**
 
@@ -53,14 +53,14 @@ expected (and vice versa). The name makes intent explicit: every
 path in the codebase is either `ValidatedPath` (user-derived,
 checked) or `InternalPath` (daemon-constructed, trusted).
 
-| Site | File | Rationale |
-|------|------|-----------|
-| `ContainerSpawnConfig::rootfs` | `domain.rs:1021` | Output of validated setup_rootfs |
-| `ContainerSpawnConfig::cgroup_path` | `domain.rs:1031` | Daemon-constructed |
-| `RootfsLayout::merged_dir` | `domain.rs:781` | Output of setup_rootfs |
-| `BackendRootfsMetadata::Overlay::upper_dir` | `domain.rs:755` | Adapter output |
-| `ContainerRecord` fields | `extensions.rs:368-374` | Daemon state |
-| `ExecutionManifest::manifest_path` | `execution_manifest.rs:37` | Daemon-generated |
+| Site                                        | File                       | Rationale                        |
+| ------------------------------------------- | -------------------------- | -------------------------------- |
+| `ContainerSpawnConfig::rootfs`              | `domain.rs:1021`           | Output of validated setup_rootfs |
+| `ContainerSpawnConfig::cgroup_path`         | `domain.rs:1031`           | Daemon-constructed               |
+| `RootfsLayout::merged_dir`                  | `domain.rs:781`            | Output of setup_rootfs           |
+| `BackendRootfsMetadata::Overlay::upper_dir` | `domain.rs:755`            | Adapter output                   |
+| `ContainerRecord` fields                    | `extensions.rs:368-374`    | Daemon state                     |
+| `ExecutionManifest::manifest_path`          | `execution_manifest.rs:37` | Daemon-generated                 |
 
 ## Tech Stack
 
@@ -371,14 +371,14 @@ checked) or `InternalPath` (daemon-constructed, trusted).
 
 5. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core -- validated_path  -> all green
    cargo clippy -p minibox-core -- -D warnings          -> zero warnings
    ```
 
 6. Run: `git branch --show-current`
    Commit: `feat(minibox-core): add ValidatedPath newtype with
-   no-Deref safety`
+no-Deref safety`
 
 ### Task 2: Create InternalPath type
 
@@ -478,13 +478,13 @@ checked) or `InternalPath` (daemon-constructed, trusted).
 
 3. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core -- internal_path  -> green
    cargo clippy -p minibox-core -- -D warnings         -> zero
    ```
 
 4. Commit: `feat(minibox-core): add InternalPath newtype for
-   daemon-constructed paths`
+daemon-constructed paths`
 
 ### Task 3: Add property tests for ValidatedPath
 
@@ -540,12 +540,12 @@ checked) or `InternalPath` (daemon-constructed, trusted).
 
 2. Verify:
 
-   ```
+   ```text
    cargo nextest run -p minibox-core -- proptest_validated  -> green
    ```
 
 3. Commit: `test(minibox-core): add property tests for
-   ValidatedPath`
+ValidatedPath`
 
 ### Task 4: Update fuzz harness
 
@@ -679,7 +679,7 @@ checked) or `InternalPath` (daemon-constructed, trusted).
 5. This will NOT compile yet — adapters need updating (Task 6-8).
 
 6. Commit: `refactor(minibox-core): change domain signatures to
-   ValidatedPath + InternalPath`
+ValidatedPath + InternalPath`
 
 ### Task 6: Update adapter implementations
 
@@ -689,6 +689,7 @@ implement `RootfsSetup`, `ImageRegistry`, or `ImageLoader`
 **Run**: `cargo check -p minibox`
 
 Affected adapter files (from context map):
+
 - `filesystem.rs` — `RootfsSetup` impl
 - `colima.rs` — `RootfsSetup` + `ImageRegistry` impls
 - `smolvm.rs` — `ContainerRuntime` (no path trait changes)
@@ -722,7 +723,7 @@ Affected adapter files (from context map):
    or `rootfs: layout.merged_dir` (since both are `InternalPath`).
 
 6. Commit: `refactor(minibox): update adapters for ValidatedPath
-   + InternalPath`
+   - InternalPath`
 
 ### Task 7: Update mock adapters
 
@@ -733,9 +734,8 @@ Affected adapter files (from context map):
 1. Update all mock trait impls to accept `ValidatedPath` params.
 2. Mock `get_image_layers` returns
    `ValidatedPath::from_absolute(...)`.
-
 3. Commit: `refactor(minibox): update mock adapters for
-   ValidatedPath`
+ValidatedPath`
 
 ### Task 8: Update handlers
 
@@ -762,13 +762,14 @@ Affected adapter files (from context map):
    `setup_rootfs`.
 
 4. Verify full workspace compiles:
-   ```
+
+   ```text
    cargo check --workspace
    cargo clippy --workspace -- -D warnings
    ```
 
 5. Commit: `refactor(minibox): validate paths in handlers with
-   ValidatedPath`
+ValidatedPath`
 
 ### Task 9: Run full test suite
 
@@ -779,7 +780,7 @@ Affected adapter files (from context map):
    test failures.
 2. Run `cargo nextest run --workspace` to verify all tests pass.
 3. Commit any fixes: `fix(minibox): resolve ValidatedPath
-   migration test failures`
+migration test failures`
 
 ### Task 10: Add DaemonConfig type
 
@@ -1048,13 +1049,13 @@ Affected adapter files (from context map):
 
 5. Verify:
 
-   ```
+   ```text
    cargo nextest run -p miniboxd -- config  -> all green
    cargo clippy -p miniboxd -- -D warnings  -> zero
    ```
 
 6. Commit: `feat(miniboxd): add DaemonConfig with TOML loading
-   and env overrides`
+and env overrides`
 
 ### Task 11: Wire config into daemon startup
 
@@ -1092,7 +1093,7 @@ Affected adapter files (from context map):
 1. Add a `lint-paths` subcommand that:
    - Reads `crates/minibox-core/src/domain.rs` and all files in
      `crates/minibox-core/src/domain/`
-   - Finds `fn ` lines containing `PathBuf` or `&Path` in
+   - Finds `fn` lines containing `PathBuf` or `&Path` in
      trait method signatures
    - Checks against an allowlist of daemon-internal sites
    - Exits non-zero if un-allowlisted raw path params found
@@ -1102,7 +1103,7 @@ Affected adapter files (from context map):
 3. Write a test that the current codebase passes the lint.
 
 4. Commit: `feat(xtask): add lint-paths gate for ValidatedPath
-   enforcement`
+enforcement`
 
 ### Task 13: Final verification
 

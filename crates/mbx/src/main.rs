@@ -16,7 +16,10 @@
 //! mbx ps
 //! mbx stop <id>
 //! mbx rm <id>
+//! mbx images
 //! mbx pull nginx
+//! mbx build -t myapp:latest ./ctx
+//! mbx push myapp:latest
 //! ```
 #![cfg_attr(
     test,
@@ -230,6 +233,9 @@ enum Commands {
         restart: bool,
     },
 
+    /// List cached images available in the daemon's image store.
+    Images,
+
     /// Search cached image repositories and tags.
     Search {
         /// Case-insensitive repository name or tag query.
@@ -258,6 +264,49 @@ enum Commands {
         platform: Option<String>,
     },
 
+    /// Build an image from a Dockerfile context.
+    Build {
+        /// Build context directory.
+        context: String,
+
+        /// Target image tag.
+        #[arg(short = 't', long)]
+        tag: String,
+
+        /// Dockerfile path relative to the build context.
+        #[arg(short = 'f', long, default_value = "Dockerfile")]
+        file: String,
+
+        /// Build-time variable in KEY=VALUE form. Repeatable.
+        #[arg(long = "build-arg", value_name = "KEY=VALUE")]
+        build_args: Vec<String>,
+
+        /// Disable cached build layers.
+        #[arg(long)]
+        no_cache: bool,
+    },
+
+    /// Push a locally-stored image to a remote OCI registry.
+    ///
+    /// Sends a `DaemonRequest::Push`, then streams `PushProgress` updates to
+    /// stdout until the daemon returns a terminal `Success` or `Error`.
+    Push {
+        /// Image reference to push (e.g. docker.io/library/ubuntu:22.04).
+        image_ref: String,
+
+        /// Registry account username. Requires --password.
+        #[arg(long)]
+        username: Option<String>,
+
+        /// Registry account password. Requires --username.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// Bearer token. Cannot be combined with --username or --password.
+        #[arg(long)]
+        token: Option<String>,
+    },
+
     /// Execute a command inside a running container.
     ///
     /// Sends a `DaemonRequest::Exec` to the daemon, then streams
@@ -284,7 +333,7 @@ enum Commands {
         user: Option<String>,
     },
 
-    /// Fetch or stream log output from a container.
+    /// Fetch stored log output from a container.
     ///
     /// Sends a `DaemonRequest::ContainerLogs` to the daemon and prints each
     /// log line to stdout (stdout stream) or stderr (stderr stream).
@@ -292,7 +341,7 @@ enum Commands {
         /// Container ID or name.
         id: String,
 
-        /// Keep the connection open and stream new output as it arrives.
+        /// Reserved for future streaming support; currently fetches stored output.
         #[arg(long)]
         follow: bool,
     },
@@ -387,11 +436,27 @@ enum Commands {
         container_id: String,
     },
 
-    /// Show adapter suite diagnostics (no daemon connection required).
+    /// Check that this host can run containers, and report what it found.
     ///
-    /// Prints which adapter suites are compiled into this build, which would
-    /// be selected given the current environment, and basic platform info.
-    Doctor,
+    /// Runs entirely inside this binary — no daemon connection, no build
+    /// tools, no workspace. Reports host identity, virtualization support,
+    /// which adapter would be selected and whether its binaries are present,
+    /// CNI plugin availability, and daemon reachability.
+    ///
+    /// Exits non-zero if any check fails, so it works in CI and shell
+    /// conditionals.
+    Doctor {
+        /// Also probe the development toolchain (cargo, just, rustup, gh, op).
+        ///
+        /// Off by default: a user running a release binary has none of these,
+        /// and their absence says nothing about whether minibox works.
+        #[arg(long)]
+        tools: bool,
+
+        /// Emit the report as JSON instead of text.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Open a read-only terminal dashboard: live container table + event log.
     #[cfg(feature = "tui")]
@@ -577,6 +642,8 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
 
         Commands::Ps => into_cli(commands::ps::execute(socket_path).await),
 
+        Commands::Images => into_cli(commands::images::execute(socket_path).await),
+
         Commands::Capabilities { json } => {
             into_cli(commands::capabilities::execute(json, socket_path).await)
         }
@@ -661,6 +728,44 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             .await,
         ),
 
+        Commands::Build {
+            context,
+            tag,
+            file,
+            build_args,
+            no_cache,
+        } => into_cli(
+            commands::build::execute(
+                commands::build::BuildOptions {
+                    context: context.into(),
+                    tag,
+                    file: file.into(),
+                    build_args,
+                    no_cache,
+                },
+                socket_path,
+            )
+            .await,
+        ),
+
+        Commands::Push {
+            image_ref,
+            username,
+            password,
+            token,
+        } => into_cli(
+            commands::push::execute(
+                image_ref,
+                commands::push::PushAuth {
+                    username,
+                    password,
+                    token,
+                },
+                socket_path,
+            )
+            .await,
+        ),
+
         Commands::Load { path, name, tag } => {
             let name = name.unwrap_or_else(|| commands::load::name_from_path(&path));
             into_cli(commands::load::execute(path, name, tag, socket_path).await)
@@ -708,7 +813,17 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             }
         },
 
-        Commands::Doctor => into_cli(commands::doctor::execute()),
+        Commands::Doctor { tools, json } => {
+            let format = if json {
+                commands::doctor::Format::Json
+            } else {
+                commands::doctor::Format::Text
+            };
+            match into_cli(commands::doctor::execute(tools, format).await)? {
+                0 => Ok(()),
+                code => std::process::exit(code),
+            }
+        }
 
         #[cfg(feature = "tui")]
         Commands::Tui => into_cli(commands::tui::execute().await),
@@ -765,6 +880,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
 
 /// Entry point. Initialises tracing, parses arguments, then delegates to
 /// [`run`] which owns all dispatch logic.
+// qual:allow(iosp) reason: "CLI bootstrap: completion output, tracing setup, argument parsing, and dispatch"
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     if std::env::args().nth(1).as_deref() == Some("completions") {
@@ -1029,6 +1145,18 @@ mod tests {
     }
 
     #[test]
+    fn cli_parses_build_subcommand() {
+        let cli = Cli::try_parse_from([
+            "mbx",
+            "build",
+            "-t",
+            "minibox-e2e/alpine-echo:latest",
+            "tests/e2e/images/alpine-echo",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+    }
+
+    #[test]
     fn cli_run_without_platform_is_none() {
         let cli = Cli::try_parse_from(["mbx", "run", "alpine", "--", "/bin/sh"]).unwrap();
         match cli.command {
@@ -1144,6 +1272,108 @@ mod tests {
             }
             _ => panic!("expected Update"),
         }
+    }
+
+    #[test]
+    fn cli_exposes_images_subcommand() {
+        let cmd = Cli::command();
+        let names: Vec<&str> = cmd.get_subcommands().map(|s| s.get_name()).collect();
+        assert!(
+            names.contains(&"images"),
+            "expected an `images` subcommand, got: {names:?}"
+        );
+    }
+
+    #[test]
+    fn cli_exposes_push_subcommand() {
+        let cmd = Cli::command();
+        let names: Vec<&str> = cmd.get_subcommands().map(|s| s.get_name()).collect();
+        assert!(
+            names.contains(&"push"),
+            "expected a `push` subcommand, got: {names:?}"
+        );
+    }
+
+    #[test]
+    fn cli_parses_images_subcommand() {
+        let cli = Cli::try_parse_from(["mbx", "images"]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        assert!(matches!(cli.unwrap().command, Commands::Images));
+    }
+
+    #[test]
+    fn cli_images_rejects_extra_positional_argument() {
+        let cli = Cli::try_parse_from(["mbx", "images", "alpine"]);
+        assert!(cli.is_err(), "images takes no positional arguments");
+    }
+
+    #[test]
+    fn cli_parses_push_subcommand() {
+        let cli = Cli::try_parse_from(["mbx", "push", "myapp:latest"]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Push {
+                image_ref,
+                username,
+                password,
+                token,
+            } => {
+                assert_eq!(image_ref, "myapp:latest");
+                assert_eq!(username, None);
+                assert_eq!(password, None);
+                assert_eq!(token, None);
+            }
+            _ => panic!("expected Push"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_push_with_basic_credentials() {
+        let cli = Cli::try_parse_from([
+            "mbx",
+            "push",
+            "--username",
+            "alice",
+            "--password",
+            "hunter2",
+            "myapp:latest",
+        ]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Push {
+                username,
+                password,
+                token,
+                ..
+            } => {
+                assert_eq!(username.as_deref(), Some("alice"));
+                assert_eq!(password.as_deref(), Some("hunter2"));
+                assert_eq!(token, None);
+            }
+            _ => panic!("expected Push"),
+        }
+    }
+
+    #[test]
+    fn cli_parses_push_with_token_credential() {
+        let cli = Cli::try_parse_from(["mbx", "push", "--token", "abc123", "myapp:latest"]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Push { token, .. } => assert_eq!(token.as_deref(), Some("abc123")),
+            _ => panic!("expected Push"),
+        }
+    }
+
+    #[test]
+    fn cli_push_requires_image_ref() {
+        let cli = Cli::try_parse_from(["mbx", "push"]);
+        assert!(cli.is_err(), "push requires an image reference");
+    }
+
+    #[test]
+    fn cli_build_requires_tag() {
+        let cli = Cli::try_parse_from(["mbx", "build", "tests/e2e/images/alpine-echo"]);
+        assert!(cli.is_err(), "build requires -t/--tag");
     }
 }
 // wave-b test

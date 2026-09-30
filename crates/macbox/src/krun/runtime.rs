@@ -3,6 +3,9 @@
 //! Phase 1: delegates to `smolvm machine run` via [`SmolvmProcess`].
 //! Phase 2: will replace subprocess calls with direct libkrun FFI.
 //!
+// TODO(feature-idea-34): spike msb_krun behind an opt-in feature and qualify firmware,
+// networking, lifecycle, packaging, and macOS entitlements before replacing the process shim.
+//!
 //! # API
 //!
 //! The krun lifecycle is:

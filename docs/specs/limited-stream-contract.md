@@ -72,7 +72,7 @@ layer size, not the decompressed tar contents.
 The limit is checked **per chunk**, immediately after the chunk length is added to
 `consumed`. There is no deferred end-of-stream check. Formally:
 
-```
+```text
 consumed += chunk.len()
 if consumed > limit  →  error
 ```
@@ -148,7 +148,7 @@ might have occurred simultaneously.
 
 The byte flow for a layer pull is (registry.rs:622-625):
 
-```
+```text
 HTTP response body
   └─ LimitedStream           (size cap, compressed bytes)
        └─ StreamReader        (bytes::Bytes → AsyncRead)
@@ -197,17 +197,17 @@ EOF `io::Error` during `GzDecoder` decompression.
 
 ## 7. Edge Cases
 
-| Scenario                                     | Expected behaviour                                        |
-| -------------------------------------------- | --------------------------------------------------------- |
-| All chunks well under limit                  | All chunks forwarded as `Ok`; stream ends normally        |
-| Single chunk exactly equal to limit          | Chunk forwarded as `Ok`; next poll returns `None`         |
-| Single chunk of `limit + 1` bytes            | `Err(InvalidData)` on the first poll                      |
-| Two chunks summing to exactly limit          | Both forwarded as `Ok`; stream exhausted                  |
-| Chunk straddles boundary (some bytes ok)     | Entire chunk rejected with `Err(InvalidData)`             |
-| `limit == 0`, any non-empty chunk            | `Err(InvalidData)` on first poll                          |
-| Inner stream yields `Err`                    | Error forwarded as-is; limit state is not consulted       |
-| Premature EOF (stream ends before limit)     | `None` returned; upper layers surface unexpected-EOF      |
-| `consumed()` called mid-stream               | Returns bytes seen so far, including any rejected chunk   |
+| Scenario                                 | Expected behaviour                                      |
+| ---------------------------------------- | ------------------------------------------------------- |
+| All chunks well under limit              | All chunks forwarded as `Ok`; stream ends normally      |
+| Single chunk exactly equal to limit      | Chunk forwarded as `Ok`; next poll returns `None`       |
+| Single chunk of `limit + 1` bytes        | `Err(InvalidData)` on the first poll                    |
+| Two chunks summing to exactly limit      | Both forwarded as `Ok`; stream exhausted                |
+| Chunk straddles boundary (some bytes ok) | Entire chunk rejected with `Err(InvalidData)`           |
+| `limit == 0`, any non-empty chunk        | `Err(InvalidData)` on first poll                        |
+| Inner stream yields `Err`                | Error forwarded as-is; limit state is not consulted     |
+| Premature EOF (stream ends before limit) | `None` returned; upper layers surface unexpected-EOF    |
+| `consumed()` called mid-stream           | Returns bytes seen so far, including any rejected chunk |
 
 ---
 
@@ -227,18 +227,18 @@ The tests below are required to fully exercise the contract. Tests in the `/// -
 Boundary tests for #150 ---` block in `registry.rs` (lines 1742-1805) cover items
 1-6; items 7-10 are to be implemented as part of issue #152.
 
-| # | Test name (proposed)                        | What it verifies                                          |
-| - | ------------------------------------------- | --------------------------------------------------------- |
-| 1 | `passes_chunks_under_limit`                 | All chunks forwarded when well under limit (exists)       |
-| 2 | `errors_when_limit_exceeded`                | `InvalidData` error when limit exceeded (exists)          |
-| 3 | `tracks_consumed_bytes`                     | `consumed()` increments correctly across chunks (exists)  |
-| 4 | `exactly_limit_bytes_allowed`               | `consumed == limit` → `Ok` (exists, #150 boundary)        |
-| 5 | `one_over_limit_errors`                     | `consumed == limit + 1` → `Err(InvalidData)` (exists)     |
-| 6 | `inner_error_forwarded_before_limit_check`  | Inner `Err` forwarded as-is (exists)                      |
-| 7 | `boundary_split_across_chunks`              | Two chunks summing to exactly limit both pass (exists)    |
-| 8 | `zero_limit_rejects_first_byte`             | `limit == 0`, any non-empty chunk → immediate error (#152)|
-| 9 | `chunk_straddles_boundary_rejected_whole`   | Chunk spanning boundary is rejected entirely (#152)       |
-|10 | `consumed_reflects_rejected_chunk`          | `consumed()` includes bytes from the rejected chunk (#152)|
+| #   | Test name (proposed)                       | What it verifies                                           |
+| --- | ------------------------------------------ | ---------------------------------------------------------- |
+| 1   | `passes_chunks_under_limit`                | All chunks forwarded when well under limit (exists)        |
+| 2   | `errors_when_limit_exceeded`               | `InvalidData` error when limit exceeded (exists)           |
+| 3   | `tracks_consumed_bytes`                    | `consumed()` increments correctly across chunks (exists)   |
+| 4   | `exactly_limit_bytes_allowed`              | `consumed == limit` → `Ok` (exists, #150 boundary)         |
+| 5   | `one_over_limit_errors`                    | `consumed == limit + 1` → `Err(InvalidData)` (exists)      |
+| 6   | `inner_error_forwarded_before_limit_check` | Inner `Err` forwarded as-is (exists)                       |
+| 7   | `boundary_split_across_chunks`             | Two chunks summing to exactly limit both pass (exists)     |
+| 8   | `zero_limit_rejects_first_byte`            | `limit == 0`, any non-empty chunk → immediate error (#152) |
+| 9   | `chunk_straddles_boundary_rejected_whole`  | Chunk spanning boundary is rejected entirely (#152)        |
+| 10  | `consumed_reflects_rejected_chunk`         | `consumed()` includes bytes from the rejected chunk (#152) |
 
 All `LimitedStream` tests are cross-platform (no Linux-only gating needed) because the
 type has no OS dependencies.

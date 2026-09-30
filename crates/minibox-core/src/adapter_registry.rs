@@ -1,0 +1,897 @@
+//! Adapter registry — centralizes adapter suite discovery and validation.
+//!
+//! This module provides [`AdapterInfo`] descriptors and functions to enumerate
+//! available adapter suites at compile time, validate user-provided adapter
+//! names, and produce structured errors listing valid options.
+//!
+//! Lives in `minibox-core` because *both* binaries need one answer:
+//! `miniboxd` selects an adapter at startup, and `mbx doctor` reports what
+//! would be selected. When this table was duplicated per-binary the copies
+//! drifted — `mbx doctor` silently omitted the `vz` adapter. One table, one
+//! answer. `miniboxd::adapter_registry` re-exports this module so existing
+//! call sites keep resolving unchanged.
+//!
+//! # Adapter selection flow
+//!
+//! 1. If `MINIBOX_ADAPTER` is set, its value is parsed via [`parse_adapter`] or
+//!    validated via [`validate_adapter_name`]. An unrecognized or platform-unavailable
+//!    value is a hard error at daemon startup — no fallback.
+//! 2. If `MINIBOX_ADAPTER` is unset, [`adapter_from_env`] tries [`DEFAULT_ADAPTER_SUITE`]
+//!    (`smolvm`) first. If the `smolvm` binary is absent from PATH, it falls back to
+//!    [`FALLBACK_ADAPTER_SUITE`] (`native` on Linux, `krun` on macOS/other).
+//! 3. [`VALID_ADAPTERS`] lists every known adapter name. Use it for `--list-adapters`
+//!    output or tab-completion.
+//! 4. [`validate_adapter_name`] wraps [`parse_adapter`] returning `anyhow::Result`,
+//!    suitable for early-startup validation in `main`.
+
+use std::fmt;
+
+/// Metadata about a single adapter suite.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdapterInfo {
+    /// The string value accepted by `MINIBOX_ADAPTER`.
+    pub name: &'static str,
+    /// Human-readable one-line description.
+    pub description: &'static str,
+    /// Whether this adapter is available in the current build.
+    pub available: bool,
+    /// The platform this adapter targets (e.g. "linux", "macos").
+    pub platform: &'static str,
+}
+
+/// Which set of adapters to use for container operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdapterSuite {
+    /// Linux-native: namespaces, overlay FS, cgroups v2. Requires root.
+    Native,
+    /// GKE unprivileged: proot, copy FS, no-op limiter. No root needed.
+    Gke,
+    /// macOS via Colima/Lima: delegates to limactl, nerdctl, chroot in VM.
+    Colima,
+    /// macOS via `SmolVM`: lightweight Linux VMs with subsecond boot.
+    SmolVm,
+    /// krun: libkrun-based micro-VM (Linux via KVM, macOS via HVF).
+    Krun,
+    /// macOS via Apple Virtualization.framework. Bypasses this registry's
+    /// `build_handler_deps` dispatch entirely — selected earlier, in
+    /// `main()`, because its VM boot needs the OS main thread for GCD
+    /// callbacks. Listed here only so `--adapter vz` / `MINIBOX_ADAPTER=vz`
+    /// validate and `--list-adapters` shows it.
+    Vz,
+}
+
+impl fmt::Display for AdapterSuite {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AdapterSuite {
+    /// The string identifier for this suite (matches `MINIBOX_ADAPTER` values).
+    #[must_use]
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Native => "native",
+            Self::Gke => "gke",
+            Self::Colima => "colima",
+            Self::SmolVm => "smolvm",
+            Self::Krun => "krun",
+            Self::Vz => "vz",
+        }
+    }
+}
+
+/// All known adapter name strings accepted by `MINIBOX_ADAPTER`.
+///
+/// This slice contains every adapter name regardless of platform availability.
+/// Use [`available_adapter_names`] to filter to adapters compiled into the
+/// current build, or [`all_adapters`] for full metadata (including `available`).
+pub const VALID_ADAPTERS: &[&str] = &["native", "gke", "colima", "smolvm", "krun", "vz"];
+
+/// Default adapter suite when `MINIBOX_ADAPTER` is unset.
+pub const DEFAULT_ADAPTER_SUITE: &str = "smolvm";
+
+/// All known adapter suites with their compile-time availability.
+///
+/// Feature-gated and platform-gated adapters are included with
+/// `available: false` when not compiled in, so error messages can
+/// list them as "known but unavailable".
+#[must_use]
+pub fn all_adapters() -> Vec<AdapterInfo> {
+    vec![
+        AdapterInfo {
+            name: "native",
+            description: "Linux namespaces, overlay FS, cgroups v2 (requires root)",
+            available: cfg!(target_os = "linux"),
+            platform: "linux",
+        },
+        AdapterInfo {
+            name: "gke",
+            description: "proot (ptrace), copy FS, no-op limiter (unprivileged GKE)",
+            available: cfg!(target_os = "linux"),
+            platform: "linux",
+        },
+        AdapterInfo {
+            name: "colima",
+            description: "Colima/Lima VM via limactl + nerdctl",
+            available: cfg!(unix),
+            platform: "any",
+        },
+        AdapterInfo {
+            name: "smolvm",
+            description: "SmolVM lightweight Linux VMs (recommended default, cross-platform)",
+            available: cfg!(unix),
+            platform: "any",
+        },
+        AdapterInfo {
+            name: "krun",
+            description: "libkrun micro-VM via KVM/HVF (recommended fallback, cross-platform)",
+            available: true,
+            platform: "any",
+        },
+        AdapterInfo {
+            name: "vz",
+            description: "Apple Virtualization.framework micro-VM (macOS, opt-in, feature-gated)",
+            available: cfg!(all(target_os = "macos", feature = "vz")),
+            platform: "macos",
+        },
+    ]
+}
+
+/// Validate an adapter name supplied via `--adapter` CLI flag or `MINIBOX_ADAPTER` env var.
+///
+/// Returns `Ok(())` when the name is recognised **and** available in this build.
+/// Returns a descriptive `Err` listing valid options when the name is unknown or
+/// unavailable, suitable for printing directly to the user.
+///
+/// # Examples
+///
+/// ```
+/// use minibox_core::adapter_registry::validate_adapter_name;
+///
+/// // Valid adapters are accepted (availability depends on platform).
+/// // On any platform "krun" is always available.
+/// assert!(validate_adapter_name("krun").is_ok());
+///
+/// // Unknown adapters are rejected with a helpful message.
+/// let err = validate_adapter_name("bogus").unwrap_err();
+/// assert!(err.to_string().contains("bogus"));
+///
+/// // Empty string is also rejected.
+/// assert!(validate_adapter_name("").is_err());
+/// ```
+pub fn validate_adapter_name(name: &str) -> anyhow::Result<()> {
+    parse_adapter(name)
+        .map(|_| ())
+        .map_err(|e| anyhow::anyhow!("{e}"))
+}
+
+/// Return only the names of adapters compiled into the current build.
+///
+/// Alias for [`available_adapter_names`] — preferred name for use in
+/// diagnostic output (e.g. `mbx doctor`, daemon startup logs).
+#[must_use]
+pub fn compiled_adapters() -> Vec<&'static str> {
+    available_adapter_names()
+}
+
+/// Return only the names of adapters available in the current build.
+#[must_use]
+pub fn available_adapter_names() -> Vec<&'static str> {
+    all_adapters()
+        .into_iter()
+        .filter(|a| a.available)
+        .map(|a| a.name)
+        .collect()
+}
+
+/// Parse an adapter name string into an [`AdapterSuite`].
+///
+/// Returns a structured error listing all valid (and known-but-unavailable)
+/// options when the name is not recognized or not available.
+pub fn parse_adapter(name: &str) -> Result<AdapterSuite, AdapterSelectionError> {
+    let suite = match name {
+        "native" => AdapterSuite::Native,
+        "gke" => AdapterSuite::Gke,
+        "colima" => AdapterSuite::Colima,
+        "smolvm" => AdapterSuite::SmolVm,
+        "krun" => AdapterSuite::Krun,
+        "vz" => AdapterSuite::Vz,
+        _ => {
+            return Err(AdapterSelectionError {
+                requested: name.to_string(),
+                available: available_adapter_names(),
+                all_known: all_adapters().into_iter().map(|a| a.name).collect(),
+            });
+        }
+    };
+
+    // Reject known-but-unavailable adapters in this build.
+    let info = all_adapters();
+    if let Some(adapter) = info.iter().find(|a| a.name == name)
+        && !adapter.available
+    {
+        return Err(AdapterSelectionError {
+            requested: name.to_string(),
+            available: available_adapter_names(),
+            all_known: info.into_iter().map(|a| a.name).collect(),
+        });
+    }
+
+    Ok(suite)
+}
+
+/// Fallback adapter suite used when the default (`smolvm`) binary is not on PATH.
+///
+/// - Linux: `native` (namespace/cgroup isolation, requires root).
+/// - macOS (and other platforms): `krun` (libkrun micro-VM).
+pub const FALLBACK_ADAPTER_SUITE: &str = if cfg!(target_os = "linux") {
+    "native"
+} else {
+    "krun"
+};
+
+/// Parse from the `MINIBOX_ADAPTER` environment variable.
+///
+/// When `MINIBOX_ADAPTER` is unset, tries [`DEFAULT_ADAPTER_SUITE`] (`smolvm`) first.
+/// If the `smolvm` binary is not found on PATH, silently falls back to
+/// [`FALLBACK_ADAPTER_SUITE`] (`native` on Linux, `krun` on macOS).
+///
+/// When `MINIBOX_ADAPTER` is explicitly set, the value is used as-is — no fallback.
+pub fn adapter_from_env() -> Result<AdapterSuite, AdapterSelectionError> {
+    adapter_from_env_with_smolvm_available(smolvm_available())
+}
+
+fn adapter_from_env_with_smolvm_available(
+    smolvm_is_available: bool,
+) -> Result<AdapterSuite, AdapterSelectionError> {
+    match std::env::var("MINIBOX_ADAPTER") {
+        Ok(val) => parse_adapter(&val),
+        Err(_) => {
+            // Auto-detect: prefer smolvm, fall back to native (Linux) or krun (macOS).
+            if smolvm_is_available {
+                parse_adapter(DEFAULT_ADAPTER_SUITE)
+            } else {
+                parse_adapter(FALLBACK_ADAPTER_SUITE)
+            }
+        }
+    }
+}
+
+/// Returns `true` if the `smolvm` binary is present on PATH.
+fn smolvm_available() -> bool {
+    std::process::Command::new("smolvm")
+        .arg("--version")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Structured error for invalid adapter selection.
+#[derive(Debug, Clone)]
+pub struct AdapterSelectionError {
+    /// The value the user provided.
+    pub requested: String,
+    /// Adapter names available in this build.
+    pub available: Vec<&'static str>,
+    /// All known adapter names (including unavailable).
+    pub all_known: Vec<&'static str>,
+}
+
+impl fmt::Display for AdapterSelectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.all_known.contains(&self.requested.as_str()) {
+            write!(
+                f,
+                "MINIBOX_ADAPTER {:?} is known but not available in this build. \
+                 Available options: {}",
+                self.requested,
+                self.available.join(", ")
+            )?;
+        } else {
+            write!(
+                f,
+                "unknown MINIBOX_ADAPTER value {:?}. Valid options: {}",
+                self.requested,
+                self.available.join(", ")
+            )?;
+        }
+        let unavailable: Vec<_> = self
+            .all_known
+            .iter()
+            .filter(|n| !self.available.contains(n))
+            .collect();
+        if !unavailable.is_empty() {
+            write!(
+                f,
+                ". Known but unavailable in this build: {}",
+                unavailable
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for AdapterSelectionError {}
+
+/// Emit a structured tracing warning when `MINIBOX_ADAPTER=native` is set
+/// but the current process is not running as UID 0.
+///
+/// The native adapter requires root for namespace creation, overlay mounts,
+/// and cgroup v2 management. Running it as non-root will fail at runtime;
+/// warn early so operators catch the misconfiguration at startup.
+#[cfg(target_os = "linux")]
+pub fn warn_if_native_without_root() {
+    use crate::preflight;
+
+    if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("native") && !preflight::probe().is_root {
+        tracing::warn!(
+            adapter = "native",
+            "adapter: MINIBOX_ADAPTER=native requires root (UID 0); \
+             container operations will fail — consider smolvm or krun instead"
+        );
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    clippy::unwrap_used,
+    clippy::doc_markdown,
+    clippy::uninlined_format_args,
+    clippy::match_same_arms,
+    clippy::redundant_clone,
+    clippy::collapsible_if,
+    clippy::used_underscore_binding
+)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    // Serialize env-var-mutating tests to prevent parallel races.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_native_succeeds() {
+        assert_eq!(
+            parse_adapter("native").expect("should parse native"),
+            AdapterSuite::Native
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_gke_succeeds() {
+        assert_eq!(
+            parse_adapter("gke").expect("should parse gke"),
+            AdapterSuite::Gke
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn parse_colima_succeeds() {
+        assert_eq!(
+            parse_adapter("colima").expect("should parse colima on any unix"),
+            AdapterSuite::Colima
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn parse_smolvm_succeeds() {
+        assert_eq!(
+            parse_adapter("smolvm").expect("should parse smolvm on any unix"),
+            AdapterSuite::SmolVm
+        );
+    }
+
+    #[test]
+    fn parse_unknown_returns_structured_error_with_valid_options() {
+        let err = parse_adapter("invalid_adapter").expect_err("should fail for unknown adapter");
+        assert_eq!(err.requested, "invalid_adapter");
+        // Error message must list valid options
+        let msg = err.to_string();
+        assert!(
+            msg.contains("native"),
+            "error should list 'native' as valid option: {msg}"
+        );
+        assert!(
+            msg.contains("gke"),
+            "error should list 'gke' as valid option: {msg}"
+        );
+        assert!(
+            msg.contains("colima"),
+            "error should list 'colima' as valid option: {msg}"
+        );
+        assert!(
+            msg.contains("smolvm"),
+            "error should list 'smolvm' as valid option: {msg}"
+        );
+        assert!(
+            msg.contains("invalid_adapter"),
+            "error should echo the invalid value: {msg}"
+        );
+    }
+
+    #[test]
+    fn compiled_adapters_matches_available_adapter_names() {
+        assert_eq!(compiled_adapters(), available_adapter_names());
+    }
+
+    #[test]
+    fn compiled_adapters_is_non_empty() {
+        assert!(
+            !compiled_adapters().is_empty(),
+            "compiled_adapters() must return at least one adapter"
+        );
+    }
+
+    #[test]
+    fn all_adapters_includes_native() {
+        let adapters = all_adapters();
+        assert!(
+            adapters.iter().any(|a| a.name == "native"),
+            "all_adapters must include 'native'"
+        );
+    }
+
+    #[test]
+    fn available_adapter_names_is_subset_of_all() {
+        let available = available_adapter_names();
+        let all: Vec<&str> = all_adapters().iter().map(|a| a.name).collect();
+        for name in &available {
+            assert!(
+                all.contains(name),
+                "available adapter {name} not in all_adapters"
+            );
+        }
+    }
+
+    #[test]
+    fn adapter_suite_display_matches_parse_for_available() {
+        let available = available_adapter_names();
+        for suite in [
+            AdapterSuite::Native,
+            AdapterSuite::Gke,
+            AdapterSuite::Colima,
+            AdapterSuite::SmolVm,
+            AdapterSuite::Krun,
+            AdapterSuite::Vz,
+        ] {
+            let name = suite.to_string();
+            if available.contains(&name.as_str()) {
+                let parsed =
+                    parse_adapter(&name).unwrap_or_else(|_| panic!("should round-trip: {name}"));
+                assert_eq!(parsed, suite);
+            } else {
+                parse_adapter(&name).expect_err(&format!("unavailable suite should fail: {name}"));
+            }
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn adapter_from_env_defaults_to_smolvm_or_fallback() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = adapter_from_env().expect("default adapter should parse on any unix platform");
+        // smolvm is preferred; fallback is native (Linux) or krun (macOS).
+        let valid = suite == AdapterSuite::SmolVm
+            || suite == AdapterSuite::Krun
+            || suite == AdapterSuite::Native;
+        assert!(
+            valid,
+            "default should be smolvm, native, or krun, got {suite:?}"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn adapter_from_env_explicit_smolvm_is_honoured() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "smolvm");
+        }
+        let suite = adapter_from_env().expect("explicit smolvm should parse");
+        assert_eq!(suite, AdapterSuite::SmolVm);
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn adapter_from_env_prefers_smolvm_when_probe_succeeds() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite =
+            adapter_from_env_with_smolvm_available(true).expect("smolvm default should parse");
+        assert_eq!(suite, AdapterSuite::SmolVm);
+    }
+
+    #[test]
+    #[serial]
+    fn adapter_from_env_falls_back_when_probe_fails() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite =
+            adapter_from_env_with_smolvm_available(false).expect("fallback adapter should parse");
+        // Linux falls back to native; macOS falls back to krun.
+        if cfg!(target_os = "linux") {
+            assert_eq!(suite, AdapterSuite::Native);
+        } else {
+            assert_eq!(suite, AdapterSuite::Krun);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn adapter_from_env_explicit_krun_is_honoured() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "krun");
+        }
+        let suite = adapter_from_env().expect("explicit krun should parse");
+        assert_eq!(suite, AdapterSuite::Krun);
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+    }
+
+    /// Explicit `MINIBOX_ADAPTER` disables fallback: even when the smolvm
+    /// probe fails, the requested adapter must be selected, not the fallback
+    /// (issue #80 regression guard for the documented contract).
+    #[test]
+    #[serial]
+    fn explicit_adapter_does_not_fall_back_when_smolvm_probe_fails() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "smolvm");
+        }
+        let result = adapter_from_env_with_smolvm_available(false);
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = result.expect("explicit smolvm must parse regardless of probe");
+        assert_eq!(
+            suite,
+            AdapterSuite::SmolVm,
+            "explicit MINIBOX_ADAPTER must disable fallback"
+        );
+    }
+
+    /// An explicitly requested adapter that is unavailable on this platform
+    /// must be a hard error — never a silent fallback.
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[serial]
+    fn explicit_unavailable_adapter_errors_instead_of_falling_back() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "native");
+        }
+        let result = adapter_from_env_with_smolvm_available(false);
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let err = result.expect_err("native is unavailable on macOS — must be a hard error");
+        assert_eq!(err.requested, "native");
+    }
+
+    /// Pin the macOS fallback: when smolvm is absent and no adapter is
+    /// requested, selection must land on krun, not error or pick native.
+    #[test]
+    #[cfg(target_os = "macos")]
+    #[serial]
+    fn macos_fallback_is_krun() {
+        assert_eq!(FALLBACK_ADAPTER_SUITE, "krun");
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+        let suite = adapter_from_env_with_smolvm_available(false)
+            .expect("krun fallback must parse on macOS");
+        assert_eq!(suite, AdapterSuite::Krun);
+    }
+
+    #[test]
+    fn parse_unavailable_adapter_returns_error() {
+        // On macOS: native/gke are unavailable. On Linux: all adapters are available.
+        // Only test on macOS where we know native is unavailable.
+        if !cfg!(target_os = "macos") {
+            return; // all adapters available on Linux — skip
+        }
+        let unavailable_name = "native";
+        let err = parse_adapter(unavailable_name).expect_err("should reject unavailable adapter");
+        assert_eq!(err.requested, unavailable_name);
+        assert!(
+            err.all_known.contains(&unavailable_name),
+            "unavailable adapter should be in all_known"
+        );
+        assert!(
+            !err.available.contains(&unavailable_name),
+            "unavailable adapter should not be in available"
+        );
+    }
+
+    #[test]
+    fn unavailable_adapter_error_message_says_not_available() {
+        if !cfg!(target_os = "macos") {
+            return; // all adapters available on Linux — skip
+        }
+        let unavailable_name = "native";
+        let err = parse_adapter(unavailable_name).expect_err("should reject unavailable adapter");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not available"),
+            "error for known-but-unavailable should say 'not available': {msg}"
+        );
+    }
+
+    /// Verify that Linux-only adapters (native, gke) are marked unavailable
+    /// on non-Linux platforms. This is the compile-time cfg-gate contract: the
+    /// `AdapterInfo::available` field must reflect the current build target.
+    ///
+    /// On Linux this test is a no-op (all adapters are available there).
+    #[test]
+    #[cfg(not(target_os = "linux"))]
+    fn linux_only_adapters_are_unavailable_on_non_linux() {
+        let adapters = all_adapters();
+        for linux_only in &["native", "gke"] {
+            let info = adapters
+                .iter()
+                .find(|a| &a.name == linux_only)
+                .unwrap_or_else(|| panic!("{linux_only} must appear in all_adapters()"));
+            assert!(
+                !info.available,
+                "adapter '{linux_only}' must be unavailable on non-Linux targets \
+                 (cfg gate missing in AdapterInfo::available)"
+            );
+        }
+    }
+
+    #[test]
+    fn valid_adapters_contains_expected_entries() {
+        assert!(
+            VALID_ADAPTERS.contains(&"native"),
+            "VALID_ADAPTERS must include 'native'"
+        );
+        assert!(
+            VALID_ADAPTERS.contains(&"gke"),
+            "VALID_ADAPTERS must include 'gke'"
+        );
+        assert!(
+            VALID_ADAPTERS.contains(&"colima"),
+            "VALID_ADAPTERS must include 'colima'"
+        );
+        assert!(
+            VALID_ADAPTERS.contains(&"smolvm"),
+            "VALID_ADAPTERS must include 'smolvm'"
+        );
+        assert!(
+            VALID_ADAPTERS.contains(&"krun"),
+            "VALID_ADAPTERS must include 'krun'"
+        );
+    }
+
+    #[test]
+    fn valid_adapters_matches_all_adapters_names() {
+        let all_names: Vec<&str> = all_adapters().into_iter().map(|a| a.name).collect();
+        for name in VALID_ADAPTERS {
+            assert!(
+                all_names.contains(name),
+                "VALID_ADAPTERS entry {name:?} is missing from all_adapters()"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_adapter_name_accepts_known_available() {
+        // krun is always available (available: true unconditionally)
+        assert!(
+            validate_adapter_name("krun").is_ok(),
+            "krun should pass validate_adapter_name"
+        );
+    }
+
+    #[test]
+    fn validate_adapter_name_rejects_bogus() {
+        let err = validate_adapter_name("notanadapter")
+            .expect_err("bogus name should fail validate_adapter_name");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("notanadapter"),
+            "error should echo the invalid value: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_adapter_name_error_includes_context() {
+        let err = validate_adapter_name("bad_value").expect_err("should fail for unknown adapter");
+        let msg = err.to_string();
+        // The anyhow context layer wraps the inner AdapterSelectionError
+        assert!(
+            msg.contains("MINIBOX_ADAPTER") || msg.contains("bad_value"),
+            "error must reference the adapter name or env var: {msg}"
+        );
+    }
+
+    #[test]
+    fn colima_metadata_targets_any() {
+        let info = all_adapters();
+        let colima = info
+            .iter()
+            .find(|a| a.name == "colima")
+            .expect("colima entry");
+        assert_eq!(colima.platform, "any");
+        assert_eq!(colima.available, cfg!(unix));
+    }
+
+    #[test]
+    fn smolvm_metadata_targets_any() {
+        let info = all_adapters();
+        let smolvm = info
+            .iter()
+            .find(|a| a.name == "smolvm")
+            .expect("smolvm entry");
+        assert_eq!(smolvm.platform, "any");
+        assert_eq!(smolvm.available, cfg!(unix));
+    }
+
+    #[test]
+    fn validate_adapter_name_accepts_krun() {
+        // krun is always available regardless of platform.
+        assert!(
+            super::validate_adapter_name("krun").is_ok(),
+            "krun must always validate as available"
+        );
+    }
+
+    #[test]
+    fn validate_adapter_name_rejects_unknown() {
+        let err = super::validate_adapter_name("bogus").expect_err("should reject bogus adapter");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("bogus"),
+            "error should echo the invalid name: {msg}"
+        );
+    }
+
+    #[test]
+    fn validate_adapter_name_rejects_empty() {
+        assert!(
+            super::validate_adapter_name("").is_err(),
+            "empty adapter name must be rejected"
+        );
+    }
+
+    /// All `AdapterSuite` variants must have a non-empty `as_str()` that round-trips
+    /// through `fmt::Display` and through `parse_adapter` (when available).
+    #[test]
+    fn adapter_suite_as_str_is_non_empty_for_all_variants() {
+        for suite in [
+            AdapterSuite::Native,
+            AdapterSuite::Gke,
+            AdapterSuite::Colima,
+            AdapterSuite::SmolVm,
+            AdapterSuite::Krun,
+            AdapterSuite::Vz,
+        ] {
+            let s = suite.as_str();
+            assert!(
+                !s.is_empty(),
+                "AdapterSuite::{suite:?} as_str must be non-empty"
+            );
+            // Display must match as_str.
+            assert_eq!(
+                suite.to_string().as_str(),
+                s,
+                "AdapterSuite::{suite:?} Display must match as_str"
+            );
+        }
+    }
+
+    /// `AdapterSelectionError` for an *unknown* name must say "unknown … Valid options"
+    /// and must NOT say "not available".
+    #[test]
+    fn adapter_selection_error_unknown_message_format() {
+        let err = parse_adapter("totally_unknown").expect_err("should fail");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("unknown"),
+            "error for unknown name must contain 'unknown': {msg}"
+        );
+        assert!(
+            !msg.contains("not available"),
+            "error for unknown name must not say 'not available': {msg}"
+        );
+    }
+
+    /// `AdapterSelectionError` exposes `available` and `all_known` fields
+    /// and they satisfy the subset invariant.
+    #[test]
+    fn adapter_selection_error_fields_invariant() {
+        let err = parse_adapter("xyz_no_such_adapter").expect_err("should fail");
+        // Every available adapter must also appear in all_known.
+        for name in &err.available {
+            assert!(
+                err.all_known.contains(name),
+                "available adapter {name} must appear in all_known"
+            );
+        }
+        // The requested name must be in the error.
+        assert_eq!(err.requested, "xyz_no_such_adapter");
+    }
+
+    /// `AdapterInfo` derives Clone and Debug — ensure they produce sensible output.
+    #[test]
+    fn adapter_info_clone_and_debug() {
+        let info = AdapterInfo {
+            name: "test",
+            description: "test adapter",
+            available: true,
+            platform: "any",
+        };
+        let cloned = info.clone();
+        assert_eq!(cloned, info);
+        let debug_str = format!("{info:?}");
+        assert!(debug_str.contains("test"));
+    }
+
+    #[test]
+    #[cfg(all(target_os = "macos", feature = "vz"))]
+    fn parse_vz_succeeds_when_feature_enabled() {
+        assert_eq!(
+            parse_adapter("vz").expect("should parse vz on macOS with vz feature"),
+            AdapterSuite::Vz
+        );
+    }
+
+    #[test]
+    fn valid_adapters_contains_vz() {
+        assert!(
+            VALID_ADAPTERS.contains(&"vz"),
+            "VALID_ADAPTERS must include 'vz' regardless of platform availability, same as native/gke"
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn adapter_from_env_rejects_unknown() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        // SAFETY: env var mutation serialized by ENV_LOCK
+        unsafe {
+            std::env::set_var("MINIBOX_ADAPTER", "bogus");
+        }
+        let err = adapter_from_env().expect_err("should reject bogus");
+        assert_eq!(err.requested, "bogus");
+        // Cleanup
+        unsafe {
+            std::env::remove_var("MINIBOX_ADAPTER");
+        }
+    }
+}

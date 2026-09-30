@@ -1,12 +1,24 @@
-# This small Nu script will iterate over all .mbx.md and .md files in docs/ and pipe them into kgx ingest.
+#!/usr/bin/env nu
 
-# TODO: glob pattern *.{mbx,txt} misses .mbx.md files — correct pattern is *.mbx.md (or **/*.md)
-# TODO: `nu -c "glob ..."` spawns an unnecessary child process; use `glob` directly in Nu
-# TODO: `| lines` won't work — glob returns a list, not a string; remove the lines call
-let docs = (nu -c "glob docs/**/*.{mbx,txt}"
-   | lines)
-for doc in $docs {
-    let path = ($doc | str replace --regex ".*\/docs\/(.*)" "$1")
-    echo 'Ingesting' $path
-    cat ('docs/' + $path) | kgx ingest
+def discover-docs [root: path] {
+    glob ($root | path join "**/*.md") | sort
+}
+
+def main [--dry-run, --docs-root: path] {
+    let root = ($docs_root | default ((pwd) | path join "docs"))
+    let docs = (discover-docs $root)
+    let kgx = ($env.KGX_BIN? | default "kgx")
+
+    for doc in $docs {
+        let relative = ($doc | path relative-to $root)
+        print $"Ingesting ($relative)"
+        if not $dry_run {
+            let contents = (open --raw $doc)
+            let result = (do { $contents | ^$kgx ingest } | complete)
+            if $result.exit_code != 0 {
+                let detail = ($result.stderr | str trim)
+                error make {msg: $"kgx ingest failed for ($relative) with exit code ($result.exit_code): ($detail)"}
+            }
+        }
+    }
 }

@@ -97,7 +97,7 @@ fn code_facts(root: &Path) -> Result<BTreeMap<String, String>> {
     }
 
     // adapter_suites: parse AdapterSuite enum variants
-    let registry_path = crates_dir.join("miniboxd/src/adapter_registry.rs");
+    let registry_path = crate::utils::adapter_registry_path();
     if registry_path.exists() {
         let content =
             std::fs::read_to_string(&registry_path).context("read adapter_registry.rs")?;
@@ -457,7 +457,7 @@ fn check_coverage(root: &Path) -> Result<Vec<CoverageGap>> {
     let fm_path = root.join("docs/core/FEATURE_MATRIX.mbx.md");
     let fm_content = std::fs::read_to_string(&fm_path).unwrap_or_default();
 
-    let registry_path = crates_dir.join("miniboxd/src/adapter_registry.rs");
+    let registry_path = crate::utils::adapter_registry_path();
     if registry_path.exists() {
         let content = std::fs::read_to_string(&registry_path)?;
         let suites = parse_enum_variants(&content, "AdapterSuite");
@@ -496,11 +496,22 @@ fn run_agentlint(sh: &Shell, root: &Path, json: bool) -> Result<AgentlintResult>
     })
 }
 
+fn check_adapter_manifest_drift(root: &Path) -> Result<()> {
+    crate::context::check_adapter_docs(root).with_context(|| {
+        "adapter documentation drift between xtask/context.toml and docs/core/FEATURE_MATRIX.mbx.md"
+            .to_string()
+    })
+}
+
 // ── Public entry point ───────────────────────────────────────────────────
 
+/// Checks documented code facts, adapter metadata, and agent definitions for drift.
+///
+/// Full mode also audits freshness and coverage, then writes `xtask/docs-audit-report.json`.
 pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     eprintln!("--- docs-audit ---");
 
+    check_adapter_manifest_drift(root)?;
     let code = code_facts(root)?;
     let docs = doc_facts(root)?;
 
@@ -600,4 +611,134 @@ pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MANIFEST: &str = r#"schema_version = 1
+[[adapters]]
+id = "zeta"
+maturity = "blocked"
+platforms = ["windows"]
+default_roles = []
+[adapters.capabilities]
+build = "blocked"
+run = "limited"
+[[adapters]]
+id = "alpha"
+maturity = "production"
+platforms = ["linux", "macos"]
+default_roles = []
+[adapters.capabilities]
+build = "no"
+run = "yes"
+[[profiles]]
+id = "native-macos"
+target = "aarch64-apple-darwin"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-linux-gnu"
+target = "x86_64-unknown-linux-gnu"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-linux-musl"
+target = "x86_64-unknown-linux-musl"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+[[profiles]]
+id = "native-windows"
+target = "x86_64-pc-windows-msvc"
+features = []
+no_default_features = false
+all_targets = true
+required_in_ci = true
+"#;
+
+    const DOCUMENT: &str = "before\n<!-- BEGIN GENERATED: adapter-suites -->\n| Adapter | Platforms | Maturity | Default roles |\n| --- | --- | --- | --- |\n| `alpha` | `linux`, `macos` | Production | -- |\n| `zeta` | `windows` | Blocked | -- |\n<!-- END GENERATED: adapter-suites -->\nmiddle\n<!-- BEGIN GENERATED: adapter-capabilities -->\n| Capability | `alpha` | `zeta` |\n| --- | --- | --- |\n| `build` | No | Blocked |\n| `run` | Yes | Limited |\n<!-- END GENERATED: adapter-capabilities -->\nafter\n";
+
+    fn write_fixture(root: &Path, manifest: &str, document: &str) {
+        std::fs::create_dir_all(root.join("xtask")).expect("xtask fixture should be created");
+        std::fs::create_dir_all(root.join("docs/core")).expect("docs fixture should be created");
+        std::fs::write(root.join("xtask/context.toml"), manifest)
+            .expect("manifest fixture should be written");
+        std::fs::write(root.join("docs/core/FEATURE_MATRIX.mbx.md"), document)
+            .expect("matrix fixture should be written");
+    }
+
+    fn assert_drift(root: &Path, manifest: &str, document: &str) {
+        write_fixture(root, manifest, document);
+        let first = check_adapter_manifest_drift(root)
+            .expect_err("drift should fail the docs audit")
+            .to_string();
+        let second = check_adapter_manifest_drift(root)
+            .expect_err("repeated drift should fail identically")
+            .to_string();
+        assert_eq!(first, second);
+        assert!(first.contains("xtask/context.toml"), "{first}");
+        assert!(first.contains("docs/core/FEATURE_MATRIX.mbx.md"), "{first}");
+    }
+
+    #[test]
+    fn docs_audit_rejects_adapter_manifest_drift() {
+        let temp = tempfile::tempdir().expect("temporary docs root should be created");
+        write_fixture(temp.path(), MANIFEST, DOCUMENT);
+        check_adapter_manifest_drift(temp.path()).expect("exact generated blocks should pass");
+
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen(
+                "maturity = \"production\"",
+                "maturity = \"experimental\"",
+                1,
+            ),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen("build = \"no\"", "build = \"yes\"", 1),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen("id = \"alpha\"", "id = \"beta\"", 1),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen(
+                "platforms = [\"linux\", \"macos\"]",
+                "platforms = [\"linux\"]",
+                1,
+            ),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            &MANIFEST.replacen("default_roles = []", "default_roles = [\"custom\"]", 1),
+            DOCUMENT,
+        );
+        assert_drift(
+            temp.path(),
+            MANIFEST,
+            &DOCUMENT.replace("| `alpha` | `linux`, `macos` | Production | -- |\n", ""),
+        );
+        assert_drift(
+            temp.path(),
+            MANIFEST,
+            &DOCUMENT.replace(
+                "<!-- END GENERATED: adapter-suites -->",
+                "| `extra` | `linux` | Stub | -- |\n<!-- END GENERATED: adapter-suites -->",
+            ),
+        );
+    }
 }

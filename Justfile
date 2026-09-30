@@ -30,7 +30,7 @@ build-sandbox:
     crux run crux/dev/build_sandbox.crux
 
 # Build static Linux musl binaries matching the host architecture.
-# Output: target/<arch>-unknown-linux-musl/release/{miniboxd,minibox}
+# Output: target/<arch>-unknown-linux-musl/release/{miniboxd,mbx}
 build-linux:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -42,7 +42,7 @@ build-linux:
     rustup target add "$MUSL_TARGET"
     RUSTFLAGS="-C target-feature=+crt-static" \
         cargo build --release --target "$MUSL_TARGET" \
-        -p miniboxd -p mbx
+        -p miniboxd -p minibox-cli
 
 # ── Gates ───────────────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ install-hooks:
     crux run crux/dev/install_hooks.crux
     @echo "installed .git/hooks/pre-commit from .githooks/pre-commit"
 
-# fmt-check + lint + build-release
+# staged fmt/clippy plus architecture, configuration, and documentation checks
 pre-commit:
     crux run crux/dev/pre_commit.crux
 
@@ -72,7 +72,7 @@ verify:
 
 # ── Testing ─────────────────────────────────────────────────────────────────
 
-# All unit + conformance tests (any platform)
+# Workspace unit tests (any platform); conformance is a separate xtask suite
 test-unit:
     crux run crux/dev/test_unit.crux
 

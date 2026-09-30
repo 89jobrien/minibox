@@ -2,7 +2,8 @@
 
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 
-> **Status**: Stabilization freeze active — see [CONTRIBUTING.md](CONTRIBUTING.md) and
+> **Status**: The stabilization freeze was lifted on 2026-08-18. The standing promotion
+> gates remain in force; see [CONTRIBUTING.md](CONTRIBUTING.md) and
 > [docs/core/STABILITY_CHECKLIST.mbx.md](docs/core/STABILITY_CHECKLIST.mbx.md).
 
 An agent-controllable container runtime written in Rust. Daemon/CLI split, OCI image pulling,
@@ -11,7 +12,7 @@ architecture keeps adapter suites swappable at startup with no recompile. A buil
 server exposes policy-gated daemon operations directly to MCP clients so agents can drive container
 lifecycle without shelling out to the CLI.
 
-**Status:** Active development — `v0.32.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.33.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -52,8 +53,12 @@ Requires Linux, root, kernel 5.0+, cgroups v2, overlay FS.
 
 First-time contributors: run `just install-hooks` and `cargo xtask doctor` to verify your
 toolchain and environment before building — see
-[`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md). For per-environment usage
-workflows (systemd, GKE, WSL2, Colima) see [`docs/core/USAGE.mbx.md`](docs/core/USAGE.mbx.md).
+[`DEVELOPMENT.md`](DEVELOPMENT.md). For per-environment usage workflows (systemd, GKE,
+WSL2, and macOS adapters) see [`USAGE.md`](USAGE.md).
+
+Anyone installing minibox (not just contributors) should run `mbx doctor` first. It is
+built into the binary, needs no cargo or workspace, and reports whether this host can
+actually run containers. It exits non-zero if a check fails.
 
 ```bash
 # Build
@@ -73,8 +78,9 @@ sudo ./target/release/mbx logs <id>
 sudo ./target/release/mbx stop <id>
 sudo ./target/release/mbx rm <id>
 
-# Check compiled adapter info (no daemon needed)
+# Check whether this host can run containers (built in; no cargo needed)
 ./target/release/mbx doctor
+./target/release/mbx doctor --json    # same report as data
 ```
 
 ### Commit and image volumes
@@ -91,14 +97,14 @@ Host bind-mount contents are never captured. `--include-volumes` is currently su
 
 ## Platform Support
 
-| Platform              | Status         | Adapter         | Notes                                 |
-| --------------------- | -------------- | --------------- | ------------------------------------- |
-| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay      |
-| Linux aarch64         | **Production** | `native`        | Same as x86_64                        |
-| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS |
-| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; VZ adapter removed |
-| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                     |
-| Windows               | Planned        | `winbox` stub   | Returns error unconditionally         |
+| Platform              | Status         | Adapter         | Notes                                   |
+| --------------------- | -------------- | --------------- | --------------------------------------- |
+| Linux x86_64          | **Production** | `native`        | Full namespace/cgroup v2/overlay        |
+| Linux aarch64         | **Production** | `native`        | Same as x86_64                          |
+| Linux (GKE)           | **Production** | `gke`           | Unprivileged pods via proot + copy-FS   |
+| macOS (Apple Silicon) | Experimental   | `smolvm`/`krun` | exec/logs limited; opt-in VZ is blocked |
+| macOS (Intel)         | Experimental   | `colima`        | exec/logs limited                       |
+| Windows               | Planned        | `winbox` stub   | Returns error unconditionally           |
 
 See [`docs/core/FEATURE_MATRIX.mbx.md`](docs/core/FEATURE_MATRIX.mbx.md) for the full per-adapter capability
 breakdown.
@@ -107,16 +113,18 @@ breakdown.
 
 ## Architecture
 
-15 crates plus `xtask` (16 workspace members), Rust 2024 edition:
+16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
 
-```
-minibox-macros          proc macros (as_any!, adapt!)
+```text
+minibox-macros          declarative macros (as_any!, adapt!)
     ^
-minibox-core            cross-platform types, domain traits, protocol, OCI ops
+minibox-domain          canonical domain values, policies, events, and ports
+    ^
+minibox-core            protocol, clients, OCI services, shared adapters
     ^
 minibox                 Linux adapters, daemon handler/server/state, test infra
     ^        ^        ^
-macbox   smolbox   winbox  macOS Colima | macOS smolvm/krun | Windows stub
+macbox   smolbox   winbox  krun/Colima/VZ | VM facades | Windows stub
     ^        ^        ^
 miniboxd                daemon entry point, adapter dependency injection
 
@@ -146,7 +154,8 @@ agent runtime used to develop minibox itself — not a minibox subcommand, but w
 if you're exploring the repo.
 
 **Hexagonal ports.** Domain traits (`ImageRegistry`, `FilesystemProvider`, `ResourceLimiter`,
-`ContainerRuntime`, `NetworkProvider`, …) live in `minibox-core`. Adapters implement them.
+`ContainerRuntime`, `NetworkProvider`, …) live in `minibox-domain`; `minibox-core` provides a
+compatibility facade. Adapters implement the domain traits.
 Tests use mock adapters — no real HTTP or filesystem required.
 
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
@@ -163,21 +172,23 @@ Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITE
 
 | Area           | Protection                                                          |
 | -------------- | ------------------------------------------------------------------- |
-| Socket auth    | `SO_PEERCRED` — UID 0 only, socket mode `0600`                      |
+| Socket auth    | Native adapter: `SO_PEERCRED` UID 0 only; socket mode `0600`        |
 | Path traversal | `canonicalize()` + `..` rejection in overlay FS and tar extraction  |
 | Tar extraction | Rejects `..`, absolute symlinks, device nodes; strips setuid/setgid |
-| DoS limits     | 1 MB request, 10 MB manifest, 1 GB/layer, 5 GB total image          |
+| DoS limits     | 1 MiB request, 10 MiB manifest, 10 GiB/layer, 50 GiB total image    |
 | Mount flags    | `MS_NOSUID`, `MS_NODEV`, `MS_NOEXEC` on proc/sys/tmpfs              |
 | PID limit      | 1024 per container (default)                                        |
 
-**Not yet implemented:** capability dropping, seccomp filters, user namespace remapping,
-rootless support.
+**Not yet implemented:** default capability dropping, general-purpose seccomp profiles,
+user namespace remapping, and rootless support. A narrow seccomp rule already prevents
+mount-remount widening after container initialization.
 
 ---
 
 ## Configuration
 
-Configuration is layered: TOML config file → environment variables → defaults.
+Configuration is layered from defaults, then system TOML, user TOML, and finally
+environment-variable overrides.
 
 **Config files** (later overrides earlier):
 
@@ -191,20 +202,22 @@ log_level = "info"
 [policy]
 allow_privileged = false
 allow_bind_mounts = false
-max_image_size_mb = 2048
 ```
+
+`max_image_size_mb` is parsed from TOML but is not yet wired into runtime policy enforcement.
+`log_level` is also parsed but tracing currently follows `RUST_LOG`.
 
 **Environment variables** (override config file values):
 
-| Variable                    | Default                                         | Purpose                   |
-| --------------------------- | ----------------------------------------------- | ------------------------- |
-| `MINIBOX_ADAPTER`           | `native` (Linux) / `smolvm` (macOS)             | Adapter suite selection   |
-| `MINIBOX_DATA_DIR`          | `/var/lib/minibox`                              | Image + container storage |
-| `MINIBOX_RUN_DIR`           | `/run/minibox`                                  | Socket + runtime state    |
-| `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service` | Cgroup root               |
-| `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                         | Permit `-v` bind mounts   |
-| `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                         | Permit `--privileged`     |
-| `RUST_LOG`                  | —                                               | Tracing log level         |
+| Variable                    | Default                                                    | Purpose                   |
+| --------------------------- | ---------------------------------------------------------- | ------------------------- |
+| `MINIBOX_ADAPTER`           | auto: `smolvm`; Linux `native` / macOS `krun` fallback     | Adapter suite selection   |
+| `MINIBOX_DATA_DIR`          | Linux root: `/var/lib/minibox`; macOS: Application Support | Image + container storage |
+| `MINIBOX_RUN_DIR`           | Linux: `/run/minibox`; macOS: `/tmp/minibox`               | Socket + runtime state    |
+| `MINIBOX_CGROUP_ROOT`       | `/sys/fs/cgroup/minibox.slice/miniboxd.service`            | Cgroup root               |
+| `MINIBOX_ALLOW_BIND_MOUNTS` | `false`                                                    | Permit `-v` bind mounts   |
+| `MINIBOX_ALLOW_PRIVILEGED`  | `false`                                                    | Permit `--privileged`     |
+| `RUST_LOG`                  | —                                                          | Tracing log level         |
 
 ---
 
@@ -240,14 +253,17 @@ report that the repository password is correct. A newly initialized repository r
 ## Testing
 
 ```bash
-cargo xtask test unit        # unit + conformance + property tests (any platform)
+cargo xtask test unit        # workspace library tests only (any platform)
 cargo xtask test conformance # OCI adapter conformance matrix
+cargo xtask test property    # property-test suites
 just test-integration        # cgroup tests (Linux + root)
-just test-e2e                # daemon + CLI end-to-end (Linux + root)
+just test-e2e                # protocol end-to-end tests (any platform)
+just test-system             # daemon + CLI full-stack tests (Linux + root)
 ```
 
-The conformance suite runs 28 backend-agnostic tests against every adapter. Unit tests run on
-macOS without root. See [`docs/core/TESTING.mbx.md`](docs/core/TESTING.mbx.md) for the full test
+The unit gate runs workspace `--lib` targets and a zero-test guard for `minibox-testsuite`;
+conformance and property tests remain separate suites. Unit tests run on macOS without root.
+See [`TESTING.md`](TESTING.md) for the full test
 strategy and [`docs/core/TEST_INFRASTRUCTURE.mbx.md`](docs/core/TEST_INFRASTRUCTURE.mbx.md) for how
 the harness is built.
 
@@ -259,10 +275,12 @@ the harness is built.
 cargo xtask pre-commit       # staged fmt/clippy + config/docs checks
 cargo xtask prepush          # release build + release nextest + conformance
 just --list                  # all available recipes
-mbx doctor                   # preflight: show compiled adapters and capabilities
+mbx doctor                   # runtime preflight: host, adapters, daemon, storage
+mbx doctor --tools           # ...plus the contributor toolchain probes
+cargo xtask doctor           # toolchain readiness for building and testing
 ```
 
-See [`docs/core/DEVELOPMENT.mbx.md`](docs/core/DEVELOPMENT.mbx.md) for the full workflow.
+See [`DEVELOPMENT.md`](DEVELOPMENT.md) for the full workflow.
 
 ---
 
@@ -283,16 +301,16 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature                | Status                               |
-| ---------------------- | ------------------------------------ |
-| Bridge networking      | Experimental                         |
-| OCI push/commit/build  | Experimental                         |
-| macOS VZ.framework     | Removed after Apple ARM64 bug        |
-| Seccomp / capabilities | Planned                              |
-| Rootless support       | Planned                              |
-| Port forwarding / DNS  | Planned                              |
-| Windows (WSL2)         | Planned                              |
-| MCP control surface    | Initial MCP stdio server implemented |
+| Feature                | Status                                              |
+| ---------------------- | --------------------------------------------------- |
+| Bridge networking      | Experimental                                        |
+| OCI push/commit/build  | Experimental                                        |
+| macOS VZ.framework     | Restored behind opt-in `vz`; boot currently blocked |
+| Seccomp / capabilities | Planned                                             |
+| Rootless support       | Planned                                             |
+| Port forwarding / DNS  | Implemented for Linux `native` bridge networking    |
+| Windows (WSL2)         | Planned                                             |
+| MCP control surface    | Initial MCP stdio server implemented                |
 
 Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 

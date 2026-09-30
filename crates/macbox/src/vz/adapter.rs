@@ -93,6 +93,7 @@ impl ImageRegistry for VzRegistry {
         false
     }
 
+    // qual:allow(iosp) reason: "VM registry boundary: request construction, agent I/O, and response mapping"
     async fn pull_image(&self, image_ref: &ImageRef) -> Result<ImageMetadata> {
         let req = DaemonRequest::Pull {
             image: format!("{}/{}", image_ref.namespace, image_ref.name),

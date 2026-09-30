@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Minibox is a compact Rust container runtime with OCI images, Linux isolation, and swappable platform adapters.">
+    <title>minibox &mdash; A container runtime from scratch</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav aria-label="Primary">
+      <a href="index.html" class="brand" aria-current="page"><span>mini</span>box</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State</a>
+      <a href="feature-matrix.html">Features</a>
+      <a href="crate-inventory.html">Crates</a>
+      <a href="crate-tiers.html">Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main id="main">
+      <header class="hero">
+        <div class="hero-grid">
+          <div>
+            <span class="eyebrow reveal">Rust 2024 / OCI / Linux + macOS</span>
+            <h1 class="reveal"><span>mini</span>box</h1>
+            <p class="tagline reveal">A small, readable container runtime with a daemon/CLI split, native Linux isolation, and swappable platform adapters.</p>
+            <div class="actions reveal">
+              <a class="button button-primary" href="architecture.html">Explore the architecture</a>
+              <a class="button" href="roadmap.html">View the roadmap</a>
+            </div>
+          </div>
+          <div class="terminal reveal" aria-label="Example minibox session">
+            <div class="terminal-bar"><span>minibox / quickstart</span></div>
+            <pre><span class="prompt">$</span> mbx pull alpine
+<span class="cmt">Pulling alpine:latest...
+Image cached</span>
+
+<span class="prompt">$</span> mbx run alpine -- echo "hello from minibox"
+<span class="prompt">hello from minibox</span>
+
+<span class="prompt">$</span> mbx ps
+<span class="cmt">ID       IMAGE    STATE
+a3f7c2   alpine   stopped</span></pre>
+          </div>
+        </div>
+      </header>
+
+      <div class="stat-strip" aria-label="Project snapshot">
+        <div class="stat"><div class="n">17</div><div class="d">workspace members</div></div>
+        <div class="stat"><div class="n">0.33.0</div><div class="d">workspace version</div></div>
+        <div class="stat"><div class="n">5</div><div class="d">working adapter suites</div></div>
+        <div class="stat"><div class="n">15</div><div class="d">CI workflows</div></div>
+        <div class="stat"><div class="n">29 / 28</div><div class="d">request / response variants</div></div>
+      </div>
+
+      <section class="home-section">
+        <span class="eyebrow">The runtime path</span>
+        <h2>From image reference to isolated process</h2>
+        <p class="section-intro">The native Linux path exposes the mechanics that larger runtimes hide behind layers of orchestration.</p>
+        <ol class="steps">
+          <li class="step"><div><h3>Resolve and pull the image</h3><p>Fetch the OCI manifest and layers, verify digests, then reuse content-addressed cache entries.</p></div></li>
+          <li class="step"><div><h3>Prepare the root filesystem</h3><p>Stack read-only layers beneath a thin writable overlay and validate every path crossing the extraction boundary.</p></div></li>
+          <li class="step"><div><h3>Create isolation</h3><p>Enter PID, mount, network, UTS, and IPC namespaces while cgroups v2 enforce resource limits.</p></div></li>
+          <li class="step"><div><h3>Seal and execute</h3><p>Persist the execution manifest, pivot the root, close inherited descriptors, and launch with explicit-environment <code>execve</code>.</p></div></li>
+        </ol>
+      </section>
+
+      <section class="home-section">
+        <span class="eyebrow">Capabilities</span>
+        <h2>A focused runtime, not a Docker clone</h2>
+        <p class="section-intro">Native Linux is the complete reference path. VM and remote adapters deliberately expose their capability differences.</p>
+        <div class="card-grid">
+          <article class="feature-card"><span class="pill pill-shipped">Native</span><h3>Container lifecycle</h3><p>Pull, run, stop, remove, list, logs, exec, events, pause, resume, restart, and resource controls.</p></article>
+          <article class="feature-card"><span class="pill pill-neutral">Security</span><h3>Layered boundaries</h3><p>Peer credentials, request limits, policy admission, digest verification, path containment, and hardened child setup.</p></article>
+          <article class="feature-card"><span class="pill pill-partial">Adapters</span><h3>Platform suites</h3><p>Native and GKE are production suites; Colima, smolvm, and krun provide experimental lifecycle paths.</p></article>
+          <article class="feature-card"><span class="pill pill-shipped">Images</span><h3>OCI workflows</h3><p>Docker Hub and GHCR pulls, parallel layer downloads, cache management, plus adapter-dependent build, push, and commit.</p></article>
+          <article class="feature-card"><span class="pill pill-shipped">Operations</span><h3>Observable by design</h3><p>Structured tracing, optional OTLP export, Prometheus metrics, lifecycle events, and a read-only terminal dashboard.</p></article>
+          <article class="feature-card"><span class="pill pill-partial">Agents</span><h3>Controlled automation</h3><p>A policy-gated MCP server and Crux JSON-RPC plugin expose typed daemon operations to agent workflows.</p></article>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <span class="eyebrow">System map</span>
+        <h2>One protocol, multiple control surfaces</h2>
+        <p class="section-intro"><code>mbx</code>, MCP, Crux, and the read-only TUI converge on the same daemon protocol and composed adapter suite.</p>
+        <figure class="diagram">
+          <img src="arch-system.svg" alt="Minibox control surfaces connect through miniboxd to native and VM-backed workloads">
+          <figcaption>The daemon is the composition root and policy boundary; adapters supply runtime, filesystem, limiter, network, and image capabilities.</figcaption>
+        </figure>
+      </section>
+
+      <section class="home-section">
+        <span class="eyebrow">Project status</span>
+        <h2>Built for learning, hardened through evidence</h2>
+        <div class="grid-2">
+          <div class="card"><h3>Current baseline</h3><p>The workspace is version 0.33.0. Native Linux is production-ready; stabilization gates remain the promotion bar as features continue.</p><a href="stability.html">Read the stability evidence</a></div>
+          <div class="card"><h3>Next work</h3><p>Cross-platform exec and logs, Windows composition, unprivileged isolation, networking hardening, and broader image workflows remain visible priorities.</p><a href="roadmap.html">Open the roadmap</a></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>Built by <a href="https://github.com/89jobrien">Joseph O'Brien</a> &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+  </body>
+</html>

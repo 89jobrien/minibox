@@ -2,7 +2,7 @@
 
 use crate::client::MiniboxDaemonClient;
 use crate::error::{McpServerError, Result};
-use crate::policy::AgentPolicy;
+use crate::policy::{AgentPolicy, Authorized};
 use crate::types::{
     ContainerIdInput, ContainerInfoOutput, ImagesOutput, LogEntry, LogsInput, LogsOutput,
     ManifestOutput, MountInput, PsOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
@@ -119,12 +119,13 @@ pub async fn run(
     // network-isolated runs are the core agent workflow and stay available by
     // default; everything that escalates (privileged, mounts, host network) or
     // mutates shared daemon state is gated. Documented in this crate's README.
-    policy.validate_run(&input)?;
-    let request = run_request(input, policy)?;
-    let result = client
-        .call_limited(request, policy.max_output_bytes)
+    let request = policy
+        .authorize_run(input)?
+        .try_map(|input| run_request(input, policy))?;
+    let (result, output_truncated) = client
+        .call_authorized(request, policy.max_output_bytes)
         .await?;
-    normalize_run_output(result.responses, policy.max_output_bytes)
+    normalize_run_output(result.responses, policy.max_output_bytes, output_truncated)
 }
 
 /// Stop a container.
@@ -137,11 +138,10 @@ pub async fn stop(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<SimpleOutput> {
-    policy.validate_mutation("minibox_stop")?;
-    simple_id_request(client, policy, input, "minibox_stop", |id| {
-        DaemonRequest::Stop { id }
-    })
-    .await
+    require_non_empty(&input.id, "id")?;
+    let request =
+        policy.authorize_mutation("minibox_stop", DaemonRequest::Stop { id: input.id })?;
+    simple_id_request(client, policy, request, "minibox_stop").await
 }
 
 /// Remove a stopped container.
@@ -154,11 +154,10 @@ pub async fn rm(
     policy: &AgentPolicy,
     input: ContainerIdInput,
 ) -> Result<SimpleOutput> {
-    policy.validate_mutation("minibox_rm")?;
-    simple_id_request(client, policy, input, "minibox_rm", |id| {
-        DaemonRequest::Remove { id }
-    })
-    .await
+    require_non_empty(&input.id, "id")?;
+    let request =
+        policy.authorize_mutation("minibox_rm", DaemonRequest::Remove { id: input.id })?;
+    simple_id_request(client, policy, request, "minibox_rm").await
 }
 
 /// Re-export image list output for docs/tests that group container and image tools together.
@@ -236,12 +235,14 @@ fn validate_absolute_clean_path(path: &Path, field: &'static str) -> Result<()> 
 fn normalize_run_output(
     responses: Vec<DaemonResponse>,
     max_output_bytes: usize,
+    output_truncated: bool,
 ) -> Result<RunContainerOutput> {
     let mut container_id = None;
     let mut stdout = String::new();
     let mut stderr = String::new();
     let mut exit_code = None;
-    let mut truncated = false;
+    let mut truncated = output_truncated;
+    let mut remaining_output_bytes = max_output_bytes;
 
     for response in responses {
         match response {
@@ -258,7 +259,7 @@ fn normalize_run_output(
                         OutputStreamKind::Stderr => &mut stderr,
                     },
                     &decoded,
-                    max_output_bytes,
+                    &mut remaining_output_bytes,
                     &mut truncated,
                 );
             }
@@ -289,15 +290,15 @@ fn normalize_run_output(
     })
 }
 
-fn append_output(target: &mut String, bytes: &[u8], max_len: usize, truncated: &mut bool) {
-    if target.len() >= max_len {
-        *truncated = true;
-        return;
+fn append_output(target: &mut String, bytes: &[u8], remaining: &mut usize, truncated: &mut bool) {
+    let decoded = String::from_utf8_lossy(bytes);
+    let mut take = decoded.len().min(*remaining);
+    while take > 0 && !decoded.is_char_boundary(take) {
+        take -= 1;
     }
-    let remaining = max_len - target.len();
-    let take = bytes.len().min(remaining);
-    target.push_str(&String::from_utf8_lossy(&bytes[..take]));
-    if take < bytes.len() {
+    target.push_str(&decoded[..take]);
+    *remaining -= take;
+    if take < decoded.len() {
         *truncated = true;
     }
 }
@@ -305,13 +306,11 @@ fn append_output(target: &mut String, bytes: &[u8], max_len: usize, truncated: &
 async fn simple_id_request(
     client: &MiniboxDaemonClient,
     policy: &AgentPolicy,
-    input: ContainerIdInput,
+    request: Authorized<DaemonRequest>,
     tool: &'static str,
-    request_builder: impl FnOnce(String) -> DaemonRequest,
 ) -> Result<SimpleOutput> {
-    require_non_empty(&input.id, "id")?;
-    let result = client
-        .call_limited(request_builder(input.id), policy.max_output_bytes)
+    let (result, _) = client
+        .call_authorized(request, policy.max_output_bytes)
         .await?;
     let message = result
         .responses
@@ -408,6 +407,7 @@ mod tests {
                 DaemonResponse::ContainerStopped { exit_code: 0 },
             ],
             1024,
+            false,
         )
         .expect("normalize output");
 
@@ -416,5 +416,26 @@ mod tests {
         assert_eq!(output.stderr, "warn\n");
         assert_eq!(output.exit_code, Some(0));
         assert!(!output.truncated);
+    }
+
+    #[test]
+    fn normalize_run_output_keeps_lossy_utf8_within_byte_limit() {
+        let data = base64::engine::general_purpose::STANDARD.encode([b'a', 0xff]);
+        let output = normalize_run_output(
+            vec![
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stdout,
+                    data,
+                },
+                DaemonResponse::ContainerStopped { exit_code: 0 },
+            ],
+            2,
+            false,
+        )
+        .expect("normalize lossy output");
+
+        assert!(output.stdout.len() <= 2);
+        assert!(output.truncated);
+        assert!(output.stdout.is_char_boundary(output.stdout.len()));
     }
 }

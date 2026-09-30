@@ -10,7 +10,7 @@ Reduce rustqual findings in production source files from 533 to <150 by fixing
 actionable categories (error handling, magic numbers, long functions, dead code,
 duplicates, SRP params, IOSP violations) across `minibox`, `minibox-core`,
 `miniboxd`, and `minibox-cli`. Deferred: UNSAFE (already documented), test
-quality (TQ_*), FRAGMENT, BOILERPLATE.
+quality (TQ\_\*), FRAGMENT, BOILERPLATE.
 
 ## Architecture
 
@@ -28,11 +28,11 @@ quality (TQ_*), FRAGMENT, BOILERPLATE.
 
 Three parallel subagents, one per crate group. Each runs in a worktree branch.
 
-| Slot | Crate(s) | Branch | Est. findings |
-|------|----------|--------|---------------|
-| 1 | `minibox-core` | `qual/minibox-core` | ~100 |
-| 2 | `minibox` | `qual/minibox` | ~240 |
-| 3 | `miniboxd` + `minibox-cli` | `qual/miniboxd` | ~30 |
+| Slot | Crate(s)                   | Branch              | Est. findings |
+| ---- | -------------------------- | ------------------- | ------------- |
+| 1    | `minibox-core`             | `qual/minibox-core` | ~100          |
+| 2    | `minibox`                  | `qual/minibox`      | ~240          |
+| 3    | `miniboxd` + `minibox-cli` | `qual/miniboxd`     | ~30           |
 
 Slot 2 is largest. Slot 3 is small enough to combine.
 
@@ -60,6 +60,7 @@ MockRuntime.
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/image/layer.rs` (8 magic numbers)
 - `crates/minibox-core/src/image/registry.rs` (12 magic numbers)
 - `crates/minibox-core/src/image/mod.rs` (3 magic numbers)
@@ -79,6 +80,7 @@ MockRuntime.
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/image/layer.rs:144` — `extract_layer` (156 lines)
 - `crates/minibox-core/src/image/mod.rs:236` — `store_layer_verified` (94 lines)
 - `crates/minibox-core/src/image/mod.rs:367` — `image_dir` (64 lines)
@@ -99,6 +101,7 @@ MockRuntime.
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/adapters/mocks.rs` (testonly fns)
 - `crates/minibox-core/src/adapters/conformance.rs` (testonly)
 - `crates/minibox-core/src/preflight.rs` (uncalled fns)
@@ -115,6 +118,7 @@ MockRuntime.
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/adapters/mocks.rs:488` — `spawn_process_sync`
 - `crates/minibox-core/src/adapters/test_fixtures.rs` — `MockAdapterBuilder::build`,
   `TempContainerFixture::new`
@@ -132,6 +136,7 @@ MockRuntime.
 
 **Crate**: `minibox-core`
 **File(s)**:
+
 - `crates/minibox-core/src/image/manifest.rs:214` — `TargetPlatform::parse`
 - `crates/minibox-core/src/image/mod.rs:236` — `store_layer_verified`
 - `crates/minibox-core/src/image/registry.rs:365` — `get_manifest_inner`
@@ -160,6 +165,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**:
+
 - `crates/minibox/src/adapters/colima.rs` (6 findings)
 - `crates/minibox/src/adapters/mocks.rs` (5 findings)
 - `crates/minibox/src/daemon/handler/run.rs` (3 findings)
@@ -176,6 +182,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**:
+
 - `crates/minibox/src/adapters/colima.rs` (8 magic numbers)
 - `crates/minibox/src/adapters/network/bridge.rs` (10 magic numbers)
 - `crates/minibox/src/container/process.rs` (5 magic numbers)
@@ -193,6 +200,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**: (49 findings — focus on worst offenders >100 lines)
+
 - `src/adapters/builder.rs:86` — `build_image` (286 lines)
 - `src/daemon/handler/run.rs:366` — `prepare_run` (272 lines)
 - `src/daemon/handler/run.rs:153` — `handle_run_streaming` (175 lines)
@@ -216,6 +224,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**:
+
 - `crates/minibox/src/adapters/colima.rs` (testonly fns)
 - `crates/minibox/src/adapters/mocks.rs` (testonly)
 - `crates/minibox/src/preflight.rs` (uncalled)
@@ -231,6 +240,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**:
+
 - `crates/minibox/src/adapters/colima.rs` — 4x `lima_exec` duplicates
   (lines 150, 380, 558, 737)
 - `crates/minibox/src/daemon/handler/lifecycle.rs` — `handle_pause` /
@@ -248,6 +258,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**:
+
 - Functions with 6+ parameters (18 findings across minibox + minibox-core)
 
 1. For each function with 6+ params: group related params into a config struct.
@@ -260,6 +271,7 @@ MockRuntime.
 
 **Crate**: `minibox`
 **File(s)**:
+
 - `src/adapters/gke.rs:239` — `ProotRuntime::from_env`
 - `src/adapters/network/bridge.rs` — setup, attach, cleanup, stats
 
@@ -283,6 +295,7 @@ MockRuntime.
 
 **Crate**: `miniboxd`
 **File(s)**:
+
 - `crates/miniboxd/src/main.rs` — 3 LONG_FN (`run_daemon` 223 lines,
   `build_handler_deps` 63 lines, `build_native_handler_dependencies` 68 lines),
   magic numbers, dead code

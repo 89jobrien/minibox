@@ -6,6 +6,11 @@ use rmcp::{ServiceExt, transport::stdio};
 
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("{} {}", env!("CARGO_BIN_NAME"), env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("mcp=info"));
     tracing_subscriber::fmt()

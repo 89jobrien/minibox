@@ -23,6 +23,9 @@ xshell = "0.2"
 miette = { workspace = true }
 thiserror = { workspace = true }
 minibox-testsuite = { workspace = true }
+cargo_metadata = "0.20.0"
+syn = { version = "2.0.119", features = ["full", "visit"] }
+jsonschema = { version = "0.37.0", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"

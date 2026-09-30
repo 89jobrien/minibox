@@ -1,6 +1,4 @@
 //! Image handlers: pull, load, push, commit, build, prune, remove, list.
-// Handler signatures require >5 parameters by design (DI pattern). See rustqual.toml.
-#![allow(clippy::too_many_arguments)]
 
 use anyhow::Result;
 use minibox_core::events::EventSink;
@@ -92,7 +90,6 @@ pub(super) fn resolve_platform_registry(
 
 // ─── Pull ───────────────────────────────────────────────────────────────────
 
-// qual:allow(iosp) reason: "handler orchestration — parse, pull, respond"
 #[instrument(skip(_state, deps), fields(image = %image, tag = ?tag))]
 /// Pulls an image through the selected registry and returns its metadata.
 pub async fn handle_pull(
@@ -193,7 +190,7 @@ pub async fn handle_load_image(
             )
         }
         Err(e) => {
-            error!(error = %e, "load_image: failed");
+            error!(error = ?e, "load_image: failed");
             (
                 "error",
                 DaemonResponse::Error {
@@ -318,6 +315,8 @@ pub async fn handle_push(
 // ─── Commit ─────────────────────────────────────────────────────────────────
 
 /// Commits a container's writable layer and streams the terminal response.
+// qual:allow(srp) reason: "daemon boundary mirrors the Commit protocol request"
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_commit(
     container_id: String,
     target_image: String,
@@ -325,7 +324,6 @@ pub async fn handle_commit(
     message: Option<String>,
     env_overrides: Vec<String>,
     cmd_override: Option<Vec<String>>,
-    include_volumes: bool,
     _state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -358,7 +356,6 @@ pub async fn handle_commit(
         message,
         env_overrides,
         cmd_override,
-        include_volumes,
     };
 
     match committer.commit(&cid, &target_image, &config).await {
@@ -366,7 +363,7 @@ pub async fn handle_commit(
             info!(
                 container_id = %container_id,
                 target = %target_image,
-                layers = meta.image.layers.len(),
+                layers = meta.layers.len(),
                 "commit: completed"
             );
             deps.events.metrics.increment_counter(
@@ -378,33 +375,15 @@ pub async fn handle_commit(
                 start.elapsed().as_secs_f64(),
                 &[("op", "commit"), ("adapter", "daemon")],
             );
-            let mut response_lines = meta
-                .excluded_volume_paths
-                .iter()
-                .map(|path| {
-                    format!(
-                        "warning: image VOLUME {} contains data and was excluded; use --include-volumes to capture it",
-                        path.display()
-                    )
-                })
-                .collect::<Vec<_>>();
-            response_lines.push(format!(
-                "committed {} digest:{}",
-                target_image,
-                meta.image
-                    .layers
-                    .first()
-                    .map_or("unknown", |layer| layer.digest.as_str())
-            ));
-            if tx
+            let _ = tx
                 .send(DaemonResponse::Success {
-                    message: response_lines.join("\n"),
+                    message: format!(
+                        "committed {} digest:{}",
+                        target_image,
+                        meta.layers.first().map_or("unknown", |l| l.digest.as_str())
+                    ),
                 })
-                .await
-                .is_err()
-            {
-                warn!("commit: client disconnected before completion response");
-            }
+                .await;
         }
         Err(e) => {
             deps.events.metrics.increment_counter(
@@ -423,12 +402,76 @@ pub async fn handle_commit(
 
 // ─── Build ──────────────────────────────────────────────────────────────────
 
+struct TemporaryDockerfile {
+    path: std::path::PathBuf,
+}
+
+impl TemporaryDockerfile {
+    fn create(context: &std::path::Path, contents: &[u8]) -> Result<(Self, String)> {
+        const MAX_ATTEMPTS: usize = 8;
+        for _ in 0..MAX_ATTEMPTS {
+            let name = format!(
+                ".minibox-build-{}.Dockerfile",
+                uuid::Uuid::new_v4().simple()
+            );
+            match Self::create_named(context, &name, contents) {
+                Ok(temporary) => return Ok((temporary, name)),
+                Err(error)
+                    if error
+                        .downcast_ref::<std::io::Error>()
+                        .is_some_and(|error| error.kind() == std::io::ErrorKind::AlreadyExists) =>
+                {
+                    continue;
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        anyhow::bail!("unable to allocate a collision-free temporary Dockerfile")
+    }
+
+    fn create_named(context: &std::path::Path, name: &str, contents: &[u8]) -> Result<Self> {
+        use std::io::Write;
+
+        let path = context.join(name);
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600).custom_flags(nix::libc::O_NOFOLLOW);
+        }
+        let mut file = options.open(&path)?;
+        if let Err(error) = file.write_all(contents).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = std::fs::remove_file(&path);
+            return Err(error.into());
+        }
+        Ok(Self { path })
+    }
+}
+
+impl Drop for TemporaryDockerfile {
+    fn drop(&mut self) {
+        if let Err(error) = std::fs::remove_file(&self.path)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!(
+                path = %self.path.display(),
+                error = %error,
+                "build: failed to remove temporary Dockerfile"
+            );
+        }
+    }
+}
+
 /// Build an image from an inline Dockerfile string.
 ///
 /// Streams [`DaemonResponse::BuildOutput`] for each Dockerfile step, then
 /// sends exactly one terminal response: [`DaemonResponse::BuildComplete`] on
 /// success or [`DaemonResponse::Error`] on failure.
 // qual:allow(iosp) reason: "handler orchestration — parse, build steps, stream output"
+// qual:allow(srp) reason: "daemon boundary mirrors the Build protocol request"
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_build(
     dockerfile: String,
     context_path: String,
@@ -481,15 +524,32 @@ pub async fn handle_build(
             }
         }
     };
-    let dockerfile_path = context_dir.join("Dockerfile.minibox-build");
-    if let Err(e) = tokio::fs::write(&dockerfile_path, &dockerfile).await {
-        send_error(&tx, "handle_build", format!("write Dockerfile: {e}")).await;
-        return;
-    }
+    let context_for_dockerfile = context_dir.clone();
+    let dockerfile_bytes = dockerfile.into_bytes();
+    let temporary = tokio::task::spawn_blocking(move || {
+        TemporaryDockerfile::create(&context_for_dockerfile, &dockerfile_bytes)
+    })
+    .await;
+    let (_temporary_dockerfile, dockerfile_name) = match temporary {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => {
+            send_error(&tx, "handle_build", format!("write Dockerfile: {error}")).await;
+            return;
+        }
+        Err(error) => {
+            send_error(
+                &tx,
+                "handle_build",
+                format!("write Dockerfile task failed: {error}"),
+            )
+            .await;
+            return;
+        }
+    };
 
     let context = minibox_core::domain::BuildContext {
         directory: context_dir,
-        dockerfile: std::path::PathBuf::from("Dockerfile.minibox-build"),
+        dockerfile: std::path::PathBuf::from(dockerfile_name),
     };
     let config = minibox_core::domain::BuildConfig {
         tag: tag.clone(),
@@ -713,6 +773,46 @@ pub async fn handle_list_images(
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod temporary_dockerfile_tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn create_named_rejects_collision_and_symlink_without_touching_target() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let target = temp.path().join("target");
+        std::fs::write(&target, "unchanged").expect("write target");
+        let candidate = temp.path().join("candidate");
+        std::os::unix::fs::symlink(&target, &candidate).expect("create candidate symlink");
+
+        let result = TemporaryDockerfile::create_named(temp.path(), "candidate", b"malicious");
+        assert!(result.is_err());
+        assert_eq!(
+            std::fs::read_to_string(target).expect("read target"),
+            "unchanged"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temporary_dockerfile_is_mode_0600_and_removed_on_drop() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let (temporary, _name) =
+            TemporaryDockerfile::create(temp.path(), b"FROM scratch\n").expect("create file");
+        let path = temporary.path.clone();
+        let mode = std::fs::metadata(&path)
+            .expect("temporary metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+        drop(temporary);
+        assert!(!path.exists());
+    }
+}
 
 #[cfg(test)]
 mod search_handler_tests {

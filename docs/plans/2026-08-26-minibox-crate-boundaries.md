@@ -1,5 +1,5 @@
 ---
-source_sha: 045070e8926941810fbe1c48663b9ea3640cffd0
+source_sha: 98cfc0e94b126624f7c86c89e8edc86444ab63c4
 sources:
   - docs/designs/2026-08-26-minibox-crate-boundaries-design.md
   - crates/minibox-core/src/
@@ -7,7 +7,7 @@ sources:
   - crates/minibox-core/Cargo.toml
   - crates/minibox/Cargo.toml
   - xtask/src/
-generated: 2026-08-26
+generated: 2026-09-16
 ---
 
 # Plan: Minibox Crate Boundaries

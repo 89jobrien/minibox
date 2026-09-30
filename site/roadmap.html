@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="The minibox roadmap: shipped foundations, active platform work, next priorities, constraints, and dogfooding targets.">
+    <title>Roadmap &mdash; minibox</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav aria-label="Primary">
+      <a href="index.html" class="brand"><span>mini</span>box</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State</a>
+      <a href="feature-matrix.html">Features</a>
+      <a href="crate-inventory.html">Crates</a>
+      <a href="crate-tiers.html">Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html" aria-current="page">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head">
+        <span class="eyebrow">Direction of travel</span>
+        <h1>Roadmap</h1>
+        <p class="lead">Evidence-backed priorities for making the runtime safer, more portable, and easier to operate without obscuring its systems-programming core.</p>
+        <div class="meta-row"><span class="meta">Baseline 0.33.0</span><span class="meta">Active development</span><span class="meta">Updated 2026-09-15</span></div>
+      </header>
+
+      <section>
+        <h2>Shipped baseline</h2>
+        <div class="roadmap-grid">
+          <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Native Linux runtime</h3><p>OCI pull, lifecycle, interactive exec, logs, events, cgroups v2, overlay filesystems, bridge networking, mounts, image operations, and execution-policy checks form the production reference path.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Typed control plane</h3><p>The <code>mbx</code> CLI, policy-gated MCP server, Crux JSON-RPC plugin, and read-only TUI converge on the daemon protocol.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Platform suites</h3><p>GKE is production-ready for unprivileged pod execution. Colima, smolvm, and krun provide experimental lifecycle paths with explicit capability limits.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Standing quality gates</h3><p>Protocol ownership, handler coverage, adapter evidence, macOS validation, unit tests, and dependency audits remain the promotion bar after the feature freeze was lifted.</p></article>
+        </div>
+      </section>
+
+      <section>
+        <h2>Active work</h2>
+        <div class="roadmap-grid">
+          <article class="card roadmap-card"><span class="pill pill-partial">P1</span><h3>Cross-platform exec and logs</h3><p>Native Linux has complete exec and historical logs. VM-backed macOS suites can run workloads and stream initial cmt, but cannot yet exec into an existing container.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">P1</span><h3>Linux verification from macOS</h3><p>The VM test path can exercise image pulls. Native overlay and cgroup scenarios still require a Linux environment with the correct privileges.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">P1</span><h3>Windows composition</h3><p><code>winbox</code> remains a stub. Named Pipe transport, authentication, WSL2/HCS backend selection, and helper execution are still required.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">P1</span><h3>Unprivileged isolation</h3><p>Default capability dropping, user namespaces, UID/GID maps, rootless storage, networking, and cgroup delegation remain open.</p></article>
+        </div>
+      </section>
+
+      <section>
+        <h2>Next priorities</h2>
+        <div class="roadmap-grid">
+          <article class="card roadmap-card"><span class="pill pill-neutral">P2</span><h3>Networking rollout</h3><p>Package CNI plugins, harden mode validation, expand privileged integration coverage, and make installation repeatable.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-neutral">P2</span><h3>Image workflow parity</h3><p>Broaden live-registry coverage, expose the remaining image operations through the CLI, and document adapter-specific build, push, and commit behavior.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-neutral">P2</span><h3>Checkpoint implementation</h3><p>The snapshot protocol and CLI exist, while production suites still compose <code>NoopVmCheckpoint</code>. Real backend support needs explicit lifecycle semantics and tests.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-neutral">P2</span><h3>CI coverage closure</h3><p>Bring Linux-root sandbox and feature-gated CLI subprocess coverage into a dependable CI lane without slowing every pull request.</p></article>
+        </div>
+      </section>
+
+      <section>
+        <h2>Known constraints</h2>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="Known roadmap constraints">
+          <table tabindex="0">
+            <thead><tr><th scope="col">Area</th><th scope="col">Current boundary</th><th scope="col">Required evidence</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">VZ</th><td>Feature-gated source is present, but VM boot remains blocked on current macOS.</td><td>A minimal boot repro and adapter conformance on supported hardware.</td></tr>
+              <tr><th scope="row">Rootless</th><td>No user namespace, delegated cgroup, or unprivileged networking path.</td><td>End-to-end lifecycle without root on Linux.</td></tr>
+              <tr><th scope="row">Portable exec</th><td>Interactive exec is complete only on native Linux.</td><td>Existing-container exec plus PTY and cleanup tests per suite.</td></tr>
+              <tr><th scope="row">CI</th><td>Some Linux-root and feature-gated suites remain outside normal enforcement.</td><td>Stable runners, bounded runtime, and explicit promotion gating.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <h2>Dogfooding track</h2>
+        <p class="lead">The roadmap is strongest when minibox proves its own product claims through real operator and agent workflows.</p>
+        <div class="roadmap-grid">
+          <article class="card roadmap-card"><span class="pill pill-shipped">Ready</span><h3>Operator lifecycle drill</h3><p>Run pull, create, observe, stop, remove, and cleanup through <code>mbx</code>, then correlate state, events, logs, traces, and metrics.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-shipped">Ready</span><h3>Policy-gated agent run</h3><p>Exercise MCP read-only defaults, explicit mutation enablement, high-risk run denial, manifest inspection, and cleanup.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">Planned</span><h3>Image supply-chain round trip</h3><p>Build, run, commit, push, clear the cache, pull again, and verify workload identity through a disposable registry.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">Planned</span><h3>Sandboxed generated code</h3><p>Standardize a prebuilt toolchain image or bind-mount workflow around the existing resource-limited sandbox path.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">Planned</span><h3>Restart recovery drill</h3><p>Restart the daemon around running and paused containers and verify conservative orphan and freezer-state reconciliation.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-partial">Planned</span><h3>Cross-adapter conformance</h3><p>Run one lifecycle story through native, GKE, Colima, smolvm, and krun while recording expected capability skips.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+  </body>
+</html>

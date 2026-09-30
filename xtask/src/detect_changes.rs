@@ -1,4 +1,10 @@
 //! CI change detection: classify changed paths into workspace areas.
+//!
+//! Invariant: every workspace member is classified into some `Area`, and any
+//! `crates/` path that is not explicitly recognised falls back to
+//! [`Area::Workspace`] so the full CI gate set runs. A newly added crate
+//! therefore cannot silently skip lint and tests — see
+//! `every_workspace_member_classifies` for the test that enforces this.
 
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -22,6 +28,9 @@ pub enum Area {
     Workflows,
     /// Workspace-level config: Cargo.toml, Cargo.lock, rust-toolchain.toml,
     /// deny.toml, Justfile, and other root config files that affect all crates.
+    ///
+    /// Also the fallback for any `crates/` path not explicitly recognised, so a
+    /// new crate defaults to the full gate set rather than to no gates.
     Workspace,
 }
 
@@ -65,7 +74,13 @@ impl ChangeSet {
 
 /// Map a changed file path (relative to workspace root) to a workspace area.
 ///
-/// Returns `None` for paths that don't match any tracked area (e.g. `fuzz/`).
+/// Returns `None` only for paths that belong to no tracked area and are not
+/// part of the product workspace (e.g. `fuzz/`, `cache/`, `traces/`).
+///
+/// Every `crates/` member is recognised explicitly. A `crates/` path with no
+/// explicit mapping resolves to [`Area::Workspace`] so the full gate set runs —
+/// this is deliberate: an unrecognised crate must fail safe (run everything),
+/// not fail open (run nothing).
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 pub fn classify_path(path: &str) -> Option<Area> {
     if path.starts_with("crates/minibox-domain/")
@@ -79,12 +94,27 @@ pub fn classify_path(path: &str) -> Option<Area> {
         Some(Area::Cli)
     } else if path.starts_with("crates/minibox/") {
         Some(Area::Runtime)
+    } else if path.starts_with("crates/smolbox/") {
+        // krun / smolvm Linux microVM adapters.
+        Some(Area::Runtime)
+    } else if path.starts_with("crates/minibox-cni/") {
+        // CNI network provider used by the runtime adapters.
+        Some(Area::Runtime)
     } else if path.starts_with("crates/macbox/") {
         Some(Area::Macbox)
     } else if path.starts_with("crates/winbox/") {
         Some(Area::Winbox)
+    } else if path.starts_with("crates/mcp/") {
+        // MCP agent control surface — an operator/agent-facing interface.
+        Some(Area::Cli)
+    } else if path.starts_with("crates/minibox-tui/") {
+        Some(Area::Cli)
+    } else if path.starts_with("crates/ail/") {
+        // Agent-improvement-loop tooling.
+        Some(Area::Cli)
     } else if path.starts_with("crates/minibox-testsuite/")
         || path.starts_with("crates/minibox-crux-plugin/")
+        || path.starts_with("crates/minibox-bench/")
     {
         Some(Area::Conformance)
     } else if path.starts_with("xtask/") || path.starts_with("scripts/") {
@@ -106,6 +136,10 @@ pub fn classify_path(path: &str) -> Option<Area> {
             | "Dockerfile"
     ) || (path.ends_with(".toml") && !path.contains('/'))
     {
+        Some(Area::Workspace)
+    } else if path.starts_with("crates/") {
+        // Default-deny catch-all: an unrecognised crate forces the full gate
+        // set. Must stay last in this chain — see module docs.
         Some(Area::Workspace)
     } else {
         None
@@ -185,6 +219,7 @@ pub fn emit_gha_outputs(cs: &ChangeSet) -> Result<()> {
     Ok(())
 }
 
+/// Classifies paths changed from the base ref to `HEAD` and emits CI area flags.
 pub fn run(root: &Path, base_ref: &str) -> Result<()> {
     let cs = detect_changes(root, base_ref)?;
     emit_gha_outputs(&cs)
@@ -197,6 +232,91 @@ pub fn run(root: &Path, base_ref: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every workspace member must classify to some area, and the area must be
+    /// one the CI gate set actually reacts to.
+    ///
+    /// This is the regression test for the gate escape where six members
+    /// (`smolbox`, `ail`, `minibox-bench`, `mcp`, `minibox-cni`,
+    /// `minibox-tui`) had no branch in `classify_path`, returned `None`, and
+    /// therefore produced all-false flags — so a PR touching only one of them
+    /// skipped lint and unit tests and still went green.
+    ///
+    /// Reads the live `Cargo.toml` via `cargo_metadata` so it cannot drift out
+    /// of sync with the real member list.
+    #[test]
+    fn every_workspace_member_classifies() {
+        let metadata = cargo_metadata::MetadataCommand::new()
+            .no_deps()
+            .exec()
+            .expect("failed to read workspace metadata");
+
+        let mut members: Vec<String> = metadata
+            .workspace_members
+            .iter()
+            .map(|id| {
+                metadata[id]
+                    .manifest_path
+                    .parent()
+                    .and_then(|p| p.strip_prefix(metadata.workspace_root.as_std_path()).ok())
+                    .map_or_else(
+                        || panic!("member {id} is not inside the workspace root"),
+                        |p| p.as_str().to_owned(),
+                    )
+            })
+            .collect();
+        members.sort();
+
+        assert!(
+            members.len() >= 16,
+            "expected the full product workspace, got {} members: {members:?}",
+            members.len()
+        );
+
+        for member in &members {
+            let probe = format!("{member}/src/lib.rs");
+            let area = classify_path(&probe)
+                .unwrap_or_else(|| panic!("{member} classifies to None — CI would skip it"));
+            assert_ne!(
+                area,
+                Area::Docs,
+                "{member} must not classify to the Docs area"
+            );
+        }
+    }
+
+    /// An unrecognised crate must fail safe (full gate set), not fail open.
+    #[test]
+    fn unrecognised_crate_forces_full_gate_set() {
+        assert_eq!(
+            classify_path("crates/some-future-crate/src/lib.rs"),
+            Some(Area::Workspace),
+            "a crate with no explicit mapping must fall back to Workspace so \
+             lint and unit tests still run"
+        );
+        assert_eq!(
+            classify_path("crates/nested/deep/src/lib.rs"),
+            Some(Area::Workspace)
+        );
+    }
+
+    /// Non-product paths stay out of the gate set — they belong to separate
+    /// workspaces or are build artifacts.
+    #[test]
+    fn non_product_paths_are_unclassified() {
+        for path in [
+            "fuzz/fuzz_targets/anything.rs",
+            "cache/layer.tar",
+            "traces/trace.json",
+            "artifacts/report.json",
+        ] {
+            assert_eq!(
+                classify_path(path),
+                None,
+                "{path} should not be classified — it is not a product workspace path"
+            );
+        }
+    }
 
     #[test]
     fn classify_minibox_core() {

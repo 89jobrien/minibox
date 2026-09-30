@@ -40,14 +40,20 @@
 //! | [`image`] | OCI image handling: parsing `image:tag` references, Docker Hub v2 registry client (anonymous token auth), manifest parsing, and tar layer extraction with path-traversal protection. |
 //! | [`protocol`] | Newline-delimited JSON types for the Unix socket protocol between the daemon and CLI. Includes framing helpers and the streaming ephemeral run protocol. |
 //! | [`preflight`] | Host capability probing (cgroups v2, overlay FS, kernel version, systemd). Used by `just doctor` and the `require_capability!` test macro. |
+//! | [`adapter_registry`] | The single adapter table: which suites exist, which are compiled in, and which the environment selects. Shared by `miniboxd` startup and `mbx doctor`. |
+//! | [`doctor`] | Runtime health check engine behind `mbx doctor` — host, virtualization, adapter binaries, CNI plugins, daemon reachability, optional toolchain probes. |
 //! | [`error`] | Top-level [`MiniboxError`] type and cross-platform error types. |
 //!
 //! ## Feature flags
 //!
 //! - `test-utils`: enables mock adapters (`adapters::mocks`, `adapters::test_fixtures`)
 //!   for use in other crates' dev-dependencies without `cfg(test)` restrictions.
+//! - `vz`: marks the Apple Virtualization.framework adapter as available in
+//!   [`adapter_registry::all_adapters`]. Forwarded by `miniboxd/vz`.
 
+pub mod adapter_registry;
 pub mod adapters;
+pub mod doctor;
 pub mod domain;
 pub mod error;
 pub mod events;

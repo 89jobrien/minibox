@@ -7,7 +7,7 @@ crates = [
   { dir = "crates/miniboxd", pkg = "miniboxd" },
   { dir = "crates/winbox", pkg = "winbox" },
   { dir = "crates/smolbox", pkg = "smolbox" },
-  { dir = "crates/mbx", pkg = "mbx" },
+  { dir = "crates/mbx", pkg = "minibox-cli" },
   { dir = "crates/minibox-crux-plugin", pkg = "minibox-crux-plugin" },
   { dir = "crates/minibox-testsuite", pkg = "minibox-testsuite" },
   { dir = "xtask", exclude_from_version_check = true },
@@ -29,7 +29,7 @@ dependents = ["minibox", "macbox", "miniboxd", "winbox", "minibox-cli", "minibox
 
 [[workspace.propagation]]
 source = "minibox-macros"
-dependents = ["minibox-core", "minibox", "macbox", "miniboxd", "mbx"]
+dependents = ["minibox-core", "minibox", "macbox", "miniboxd", "minibox-cli"]
 
 [[workspace.propagation]]
 source = "smolbox"

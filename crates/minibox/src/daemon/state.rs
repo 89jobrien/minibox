@@ -365,12 +365,15 @@ impl DaemonState {
     /// marked "Stopped" since the processes are no longer alive.
     ///
     /// Returns silently if the state file does not exist or is unreadable.
+    // TODO(feature-idea-28): fail closed on corrupt or unreadable state, serialize durable
+    // writes, and guard lifecycle transitions with process-held locks plus adapter-specific
+    // runtime identity (pidfd on Linux).
     pub async fn load_from_disk(&self) {
         let mut records: HashMap<String, ContainerRecord> = if let Some(repo) = &self.repository {
             match repo.load_containers() {
                 Ok(r) => r,
                 Err(e) => {
-                    warn!(error = %e, "state: repository load failed, starting fresh");
+                    warn!(error = ?e, "state: repository load failed, starting fresh");
                     return;
                 }
             }
@@ -473,7 +476,7 @@ impl DaemonState {
 
         if let Some(repo) = &self.repository {
             if let Err(e) = repo.save_containers(&map) {
-                warn!(error = %e, "state: repository save failed");
+                warn!(error = ?e, "state: repository save failed");
             }
             return;
         }
@@ -833,6 +836,17 @@ impl crate::container_state::ContainerStateAccess for DaemonState {
             .as_ref()
             .map(|m| std::path::Path::to_path_buf(m.overlay_upper_dir()))
             .ok_or_else(|| anyhow::anyhow!("container {container_id} has no overlay upper dir"))
+    }
+
+    async fn get_merged_rootfs(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf> {
+        let map = self.containers.read().await;
+        let record = map
+            .get(container_id)
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
+        record
+            .merged_dir
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} has no merged rootfs"))
     }
 
     async fn get_source_image_ref(&self, container_id: &str) -> anyhow::Result<String> {

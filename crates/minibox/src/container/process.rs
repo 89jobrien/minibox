@@ -10,7 +10,7 @@ use crate::error::ProcessError;
 use anyhow::Context;
 use minibox_core::domain::{HookSpec, SpawnResult};
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::execve;
+use nix::unistd::{Gid, Uid, execve};
 use std::ffi::CString;
 use std::os::unix::io::RawFd;
 use std::path::PathBuf;
@@ -51,7 +51,7 @@ pub struct ContainerConfig {
     pub pre_exec_hooks: Vec<HookSpec>,
     /// Bind mounts applied inside the container's mount namespace before `pivot_root`.
     pub mounts: Vec<minibox_core::domain::BindMount>,
-    /// If `true`, call `capset(2)` with all capabilities set before `execvp`.
+    /// If `true`, call `capset(2)` with all capabilities set before `execve`.
     pub privileged: bool,
     /// Host IDs mapped to container IDs 0..size in the user namespace.
     pub uid_mapping: UidMapping,
@@ -109,26 +109,47 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     };
 
     let capture_output = config.capture_output;
-    let cgroup_path = config.cgroup_path.clone();
     let uid_mapping = config.uid_mapping;
+    let cgroup_path = config.cgroup_path.clone();
+    let ns_config = config.namespace_config.clone();
 
-    // Parent/child barrier: the child must not proceed until the parent has
-    // installed UID/GID maps and moved it into the cgroup.
+    // ---- Parent phase 1: before clone -------------------------------------
+    // Operations the child must *inherit*. The mount namespace is copied at
+    // clone(2), so anything created afterwards is invisible to the child, and
+    // a mount namespace created alongside a new user namespace holds its
+    // inherited mounts locked -- the child cannot graft onto them even with a
+    // full capability set in its own namespace. Both reasons force these to
+    // happen here rather than in `child_init`.
+    crate::container::filesystem::bind_rootfs_mount_point(&config.rootfs)
+        .context("parent: make rootfs a mount point")?;
+
+    // Parent/child barrier: the child must not proceed — in particular must not
+    // reach `execve` — until the parent has installed the UID/GID maps. Without
+    // this the child could `exec` while its user namespace is still unmapped,
+    // and every UID in the container image would resolve to the unmapped
+    // overflow UID.
     let (sync_read, sync_write) = nix::unistd::pipe2(OFlag::O_CLOEXEC)
         .context("creating user namespace synchronization pipe")?;
     let sync_read_raw = sync_read.as_raw_fd();
     let sync_write_raw = sync_write.as_raw_fd();
+    // Take full manual control of the fd lifetimes, for the same reason as the
+    // capture pipe above: dropping either OwnedFd here would close the fd for
+    // both parent and child after clone(2).
     std::mem::forget(sync_read);
     std::mem::forget(sync_write);
 
-    let ns_config = config.namespace_config.clone();
     let pid = clone_with_namespaces(&ns_config, move || {
         // ----------------------------------------------------------------
         // Everything here runs in the child process.
         // We must not return; we must either exec or call _exit.
         // ----------------------------------------------------------------
 
-        // Wait until the parent has populated uid_map/gid_map and the cgroup.
+        // Block until the parent has written uid_map/gid_map. This must happen
+        // before anything that observes our credentials, and before the
+        // descriptor sweep in `child_init` closes the sync pipe's descriptor.
+        // SAFETY: both fds are valid descriptors inherited across clone(2);
+        // their OwnedFds were forgotten before the clone so no other owner will
+        // close them. read/write/close are async-signal-safe.
         unsafe {
             libc::close(sync_write_raw);
             let mut ready = 0u8;
@@ -136,6 +157,31 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
                 libc::_exit(127);
             }
             libc::close(sync_read_raw);
+        }
+
+        // Now that the map exists, re-resolve our credentials against it.
+        //
+        // ruid/euid/suid/fsuid are fixed at clone(2), at which point the new
+        // user namespace's map is still empty, so they were all assigned the
+        // overflow uid (65534). Writing uid_map afterwards does not change
+        // them: it makes the *files* interpret correctly for later lookups, but
+        // this process's already-assigned ids stay unmapped. The observable
+        // symptom is that opening any file for write fails with EOVERFLOW,
+        // because the filesystem cannot represent an unmapped owner.
+        //
+        // So the map write is necessary but not sufficient — the child has to
+        // reset all four credential slots to 0 (namespace-local) itself, which
+        // is what makes it root inside the container. This is the same step
+        // runc performs after the parent signals that mapping is complete.
+        //
+        // gid first: setresuid can drop the privilege needed to change groups,
+        // and the parent has already written setgroups=deny, so nothing can
+        // widen group access afterwards.
+        if nix::unistd::setresgid(Gid::from_raw(0), Gid::from_raw(0), Gid::from_raw(0)).is_err()
+            || nix::unistd::setresuid(Uid::from_raw(0), Uid::from_raw(0), Uid::from_raw(0)).is_err()
+        {
+            error!("container: failed to apply namespace credentials");
+            unsafe { libc::_exit(127) };
         }
 
         // Redirect stdout and stderr to the write end of the pipe.
@@ -159,7 +205,13 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
 
         const EXEC_FAILURE_EXIT_CODE: i32 = 127;
         if let Err(e) = child_init(config) {
-            error!(error = %e, "container: child init failed");
+            // `?e` (Debug), not `%e` (Display). anyhow's Display prints only the
+            // outermost context, so `%e` collapses a failure to "child:
+            // <context>" and discards the errno and the whole chain — every
+            // mount target, path, and io::Error underneath. child_init's
+            // failures are the ones you most need to diagnose and they were
+            // the least diagnosable. Matches `error = ?e` in adapters/exec.rs.
+            error!(error = ?e, "container: child init failed");
             unsafe { libc::_exit(EXEC_FAILURE_EXIT_CODE) };
         }
         // exec replaces the process image, so we never reach here.
@@ -168,10 +220,11 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     .with_context(|| "failed to spawn container process");
 
     if let Err(ref _e) = pid {
+        // Clone failed — no child was created, so neither the sync pipe's nor
+        // the capture pipe's forgotten OwnedFds were ever consumed. Close all
+        // four raw FDs to prevent leaks.
         unsafe { libc::close(sync_read_raw) };
         unsafe { libc::close(sync_write_raw) };
-        // Clone failed — the forgotten OwnedFds were never consumed by a
-        // child (no child was created). Close both raw FDs to prevent leaks.
         if capture_output && read_fd_raw >= 0 {
             unsafe { libc::close(read_fd_raw) };
             unsafe { libc::close(write_fd_raw) };
@@ -179,8 +232,40 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     }
 
     let pid = pid?;
+
+    // ---- Parent phase 2: after clone, before the barrier releases ---------
+    // Operations that target the child's own PID, so they cannot happen before
+    // clone. Both land somewhere the child cannot write to itself, which is
+    // exactly why the child does neither: it is in a user namespace.
+    //
+    // - uid_map/gid_map may only be written by a process *outside* the new user
+    //   namespace, i.e. by us.
+    // - cgroup.procs. The child's cgroup namespace is the *initial* one, because
+    //   NamespaceConfig::to_clone_flags never sets CLONE_NEWCGROUP. Adding a
+    //   process to a cgroup requires privilege over the user namespace that
+    //   owns the cgroup namespace -- the parent's, not the child's new one -- so
+    //   the child gets EPERM however privileged it is inside its own namespace.
+    //   Holding PID 1 in its own PID namespace does not help and never did
+    //   under a user namespace. We use the PID clone(2) returned, which is the
+    //   one valid in this namespace.
+    //
+    // The child is still parked on the sync pipe at this point, so if either
+    // step fails it can be killed and reaped rather than left half-configured
+    // and unaccounted for.
+    let parent_setup = configure_child_isolation(pid.as_raw(), uid_mapping).and_then(|()| {
+        let procs_file = cgroup_path.join("cgroup.procs");
+        std::fs::write(&procs_file, format!("{}\n", pid.as_raw()))
+            .map_err(|source| crate::error::CgroupError::AddProcessFailed {
+                pid: pid.as_raw() as u32,
+                path: procs_file.display().to_string(),
+                source,
+            })
+            .map_err(anyhow::Error::from)
+    });
     unsafe { libc::close(sync_read_raw) };
-    if let Err(error) = configure_child_isolation(pid.as_raw(), &cgroup_path, uid_mapping) {
+    if let Err(error) = parent_setup {
+        // The child is parked on the sync pipe; it will never be released, so
+        // reap it rather than leaking a live process.
         unsafe { libc::close(sync_write_raw) };
         let _ = nix::sys::signal::kill(pid, nix::sys::signal::Signal::SIGKILL);
         let _ = waitpid(pid, None);
@@ -279,7 +364,7 @@ pub fn run_hooks(
                     std::thread::sleep(Duration::from_millis(HOOK_POLL_INTERVAL_MS));
                 }
                 Err(e) => {
-                    warn!(command = %hook.command, error = %e, "lifecycle hook wait error");
+                    warn!(command = %hook.command, error = ?e, "lifecycle hook wait error");
                     break;
                 }
             }
@@ -292,7 +377,7 @@ pub fn run_hooks(
 ///
 /// Uses `capset(2)` with `LINUX_CAPABILITY_VERSION_3` to set a wide but
 /// deliberately bounded set of capabilities in `permitted`, `effective`, and
-/// `inheritable`. Called inside the child process before `execvp` when
+/// `inheritable`. Called inside the child process before `execve` when
 /// `config.privileged` is true.
 ///
 /// # Excluded capabilities (host-escape tier)
@@ -373,34 +458,10 @@ fn apply_privileged_capabilities() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
-fn configure_child_isolation(
-    pid: i32,
-    cgroup_path: &std::path::Path,
-    mapping: UidMapping,
-) -> anyhow::Result<()> {
-    let proc_dir = std::path::PathBuf::from(format!("/proc/{pid}"));
-    std::fs::write(proc_dir.join("setgroups"), "deny\n")
-        .with_context(|| format!("disable setgroups for child {pid}"))?;
-    std::fs::write(
-        proc_dir.join("uid_map"),
-        format!("0 {} {}\n", mapping.host_uid, mapping.size),
-    )
-    .with_context(|| format!("write exclusive uid_map for child {pid}"))?;
-    std::fs::write(
-        proc_dir.join("gid_map"),
-        format!("0 {} {}\n", mapping.host_gid, mapping.size),
-    )
-    .with_context(|| format!("write exclusive gid_map for child {pid}"))?;
-    std::fs::write(cgroup_path.join("cgroup.procs"), format!("{pid}\n"))
-        .with_context(|| format!("add child {pid} to cgroup {}", cgroup_path.display()))?;
-    Ok(())
-}
-
 /// Initialise the container environment inside the cloned child process.
 ///
 /// Called immediately after `clone(2)` returns in the child. Performs all
-/// setup steps before `execvp` replaces the process image:
+/// setup steps before `execve` replaces the process image:
 ///
 /// 1. Set the UTS hostname (requires `CLONE_NEWUTS`).
 /// 2. Add the child to its cgroup by writing `"0"` to `cgroup.procs` (the
@@ -413,12 +474,36 @@ fn configure_child_isolation(
 ///    grant all Linux capabilities via `capset(2)`.
 /// 6. Call [`close_extra_fds`] to release any file descriptors > 2 that
 ///    leaked from the parent across the clone boundary.
-/// 7. Build the `argv` vector and call `execvp` to exec the user command.
+/// 7. Build the `argv` and `envp` vectors and call `execve` to exec the user
+///    command. `envp` comes only from `config.env` (see [`build_envp`]).
 ///
 /// On any error the caller is expected to call `libc::_exit(127)` so the
 /// process terminates without running Rust destructors.
 // qual:allow(complexity) reason: "child init sequence — must be linear and auditable"
 fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
+    // 0. Record the credentials this process actually holds, from the inside.
+    //    The parent reads /proc/<pid>/status, but that renders ids in the
+    //    *reader's* user namespace, so it cannot distinguish "the map was
+    //    applied and the ids happen to be 0" from "the map was never applied".
+    //    These getters are unambiguous -- they report this process's own view.
+    //    The filesystem (fsuid/fsgid) column is the one that decides whether
+    //    the container can create files at all.
+    //
+    //    This is a diagnostic for #526; it observes and changes nothing.
+    //
+    //    fsuid/fsgid are not reported: `libc` does not bind `getfsuid`/
+    //    `getfsgid`, and neither is needed here because nothing in this crate
+    //    calls `setfsuid`/`setfsgid`, so the filesystem ids always equal the
+    //    effective ones.
+    debug!(
+        uid = unsafe { libc::getuid() },
+        gid = unsafe { libc::getgid() },
+        euid = unsafe { libc::geteuid() },
+        egid = unsafe { libc::getegid() },
+        cap_eff = read_cap_eff().unwrap_or_else(|| "unreadable".to_string()),
+        "container: child credentials after entering namespace"
+    );
+
     // 1. Set hostname (requires UTS namespace).
     debug!(hostname = %config.hostname, "container: setting hostname");
     nix::unistd::sethostname(&config.hostname).map_err(|e| {
@@ -428,7 +513,14 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         ))
     })?;
 
-    // 2. UID/GID maps and cgroup membership were installed by the parent.
+    // 2. Join the cgroup. This happens in the parent, immediately after
+    //    clone(2) and before this child is released from the sync barrier --
+    //    see the `parent_setup` block in `spawn_container_process`. The child
+    //    cannot do it: the cgroup namespace is the initial one, owned by the
+    //    parent user namespace, and adding a process to a cgroup requires
+    //    privilege in that namespace rather than in the child's own. Writing
+    //    PID 0 from in here returns EPERM, so this step is deliberately absent
+    //    from `child_init` rather than merely reordered.
 
     // 3. Apply bind mounts into the overlay rootfs before pivot_root.
     //    These mounts live inside this child's new mount namespace (CLONE_NEWNS).
@@ -456,6 +548,18 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     crate::container::mount_seccomp::install_mount_immutability_filter()
         .with_context(|| "child: install_mount_immutability_filter")?;
 
+    // TODO(feature-idea-14): add and verify a default capability drop policy plus
+    // no_new_privs for unprivileged containers; keep privileged mode an explicit relaxation.
+    // TODO(feature-idea-16): the user namespace and its uid_map/gid_map are now
+    // installed (see `configure_child_isolation`), but the storage, networking,
+    // and cgroup support required for genuinely *rootless* operation are not.
+    // Writing a non-identity map requires the daemon to hold CAP_SETUID in the
+    // parent user namespace, so an unprivileged daemon still cannot create
+    // containers.
+    // TODO(feature-idea-17): extend the mount-only seccomp filter into a documented,
+    // configurable syscall profile for container workloads.
+    // TODO(feature-idea-18): add end-to-end security regressions for capability drops,
+    // seccomp denials, user mappings, and rootless escape boundaries.
     // 5. Apply privileged capability whitelist if requested.
     #[cfg(target_os = "linux")]
     if config.privileged {
@@ -500,13 +604,7 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         );
     }
 
-    let mut envp: Vec<CString> = Vec::with_capacity(config.env.len());
-    for kv in &config.env {
-        envp.push(
-            CString::new(kv.as_str())
-                .map_err(|_| ProcessError::SpawnFailed(format!("invalid env var: {kv}")))?,
-        );
-    }
+    let envp = build_envp(&config.env)?;
 
     debug!(command = %config.command, "container: execve");
 
@@ -515,8 +613,153 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
         source,
     })?;
 
-    // execvp never returns on success.
+    // execve never returns on success.
     unreachable!()
+}
+
+/// Build the `envp` vector passed to `execve` from the container's declared
+/// environment.
+///
+/// Security invariant: `envp` is built **only** from `declared` — never from
+/// `std::env::vars()` or any other host-environment source. `execvp` (or an
+/// `envp` seeded from the daemon's environment) would leak every API key and
+/// secret the daemon holds into every container.
+fn build_envp(declared: &[String]) -> anyhow::Result<Vec<CString>> {
+    declared
+        .iter()
+        .map(|kv| {
+            CString::new(kv.as_str()).map_err(|_| {
+                anyhow::Error::from(ProcessError::SpawnFailed(format!("invalid env var: {kv}")))
+            })
+        })
+        .collect()
+}
+
+/// Extract the `Uid:` and `Gid:` credential lines from `/proc/<pid>/status`.
+///
+/// Each line carries four ids: real, effective, saved-set, and filesystem.
+/// The filesystem (fourth) column is the one that decides whether file
+/// creation works — a container whose fsgid has no representation in the
+/// enclosing namespace fails `open(2)` with `EOVERFLOW` when it tries to
+/// create a file, even though its `uid_map` and `gid_map` read back
+/// correctly. Reading them back from the map files is therefore not
+/// sufficient evidence that the child can actually write to disk.
+///
+/// Returns `(uid_line, gid_line)` with the raw four-column text, or `None`
+/// for either if the line is absent.
+#[cfg(target_os = "linux")]
+fn read_child_credentials(pid: i32) -> (Option<String>, Option<String>) {
+    let Ok(status) = std::fs::read_to_string(format!("/proc/{pid}/status")) else {
+        return (None, None);
+    };
+    let mut uid = None;
+    let mut gid = None;
+    for line in status.lines() {
+        if let Some(rest) = line.strip_prefix("Uid:") {
+            uid = Some(rest.split_whitespace().collect::<Vec<_>>().join(" "));
+        } else if let Some(rest) = line.strip_prefix("Gid:") {
+            gid = Some(rest.split_whitespace().collect::<Vec<_>>().join(" "));
+        }
+    }
+    (uid, gid)
+}
+
+/// Install the user-namespace UID/GID maps for a freshly cloned child.
+///
+/// Called in the **parent**, after `clone(2)` returns and before the child is
+/// released from the sync barrier. Only a process outside the new user
+/// namespace may write these files, so this cannot be done from `child_init`.
+///
+/// The three writes are ordered because the kernel requires them in this
+/// sequence: `setgroups` must be set to `deny` before an unprivileged writer
+/// may populate `gid_map` (writing `allow` would let the child re-enable
+/// `setgroups(2)` and escape the GID translation).
+///
+/// A single-line map (`0 <host_id> <size>`) translates container IDs `0..size`
+/// to `host_id..host_id+size`. Using one contiguous range rather than an
+/// identity map is what keeps two containers from sharing host UIDs when they
+/// are given different ranges.
+#[cfg(target_os = "linux")]
+fn configure_child_isolation(pid: i32, mapping: UidMapping) -> anyhow::Result<()> {
+    let proc_dir = std::path::PathBuf::from(format!("/proc/{pid}"));
+    std::fs::write(proc_dir.join("setgroups"), "deny\n")
+        .with_context(|| format!("disable setgroups for child {pid}"))?;
+    std::fs::write(
+        proc_dir.join("uid_map"),
+        format!("0 {} {}\n", mapping.host_uid, mapping.size),
+    )
+    .with_context(|| format!("write exclusive uid_map for child {pid}"))?;
+    std::fs::write(
+        proc_dir.join("gid_map"),
+        format!("0 {} {}\n", mapping.host_gid, mapping.size),
+    )
+    .with_context(|| format!("write exclusive gid_map for child {pid}"))?;
+
+    // Read the maps back rather than trusting the writes. A successful write
+    // means the kernel accepted the mapping, so this is confirmation rather
+    // than a second source of truth — but the contents are the only direct
+    // evidence of which UID range a container actually received, and they are
+    // what an operator needs when asking "why is my container running as the
+    // wrong user".
+    //
+    // Compare token-wise, not as raw strings: the kernel renders these files
+    // with each field padded to a fixed width, so a correctly installed map
+    // reads back as "0     165536      65536" rather than the "0 165536 65536"
+    // that was written. String equality would flag every healthy container.
+    // A mismatch is logged at warn without failing the spawn, so a diagnostic
+    // never becomes a new failure mode.
+    let applied_uid = std::fs::read_to_string(proc_dir.join("uid_map")).unwrap_or_default();
+    let applied_gid = std::fs::read_to_string(proc_dir.join("gid_map")).unwrap_or_default();
+    let expected_uid = format!("0 {} {}", mapping.host_uid, mapping.size);
+    let expected_gid = format!("0 {} {}", mapping.host_gid, mapping.size);
+    let same = |applied: &str, expected: &str| -> bool {
+        applied.split_whitespace().eq(expected.split_whitespace())
+    };
+    // The child's own view of its credentials, captured while it is still
+    // parked on the barrier. The map files describe what was *requested*;
+    // these describe what the kernel actually gave the process. The fourth
+    // column of each line is the filesystem id, which is the one that decides
+    // whether the container can create files at all.
+    let (creds_uid, creds_gid) = read_child_credentials(pid);
+    if same(&applied_uid, &expected_uid) && same(&applied_gid, &expected_gid) {
+        info!(
+            pid,
+            host_uid = mapping.host_uid,
+            host_gid = mapping.host_gid,
+            size = mapping.size,
+            child_uid = creds_uid.as_deref().unwrap_or("unreadable"),
+            child_gid = creds_gid.as_deref().unwrap_or("unreadable"),
+            "container: user namespace UID/GID maps installed"
+        );
+    } else {
+        warn!(
+            pid,
+            expected = expected_uid,
+            actual = applied_uid.trim(),
+            child_uid = creds_uid.as_deref().unwrap_or("unreadable"),
+            child_gid = creds_gid.as_deref().unwrap_or("unreadable"),
+            "container: installed uid_map does not match the requested range"
+        );
+    }
+    Ok(())
+}
+
+/// Read `CapEff` from `/proc/self/status` as a hex string.
+///
+/// The effective capability set is what decides whether the child can perform
+/// the privileged setup in `child_init` -- `mount`, `pivot_root`, `sethostname`
+/// all need capabilities in the namespaces it owns. Credentials alone are not
+/// sufficient evidence, and a zero set here explains an `EACCES` that the uid
+/// and gid columns would otherwise rule out.
+#[cfg(target_os = "linux")]
+fn read_cap_eff() -> Option<String> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("CapEff:"))?
+        .split_whitespace()
+        .next()
+        .map(str::to_string)
 }
 
 /// Close all file descriptors with index >= 3 (i.e., everything except
@@ -585,11 +828,6 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: false,
-            uid_mapping: UidMapping {
-                host_uid: 165_536,
-                host_gid: 165_536,
-                size: 65_536,
-            },
             pty: None,
         };
         assert!(!cfg.privileged);
@@ -610,11 +848,6 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
-            uid_mapping: UidMapping {
-                host_uid: 165_536,
-                host_gid: 165_536,
-                size: 65_536,
-            },
             pty: None,
         };
         assert!(cfg.privileged);
@@ -637,11 +870,6 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
-            uid_mapping: UidMapping {
-                host_uid: 165_536,
-                host_gid: 165_536,
-                size: 65_536,
-            },
             pty: None,
         };
         assert!(cfg.privileged, "privileged mode must be set");
@@ -702,6 +930,166 @@ mod tests {
             0,
             "CAP_BPF must be retained"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Invariant 6 — Environment isolation (replaces a source-string test)
+    // -----------------------------------------------------------------------
+
+    /// `envp` is built only from the container's declared variables.
+    #[test]
+    fn build_envp_contains_only_declared_vars() {
+        let declared = vec!["PATH=/bin".to_string(), "FOO=bar".to_string()];
+        let envp = build_envp(&declared).expect("valid env vars must build");
+
+        let rendered: Vec<String> = envp
+            .iter()
+            .map(|c| c.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(rendered, vec!["PATH=/bin", "FOO=bar"]);
+
+        // A host secret that exists in this process must not appear.
+        // SAFETY: single-threaded test body; no concurrent env mutation.
+        unsafe { std::env::set_var("MINIBOX_HOST_SECRET_CANARY", "leaked") };
+        let envp = build_envp(&declared).expect("valid env vars must build");
+        let rendered: Vec<String> = envp
+            .iter()
+            .map(|c| c.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !rendered.iter().any(|kv| kv.contains("CANARY")),
+            "host environment leaked into envp: {rendered:?}"
+        );
+        // SAFETY: see above.
+        unsafe { std::env::remove_var("MINIBOX_HOST_SECRET_CANARY") };
+    }
+
+    /// An empty declaration yields an empty `envp` — not an inherited one.
+    ///
+    /// An empty `envp` passed to `execve` gives the container *no* environment,
+    /// which is the correct outcome when nothing is declared. Inheriting the
+    /// daemon's environment here is precisely the leak this guards against.
+    #[test]
+    fn build_envp_empty_declaration_yields_no_inherited_env() {
+        let envp = build_envp(&[]).expect("empty env builds");
+        assert!(
+            envp.is_empty(),
+            "an empty declaration must produce an empty envp, not an inherited one"
+        );
+    }
+
+    /// A NUL byte in a declared variable is rejected rather than silently
+    /// truncating the value (which would smuggle extra env past the check).
+    #[test]
+    fn build_envp_rejects_nul_bytes() {
+        let declared = vec!["EVIL=ok\0INJECTED=bad".to_string()];
+        let err = build_envp(&declared).expect_err("embedded NUL must be rejected");
+        assert!(
+            err.to_string().contains("invalid env var"),
+            "unexpected error: {err:#}"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Invariant 5 — FD-leak prevention (replaces a source-string test)
+    // -----------------------------------------------------------------------
+
+    /// `close_extra_fds` really closes descriptors above stderr, and really
+    /// leaves 0/1/2 open.
+    ///
+    /// Runs in a forked child so that closing the test runner's own descriptors
+    /// cannot corrupt the harness. The child reports its verdict through the
+    /// exit status.
+    ///
+    /// SAFETY: the assertions inside the child only touch descriptors the child
+    /// itself opened, plus an explicit dup of stderr onto a known slot.
+    #[cfg(unix)]
+    #[test]
+    fn close_extra_fds_closes_fds_above_stderr_and_keeps_stdio() {
+        // SAFETY: this test body performs no env mutation and runs before any
+        // forking test in the same process; `fork` is used immediately below.
+        unsafe {
+            let pid = libc::fork();
+            assert!(pid >= 0, "fork failed");
+
+            if pid == 0 {
+                // ---- child ----
+                let code = child_fd_probe();
+                libc::_exit(code);
+            }
+
+            // ---- parent ----
+            let mut status: libc::c_int = 0;
+            assert_eq!(libc::waitpid(pid, &mut status, 0), pid, "waitpid failed");
+            assert!(libc::WIFEXITED(status), "child did not exit normally");
+            assert_eq!(
+                libc::WEXITSTATUS(status),
+                0,
+                "close_extra_fds left the descriptor table in the wrong state"
+            );
+        }
+    }
+
+    /// Child half of [`close_extra_fds_closes_fds_above_stderr_and_keeps_stdio`].
+    ///
+    /// Opens a handful of descriptors above stderr, parks one at a known high
+    /// slot via `dup2`, calls `close_extra_fds`, then verifies the real
+    /// descriptor table.
+    ///
+    /// Returns a process exit code: 0 = invariant held, 1 = leaked fd, 2 = stdio
+    /// was closed, 3 = probe setup failed.
+    ///
+    /// # Safety
+    ///
+    /// Runs in a freshly forked child (see the caller). Every `libc` call here
+    /// operates only on descriptors the child itself opened, or on the inherited
+    /// stdio slots, and no pointer outlives the call. The child never returns —
+    /// it `_exit`s — so no Rust destructor or allocator state is touched.
+    #[cfg(unix)]
+    unsafe fn child_fd_probe() -> libc::c_int {
+        unsafe {
+            // Open several descriptors above stderr.
+            let opened: Vec<libc::c_int> = (0..4)
+                .filter_map(|_| {
+                    let fd = libc::open(c"/dev/null".as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC);
+                    (fd >= 0).then_some(fd)
+                })
+                .collect();
+            if opened.len() < 4 {
+                return 3;
+            }
+
+            // Park a descriptor at a high, predictable slot so the check does
+            // not depend on allocation order.
+            const HIGH_FD: libc::c_int = 900;
+            if libc::dup2(opened[0], HIGH_FD) < 0 {
+                return 3;
+            }
+
+            close_extra_fds();
+
+            // Invariant: the high descriptor is gone.
+            if libc::fcntl(HIGH_FD, libc::F_GETFD) >= 0 {
+                return 1;
+            }
+
+            // Invariant: every descriptor we opened above stderr is gone.
+            for &fd in &opened {
+                if libc::fcntl(fd, libc::F_GETFD) >= 0 {
+                    return 1;
+                }
+            }
+
+            // Invariant: stdio survived. If stdin/stdout/stderr had been closed
+            // the kernel could hand one of them back to us, so check explicitly.
+            for fd in 0..3 {
+                if libc::fcntl(fd, libc::F_GETFD) < 0 {
+                    return 2;
+                }
+            }
+
+            0
+        }
     }
 }
 

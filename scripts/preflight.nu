@@ -2,15 +2,22 @@
 # preflight.nu — minibox environment validation (SessionStart hook)
 # TODO(#96): add automated test coverage for preflight.nu behavior
 #
-# CANONICAL PREFLIGHT COMMAND: `cargo xtask doctor`
+# CANONICAL TOOLCHAIN PREFLIGHT: `cargo xtask doctor`
 #   - Checks all required tools (cargo, just, rustup, cargo-nextest, gh, op)
 #   - Reports CARGO_TARGET_DIR status
 #   - On Linux: checks cgroups v2, overlay FS, and kernel version
 #
+# RUNTIME PREFLIGHT: `mbx doctor` (built into the binary, no cargo needed)
+#   - Host identity and virtualization support
+#   - Daemon socket reachability
+#   - Compiled adapters, their binaries, and the one that would be selected
+#   - CNI plugins, data/run directories
+#
 # This script is a lightweight SessionStart hook that surfaces obvious
 # missing dependencies at shell startup. For a full diagnostic run:
-#   cargo xtask doctor          # tool + env checks
-#   mbx doctor                  # adapter selection + tool + env checks
+#   mbx doctor                  # runtime health (works from a release build)
+#   mbx doctor --tools          # runtime health + toolchain probes
+#   cargo xtask doctor          # toolchain readiness for building/testing
 
 def check [label: string, pass: bool, detail: string = ""] {
     if $pass {

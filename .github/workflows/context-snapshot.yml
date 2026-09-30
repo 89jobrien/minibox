@@ -1,0 +1,103 @@
+name: Context snapshot evidence
+
+on:
+  pull_request:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: context-snapshot-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  collect:
+    name: Collect ${{ matrix.profile }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            profile: native-linux-gnu
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            profile: native-linux-musl
+            target: x86_64-unknown-linux-musl
+          - os: macos-14-xlarge
+            profile: native-macos
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            profile: native-windows
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: 1.85.0
+          targets: ${{ matrix.target }}
+      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+        with:
+          tool: cargo-nextest@0.9.100
+      - name: Install musl linker
+        if: matrix.profile == 'native-linux-musl'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - name: Collect profile evidence
+        shell: bash
+        run: cargo xtask info context --validate-all --save
+      - name: Retain matching profile evidence
+        shell: bash
+        env:
+          PROFILE: ${{ matrix.profile }}
+        run: |
+          find artifacts/context/evidence -mindepth 1 -maxdepth 1 ! -name "${PROFILE}" -exec rm -rf {} +
+          find "artifacts/context/evidence/${PROFILE}" -type f -name '*.json' -exec mv {} artifacts/context/evidence/ \;
+          rmdir "artifacts/context/evidence/${PROFILE}"
+      - name: Upload profile evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: context-evidence-${{ github.sha }}-${{ matrix.profile }}
+          path: artifacts/context/evidence/
+          if-no-files-found: error
+          retention-days: 7
+
+  aggregate:
+    name: Validate aggregate evidence
+    needs: collect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: 1.85.0
+      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+        with:
+          tool: cargo-nextest@0.9.100
+      - name: Download profile evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: context-evidence-${{ github.sha }}-*
+          path: artifacts/context/evidence
+          merge-multiple: true
+      - name: Validate required profiles
+        run: cargo xtask info context --validate-all --strict --evidence-dir artifacts/context/evidence
+
+  vz-advisory:
+    name: VZ advisory profile
+    runs-on: macos-14-xlarge
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: 1.85.0
+          targets: aarch64-apple-darwin
+      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
+        with:
+          tool: cargo-nextest@0.9.100
+      - name: List VZ tests
+        run: cargo nextest list --workspace --target aarch64-apple-darwin --features miniboxd/vz --all-targets

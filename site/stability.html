@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Standing quality and promotion gates for minibox Core and Platform crates.">
+  <title>Stability Checklist &mdash; minibox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <nav aria-label="Primary">
+    <a href="index.html" class="brand"><span>mini</span>box</a>
+    <a href="architecture.html">Architecture</a>
+    <a href="state-model.html">State</a>
+    <a href="feature-matrix.html">Features</a>
+    <a href="crate-inventory.html">Crates</a>
+    <a href="crate-tiers.html">Tiers</a>
+    <a href="testing.html">Testing</a>
+    <a href="changelog.html">Changelog</a>
+    <a href="roadmap.html">Roadmap</a>
+    <a href="stability.html" aria-current="page">Stability</a>
+  </nav>
+
+  <main id="main" class="page">
+    <header class="page-head"><span class="eyebrow">Promotion evidence</span><h1>Stability Checklist</h1><p class="lead">Standing promotion gates for Core and Platform crates. The documented evidence marks all six met, with CI fan-in gaps called out below.</p><div class="meta-row"><span class="meta">6 mandatory gates</span><span class="meta">Freeze lifted 2026-08-18</span><span class="meta">Updated 2026-09-15</span></div></header>
+
+    <section><h2>Mandatory Gates</h2><table tabindex="0"><thead><tr><th>#</th><th>Gate</th><th>Status</th><th>Evidence</th></tr></thead><tbody>
+      <tr><td>1</td><td>Protocol types have one canonical owner</td><td><span class="pill pill-shipped">Met</span></td><td><code>crates/minibox-core/src/protocol.rs</code></td></tr>
+      <tr><td>2</td><td>Handler function coverage &gt;= 80%</td><td><span class="pill pill-shipped">Met</span></td><td>92.41% (207/224 functions, measured 2026-08-10)</td></tr>
+      <tr><td>3</td><td>Normally wired adapters have integration tests</td><td><span class="pill pill-shipped">Met</span></td><td>native, GKE, Colima, smolvm, and krun; VZ is a separate blocked startup path</td></tr>
+      <tr><td>4</td><td><code>cargo xtask pre-commit</code> passes on macOS</td><td><span class="pill pill-shipped">Met</span></td><td>Staged format/clippy plus configuration and documentation checks</td></tr>
+      <tr><td>5</td><td><code>cargo xtask test unit</code> passes</td><td><span class="pill pill-shipped">Met</span></td><td>Supported cross-platform workspace library suite</td></tr>
+      <tr><td>6</td><td>Dependency, license, and advisory checks pass</td><td><span class="pill pill-shipped">Met</span></td><td><code>cargo deny check</code> and audit CI</td></tr>
+    </tbody></table></section>
+
+    <section><h2>Fresh Test Evidence</h2><p>On 2026-09-06, a workspace nextest run completed <strong>2,252 tests across 118 binaries</strong>, with <strong>6 skipped</strong>. This is a dated run result, not a timeless test-count guarantee.</p></section>
+
+    <section><h2>How to Verify</h2><pre><code># Protocol ownership and drift
+cargo xtask check protocol-drift
+cargo xtask check protocol-sites
+
+# Handler coverage
+cargo xtask coverage-check
+
+# Adapter evidence
+cargo xtask check adapter-coverage
+just test-integration
+just test-adapters
+
+# Local quality and test gates
+cargo xtask pre-commit
+cargo xtask test unit
+cargo deny check
+cargo audit</code></pre></section>
+
+    <section><h2>Advisory Review Items</h2><ul>
+      <li>New domain ports have in-memory test doubles.</li>
+      <li>Production paths avoid <code>.unwrap()</code>.</li>
+      <li>Tracing uses structured fields.</li>
+      <li>Every new unsafe block documents its safety invariant.</li>
+    </ul></section>
+
+    <section><h2>Freeze and Promotion Status</h2><p><strong>The net-new Core/Platform freeze was lifted on 2026-08-18.</strong> All gates were green and Gate 2 was above threshold. The checklist now remains a standing promotion bar rather than a freeze.</p><p>The active promotion path is <code>develop</code> &rarr; <code>staging</code> &rarr; <code>release</code> &rarr; <code>main</code> &rarr; version tag.</p><p class="note">Gate 4 still lacks an equivalent full CI job, and Gates 5 and 6 run in the PR/merge workflows rather than one stability-gate fan-in. Promotion therefore combines CI evidence with explicit maintainer verification.</p></section>
+  </main>
+
+  <footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+</body>
+</html>

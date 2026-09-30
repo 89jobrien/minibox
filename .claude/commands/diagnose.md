@@ -30,14 +30,14 @@ runtime state files.
 
 ## Step 2 — Interpret common failure patterns
 
-| Symptom | Likely cause | Investigation |
-|---|---|---|
-| `pivot_root: EINVAL` | Missing `MS_PRIVATE` remount before pivot | Check `filesystem.rs` — `mount("", "/", MS_REC\|MS_PRIVATE)` must run in child |
-| `execvp: ENOENT` | Command not found in container rootfs | Verify image layers extracted; check `MINIBOX_DATA_DIR` |
-| `cgroup: permission denied` | Not running as root, or cgroup path wrong | `MINIBOX_CGROUP_ROOT` env var; check `/sys/fs/cgroup/minibox.slice/` exists |
-| `overlay: invalid argument` | Layers on different filesystems | upper/work must be on same FS as lower |
-| Container exits immediately | Missing entrypoint or bad command | Check `config.env` and command field in `RunContainer` request |
-| `CLONE_NEWUSER: operation not permitted` | Kernel config missing `CONFIG_USER_NS` | Check `/proc/sys/kernel/unprivileged_userns_clone` |
+| Symptom                                  | Likely cause                              | Investigation                                                                  |
+| ---------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------ |
+| `pivot_root: EINVAL`                     | Missing `MS_PRIVATE` remount before pivot | Check `filesystem.rs` — `mount("", "/", MS_REC\|MS_PRIVATE)` must run in child |
+| `execve: ENOENT`                         | Command not found in container rootfs     | Verify image layers extracted; check `MINIBOX_DATA_DIR`                        |
+| `cgroup: permission denied`              | Not running as root, or cgroup path wrong | `MINIBOX_CGROUP_ROOT` env var; check `/sys/fs/cgroup/minibox.slice/` exists    |
+| `overlay: invalid argument`              | Layers on different filesystems           | upper/work must be on same FS as lower                                         |
+| Container exits immediately              | Missing entrypoint or bad command         | Check `config.env` and command field in `RunContainer` request                 |
+| `CLONE_NEWUSER: operation not permitted` | Kernel config missing `CONFIG_USER_NS`    | Check `/proc/sys/kernel/unprivileged_userns_clone`                             |
 
 ## Step 3 — Manual log inspection
 
@@ -63,6 +63,7 @@ RUST_LOG=debug sudo ./target/release/miniboxd
 ```
 
 Reproduce the failure with debug logging active. Look for:
+
 - `"container: process started"` — fork succeeded
 - `"pivot_root: complete"` — rootfs switch succeeded
 - `"container: exec"` — exec succeeded

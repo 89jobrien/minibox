@@ -8,6 +8,8 @@
 // TODO(#183): DaemonRequest::Build variant + handler exist; still missing
 // an `mbx build` CLI subcommand to invoke it
 // TODO(#229): add container networking protocol variants
+// TODO(feature-idea-32): add an additive protocol generation and capability discovery handshake
+// while retaining NDJSON, and reject unsupported operations before mutation.
 //!
 //! The `#[serde(tag = "type")]` attribute makes the discriminant field
 //! (`"type"`) appear explicitly in the JSON, e.g.:

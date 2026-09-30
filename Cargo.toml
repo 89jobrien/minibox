@@ -102,6 +102,7 @@ wiremock = "0.6"     # dev-only: used exclusively in [dev-dependencies] blocks
 assert_cmd = "2"    # dev-only: CLI subprocess testing
 predicates = "3"    # dev-only: assert_cmd predicate helpers
 proptest = "1"      # dev-only: property-based testing
+rstest = "0.27"     # dev-only: fixtures + table-driven tests
 serial_test = "3"   # dev-only: serialize e2e/integration tests that share Linux kernel resources
 turmoil = "0.7"     # dev-only: deterministic network simulation tests
 insta = { version = "1", features = ["json"] }   # dev-only: snapshot testing

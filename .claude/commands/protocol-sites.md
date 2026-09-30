@@ -20,7 +20,7 @@ nu scripts/check-protocol-sites.nu
 
 Expected output (3 sites: native, gke, colima adapter suites):
 
-```
+```text
 check-protocol-sites: found 3 HandlerDependencies construction site(s) in
   crates/miniboxd/src/main.rs (expected 3)
 OK: construction site count matches expected.

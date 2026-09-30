@@ -233,7 +233,7 @@ let running: Vec<_> = state.containers
 
 ## Module Structure Conventions
 
-### Container module files follow this pattern:
+### Container module files follow this pattern
 
 ```rust
 // 1. Imports
@@ -258,7 +258,7 @@ mod tests {
 }
 ```
 
-### Adapter module pattern:
+### Adapter module pattern
 
 ```rust
 pub struct MyPlatformRuntime {

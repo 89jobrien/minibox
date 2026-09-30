@@ -31,6 +31,7 @@ mod linux {
         limiter.cleanup(&id).expect("cleanup cgroup");
     }
 
+    /// Registers and runs the cgroup benchmarks.
     pub fn bench_cgroup(c: &mut Criterion) {
         if !minibox_bench::is_root() {
             eprintln!("SKIP: linux_cgroup benches require root (euid != 0)");

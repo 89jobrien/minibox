@@ -8,6 +8,20 @@ repository.workspace = true
 description = "CNI (Container Network Interface) plugin exec protocol and chain orchestration"
 publish = false
 
+# The packaged CNI plugin. Install as `<name>` on the CNI_PATH the daemon is
+# configured with, and reference it as `"type": "minibox-bridge"` in a
+# `.conflist`. See src/rollout.rs for the encoded rollout contract.
+[[bin]]
+name = "minibox-cni-bridge"
+path = "src/bin/minibox-cni-bridge.rs"
+
+# Operator-facing rollout preflight: checks the installed plugin binaries and
+# the `.conflist` against the crate's single source of truth for the CNI
+# spec version.
+[[bin]]
+name = "minibox-cni-verify"
+path = "src/bin/minibox-cni-verify.rs"
+
 [dependencies]
 minibox-core = { workspace = true }
 anyhow = { workspace = true }

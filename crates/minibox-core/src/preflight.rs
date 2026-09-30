@@ -121,14 +121,24 @@ pub(crate) fn format_report(caps: &HostCapabilities) -> String {
 ///
 /// Returns `false` on non-Unix platforms.
 fn probe_root() -> bool {
+    effective_uid() == 0
+}
+
+/// The effective UID of the current process, or `0` on non-Unix platforms.
+///
+/// Exposed because path resolution is UID-dependent: the daemon stores images
+/// in `/var/lib/minibox` as root and `~/.minibox/cache` otherwise, and
+/// `minibox_core::doctor` must report the path the daemon will actually use.
+#[must_use]
+pub fn effective_uid() -> u32 {
     #[cfg(unix)]
     {
         // SAFETY: geteuid() is a read-only syscall with no side effects.
-        unsafe { libc::geteuid() == 0 }
+        unsafe { libc::geteuid() }
     }
     #[cfg(not(unix))]
     {
-        false
+        0
     }
 }
 

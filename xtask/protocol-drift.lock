@@ -50,7 +50,7 @@
     {
       "name": "domain-image",
       "path": "crates/minibox-domain/src/image.rs",
-      "hash": "2727f83a4bbf248a36496c41f7ba0bfe6fd903a4c198cfad80afd19f86b549f3"
+      "hash": "3435f6d0234033a98c4c90f7255214c0c3ea7adcca3bf5816068470ec67b7ed7"
     },
     {
       "name": "domain-metrics",

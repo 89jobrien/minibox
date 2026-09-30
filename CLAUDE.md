@@ -8,7 +8,7 @@ Guidance for Claude Code when working in this repository.
 
 Minibox is a Rust 2024 Docker-like container runtime with a daemon/CLI split, OCI image support, Linux namespace/cgroup isolation, overlay filesystems, and macOS adapter backends.
 
-Default adapter selection lives in `crates/miniboxd/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
+Default adapter selection lives in `crates/minibox-core/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
 
 ## Read First
 
@@ -64,10 +64,11 @@ Use `just` or `cargo xtask` for repeatable gates.
 - `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
 - `cargo xtask pre-commit` — macOS-safe pre-commit gate: staged fmt/clippy plus config/docs checks.
 - `cargo xtask prepush` — broader gate: release build, release nextest, and conformance (use `cargo xtask coverage` separately for coverage reports).
-- `cargo xtask test unit` — cross-platform unit and conformance subset.
+- `cargo xtask test unit` — cross-platform workspace library tests.
 - `cargo xtask test property` — property tests.
 - `just test-integration` — Linux+root cgroup tests.
-- `just test-e2e` — Linux+root daemon/CLI tests.
+- `just test-e2e` — cross-platform protocol end-to-end tests.
+- `just test-system` — Linux+root full-stack daemon/CLI tests.
 - `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.
 - `cargo xtask build-test-image` — build cached Alpine kernel/agent image for macOS VM adapters.
 - `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
@@ -101,7 +102,7 @@ No Python scripts are expected in the project; use Rust scripts or Nushell helpe
 
 - Preserve tar extraction protections: reject `..`, absolute symlinks, device nodes, FIFOs, and setuid/setgid bits.
 - Keep overlay/path validation inside the target root.
-- Preserve Unix socket peer credential checks and root-only access.
+- Preserve native-adapter Unix socket peer credential checks and root-only access.
 - Enforce image pull size limits.
 - Container init must use `execve` with explicit env, not `execvp`.
 
@@ -130,7 +131,7 @@ Branches follow the stability pipeline:
   markers in docs/core/{ARCHITECTURE,CRATE_INVENTORY}.mbx.md, or
   `cargo xtask verify`'s docs-audit reports a mismatch.
 - If a file listed in taskit.toml's `[[protocol.surfaces]]` is deleted or
-  renamed, update the list and run `taskit check-protocol-drift --update`
+  renamed, update the list and run `taskit protocol drift --update`
   to regenerate taskit-protocol.lock, or the check breaks.
 
 ## Hook Notes
@@ -141,7 +142,7 @@ Claude hook config lives in `.claude/settings.json`. The `SessionStart` hook run
 
 ## Quick Reference
 
-```
+```text
 No .unwrap() in production        → use .context("description")?
 No println!/eprintln! in daemon   → use tracing::info!/warn!
 No platform imports in core       → minibox-core has zero OS deps
@@ -166,7 +167,6 @@ _Last synced: 2026-05-18T16:21:06.033093Z._
 #### Workspace MCP
 
 - `/Users/joe/dev/minibox/.vscode/mcp.json` — _servers defined_
-
 - **github** (stdio)
 - **personal** (stdio)
 
@@ -179,13 +179,13 @@ _Last synced: 2026-05-18T16:21:06.033093Z._
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
 <!-- godmode-workflow:begin -->
 
-# Phased workflow
+## Phased workflow
 
 Unless the user clearly opts out (e.g. **"skip plan, just fix it"**), every
 non-trivial task progresses through five phases. Short confirmations like
 **"do it"**, **"act"**, **"go"** advance to the next phase.
 
-## Phases
+### Phases
 
 <godmode-phase name="ORIENT" mode="read-only" response-header="# Phase: ORIENT" skills="godmode handon">
 Default phase. Read files, search code, run `godmode handon`, check task
@@ -221,7 +221,7 @@ Only entered with explicit user approval. After shipping, return to
 ORIENT for the next task.
 </godmode-phase>
 
-## Phase transitions
+### Phase transitions
 
 - **User can skip phases**: "skip plan, implement now" jumps to ACT.
   "just fix it" implies ORIENT → ACT → VERIFY → SHIP in one pass.
@@ -231,33 +231,33 @@ ORIENT for the next task.
 - When the user gives a lettered choice or short confirmation, advance
   to the most obvious next phase without asking.
 
-## Skill invocation rule
+### Skill invocation rule
 
 Before responding in any phase, check if a godmode skill applies.
 1% chance it’s relevant = invoke it. Process skills (`brainstorm`,
 `systematic-debugging`) before implementation skills
 (`task-driven-development`, `parallel-agents`).
 
-## Task graph
+### Task graph
 
 Tasks live in @.ctx/GODMODE.tasks.yaml. Use `Bash(godmode task)` CLI for
 state transitions. Independent chains can run in parallel via
 `Skill(godmode:parallel-agents)`. A task is runnable when all `depends_on`
 items are `done`.
 
-## Memory bank
+### Memory bank
 
 - Persistent context lives in @.ctx/memory-bank/
 - Read before substantive work: !`ls .ctx/memory-bank/`
 - update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md
 - See @AGENTS.md for the full file list
 
-## Context Graph
+### Context Graph
 
 - Wiki root: `Read(.kgx/wiki/index.md)` — run `kgx wiki write`/populate the wiki first if this doesn't exist yet
 - Query the graph: !`kgx query <entity>`
 
-## Agent-specific guidance
+### Agent-specific guidance
 
 For subagent conventions, Codex integration, and memory-bank file
 inventory, see @AGENTS.md.

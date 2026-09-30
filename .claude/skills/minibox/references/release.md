@@ -1,5 +1,5 @@
 ---
-name: minibox:release
+name: release
 description: Release workflow for minibox — quality gates, version bump, changelog, git tag, push to Gitea + GitHub
 ---
 
@@ -18,18 +18,18 @@ Systematic release workflow for minibox: pre-release quality gates, version bump
 ### 1. macOS Quality Gates
 
 ```bash
-cargo fmt --all --check
-cargo clippy -p minibox-cli -p minibox-macros -p minibox-core -p macbox -p miniboxd -- -D warnings
-cargo xtask test-unit
+cargo fmt --all
+cargo clippy --workspace -- -D warnings
+cargo nextest run --workspace
 ```
 
 ### 2. Linux Quality Gates
 
 ```bash
-cargo xtask test-unit
-cargo xtask test-property
+cargo xtask test unit
+cargo xtask test property
 just test-integration    # cgroup tests, requires root
-just test-e2e            # daemon+CLI tests, requires root
+just test-e2e            # protocol e2e tests, no root required
 just doctor              # preflight capability check
 ```
 
@@ -43,13 +43,8 @@ cargo deny check     # license + ban check; Gitea CI also runs this
 ### 4. Benchmark Baseline
 
 ```bash
-cargo xtask bench
-
-# Verify results saved
-cat bench/results/latest.json | head -20
-
-# Check for regressions vs previous
-git diff bench/results/bench.jsonl | tail -30
+just bench
+just bench-check
 ```
 
 ### 5. Clean Working Tree
@@ -76,17 +71,21 @@ Examples:
 
 ### Step 2: Update Version
 
-Edit `Cargo.toml` at the workspace root:
+Apply the selected bump and let xtask update the workspace version and changelog:
 
-```toml
-[workspace.package]
-version = "0.5.0"
+```bash
+cargo xtask bump <patch|minor|major> --changelog
 ```
 
-Add a section to `CHANGELOG.md`:
+Read the resulting `[workspace.package].version` from `Cargo.toml`; use that exact
+value as `<version>` in the remaining commands. Verify the generated section in
+`CHANGELOG.md`:
+
+Update the `workspace_version` fact markers in `docs/core/ARCHITECTURE.mbx.md`
+and `docs/core/CRATE_INVENTORY.mbx.md` to the same version before running gates.
 
 ```markdown
-## [0.5.0] - 2026-03-21
+## [<version>] - <release-date>
 
 ### Added
 
@@ -113,21 +112,20 @@ Add a section to `CHANGELOG.md`:
 ```bash
 cargo build --release
 
-./target/release/miniboxd --version
-./target/release/minibox --version
+./target/release/mbx --version
 
 # Re-run quality gates after the bump
-cargo fmt --all --check
-cargo clippy -p minibox-cli -p minibox-macros -p minibox-core -p macbox -p miniboxd -- -D warnings
-cargo xtask test-unit
+cargo fmt --all
+cargo clippy --workspace -- -D warnings
+cargo nextest run --workspace
 ```
 
 ### Step 4: Commit
 
 ```bash
-git add Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md docs/core/ARCHITECTURE.mbx.md docs/core/CRATE_INVENTORY.mbx.md
 
-git commit -m "chore(release): bump version to v0.5.0
+git commit -m "chore(release): bump version to v<version>
 
 - Updated workspace version in Cargo.toml
 - Updated CHANGELOG.md with release notes
@@ -140,7 +138,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 ### Step 5: Create Annotated Tag
 
 ```bash
-git tag -a v0.5.0 -m "Release v0.5.0
+git tag -a v<version> -m "Release v<version>
 
 Added:
 - exec command for running commands in existing containers
@@ -154,16 +152,15 @@ Security:
 - Stricter path validation in overlay setup"
 ```
 
-### Step 6: Push to Both Remotes
+### Step 6: Promote and Push the Tag
 
 ```bash
-# Gitea — self-hosted, primary CI
-git push gitea main
-git push gitea v0.5.0
+# Promote through the protected branch pipeline; do not push main directly.
+cargo xtask promote --from release --to main
 
-# GitHub — macOS Actions CI
-git push github main
-git push github v0.5.0
+# Publish the annotated tag to both mirrors after main contains the release commit.
+git push gitea v<version>
+git push origin v<version>
 ```
 
 ## CI Verification
@@ -183,7 +180,7 @@ gh run list --limit 3
 gh run watch
 ```
 
-Expected jobs: `cargo fmt --all --check`, clippy on all crates, `cargo xtask test-unit`.
+Expected jobs include formatting, workspace clippy, nextest, stability, and actionlint gates.
 
 ## Rollback
 
@@ -192,12 +189,12 @@ Expected jobs: `cargo fmt --all --check`, clippy on all crates, `cargo xtask tes
 Preferred for bugs found after tagging.
 
 ```bash
-git checkout -b hotfix/v0.5.1
+git checkout -b hotfix/v<patch-version>
 # apply fix
-cargo xtask test-unit
+cargo xtask test unit
 just test-integration
 git commit -m "fix: ..."
-# then follow release steps above for v0.5.1
+# then follow the release steps above with the resulting patch version
 ```
 
 ### Option 2: Revert Tag
@@ -205,13 +202,13 @@ git commit -m "fix: ..."
 Last resort.
 
 ```bash
-git tag -d v0.5.0
-git push gitea :refs/tags/v0.5.0
-git push github :refs/tags/v0.5.0
+git tag -d v<version>
+git push gitea :refs/tags/v<version>
+git push origin :refs/tags/v<version>
 
 git revert HEAD
-git push gitea main
-git push github main
+# Commit the revert on a hotfix/release branch, then use the normal promotion pipeline.
+cargo xtask promote --from release --to main
 ```
 
 ## Common Issues
@@ -232,7 +229,7 @@ cargo audit
 Run the exact command locally to reproduce:
 
 ```bash
-cargo clippy -p minibox-cli -p minibox-macros -p minibox-core -p macbox -p miniboxd -- -D warnings
+cargo clippy --workspace -- -D warnings
 ```
 
 Fix all warnings, then re-tag.
@@ -242,7 +239,7 @@ Fix all warnings, then re-tag.
 ```bash
 cargo update --workspace
 cargo build --release
-./target/release/minibox --version
+./target/release/mbx --version
 ```
 
 ### Benchmark results missing
@@ -252,7 +249,7 @@ cargo xtask bench
 ls -la bench/results/
 ```
 
-Both `bench.jsonl` and `latest.json` must exist and be in sync before releasing.
+The generated result snapshot and selected environment baseline must be available before release.
 
 ## Security Pre-Release Checklist
 
@@ -262,7 +259,7 @@ Both `bench.jsonl` and `latest.json` must exist and be in sync before releasing.
 - [ ] Path validation present on all user-input handling
 - [ ] `SO_PEERCRED` check not weakened in server.rs
 - [ ] Tar extraction security checks intact in layer.rs — `..` components, device nodes, setuid bits
-- [ ] Resource limits enforced — max manifest 10 MB, max layer 1 GB
+- [ ] Resource limits enforced — max manifest 10 MiB, max layer 10 GiB, total image 50 GiB
 
 ## Release Cadence
 
