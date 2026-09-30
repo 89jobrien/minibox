@@ -32,7 +32,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: install crux
-        run: cargo install crux-agentic
+        run: >-
+          cargo install --git https://github.com/89jobrien/crux.git
+          --rev 8d54a65df7696ec01b1ef27a5c0972422020efc1
+          crux-agentic --locked
 
       - name: install cargo-nextest
         uses: taiki-e/install-action@v2
