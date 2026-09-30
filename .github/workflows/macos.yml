@@ -2,13 +2,26 @@ name: macOS
 
 on:
   push:
-    branches: [main, staging, release, "feature/*", "hotfix/*", "chore/*"]
+    branches:
+      [
+        develop,
+        main,
+        staging,
+        release,
+        "feature/*",
+        "hotfix/*",
+        "chore/*",
+        "feat/*",
+      ]
   pull_request:
-    branches: [main, staging]
+    branches: [develop, main, staging]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   fmt-check:

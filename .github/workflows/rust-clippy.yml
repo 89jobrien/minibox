@@ -11,12 +11,19 @@ name: rust-clippy analyze
 
 on:
   push:
-    branches: ["main", "staging"]
+    branches: ["develop", "main", "staging", "release"]
   pull_request:
     # The branches below must be a subset of the branches above
-    branches: ["main"]
+    branches: ["develop", "main"]
   schedule:
     - cron: "19 14 * * 3"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   rust-clippy-analyze:
