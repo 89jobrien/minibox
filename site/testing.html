@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Minibox test dimensions, CI coverage, quality gates, and canonical commands.">
+  <title>Test Infrastructure &mdash; minibox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav aria-label="Primary">
+  <a href="index.html" class="brand"><span>mini</span>box</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="state-model.html">State</a>
+  <a href="feature-matrix.html">Features</a>
+  <a href="crate-inventory.html">Crates</a>
+  <a href="crate-tiers.html">Tiers</a>
+  <a href="testing.html" aria-current="page">Testing</a>
+  <a href="changelog.html">Changelog</a>
+  <a href="roadmap.html">Roadmap</a>
+  <a href="stability.html">Stability</a>
+</nav>
+
+<main id="main" class="page">
+  <header class="page-head"><span class="eyebrow">Verification system</span><h1>Test Infrastructure</h1><p class="lead">Current test dimensions, CI coverage, and canonical commands.</p><div class="meta-row"><span class="meta">2,252-test snapshot</span><span class="meta">7 test dimensions</span><span class="meta">15 workflows</span><span class="meta">Updated 2026-09-15</span></div></header>
+
+  <section><h2>Fresh Run and Source Counts</h2><table tabindex="0"><thead><tr><th>Measure</th><th>Count</th><th>Meaning</th></tr></thead><tbody>
+    <tr><td>Workspace nextest run (2026-09-06)</td><td><strong>2,252</strong></td><td>Executed across 118 test binaries; 6 skipped</td></tr>
+    <tr><td>Integration test files</td><td>96</td><td>Current <code>crates/*/tests/</code> tree</td></tr>
+    <tr><td>Integration test annotations</td><td>1,067</td><td>Source annotation count on 2026-09-15</td></tr>
+    <tr><td>Inline test annotations</td><td>1,230</td><td>Source annotation count on 2026-09-15</td></tr>
+  </tbody></table><p class="note">The 2,252-test nextest value is a run snapshot from 2026-09-06, while annotation figures describe source on 2026-09-15. Platform, root, feature, and ignore filters mean neither is a timeless total.</p></section>
+
+  <section><h2>Seven Test Dimensions</h2><table tabindex="0"><thead><tr><th>Dimension</th><th>Purpose</th><th>Primary command</th></tr></thead><tbody>
+    <tr><td>Unit</td><td>Local function behavior</td><td><code>cargo xtask test unit</code></td></tr>
+    <tr><td>Property</td><td>Invariants over generated structured inputs</td><td><code>cargo xtask test property</code></td></tr>
+    <tr><td>Fuzz</td><td>Malformed input at parser, protocol, and unsafe boundaries</td><td><code>cargo xtask fuzz</code></td></tr>
+    <tr><td>Conformance</td><td>Reusable adapter trait contracts</td><td><code>cargo xtask test conformance</code></td></tr>
+    <tr><td>Integration</td><td>Real component wiring and system boundaries</td><td><code>cargo xtask test integration</code>, <code>just test-e2e</code></td></tr>
+    <tr><td>Regression</td><td>Permanent reproduction of fixed failures</td><td>Relevant unit/integration suite</td></tr>
+    <tr><td>Borrow fixtures</td><td>Compiler-checked ownership and lifetime expectations</td><td><code>cargo xtask borrow-fixtures</code></td></tr>
+  </tbody></table></section>
+
+  <section><h2>Selected Suites</h2><table tabindex="0"><thead><tr><th>Suite</th><th>Platform/root</th><th>CI status</th></tr></thead><tbody>
+    <tr><td>Property tests (~46 source annotations)</td><td>Any / no root</td><td>Covered</td></tr>
+    <tr><td>Borrow-reasoning fixtures (19)</td><td>Any / no root</td><td>Covered</td></tr>
+    <tr><td>krun port conformance</td><td>macOS/Linux / no root</td><td>Covered</td></tr>
+    <tr><td>Cgroup integration (16)</td><td>Linux / root</td><td>Promotion-path coverage</td></tr>
+    <tr><td>Daemon+CLI E2E (15)</td><td>Linux / root</td><td>Promotion-path coverage</td></tr>
+    <tr><td>Sandbox (~17)</td><td>Linux / root</td><td>Not in CI</td></tr>
+    <tr><td>CLI subprocess (30)</td><td>Any / no root</td><td>Not in CI</td></tr>
+  </tbody></table></section>
+
+  <section><h2>CI Workflows</h2><p>Fifteen workflow files currently live in <code>.github/workflows/</code>.</p><table tabindex="0"><thead><tr><th>Workflow</th><th>Primary purpose</th></tr></thead><tbody>
+    <tr><td><code>ci.yml</code></td><td>Core checks on main/staging/release and pull requests to main</td></tr>
+    <tr><td><code>pr.yml</code></td><td>Pull-request lint, unit, audit, and documentation jobs</td></tr>
+    <tr><td><code>merge.yml</code></td><td>Push and merge-group matrix across active workflow branches</td></tr>
+    <tr><td><code>macos.yml</code></td><td>macOS formatting validation</td></tr>
+    <tr><td><code>conformance.yml</code></td><td>Conformance, property, krun, CLI, borrow, and quickcheck suites</td></tr>
+    <tr><td><code>stability-gates.yml</code></td><td>Docs, adapter coverage, no-unwrap, compile, and handler coverage</td></tr>
+    <tr><td><code>protocol-drift.yml</code></td><td>Protocol hash and variant drift</td></tr>
+    <tr><td><code>protocol-sites.yml</code></td><td>Handler dependency construction-site drift</td></tr>
+    <tr><td><code>rust-clippy.yml</code></td><td>Clippy review workflow</td></tr>
+    <tr><td><code>nightly.yml</code></td><td>Scheduled audits and coverage check</td></tr>
+    <tr><td><code>promote.yml</code></td><td>Stability-branch promotion</td></tr>
+    <tr><td><code>release.yml</code></td><td>Crate and binary release</td></tr>
+    <tr><td><code>publish-mbx.yml</code></td><td>CLI package publishing</td></tr>
+    <tr><td><code>summary.yml</code></td><td>Issue-summary automation</td></tr>
+    <tr><td><code>context-snapshot.yml</code></td><td>Generate and verify repository context snapshots</td></tr>
+  </tbody></table><p>Current CI gaps are the Linux-root sandbox suite and the feature-gated CLI subprocess suite.</p></section>
+
+  <section><h2>Canonical Commands</h2><pre><code>cargo xtask verify
+cargo xtask pre-commit
+cargo xtask prepush
+cargo xtask test unit
+cargo xtask test property
+cargo xtask test conformance
+cargo xtask test krun-conformance
+cargo xtask test integration
+cargo xtask test e2e
+cargo xtask test system-suite
+cargo xtask test sandbox
+cargo xtask check protocol-drift
+cargo xtask check adapter-coverage
+cargo xtask borrow-fixtures
+cargo xtask coverage-check
+cargo xtask nuke-test-state</code></pre><p>Grouped <code>test &lt;suite&gt;</code> and <code>check &lt;target&gt;</code> forms are button-primary guidance; obsolete hyphenated test aliases are intentionally omitted.</p></section>
+
+  <section><h2>Test Helpers</h2><p><code>minibox::testing</code>, behind <code>test-utils</code>, provides handler-oriented mocks, fixtures, helpers, and backend capability descriptors. The daemon handler tests target modules under <code>crates/minibox/src/daemon/handler/</code>.</p><p><code>minibox-core::adapters</code>, also behind <code>test-utils</code>, provides canonical cross-platform doubles, fixtures, and conformance support. Domain trait identities originate in <code>minibox-domain</code>.</p></section>
+</main>
+
+<footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+</body>
+</html>

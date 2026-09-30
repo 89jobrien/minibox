@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 340" fill="none">
+  <style>
+    text { font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace; }
+    .label { fill: #dfe1e8; font-size: 11px; font-weight: 600; }
+    .desc { fill: #7a7f94; font-size: 9px; }
+    .title { fill: #dfe1e8; font-size: 13px; font-weight: 700; }
+    .layer-ro { fill: #14171f; stroke: #5b8def; stroke-width: 1.5; rx: 4; }
+    .layer-rw { fill: #14171f; stroke: #34d399; stroke-width: 1.5; rx: 4; }
+    .layer-merged { fill: #14171f; stroke: #a78bfa; stroke-width: 1.5; rx: 4; }
+    .layer-work { fill: #14171f; stroke: #7a7f94; stroke-width: 1; rx: 4; stroke-dasharray: 4 3; }
+    .brace { stroke: #1f2330; stroke-width: 1; fill: none; }
+    .brace-label { fill: #7a7f94; font-size: 9px; }
+    .arrow-up { stroke: #34d399; stroke-width: 1.2; fill: none; marker-end: url(#au); }
+  </style>
+  <defs>
+    <marker id="au" markerWidth="7" markerHeight="5" refX="3.5" refY="0" orient="auto">
+      <polygon points="0 5, 3.5 0, 7 5" fill="#34d399"/>
+    </marker>
+  </defs>
+
+  <!-- Left column: layer stack -->
+  <text class="title" x="180" y="24" text-anchor="middle">Overlay Filesystem</text>
+
+  <!-- Merged view -->
+  <rect class="layer-merged" x="30" y="48" width="300" height="36"/>
+  <text class="label" x="180" y="70" text-anchor="middle">merged (container sees this)</text>
+
+  <!-- Arrow from upper to merged -->
+  <line class="arrow-up" x1="180" y1="100" x2="180" y2="86"/>
+
+  <!-- Upper (writable) -->
+  <rect class="layer-rw" x="30" y="102" width="300" height="36"/>
+  <text class="label" x="180" y="124" text-anchor="middle">upper (writable layer)</text>
+
+  <!-- Work dir -->
+  <rect class="layer-work" x="30" y="148" width="300" height="28"/>
+  <text class="desc" x="180" y="166" text-anchor="middle">workdir (kernel scratch space)</text>
+
+  <!-- Image layers (read-only) -->
+  <rect class="layer-ro" x="30" y="196" width="300" height="32"/>
+  <text class="label" x="180" y="216" text-anchor="middle">layer 3 (app config)</text>
+
+  <rect class="layer-ro" x="30" y="234" width="300" height="32"/>
+  <text class="label" x="180" y="254" text-anchor="middle">layer 2 (packages)</text>
+
+  <rect class="layer-ro" x="30" y="272" width="300" height="32"/>
+  <text class="label" x="180" y="292" text-anchor="middle">layer 1 (base OS)</text>
+
+  <!-- Brace for read-only layers -->
+  <line class="brace" x1="340" y1="196" x2="345" y2="196"/>
+  <line class="brace" x1="345" y1="196" x2="345" y2="304"/>
+  <line class="brace" x1="340" y1="304" x2="345" y2="304"/>
+  <text class="brace-label" x="354" y="246">read-only</text>
+  <text class="brace-label" x="354" y="258">(from image)</text>
+
+  <!-- Right column: explanation -->
+  <text class="title" x="560" y="24" text-anchor="middle">How it works</text>
+
+  <text class="desc" x="440" y="60">The container sees a single merged</text>
+  <text class="desc" x="440" y="72">directory tree.</text>
+
+  <text class="desc" x="440" y="100">Reads fall through layers top-down</text>
+  <text class="desc" x="440" y="112">until the file is found.</text>
+
+  <text class="desc" x="440" y="140">Writes go to the upper layer only.</text>
+  <text class="desc" x="440" y="152">Image layers never change.</text>
+
+  <text class="desc" x="440" y="180">Deleting a file places a "whiteout"</text>
+  <text class="desc" x="440" y="192">marker in the upper layer.</text>
+
+  <text class="desc" x="440" y="224">10 containers from the same image</text>
+  <text class="desc" x="440" y="236">share all read-only layers.</text>
+  <text class="desc" x="440" y="248">Only the diffs are stored per container.</text>
+
+  <text class="desc" x="440" y="284">Like tracing paper over a textbook:</text>
+  <text class="desc" x="440" y="296">you can write on it and erase it,</text>
+  <text class="desc" x="440" y="308">but the original pages stay untouched.</text>
+</svg>

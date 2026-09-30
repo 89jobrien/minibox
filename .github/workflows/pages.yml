@@ -1,0 +1,70 @@
+name: Pages
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; never cancel a live one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish site/ to GitHub Pages
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/configure-pages@v5
+
+      - name: Check internal links and font files resolve
+        run: |
+          set -euo pipefail
+          cd site
+          broken=0
+          for f in *.html; do
+            grep -oE '(href|src)="[^"#][^"]*"' "$f" \
+              | sed -E 's/^(href|src)="//; s/"$//' \
+              | grep -vE '^(https?:|//|mailto:)' > /tmp/refs.txt || true
+            while read -r ref; do
+              if [ -n "$ref" ] && [ ! -e "$ref" ]; then
+                echo "::error::$f -> broken reference: $ref"
+                broken=1
+              fi
+            done < /tmp/refs.txt
+          done
+          # every self-hosted face must exist, be non-empty, and be a real woff2
+          grep -oE 'url\("fonts/[^"]+"\)' style.css \
+            | sed -E 's/url\("//; s/"\)//' > /tmp/fonts.txt
+          while read -r font; do
+            if [ -n "$font" ] && [ ! -s "$font" ]; then
+              echo "::error::missing or empty font file: $font"
+              broken=1
+            fi
+          done < /tmp/fonts.txt
+          # the site must not depend on a font CDN at render time
+          if grep -qE 'fonts\.(googleapis|gstatic)\.com|@import url\("?https?://' style.css; then
+            echo "::error::style.css references a font CDN; self-host instead"
+            broken=1
+          fi
+          exit $broken
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

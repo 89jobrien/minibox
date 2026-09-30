@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Capability and maturity matrix for every minibox adapter suite.">
+    <title>minibox &mdash; Feature Matrix</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav aria-label="Primary">
+      <a href="index.html" class="brand"><span>mini</span>box</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State</a>
+      <a href="feature-matrix.html" aria-current="page">Features</a>
+      <a href="crate-inventory.html">Crates</a>
+      <a href="crate-tiers.html">Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head"><span class="eyebrow">Adapter capabilities</span><h1>Feature Matrix</h1><p class="lead">A capability is only marked present where the selected suite actually wires it.</p><div class="meta-row"><span class="meta">2 production</span><span class="meta">3 experimental</span><span class="meta">1 blocked / 1 stub</span><span class="meta">Updated 2026-09-15</span></div></header>
+      <h2>Adapter Suites</h2>
+      <table tabindex="0"><thead><tr><th>Adapter</th><th>Platform</th><th>Status</th><th>Default behavior</th></tr></thead><tbody>
+        <tr><th scope="row"><code>native</code></th><td>Linux</td><td><span class="pill pill-shipped">Production</span></td><td>Fallback on Linux</td></tr>
+        <tr><th scope="row"><code>gke</code></th><td>Linux GKE pods</td><td><span class="pill pill-shipped">Production</span></td><td>Explicit selection</td></tr>
+        <tr><th scope="row"><code>colima</code></th><td>Unix with Colima</td><td><span class="pill pill-partial">Experimental</span></td><td>Explicit selection</td></tr>
+        <tr><th scope="row"><code>smolvm</code></th><td>Unix with smolvm</td><td><span class="pill pill-partial">Experimental</span></td><td>Default when binary is available</td></tr>
+        <tr><th scope="row"><code>krun</code></th><td>Unix with libkrun</td><td><span class="pill pill-partial">Experimental</span></td><td>Fallback on macOS</td></tr>
+        <tr><th scope="row"><code>vz</code></th><td>macOS, <code>vz</code> feature</td><td><span class="pill pill-notwired">Non-functional</span></td><td>Opt-in; VM boot currently fails</td></tr>
+        <tr><th scope="row"><code>winbox</code></th><td>Windows</td><td><span class="pill pill-neutral">Stub</span></td><td>No working runtime</td></tr>
+      </tbody></table>
+      <h2>Capability Matrix</h2>
+      <table tabindex="0"><thead><tr><th>Feature</th><th>native</th><th>gke</th><th>colima</th><th>smolvm</th><th>krun</th><th>vz</th><th>winbox</th></tr></thead><tbody>
+        <tr class="group-row"><th scope="colgroup" colspan="8">Container lifecycle</th></tr>
+        <tr><th scope="row">pull</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">run / stop / rm / ps</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">pause / resume</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">restart</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">exec (-it)</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">logs</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-warn">Limited</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">events</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr class="group-row"><th scope="colgroup" colspan="8">Image management</th></tr>
+        <tr><th scope="row">Docker Hub / ghcr.io / parallel pull</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">prune / rmi</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">push (experimental)</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">commit (experimental)</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">build (experimental)</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr class="group-row"><th scope="colgroup" colspan="8">Isolation and networking</th></tr>
+        <tr><th scope="row">PID / mount / network / UTS / IPC</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-ok">VM boundary</td><td class="status-ok">VM boundary</td><td class="status-ok">VM boundary</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">cgroups v2</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">overlay filesystem</th><td class="status-ok">Yes</td><td class="status-warn">Copy</td><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">native bridge</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">DNAT port forwarding / DNS</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">bind mounts / privileged mode</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr class="group-row"><th scope="colgroup" colspan="8">Security and execution integrity</th></tr>
+        <tr><th scope="row">socket peer authentication</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">tar validation / setuid stripping / device rejection</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Delegated</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">layer digest verification / request limits</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">execution manifest / verify / admission policy</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr class="group-row"><th scope="colgroup" colspan="8">Persistence and observability</th></tr>
+        <tr><th scope="row">records survive restart</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">PID reconciliation</th><td class="status-ok">Yes</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td><td class="status-err">No</td></tr>
+        <tr><th scope="row">structured tracing / optional OTLP</th><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-ok">Yes</td><td class="status-err">Blocked</td><td class="status-err">No</td></tr>
+      </tbody></table>
+      <h2>Current Limits and Networking</h2>
+      <div class="card"><ul>
+        <li>Image pulls enforce a 10 MiB manifest limit, 10 GiB per layer, and 50 GiB aggregate.</li>
+        <li>Native networking provides bridge allocation, DNAT port forwarding, and DNS configuration.</li>
+        <li><code>minibox-cni</code> is available behind the optional CNI feature for native networking.</li>
+      </ul></div>
+      <h2>Control Surfaces</h2>
+      <div class="card"><ul>
+        <li><code>mbx</code>: button-primary daemon CLI.</li>
+        <li><code>minibox-mcp</code>: implemented MCP stdio server; mutations and higher-risk run options require explicit policy enablement.</li>
+        <li><code>minibox-crux-plugin</code>: JSON-RPC stdio bridge.</li>
+        <li><code>minibox-tui</code>: optional read-only dashboard exposed through the CLI feature.</li>
+      </ul></div>
+      <h2>Adapter Notes</h2>
+      <div class="card"><p><strong>Native and GKE</strong> are production adapters. GKE uses proot and a copy filesystem without native namespace/cgroup isolation.</p></div>
+      <div class="card"><p><strong>Colima, smolvm, and krun</strong> are experimental, but their basic container lifecycle paths work. Colima delegates to Lima/nerdctl; smolvm and krun use lightweight VMs.</p></div>
+      <div class="card"><p><strong>VZ</strong> source was restored behind the macOS feature. It remains non-functional because <code>VZLinuxBootLoader</code> fails on current macOS before the adapter can serve requests.</p></div>
+      <div class="card"><p><strong>Winbox</strong> is a stub and returns an error unconditionally.</p></div>
+    </main>
+
+    <footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+  </body>
+</html>

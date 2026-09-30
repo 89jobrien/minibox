@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Release highlights and notable changes for minibox.">
+  <title>Changelog &mdash; minibox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+<nav aria-label="Primary">
+  <a href="index.html" class="brand"><span>mini</span>box</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="state-model.html">State</a>
+  <a href="feature-matrix.html">Features</a>
+  <a href="crate-inventory.html">Crates</a>
+  <a href="crate-tiers.html">Tiers</a>
+  <a href="testing.html">Testing</a>
+  <a href="changelog.html" aria-current="page">Changelog</a>
+  <a href="roadmap.html">Roadmap</a>
+  <a href="stability.html">Stability</a>
+</nav>
+
+<main id="main" class="page">
+  <header class="page-head"><span class="eyebrow">Release record</span><h1>Changelog</h1><p class="lead">Curated release highlights through v0.32.0, following Keep a Changelog and Semantic Versioning.</p><div class="meta-row"><span class="meta">Current workspace 0.33.0</span><span class="meta">Latest curated release 0.32.0</span><span class="meta">Updated 2026-09-15</span></div></header>
+
+  <h2>[Unreleased]</h2>
+  <section class="card release"><p>No entries are currently recorded under Unreleased in the canonical <code>CHANGELOG.md</code>. The workspace version has advanced to 0.33.0, so recent repository work is not yet represented as a curated release entry.</p></section>
+
+  <h2>[v0.32.0] &mdash; 2026-08-15</h2>
+  <section class="card release">
+    <p><span class="pill pill-experimental">Security</span></p>
+    <ul>
+      <li>CNI plugin lookup rejects plugin types that are not one normal path component.</li>
+      <li>Colima commit/save archive import canonicalizes config and layer entries and rejects extraction-root escapes.</li>
+    </ul>
+    <p><span class="pill pill-partial">Changed</span></p>
+    <ul>
+      <li>Handler function coverage is enforced at an 80% threshold; measured coverage is 92.41% (207/224 functions).</li>
+      <li>The main CI pipeline runs <code>cargo xtask verify</code>; stability gates also run on pushes to <code>develop</code>.</li>
+      <li>The mandatory stability checklist was consolidated to six gates, all passing.</li>
+      <li>SmolVM command execution was deduplicated into a shared implementation.</li>
+    </ul>
+    <p><span class="pill pill-notwired">Fixed</span></p>
+    <ul>
+      <li>Restored the missing macbox VZ trait import and fixed the clippy issues it exposed.</li>
+      <li>Corrected the stability doc-sync path to the canonical feature matrix.</li>
+      <li>Fixed the benchmark registry fixture so image config blobs are served and cached.</li>
+    </ul>
+    <p><span class="pill pill-neutral">Removed</span></p>
+    <ul><li>Deleted an orphaned duplicate <code>crates/minibox/src/domain.rs</code>; canonical domain ports live in <code>minibox-domain</code>.</li></ul>
+  </section>
+
+  <h2>[v0.31.0] &mdash; 2026-05-26</h2>
+  <section class="card release">
+    <p><span class="pill pill-shipped">Added</span></p>
+    <ul>
+      <li><code>minibox-mcp</code>, a policy-gated MCP stdio server for doctor, container/image listing, logs, manifests, pull, run, stop, and remove workflows.</li>
+      <li>SmolVM local OCI tarball loading into the VM image cache.</li>
+      <li>Expanded benchmark/regression tooling, showcase workflows, generated CLI schema, testing documentation, and SOPS-backed maintainer backup workflows.</li>
+    </ul>
+    <p><span class="pill pill-partial">Changed</span></p>
+    <ul>
+      <li>User and platform documentation was aligned with current adapters, commands, capabilities, and limitations.</li>
+      <li>CLI daemon-error and missing/unexpected-response diagnostics became more explicit.</li>
+    </ul>
+    <p><span class="pill pill-notwired">Fixed</span></p>
+    <ul>
+      <li><code>mbx diagnose</code> includes recent logs; pause/resume terminal handling and <code>mbx ps</code> polling parsing are more reliable.</li>
+      <li>Paused-state restart persistence, SmolVM async execution and local-image tagging, and multiple CI quality gates were corrected.</li>
+      <li><code>cargo xtask doctor</code> became the canonical tool/environment preflight.</li>
+      <li>Image pulls return typed manifest/layer size errors; GKE path diagnostics use display formatting.</li>
+    </ul>
+  </section>
+
+  <h2>Earlier Releases</h2>
+  <section class="card release">
+    <p><strong>v0.24.0 &mdash; 2026-05-07:</strong> first public release, adding the reusable conformance suite, Crux JSON-RPC plugin, smolvm default with krun fallback, restart support, and daemon hardening.</p>
+    <p><strong>v0.23.0 &mdash; 2026-04-28:</strong> workspace consolidation, typed adapter selection, restart reconciliation, macOS adapter wiring, and GKE image push.</p>
+    <p><strong>v0.2.0 &mdash; 2026-04-14:</strong> exec, logs, events, networking, mounts, image management, pause/resume, and observability foundations.</p>
+    <p><strong>v0.1.0 &mdash; 2026-03-17:</strong> initial daemon/CLI runtime with OCI pulls, namespaces, cgroups v2, overlay filesystems, and lifecycle operations.</p>
+  </section>
+</main>
+
+<footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+</body>
+</html>

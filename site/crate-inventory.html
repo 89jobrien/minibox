@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Inventory and ownership map for the 17-member minibox Rust workspace.">
+    <title>Crate Inventory &mdash; minibox</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <nav aria-label="Primary">
+      <a href="index.html" class="brand"><span>mini</span>box</a>
+      <a href="architecture.html">Architecture</a>
+      <a href="state-model.html">State</a>
+      <a href="feature-matrix.html">Features</a>
+      <a href="crate-inventory.html" aria-current="page">Crates</a>
+      <a href="crate-tiers.html">Tiers</a>
+      <a href="testing.html">Testing</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="stability.html">Stability</a>
+    </nav>
+
+    <main id="main" class="page">
+      <header class="page-head"><span class="eyebrow">Workspace map</span><h1>Crate Inventory</h1><p class="lead">The Rust 2024 workspace has <strong>17 members</strong>: 16 crates under <code>crates/</code> plus <code>xtask</code>. Workspace packages are version 0.33.0 except xtask, which remains 0.1.0.</p><div class="meta-row"><span class="meta">16 crates + xtask</span><span class="meta">Run cargo xtask info metrics for live totals</span><span class="meta">Updated 2026-09-15</span></div></header>
+
+      <h2>Summary</h2>
+      <div class="table-wrap"><table tabindex="0"><thead><tr><th>Package</th><th>Type</th><th>Role</th><th>Features / status</th></tr></thead><tbody>
+        <tr><td><code>minibox-domain</code></td><td>lib</td><td>Canonical pure domain values, policies, events, and ports</td><td><code>test-utils</code></td></tr>
+        <tr><td><code>minibox-core</code></td><td>lib</td><td>Protocol, client transport, OCI/image services, shared adapters</td><td><code>test-utils</code>, <code>fuzzing</code></td></tr>
+        <tr><td><code>minibox</code></td><td>lib</td><td>Linux primitives, platform adapters, daemon, test infrastructure</td><td><code>test-utils</code>, <code>metrics</code>, <code>otel</code></td></tr>
+        <tr><td><code>minibox-macros</code></td><td>lib</td><td>Published declarative adapter and test helper macros</td><td>&mdash;</td></tr>
+        <tr><td><code>miniboxd</code></td><td>bin+lib</td><td>Daemon and adapter composition root</td><td><code>metrics</code>, <code>otel</code>, <code>tailnet</code>, <code>cni</code>, <code>vz</code></td></tr>
+        <tr><td><code>macbox</code></td><td>lib</td><td>Colima dependency composition and VZ path</td><td>VZ source restored but boot-blocked</td></tr>
+        <tr><td><code>smolbox</code></td><td>lib</td><td>smolvm and krun VM adapters</td><td>Experimental, lifecycle works</td></tr>
+        <tr><td><code>winbox</code></td><td>lib</td><td>Windows platform surface</td><td>Stub</td></tr>
+        <tr><td><code>minibox-cli</code></td><td>bin</td><td><code>mbx</code> user CLI</td><td><code>subprocess-tests</code>, <code>tui</code></td></tr>
+        <tr><td><code>minibox-crux-plugin</code></td><td>lib+bin</td><td>Crux JSON-RPC stdio bridge</td><td>No former crux-plugin dependency</td></tr>
+        <tr><td><code>minibox-mcp</code></td><td>lib+bin</td><td>Policy-gated MCP stdio server</td><td>Implemented, experimental API</td></tr>
+        <tr><td><code>minibox-testsuite</code></td><td>lib+bin</td><td>Adapter conformance harness and reports</td><td>Internal</td></tr>
+        <tr><td><code>minibox-bench</code></td><td>lib/benches</td><td>Criterion benchmarks and fixtures</td><td>Internal</td></tr>
+        <tr><td><code>minibox-cni</code></td><td>lib</td><td>CNI plugin execution and chain orchestration</td><td>Optional native networking feature</td></tr>
+        <tr><td><code>minibox-tui</code></td><td>lib</td><td>Read-only Ratatui dashboard</td><td>Optional CLI feature</td></tr>
+        <tr><td><code>ail</code></td><td>bin</td><td>Agent-improvement-loop placeholder</td><td>Minimal implementation</td></tr>
+        <tr><td><code>xtask</code></td><td>bin</td><td>Build, test, audit, release, and developer automation</td><td>Internal, version 0.1.0</td></tr>
+      </tbody></table></div>
+
+      <h2>Ownership Boundaries</h2>
+      <div class="card"><h3><code>minibox-domain</code></h3><p>Owns domain ports and values. The paths <code>minibox_core::domain</code> and <code>minibox::domain</code> re-export the same type identities for compatibility.</p></div>
+      <div class="card"><h3><code>minibox-core</code></h3><p>Owns <code>DaemonRequest</code>/<code>DaemonResponse</code> in <code>protocol.rs</code>, Unix-socket client transport, image storage, registries, layer extraction, garbage collection, leases, and Dockerfile parsing.</p></div>
+      <div class="card"><h3><code>minibox</code></h3><p>Owns native container primitives, shared adapters, daemon server/state, and the split request-handler modules under <code>daemon/handler/</code>.</p></div>
+      <div class="card"><h3><code>miniboxd</code></h3><p>Builds native, GKE, Colima, smolvm, and krun handler dependencies. VZ uses a separate feature-gated startup path because Virtualization.framework boot must use the macOS main queue.</p></div>
+
+      <h2>User and Agent Control Surfaces</h2>
+      <div class="card"><ul>
+        <li><code>mbx</code>: button-primary CLI, including optional read-only <code>tui</code>.</li>
+        <li><code>minibox-mcp</code>: policy-gated MCP tools over stdio.</li>
+        <li><code>minibox-crux-plugin</code>: JSON-RPC stdio operations for Crux workflows.</li>
+      </ul></div>
+
+      <h2>Canonical xtask Shape</h2>
+      <p>Use grouped commands such as <code>cargo xtask test unit</code>, <code>cargo xtask test property</code>, <code>cargo xtask test conformance</code>, and <code>cargo xtask check protocol-drift</code>. The old hyphenated test aliases are not button-primary guidance.</p>
+    </main>
+
+    <footer>minibox &middot; <a href="https://github.com/89jobrien/minibox">Source on GitHub</a></footer>
+  </body>
+</html>
