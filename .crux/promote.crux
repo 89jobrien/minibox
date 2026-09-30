@@ -46,12 +46,19 @@ steps:
       cmd: |
         set -eu
         echo "--- smoke test: dev tier ---"
-        MINIBOX_ADAPTER=smolvm target/release/miniboxd &
+        # miniboxd needs root for its run dir and cgroups, and the hosted
+        # runner is unprivileged. Give it a writable run dir under the
+        # runner temp rather than the default /run/minibox.
+        RUN_DIR="$RUNNER_TEMP/minibox"
+        DATA_DIR="$RUNNER_TEMP/minibox-data"
+        sudo -E env MINIBOX_ADAPTER=smolvm MINIBOX_RUN_DIR="$RUN_DIR" \
+          MINIBOX_DATA_DIR="$DATA_DIR" target/release/miniboxd &
         DAEMON_PID=$!
-        sleep 2
-        target/release/mbx pull alpine:latest
-        target/release/mbx run alpine:latest -- echo "dev-tier-ok"
-        target/release/mbx prune
+        sleep 3
+        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" target/release/mbx "$@"; }
+        mbx pull alpine:latest
+        mbx run alpine:latest -- echo "dev-tier-ok"
+        mbx prune
         kill $DAEMON_PID 2>/dev/null || true
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
@@ -100,10 +107,14 @@ steps:
       cmd: |
         set -eu
         echo "--- smoke test: testing tier ---"
-        MINIBOX_ADAPTER=smolvm target/release/miniboxd &
+        RUN_DIR="$RUNNER_TEMP/minibox"
+        DATA_DIR="$RUNNER_TEMP/minibox-data"
+        sudo -E env MINIBOX_ADAPTER=smolvm MINIBOX_RUN_DIR="$RUN_DIR" \
+          MINIBOX_DATA_DIR="$DATA_DIR" target/release/miniboxd &
         DAEMON_PID=$!
-        sleep 2
-        target/release/mbx run alpine:latest -- sh -c 'echo testing-tier-ok && uname -r'
+        sleep 3
+        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" target/release/mbx "$@"; }
+        mbx run alpine:latest -- sh -c 'echo testing-tier-ok && uname -r'
         kill $DAEMON_PID 2>/dev/null || true
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
@@ -146,13 +157,17 @@ steps:
       cmd: |
         set -eu
         echo "--- smoke test: release tier ---"
-        MINIBOX_ADAPTER=smolvm target/release/miniboxd &
+        RUN_DIR="$RUNNER_TEMP/minibox"
+        DATA_DIR="$RUNNER_TEMP/minibox-data"
+        sudo -E env MINIBOX_ADAPTER=smolvm MINIBOX_RUN_DIR="$RUN_DIR" \
+          MINIBOX_DATA_DIR="$DATA_DIR" target/release/miniboxd &
         DAEMON_PID=$!
-        sleep 2
-        target/release/mbx pull alpine:latest
-        target/release/mbx run alpine:latest -- sh -c 'echo release-ok && cat /etc/os-release'
-        target/release/mbx ps
-        target/release/mbx prune
+        sleep 3
+        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" target/release/mbx "$@"; }
+        mbx pull alpine:latest
+        mbx run alpine:latest -- sh -c 'echo release-ok && cat /etc/os-release'
+        mbx ps
+        mbx prune
         kill $DAEMON_PID 2>/dev/null || true
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
