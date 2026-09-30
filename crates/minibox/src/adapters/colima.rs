@@ -809,22 +809,61 @@ impl ColimaRuntime {
     }
 }
 
+/// Resolve `$HOME` into a prefix that is safe to use as an allowlist entry.
+///
+/// Returns `None` when `$HOME` is absent, empty, relative, or the filesystem
+/// root. `Path::starts_with` reports both the empty path and `/` as a prefix of
+/// *every* path, so folding either into the allowlist would silently accept any
+/// host path — exactly what `validate_lima_paths` exists to prevent. Dropping
+/// the prefix fails closed: only `/tmp` stays usable, and a caller mounting out
+/// of its home directory gets a clear error rather than a silent pass.
+fn home_allowlist_prefix() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::PathBuf::from(home);
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return None;
+    }
+    // `/`, `.` and `..` carry no real prefix information.
+    let meaningful = path.components().any(|c| {
+        !matches!(
+            c,
+            std::path::Component::RootDir
+                | std::path::Component::CurDir
+                | std::path::Component::ParentDir
+        )
+    });
+    if !meaningful {
+        return None;
+    }
+    Some(path)
+}
+
 /// Validate that all bind mount host paths are accessible inside the Lima VM.
 ///
 /// Lima shares `$HOME` and `/tmp` into the VM by default. Paths outside those
 /// prefixes are not visible and will cause silent mount failures.
+///
+/// # Security
+///
+/// The `$HOME` prefix comes from [`home_allowlist_prefix`], which drops a blank
+/// or root `$HOME`. Without that, an environment with `HOME=/` or `HOME=""`
+/// would make the allowlist vacuous and permit mounting any host path into the
+/// VM.
 pub fn validate_lima_paths(mounts: &[minibox_core::domain::BindMount]) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let home_path = std::path::Path::new(&home);
+    let home = home_allowlist_prefix();
+    let home_display = home.as_ref().map_or_else(
+        || "<unset or unusable>".to_string(),
+        |p| p.display().to_string(),
+    );
 
     for m in mounts {
         let p = &m.host_path;
-        let in_home = p.starts_with(home_path);
+        let in_home = home.as_ref().is_some_and(|h| p.starts_with(h));
         let in_tmp = p.starts_with("/tmp");
         if !in_home && !in_tmp {
             anyhow::bail!(
                 "bind mount source {p:?} is not accessible inside the Lima VM.\n\
-                 hint: Lima shares $HOME ({home}) and /tmp — move the source or add it to lima.yaml shared dirs."
+                 hint: Lima shares $HOME ({home_display}) and /tmp — move the source or add it to lima.yaml shared dirs."
             );
         }
     }
@@ -1527,20 +1566,123 @@ mod bind_mount_tests {
     use minibox_core::domain::BindMount;
     use std::path::PathBuf;
 
-    fn home_dir() -> PathBuf {
-        PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()))
+    /// Run `f` with `$HOME` set to `value`, restoring the previous value after.
+    ///
+    /// Tests must not depend on the ambient `$HOME`: on a developer machine it
+    /// is a real directory, but in a container or VM it is often `/`, which
+    /// changes what the allowlist accepts. That is exactly the bug
+    /// `validate_lima_paths` had, so pin the value instead of inheriting it.
+    fn with_home<R>(value: Option<&str>, f: impl FnOnce() -> R) -> R {
+        // Recover from poisoning rather than propagating it. A test that
+        // panics *while holding* the lock would otherwise poison ENV_MUTEX and
+        // every later test in this module would die with PoisonError, hiding
+        // which assertions actually failed.
+        let _guard = ENV_MUTEX
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let prev = std::env::var("HOME").ok();
+        // SAFETY: ENV_MUTEX is held for the whole mutation window, serialising
+        // every environment change in this module. Rust 2024 requires unsafe for
+        // set_var/remove_var, and no other thread can observe a partial state.
+        unsafe {
+            match value {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        let out = f();
+        // SAFETY: Same guard, still held; the previous value is restored before
+        // the lock is released.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        out
+    }
+
+    /// A mount of `host`, which every test below asserts about.
+    fn mount_of(host: &str) -> Vec<BindMount> {
+        vec![BindMount {
+            host_path: PathBuf::from(host),
+            container_path: PathBuf::from("/data"),
+            read_only: false,
+        }]
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_when_home_is_root() {
+        // `Path::new("/").starts_with(anything)` is true for every absolute
+        // path, so a root HOME used to turn the allowlist into a no-op.
+        with_home(Some("/"), || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("not accessible"),
+                "root HOME must not widen the allowlist, got: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_when_home_is_empty() {
+        // `Path::new("").starts_with(anything)` is likewise true for everything.
+        with_home(Some(""), || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("not accessible"),
+                "empty HOME must not widen the allowlist, got: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_when_home_is_unset() {
+        with_home(None, || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("not accessible"),
+                "unset HOME must not widen the allowlist, got: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_still_accepts_real_home_subdir() {
+        // The normal case must keep working: a real HOME still permits its own
+        // subdirectories, and /tmp stays permitted regardless of HOME.
+        with_home(Some("/home/tester"), || {
+            validate_lima_paths(&mount_of("/home/tester/project/bin"))
+                .expect("a real HOME subdir should be accepted");
+            validate_lima_paths(&mount_of("/tmp/minibox-test"))
+                .expect("/tmp should be accepted regardless of HOME");
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin"))
+                .expect_err("outside a real HOME and /tmp must be rejected");
+            assert!(err.to_string().contains("not accessible"), "got: {err}");
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_error_names_the_unusable_home() {
+        with_home(Some("/"), || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("<unset or unusable>"),
+                "error should report the unusable HOME rather than pretending it is /, got: {err}"
+            );
+        });
     }
 
     #[test]
     fn validate_lima_paths_accepts_home_subdir() {
-        let _guard = super::ENV_MUTEX.lock().expect("env lock poisoned");
-        let home = home_dir();
-        let mounts = vec![BindMount {
-            host_path: home.join("some/project/bin"),
-            container_path: PathBuf::from("/bin"),
-            read_only: false,
-        }];
-        validate_lima_paths(&mounts).expect("home subdir should be accepted");
+        with_home(Some("/home/tester"), || {
+            let mounts = vec![BindMount {
+                host_path: PathBuf::from("/home/tester/some/project/bin"),
+                container_path: PathBuf::from("/bin"),
+                read_only: false,
+            }];
+            validate_lima_paths(&mounts).expect("home subdir should be accepted");
+        });
     }
 
     #[test]
@@ -1555,17 +1697,20 @@ mod bind_mount_tests {
 
     #[test]
     fn validate_lima_paths_rejects_opt() {
-        let mounts = vec![BindMount {
-            host_path: PathBuf::from("/opt/homebrew/bin"),
-            container_path: PathBuf::from("/bin"),
-            read_only: false,
-        }];
-        let err = validate_lima_paths(&mounts).unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("Lima") || msg.contains("accessible"),
-            "expected Lima path error, got: {msg}"
-        );
+        // Pin a real HOME: this only holds if /opt is genuinely outside it.
+        with_home(Some("/home/tester"), || {
+            let mounts = vec![BindMount {
+                host_path: PathBuf::from("/opt/homebrew/bin"),
+                container_path: PathBuf::from("/bin"),
+                read_only: false,
+            }];
+            let err = validate_lima_paths(&mounts).unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains("Lima") || msg.contains("accessible"),
+                "expected Lima path error, got: {msg}"
+            );
+        });
     }
 
     #[test]
