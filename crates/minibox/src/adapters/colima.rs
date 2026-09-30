@@ -840,27 +840,59 @@ pub fn validate_lima_paths(mounts: &[minibox_core::domain::BindMount]) -> anyhow
 /// The exported rootfs is read-only at this stage, so the target must already
 /// exist in the image. Creating it lazily with `mkdir -p` fails for paths like
 /// `/workspace` and obscures the real problem.
+///
+/// # Errors
+///
+/// Returns an error if `container_path` contains a `..` component, which would
+/// let the rootfs-relative target escape the rootfs. This mirrors the
+/// `has_parent_dir_component` check that the native mount path applies in
+/// `apply_one_bind_mount`; the Lima path needs its own because it never calls
+/// `apply_bind_mounts`.
+///
+/// # Security
+///
+/// Every path interpolated into the snippet goes through `shell_single_quote`.
+/// `host_path` and `container_path` are user-supplied, and the snippet is
+/// concatenated into a shell script, so a path containing `'` would otherwise
+/// terminate the quoting and inject arbitrary commands into the Lima VM.
 pub fn bind_mount_shell_snippet(
     m: &minibox_core::domain::BindMount,
     rootfs: &std::path::Path,
-) -> String {
-    let host = m.host_path.display();
+) -> anyhow::Result<String> {
     let container_rel = m
         .container_path
         .strip_prefix("/")
         .unwrap_or(&m.container_path);
+
+    if container_rel
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        anyhow::bail!(
+            "path traversal attempt: bind mount container_path contains '..' component: {:?}",
+            m.container_path
+        );
+    }
+
     let target = rootfs.join(container_rel);
-    let target_display = target.display();
+    let host_q = shell_single_quote(&m.host_path.display().to_string());
+    let target_q = shell_single_quote(&target.display().to_string());
     let target_check = format!(
-        "sudo test -e '{target_display}' || (echo 'bind mount target {target_display} does not exist in image rootfs' >&2; exit 1)"
+        "sudo test -e {target_q} || (echo {msg} >&2; exit 1)",
+        msg = shell_single_quote(&format!(
+            "bind mount target {} does not exist in image rootfs",
+            target.display()
+        )),
     );
 
     if m.read_only {
-        format!(
-            "{target_check} && sudo mount --bind '{host}' '{target_display}' && sudo mount -o remount,ro,bind '{target_display}'"
-        )
+        Ok(format!(
+            "{target_check} && sudo mount --bind {host_q} {target_q} && sudo mount -o remount,ro,bind {target_q}"
+        ))
     } else {
-        format!("{target_check} && sudo mount --bind '{host}' '{target_display}'")
+        Ok(format!(
+            "{target_check} && sudo mount --bind {host_q} {target_q}"
+        ))
     }
 }
 
@@ -913,7 +945,7 @@ impl ContainerRuntime for ColimaRuntime {
             .mounts
             .iter()
             .map(|m| bind_mount_shell_snippet(m, &config.rootfs))
-            .collect::<Vec<_>>()
+            .collect::<anyhow::Result<Vec<_>>>()?
             .join("\n");
 
         let privileged_flag = if config.privileged {
@@ -1548,7 +1580,7 @@ mod bind_mount_tests {
             container_path: PathBuf::from("/guest"),
             read_only: false,
         };
-        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
         assert!(snippet.contains("test -e"), "snippet: {snippet}");
         assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
         assert!(snippet.contains("/tmp/host"), "snippet: {snippet}");
@@ -1563,7 +1595,7 @@ mod bind_mount_tests {
             container_path: PathBuf::from("/guest"),
             read_only: true,
         };
-        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"));
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
         assert!(snippet.contains("test -e"), "snippet: {snippet}");
         assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
         assert!(
@@ -1571,5 +1603,108 @@ mod bind_mount_tests {
             "snippet: {snippet}"
         );
         assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_rejects_parent_dir_in_container_path() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/../../../etc"),
+            read_only: false,
+        };
+        let err = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"))
+            .expect_err("parent-dir container_path must be rejected");
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains("path traversal"),
+            "expected 'path traversal' in error, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_rejects_relative_parent_dir_container_path() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("../escape"),
+            read_only: false,
+        };
+        let err = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs"))
+            .expect_err("relative parent-dir container_path must be rejected");
+        assert!(
+            format!("{err:#}").contains("path traversal"),
+            "expected 'path traversal' in error"
+        );
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_escapes_single_quote_in_host_path() {
+        // A host path containing a single quote must not terminate the
+        // surrounding shell quoting. POSIX has no escape inside single quotes;
+        // the only safe form is to close, emit an escaped quote, and reopen.
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/it's-a-trap"),
+            container_path: PathBuf::from("/guest"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
+
+        assert!(
+            !snippet.contains("'/tmp/it's-a-trap'"),
+            "quote was not escaped, snippet is injectable: {snippet}"
+        );
+        assert!(
+            snippet.contains(r"'\''"),
+            "expected POSIX quote-escape sequence in snippet: {snippet}"
+        );
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_escapes_single_quote_in_container_path() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/it's-also-a-trap"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
+
+        assert!(
+            !snippet.contains("'/rootfs/it's-also-a-trap'"),
+            "quote was not escaped, snippet is injectable: {snippet}"
+        );
+        assert!(
+            snippet.contains(r"'\''"),
+            "expected POSIX quote-escape sequence in snippet: {snippet}"
+        );
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_neutralizes_command_substitution() {
+        // Command substitution inside single quotes is literal to the shell.
+        // This pins that a payload like $(id) cannot execute.
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/$(id)"),
+            container_path: PathBuf::from("/guest"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
+
+        assert!(
+            snippet.contains("'/tmp/$(id)'"),
+            "payload must stay inside single quotes: {snippet}"
+        );
+    }
+
+    #[test]
+    fn bind_mount_shell_snippet_keeps_target_inside_rootfs() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/nested/dir/target"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
+        assert!(
+            snippet.contains("'/rootfs/nested/dir/target'"),
+            "expected fully-quoted rootfs-relative target: {snippet}"
+        );
     }
 }

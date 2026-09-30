@@ -86,7 +86,7 @@
         <p>Found by startup reconciliation: persisted state existed but the PID did not. Not reattached.</p>
       </div>
     </div>
-    <div class="diagram"><img src="arch-state-machine.svg" alt="Container state machine including restart reconciliation to Orphaned"></div>
+    <div class="diagram"><picture><source srcset="diagrams/arch-state-machine.print.svg" media="print"><img alt="Container state machine including restart reconciliation to Orphaned" src="diagrams/arch-state-machine.svg"></picture></div>
   </section>
 
   <section class="card"><h2>Persistence Port</h2><pre><code>pub trait StateRepository: Send + Sync + &#39;static {

@@ -1,0 +1,39 @@
+---
+title: Native Linux container lifecycle and isolation
+---
+flowchart TB
+  subgraph HOST["DAEMON / HOST PREPARATION"]
+    direction LR
+    ri["resolve image<br/>pull limits + digests<br/>ordered layer paths"]
+    pi["persist intent<br/>Created state<br/>sealed manifest"]
+    iso["prepare isolation<br/>overlay rootfs + cgroup<br/>network setup"]
+    sb["spawn_blocking<br/>leave async runtime<br/>clone safely"]
+    cl["clone<br/>PID, MNT, NET<br/>UTS, IPC"]
+    ri --> pi --> iso --> sb --> cl
+  end
+
+  subgraph CHILD["CLONED CHILD BEFORE WORKLOAD EXECUTION"]
+    direction LR
+    cg["attach cgroup<br/>write 0 to cgroup.procs<br/>limits now apply"]
+    mi["mount inputs<br/>bind mounts inside<br/>new mount namespace"]
+    pr["pivot_root<br/>proc, sys, dev<br/>detach old root"]
+    sr["security ratchet<br/>deny remount,rw<br/>cap whitelist if requested"]
+    ph["process hygiene<br/>setsid + close fds &gt; 2<br/>explicit argv + envp"]
+    cg --> mi --> pr --> sr --> ph
+  end
+
+  ex["execve user command<br/>replace child process image"]
+
+  subgraph PARENT["PARENT / SUPERVISION"]
+    direction LR
+    hp["record host PID<br/>Created to Running; persist"]
+    so["stream / store output<br/>ephemeral response chunks"]
+    re["wait / reap exit<br/>blocking adapter wait"]
+    te["persist terminal state<br/>event + metrics + cleanup"]
+    hp --> so --> re --> te
+  end
+
+  HOST --> CHILD
+  CHILD --> ex
+  ex --> PARENT
+  HOST -.->|"parent keeps PID/cmt handle"| PARENT
