@@ -44,7 +44,7 @@ steps:
     handler: shell::capture
     args:
       cmd: |
-        set -euo pipefail
+        set -eu
         echo "--- smoke test: dev tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
@@ -62,7 +62,7 @@ steps:
     handler: shell::capture
     args:
       cmd: |
-        set -euo pipefail
+        set -eu
         if git ls-remote --exit-code --heads origin staging >/dev/null 2>&1; then
           git fetch origin staging
           git checkout staging
@@ -98,7 +98,7 @@ steps:
     handler: shell::capture
     args:
       cmd: |
-        set -euo pipefail
+        set -eu
         echo "--- smoke test: testing tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
@@ -113,7 +113,7 @@ steps:
     handler: shell::capture
     args:
       cmd: |
-        set -euo pipefail
+        set -eu
         if git ls-remote --exit-code --heads origin release >/dev/null 2>&1; then
           git fetch origin release
           git checkout release
@@ -144,7 +144,7 @@ steps:
     handler: shell::capture
     args:
       cmd: |
-        set -euo pipefail
+        set -eu
         echo "--- smoke test: release tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
@@ -175,7 +175,7 @@ steps:
     handler: shell::capture
     args:
       cmd: |
-        set -euo pipefail
+        set -eu
         existing=$(gh pr list --base main --head release --state open --json number -q '.[0].number')
         if [ -n "$existing" ]; then
           echo "PR #$existing already open: release -> main"
