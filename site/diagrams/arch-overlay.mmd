@@ -1,0 +1,19 @@
+---
+title: Overlay Filesystem
+---
+flowchart BT
+  merged["merged<br/>container sees this"]
+  upper["upper<br/>writable layer"]
+  work["workdir<br/>kernel scratch space"]
+
+  l3["layer 3<br/>app config"]
+  l2["layer 2<br/>packages"]
+  l1["layer 1<br/>base OS<br/>read-only (from image)"]
+
+  upper --> merged
+  work -.-> upper
+  l3 --> upper
+  l2 --> upper
+  l1 --> upper
+
+  how["How it works<br/>The container sees a single merged directory tree.<br/>Reads fall through layers top-down until the file is found.<br/>Writes go to the upper layer only.<br/>Image layers never change.<br/>Deleting a file places a whiteout marker in the upper layer.<br/>10 containers from the same image share all read-only layers.<br/>Only the diffs are stored per container.<br/>Like tracing paper over a textbook: you can write on it and erase it,<br/>but the original pages stay untouched."]

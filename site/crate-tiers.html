@@ -75,7 +75,7 @@
 
       <h2>Stabilization Policy</h2>
       <p>The net-new Core/Platform freeze was <strong>lifted on 2026-08-18</strong>. The six gates remain the standing promotion bar: canonical protocol ownership, handler coverage at or above 80%, adapter integration evidence, macOS pre-commit validation, <code>cargo xtask test unit</code>, and dependency/license audit.</p>
-      <div class="diagram"><img src="arch-promotion.svg" alt="Experimental crates may be promoted to Core or Platform after gates are met; Internal crates do not graduate"></div>
+      <div class="diagram"><picture><source srcset="diagrams/arch-promotion.print.svg" media="print"><img alt="Experimental crates may be promoted to Core or Platform after gates are met; Internal crates do not graduate" src="diagrams/arch-promotion.svg"></picture></div>
       <p>Promotion follows the active <code>develop</code> &rarr; <code>staging</code> &rarr; <code>release</code> path. It requires test/coverage evidence, review, and an updated tier record.</p>
     </main>
 

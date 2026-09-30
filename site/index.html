@@ -89,7 +89,7 @@ a3f7c2   alpine   stopped</span></pre>
         <h2>One protocol, multiple control surfaces</h2>
         <p class="section-intro"><code>mbx</code>, MCP, Crux, and the read-only TUI converge on the same daemon protocol and composed adapter suite.</p>
         <figure class="diagram">
-          <img src="arch-system.svg" alt="Minibox control surfaces connect through miniboxd to native and VM-backed workloads">
+          <picture><source srcset="diagrams/arch-system.print.svg" media="print"><img alt="Minibox control surfaces connect through miniboxd to native and VM-backed workloads" src="diagrams/arch-system.svg"></picture>
           <figcaption>The daemon is the composition root and policy boundary; adapters supply runtime, filesystem, limiter, network, and image capabilities.</figcaption>
         </figure>
       </section>
