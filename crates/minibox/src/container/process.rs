@@ -814,6 +814,21 @@ fn close_extra_fds() {
 mod tests {
     use super::*;
 
+    /// UID map for [`ContainerConfig`] literals in these tests.
+    ///
+    /// The tests that construct a `ContainerConfig` assert on `privileged` or
+    /// on capability bitmasks, so the mapping values are irrelevant to them —
+    /// this exists only to satisfy the struct. The shape mirrors the
+    /// production sites in `container/mod.rs` and `adapters/runtime.rs`, which
+    /// disagree on `host_uid`; that divergence is a separate question.
+    fn test_uid_mapping() -> UidMapping {
+        UidMapping {
+            host_uid: 165_536,
+            host_gid: 165_536,
+            size: 65_536,
+        }
+    }
+
     #[test]
     fn container_config_privileged_defaults_false() {
         let cfg = ContainerConfig {
@@ -828,6 +843,7 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: false,
+            uid_mapping: test_uid_mapping(),
             pty: None,
         };
         assert!(!cfg.privileged);
@@ -848,6 +864,7 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
+            uid_mapping: test_uid_mapping(),
             pty: None,
         };
         assert!(cfg.privileged);
@@ -870,6 +887,7 @@ mod tests {
             pre_exec_hooks: vec![],
             mounts: vec![],
             privileged: true,
+            uid_mapping: test_uid_mapping(),
             pty: None,
         };
         assert!(cfg.privileged, "privileged mode must be set");

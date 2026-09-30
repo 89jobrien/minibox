@@ -642,21 +642,57 @@ fn apply_one_bind_mount(
     Ok(())
 }
 
+/// Resolve the host-side path a bind mount is applied to, or `None` if the
+/// mount would land outside `rootfs`.
+///
+/// The `..` check mirrors what callers do before touching the filesystem. It is
+/// factored out so the apply and unmount paths cannot drift apart: both derive
+/// `container_rel` from user-supplied input by the same two steps, and a
+/// divergence here would silently reintroduce a traversal.
+fn bind_mount_target(
+    m: &minibox_core::domain::BindMount,
+    rootfs: &Path,
+) -> Option<std::path::PathBuf> {
+    let container_rel = m
+        .container_path
+        .strip_prefix("/")
+        .unwrap_or(&m.container_path);
+
+    if has_parent_dir_component(container_rel) {
+        return None;
+    }
+
+    Some(rootfs.join(container_rel))
+}
+
 /// Unmount bind mounts in reverse order. Best-effort: logs warnings on failure.
 ///
 /// Called automatically by `apply_bind_mounts` on partial failure, and
 /// should be called by the parent process in cleanup (before `cleanup_mounts`).
+///
+/// # Security
+///
+/// Re-applies the `..` check that `apply_one_bind_mount` performs before
+/// mounting. This is defense-in-depth: cleanup is reachable through
+/// `cleanup_bind_mounts` from the parent, independently of whether the mount
+/// was ever applied. Without the check, a `container_path` of `/../../etc`
+/// would resolve outside the rootfs and `umount2` would detach a real host
+/// mount. A rejected entry is skipped with a warning rather than aborting, so
+/// the remaining mounts still get cleaned up.
 pub fn cleanup_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path) {
     unmount_bind_mounts(mounts, rootfs);
 }
 
 fn unmount_bind_mounts(mounts: &[minibox_core::domain::BindMount], rootfs: &Path) {
     for m in mounts.iter().rev() {
-        let container_rel = m
-            .container_path
-            .strip_prefix("/")
-            .unwrap_or(&m.container_path);
-        let target = rootfs.join(container_rel);
+        let Some(target) = bind_mount_target(m, rootfs) else {
+            warn!(
+                container_path = %m.container_path.display(),
+                "filesystem: refusing to unmount bind mount target outside rootfs (path traversal)"
+            );
+            continue;
+        };
+
         if let Err(e) = umount2(target.as_path(), MntFlags::MNT_DETACH) {
             warn!(
                 target = %target.display(),
@@ -1188,6 +1224,46 @@ mod tests {
                     .as_raw_fd(),
             );
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn bind_mount_target_rejects_dotdot_in_container_path() {
+            let rootfs = Path::new("/var/lib/mbx/rootfs");
+            let m = BindMount {
+                host_path: PathBuf::from("/tmp/host"),
+                container_path: PathBuf::from("/../../../etc"),
+                read_only: false,
+            };
+            assert_eq!(
+                bind_mount_target(&m, rootfs),
+                None,
+                "container_path with '..' must not resolve to a target"
+            );
+        }
+
+        #[test]
+        fn bind_mount_target_rejects_relative_dotdot_container_path() {
+            let rootfs = Path::new("/var/lib/mbx/rootfs");
+            let m = BindMount {
+                host_path: PathBuf::from("/tmp/host"),
+                container_path: PathBuf::from("../escape"),
+                read_only: false,
+            };
+            assert_eq!(bind_mount_target(&m, rootfs), None);
+        }
+
+        #[test]
+        fn bind_mount_target_resolves_under_rootfs() {
+            let rootfs = Path::new("/var/lib/mbx/rootfs");
+            let m = BindMount {
+                host_path: PathBuf::from("/tmp/host"),
+                container_path: PathBuf::from("/nested/dir/target"),
+                read_only: false,
+            };
+            assert_eq!(
+                bind_mount_target(&m, rootfs),
+                Some(PathBuf::from("/var/lib/mbx/rootfs/nested/dir/target"))
+            );
         }
 
         #[test]
