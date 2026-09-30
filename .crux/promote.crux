@@ -11,6 +11,11 @@ pipeline: minibox_promote
 #   release : prepush, coverage-check
 #   main    : check-protocol-drift, lint-docs
 #
+# Every step uses shell::capture, NOT shell::exec. shell::exec ignores a
+# non-zero exit code, so a failing gate or a failed git push used to sail
+# through to the final log line and still report success. shell::capture
+# fails the step, which fails the run.
+#
 # Run: crux run .crux/promote.crux
 budget: { calls: 28 }
 
@@ -19,24 +24,25 @@ steps:
   # Tier 1: Dev (develop)
   # ============================================================
   - step: gate_lint
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask lint"
 
   - step: gate_test_unit
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask test-unit"
 
   - step: build_release_dev
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo build --release -p miniboxd -p mbx"
 
   - step: smoke_dev
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: |
+        set -euo pipefail
         echo "--- smoke test: dev tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
@@ -48,13 +54,21 @@ steps:
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
 
-  # Advance: develop -> staging
+  # Advance: develop -> staging.
+  # staging is created from develop on first run; the repo does not ship it.
   - step: merge_develop_to_staging
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: |
-        git fetch origin staging
-        git checkout staging
+        set -euo pipefail
+        if git ls-remote --exit-code --heads origin staging >/dev/null 2>&1; then
+          git fetch origin staging
+          git checkout staging
+          git reset --hard origin/staging
+        else
+          echo "staging does not exist yet; creating it from develop"
+          git checkout -B staging develop
+        fi
         git merge --ff-only develop
         git push origin staging
         git checkout develop
@@ -64,24 +78,25 @@ steps:
   # Tier 2: Testing (staging)
   # ============================================================
   - step: gate_test_conformance
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask test-conformance"
 
   - step: gate_test_property
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask test-property"
 
   - step: gate_borrow_fixtures
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask borrow-fixtures"
 
   - step: smoke_testing
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: |
+        set -euo pipefail
         echo "--- smoke test: testing tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
@@ -91,13 +106,20 @@ steps:
         wait $DAEMON_PID 2>/dev/null || true
         echo "smoke test passed"
 
-  # Advance: staging -> release
+  # Advance: staging -> release. Same first-run bootstrap as staging.
   - step: merge_staging_to_release
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: |
-        git fetch origin release
-        git checkout release
+        set -euo pipefail
+        if git ls-remote --exit-code --heads origin release >/dev/null 2>&1; then
+          git fetch origin release
+          git checkout release
+          git reset --hard origin/release
+        else
+          echo "release does not exist yet; creating it from staging"
+          git checkout -B release staging
+        fi
         git merge --ff-only staging
         git push origin release
         git checkout develop
@@ -107,19 +129,20 @@ steps:
   # Tier 3: Release
   # ============================================================
   - step: gate_prepush
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask prepush"
 
   - step: gate_coverage_check
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask coverage-check"
 
   - step: smoke_release
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: |
+        set -euo pipefail
         echo "--- smoke test: release tier ---"
         MINIBOX_ADAPTER=smolvm target/release/miniboxd &
         DAEMON_PID=$!
@@ -136,20 +159,21 @@ steps:
   # Tier 4: Main (PR only)
   # ============================================================
   - step: gate_check_protocol_drift
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask check-protocol-drift"
 
   - step: gate_lint_docs
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: "cargo xtask lint-docs"
 
   # PR for protected main branch
   - step: pr_release_to_main
-    handler: shell::exec
+    handler: shell::capture
     args:
       cmd: |
+        set -euo pipefail
         existing=$(gh pr list --base main --head release --state open --json number -q '.[0].number')
         if [ -n "$existing" ]; then
           echo "PR #$existing already open: release -> main"
@@ -159,7 +183,9 @@ steps:
             --body "Automated promotion. All tiered gates and smoke tests passed."
         fi
 
+  # Only reachable when every gate above passed, because shell::capture
+  # fails the run on the first non-zero exit.
   - step: done
     handler: ctrl::log
     args:
-      msg: "Promotion complete: develop->staging->release pushed with smoke tests, release->main PR created"
+      msg: "develop -> staging -> release pushed with gates and smoke tests; release -> main PR open"
