@@ -23,6 +23,9 @@ jobs:
   promote:
     name: promote (develop -> main)
     runs-on: ubuntu-latest
+    # A hung gate or a stalled container must fail the run, not park it
+    # until the 6-hour default job limit expires.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
         with:
