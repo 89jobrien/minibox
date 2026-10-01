@@ -87,15 +87,17 @@ ignore = [
 # [possible values: any SPDX 3.11 short identifier (+ optional exception)].
 allow = [
     "MIT",
+    # MIT-0 ("MIT No Attribution") — pulled in transitively by xtask via
+    # jsonschema -> referencing -> fluent-uri -> borrow-or-share. OSI-approved
+    # and permissive; it only removes the attribution requirement.
+    "MIT-0",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
     "BSD-3-Clause",
     "ISC",
-    "Unicode-DFS-2016",
     "Unicode-3.0",
     "MPL-2.0",
     "Zlib",
-    "CDLA-Permissive-2.0",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the

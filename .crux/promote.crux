@@ -296,6 +296,16 @@ steps:
     args:
       cmd: |
         set -eu
+        # A promotion with nothing to promote is a success, not an error.
+        # `gh pr create` rejects this as "No commits between main and release",
+        # which would otherwise fail the whole run.
+        if git fetch --quiet origin main release 2>/dev/null; then :; fi
+        if git show-ref --verify --quiet refs/remotes/origin/main; then
+          if [ "$(git rev-list --count origin/main..origin/release)" = "0" ] 2>/dev/null; then
+            echo "release has no commits ahead of main; nothing to promote"
+            exit 0
+          fi
+        fi
         existing=$(gh pr list --base main --head release --state open --json number -q '.[0].number')
         if [ -n "$existing" ]; then
           echo "PR #$existing already open: release -> main"
