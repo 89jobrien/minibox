@@ -1,11 +1,11 @@
-# Handoff — minibox (2026-09-26)
+# Handoff — minibox (2026-10-01)
 
 | ID | P | Status | Title |
 |---|---|---|---|
 | gh-473 | P2 | blocked | feat(xtask): squash chain branches during promotion |
 | gh-507 | P2 | blocked | feat(oci): stabilize push, commit, and build |
-| uncommitted-work | P1 | open | Uncommitted changes (9 files) |
+| uncommitted-work | P1 | open | Uncommitted changes (14 files) |
 
 ## Log
 
-- 20260926.125351: done=66 running=0 pending=54 blocked=2 [ea38b73, 9a3df53, 5c2b07f, b0ae997, 4be92a6, 7db55d7, e2eecc7, ab3f910, 660b39a, 9f71864]
+- 20261001.105544: done=66 running=0 pending=54 blocked=2 [2410632, 6e9d0d9, c8b7aef, 22f29c4, 6827ed4, f218a71, c69df2a, 7f14e5e, 5d2d33b, c80ebb8]
