@@ -3,4 +3,6 @@ steps:
   - step: run
     handler: shell::capture
     args:
-      cmd: "cargo build --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p mbx -p miniboxd"
+      # The package is minibox-cli; `mbx` is the binary it emits, so -p mbx
+      # does not resolve.
+      cmd: "cargo build --release -p minibox -p minibox-core -p minibox-macros -p minibox-crux-plugin -p minibox-cli -p miniboxd"

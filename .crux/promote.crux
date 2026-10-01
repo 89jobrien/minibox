@@ -2,8 +2,11 @@ pipeline: minibox_promote
 # Cascade promotion through the stability pipeline:
 # develop -> staging -> release -> main.
 #
-# Each tier runs its gates, builds a release binary, smoke-tests it
-# in a smolvm container, then advances to the next branch.
+# Each tier runs its gates, builds the release binaries, then advances to
+# the next branch. Container smoke tests are NOT run here: they need root and
+# cgroup delegation that GitHub-hosted runners do not provide, so a CI copy
+# fails for reasons unrelated to the code under test. They live in
+# `just smoke` (crux/dev/smoke.crux) and run locally.
 #
 # Tier gates:
 #   dev     : lint, test-unit
@@ -40,87 +43,6 @@ steps:
       # does not resolve.
       cmd: "cargo build --release -p miniboxd -p minibox-cli"
 
-  - step: smoke_dev
-    handler: shell::capture
-    args:
-      cmd: |
-        set -eu
-        echo "--- smoke test: dev tier (minibox in minibox) ---"
-        # miniboxd needs root for its run dir and cgroups, and the hosted
-        # runner is unprivileged. Give it a writable run dir under the
-        # runner temp rather than the default /run/minibox.
-        RUN_DIR="$RUNNER_TEMP/minibox"
-        DATA_DIR="$RUNNER_TEMP/minibox-data"
-        CGROUP_NAME="minibox-smoke-dev-$$"
-        INNER_DATA="$RUNNER_TEMP/dind-data"
-        INNER_RUN="$RUNNER_TEMP/dind-run"
-        mkdir -p "$INNER_DATA" "$INNER_RUN"
-        SCRIPT=$(cat <<'INNER'
-        set -eu
-        mkdir -p /sys/fs/cgroup/__CGROUP__
-        echo '+memory +cpu +pids' > /sys/fs/cgroup/__CGROUP__/cgroup.subtree_control
-        MINIBOX_DATA_DIR=/minibox-data \
-          MINIBOX_RUN_DIR=/minibox-run \
-          MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/__CGROUP__ \
-          RUST_LOG=error \
-          /usr/local/bin/miniboxd &
-        DAEMON_PID=$!
-        i=0
-        while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
-          sleep 0.1; i=$((i+1))
-        done
-        [ -S /minibox-run/miniboxd.sock ] || { echo 'inner daemon socket timeout' >&2; kill "$DAEMON_PID" || true; exit 1; }
-        MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox pull alpine >/dev/null
-        OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox run alpine -- /bin/echo dev-tier-ok)
-        echo "$OUT" | grep -q dev-tier-ok || { echo "unexpected output: $OUT" >&2; kill "$DAEMON_PID" || true; exit 2; }
-        kill "$DAEMON_PID" 2>/dev/null || true
-        wait "$DAEMON_PID" 2>/dev/null || true
-        echo dind-ok
-        INNER
-        )
-        SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
-        # The DinD outer container needs bind mounts and privileged mode, both of
-        # which the daemon denies by default. This is the policy gate, not a bug.
-        sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
-          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
-          timeout 600 target/release/miniboxd &
-        DAEMON_PID=$!
-        sleep 3
-        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" timeout 600 target/release/mbx "$@"; }
-        mbx pull alpine:latest
-        mbx run --privileged \
-          -v "$PWD/target/release/miniboxd:/usr/local/bin/miniboxd:ro" \
-          -v "$PWD/target/release/mbx:/usr/local/bin/minibox:ro" \
-          -v /sys/fs/cgroup:/sys/fs/cgroup \
-          -v "$INNER_DATA:/minibox-data" \
-          -v "$INNER_RUN:/minibox-run" \
-          alpine:latest -- /bin/sh -c "$SCRIPT"
-        mbx prune
-        kill $DAEMON_PID 2>/dev/null || true
-        wait $DAEMON_PID 2>/dev/null || true
-        sudo rm -rf "/sys/fs/cgroup/$CGROUP_NAME" 2>/dev/null || true
-        echo "smoke test passed"
-
-  # Advance: develop -> staging.
-  # staging is created from develop on first run; the repo does not ship it.
-  - step: merge_develop_to_staging
-    handler: shell::capture
-    args:
-      cmd: |
-        set -eu
-        if git ls-remote --exit-code --heads origin staging >/dev/null 2>&1; then
-          git fetch origin staging
-          git checkout staging
-          git reset --hard origin/staging
-        else
-          echo "staging does not exist yet; creating it from develop"
-          git checkout -B staging develop
-        fi
-        git merge --ff-only develop
-        git push origin staging
-        git checkout develop
-        echo "advanced develop -> staging"
-
   # ============================================================
   # Tier 2: Testing (staging)
   # ============================================================
@@ -139,81 +61,6 @@ steps:
     args:
       cmd: "cargo xtask borrow-fixtures"
 
-  - step: smoke_testing
-    handler: shell::capture
-    args:
-      cmd: |
-        set -eu
-        echo "--- smoke test: testing tier (minibox in minibox) ---"
-        RUN_DIR="$RUNNER_TEMP/minibox"
-        DATA_DIR="$RUNNER_TEMP/minibox-data"
-        CGROUP_NAME="minibox-smoke-testing-$$"
-        INNER_DATA="$RUNNER_TEMP/dind-data"
-        INNER_RUN="$RUNNER_TEMP/dind-run"
-        mkdir -p "$INNER_DATA" "$INNER_RUN"
-        SCRIPT=$(cat <<'INNER'
-        set -eu
-        mkdir -p /sys/fs/cgroup/__CGROUP__
-        echo '+memory +cpu +pids' > /sys/fs/cgroup/__CGROUP__/cgroup.subtree_control
-        MINIBOX_DATA_DIR=/minibox-data \
-          MINIBOX_RUN_DIR=/minibox-run \
-          MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/__CGROUP__ \
-          RUST_LOG=error \
-          /usr/local/bin/miniboxd &
-        DAEMON_PID=$!
-        i=0
-        while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
-          sleep 0.1; i=$((i+1))
-        done
-        [ -S /minibox-run/miniboxd.sock ] || { echo 'inner daemon socket timeout' >&2; kill "$DAEMON_PID" || true; exit 1; }
-        OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox run alpine -- /bin/sh -c 'echo testing-tier-ok && uname -r')
-        echo "$OUT" | grep -q testing-tier-ok || { echo "unexpected output: $OUT" >&2; kill "$DAEMON_PID" || true; exit 2; }
-        kill "$DAEMON_PID" 2>/dev/null || true
-        wait "$DAEMON_PID" 2>/dev/null || true
-        echo dind-ok
-        INNER
-        )
-        SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
-        # The DinD outer container needs bind mounts and privileged mode, both of
-        # which the daemon denies by default. This is the policy gate, not a bug.
-        sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
-          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
-          timeout 600 target/release/miniboxd &
-        DAEMON_PID=$!
-        sleep 3
-        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" timeout 600 target/release/mbx "$@"; }
-        mbx pull alpine:latest
-        mbx run --privileged \
-          -v "$PWD/target/release/miniboxd:/usr/local/bin/miniboxd:ro" \
-          -v "$PWD/target/release/mbx:/usr/local/bin/minibox:ro" \
-          -v /sys/fs/cgroup:/sys/fs/cgroup \
-          -v "$INNER_DATA:/minibox-data" \
-          -v "$INNER_RUN:/minibox-run" \
-          alpine:latest -- /bin/sh -c "$SCRIPT"
-        kill $DAEMON_PID 2>/dev/null || true
-        wait $DAEMON_PID 2>/dev/null || true
-        sudo rm -rf "/sys/fs/cgroup/$CGROUP_NAME" 2>/dev/null || true
-        echo "smoke test passed"
-
-  # Advance: staging -> release. Same first-run bootstrap as staging.
-  - step: merge_staging_to_release
-    handler: shell::capture
-    args:
-      cmd: |
-        set -eu
-        if git ls-remote --exit-code --heads origin release >/dev/null 2>&1; then
-          git fetch origin release
-          git checkout release
-          git reset --hard origin/release
-        else
-          echo "release does not exist yet; creating it from staging"
-          git checkout -B release staging
-        fi
-        git merge --ff-only staging
-        git push origin release
-        git checkout develop
-        echo "advanced staging -> release"
-
   # ============================================================
   # Tier 3: Release
   # ============================================================
@@ -226,65 +73,6 @@ steps:
     handler: shell::capture
     args:
       cmd: "cargo xtask coverage-check"
-
-  - step: smoke_release
-    handler: shell::capture
-    args:
-      cmd: |
-        set -eu
-        echo "--- smoke test: release tier (minibox in minibox) ---"
-        RUN_DIR="$RUNNER_TEMP/minibox"
-        DATA_DIR="$RUNNER_TEMP/minibox-data"
-        CGROUP_NAME="minibox-smoke-release-$$"
-        INNER_DATA="$RUNNER_TEMP/dind-data"
-        INNER_RUN="$RUNNER_TEMP/dind-run"
-        mkdir -p "$INNER_DATA" "$INNER_RUN"
-        SCRIPT=$(cat <<'INNER'
-        set -eu
-        mkdir -p /sys/fs/cgroup/__CGROUP__
-        echo '+memory +cpu +pids' > /sys/fs/cgroup/__CGROUP__/cgroup.subtree_control
-        MINIBOX_DATA_DIR=/minibox-data \
-          MINIBOX_RUN_DIR=/minibox-run \
-          MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/__CGROUP__ \
-          RUST_LOG=error \
-          /usr/local/bin/miniboxd &
-        DAEMON_PID=$!
-        i=0
-        while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
-          sleep 0.1; i=$((i+1))
-        done
-        [ -S /minibox-run/miniboxd.sock ] || { echo 'inner daemon socket timeout' >&2; kill "$DAEMON_PID" || true; exit 1; }
-        MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox pull alpine >/dev/null
-        OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox run alpine -- /bin/sh -c 'echo release-ok && cat /etc/os-release')
-        echo "$OUT" | grep -q release-ok || { echo "unexpected output: $OUT" >&2; kill "$DAEMON_PID" || true; exit 2; }
-        kill "$DAEMON_PID" 2>/dev/null || true
-        wait "$DAEMON_PID" 2>/dev/null || true
-        echo dind-ok
-        INNER
-        )
-        SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
-        # The DinD outer container needs bind mounts and privileged mode, both of
-        # which the daemon denies by default. This is the policy gate, not a bug.
-        sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
-          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
-          timeout 600 target/release/miniboxd &
-        DAEMON_PID=$!
-        sleep 3
-        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" timeout 600 target/release/mbx "$@"; }
-        mbx pull alpine:latest
-        mbx run --privileged \
-          -v "$PWD/target/release/miniboxd:/usr/local/bin/miniboxd:ro" \
-          -v "$PWD/target/release/mbx:/usr/local/bin/minibox:ro" \
-          -v /sys/fs/cgroup:/sys/fs/cgroup \
-          -v "$INNER_DATA:/minibox-data" \
-          -v "$INNER_RUN:/minibox-run" \
-          alpine:latest -- /bin/sh -c "$SCRIPT"
-        mbx ps
-        mbx prune
-        kill $DAEMON_PID 2>/dev/null || true
-        wait $DAEMON_PID 2>/dev/null || true
-        sudo rm -rf "/sys/fs/cgroup/$CGROUP_NAME" 2>/dev/null || true
-        echo "smoke test passed"
 
   # ============================================================
   # Tier 4: Main (PR only)
@@ -321,7 +109,7 @@ steps:
         else
           gh pr create --base main --head release \
             --title "Promote release -> main" \
-            --body "Automated promotion. All tiered gates and smoke tests passed."
+            --body "Automated promotion. All tiered gates passed."
         fi
 
   # Only reachable when every gate above passed, because shell::capture
@@ -329,4 +117,4 @@ steps:
   - step: done
     handler: ctrl::log
     args:
-      msg: "develop -> staging -> release pushed with gates and smoke tests; release -> main PR open"
+      msg: "develop -> staging -> release pushed with all tiered gates; release -> main PR open"
