@@ -1,7 +1,8 @@
 name: Stability Gates
 
 on:
-  merge_group:
+  # No `merge_group`: it and `pull_request` both test the synthetic merge, so
+  # having both ran every stability gate two to three times per PR.
   push:
     branches:
       [

@@ -298,8 +298,11 @@ use tokio::sync::Mutex as TokioMutex;
 #[cfg(unix)]
 use tracing::{info, warn};
 
-// Linux-only imports
-#[cfg(target_os = "linux")]
+// Linux-only imports.
+// BridgeNetwork is only the fallback when the `cni` feature is off; with `cni`
+// enabled the Bridge arm resolves to CniNetworkProvider and this import would
+// be orphaned under `-D warnings`.
+#[cfg(all(target_os = "linux", not(feature = "cni")))]
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
