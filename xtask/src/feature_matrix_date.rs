@@ -1,21 +1,29 @@
 //! Automate `Last updated:` stamps across all docs in `docs/`.
 //!
-//! Rewrites every line matching `^Last updated: YYYY-MM-DD` to today's UTC date.
-//! Idempotent: running it twice on the same day produces no diff.
+//! Rewrites the first line matching `^Last updated: YYYY-MM-DD` to today's UTC
+//! date. Idempotent: running it twice on the same day produces no diff.
 //!
-//! Run: `cargo xtask update-feature-matrix-date`
+//! Run: `cargo xtask update-date`
+//!
+//! Two entry points with deliberately different scope:
+//!
+//! - [`update_feature_matrix_date`] sweeps **every** stamped doc under `docs/`.
+//!   It is the explicit manual command, so a blanket rewrite matches intent.
+//! - [`update_staged_docs`] touches only the specific docs handed to it. The
+//!   pre-commit gate uses this so a commit bumps the stamp of the docs it
+//!   actually changes and leaves every other doc alone.
 //!
 //! Covered files (any `*.mbx.md` or `*.md` under `docs/` that contains a
 //! `Last updated:` line):
 //!
 //! - `docs/FEATURE_MATRIX.mbx.md`
 //! - `docs/SECURITY_INVARIANTS.mbx.md`
-//! - docs/ROADMAP.mbx.md
+//! - `docs/ROADMAP.mbx.md`
 //! - `docs/STABILITY_CHECKLIST.mbx.md`
 //! - `docs/STATE_MODEL.mbx.md`
 //! - `docs/CRATE_TIERS.mbx.md`
 //! - `docs/SUPPORT_TIERS.mbx.md`
-//! - docs/GOTCHAS.mbx.md
+//! - `docs/GOTCHAS.mbx.md`
 //! - … and any future docs that add a `Last updated:` stamp.
 
 use anyhow::{Context, Result};
@@ -25,10 +33,32 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Line prefix identifying a doc date stamp.
+const STAMP_PREFIX: &str = "Last updated: ";
+
+/// Tally of what a stamp pass did, for reporting.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct StampOutcome {
+    /// Files whose stamp line was rewritten.
+    pub updated: usize,
+    /// Files already carrying today's stamp.
+    pub already_current: usize,
+    /// Files with no stamp line.
+    pub no_stamp: usize,
+}
+
+impl StampOutcome {
+    /// True when no file carried a stamp at all.
+    const fn is_empty(&self) -> bool {
+        self.updated == 0 && self.already_current == 0 && self.no_stamp == 0
+    }
+}
+
 /// Update `Last updated:` stamps in all docs under `docs/`.
 ///
-/// This is the primary entry point called by `cargo xtask update-feature-matrix-date`.
-/// It replaces the older single-file behaviour with a workspace-wide pass.
+/// This is the blanket sweep behind `cargo xtask update-date`. Because it is an
+/// explicit operator action, touching every stamped doc is the intended
+/// behaviour. Automated callers should prefer [`update_staged_docs`].
 pub fn update_feature_matrix_date(root: &Path) -> Result<()> {
     let today = Utc::now().format("%Y-%m-%d").to_string();
     let docs_dir = root.join("docs");
@@ -36,33 +66,68 @@ pub fn update_feature_matrix_date(root: &Path) -> Result<()> {
     let candidates = collect_doc_files(&docs_dir)
         .with_context(|| format!("failed to list docs dir: {}", docs_dir.display()))?;
 
-    let mut updated_count = 0usize;
-    let mut skipped_count = 0usize;
+    let outcome = update_dates_in(&candidates, &today);
+    report(outcome, &today, false);
+    Ok(())
+}
 
-    for path in &candidates {
-        match update_doc_date(path, &today)? {
-            UpdateResult::Updated => {
+/// Update `Last updated:` stamps in only the given docs.
+///
+/// The pre-commit gate calls this with the staged doc paths (repo-relative, as
+/// reported by `git diff --cached`) so that committing one doc does not
+/// restamp the whole `docs/` tree. Paths are used verbatim; callers are
+/// responsible for filtering to docs that genuinely changed.
+pub fn update_staged_docs(paths: &[PathBuf]) -> StampOutcome {
+    let today = Utc::now().format("%Y-%m-%d").to_string();
+    let outcome = update_dates_in(paths, &today);
+    report(outcome, &today, true);
+    outcome
+}
+
+/// Apply today's stamp to each path, tallying the result.
+fn update_dates_in(paths: &[PathBuf], today: &str) -> StampOutcome {
+    let mut outcome = StampOutcome::default();
+    for path in paths {
+        match update_doc_date(path, today) {
+            Ok(UpdateResult::Updated) => {
                 eprintln!("doc-dates: updated  {}", path.display());
-                updated_count += 1;
+                outcome.updated += 1;
             }
-            UpdateResult::AlreadyCurrent => {
-                skipped_count += 1;
+            Ok(UpdateResult::AlreadyCurrent) => outcome.already_current += 1,
+            Ok(UpdateResult::NoStamp) => outcome.no_stamp += 1,
+            Err(error) => {
+                // A single unreadable doc must not abort the gate; report and
+                // continue so the rest of the tree still gets stamped.
+                eprintln!("doc-dates: SKIPPED {}: {error:#}", path.display());
+                outcome.no_stamp += 1;
             }
-            UpdateResult::NoStamp => {}
         }
     }
+    outcome
+}
 
-    if updated_count == 0 && skipped_count == 0 {
-        eprintln!("doc-dates: no files contain a 'Last updated:' stamp");
-    } else if updated_count == 0 {
-        eprintln!("doc-dates: all {skipped_count} stamped file(s) already up to date ({today})");
+/// Print a one-line summary of a stamp pass.
+fn report(outcome: StampOutcome, today: &str, scoped: bool) {
+    let scope = if scoped { "staged docs" } else { "docs tree" };
+    if outcome.is_empty() {
+        eprintln!("doc-dates: no files contain a 'Last updated:' stamp ({scope})");
+    } else if outcome.updated == 0 {
+        eprintln!(
+            "doc-dates: all {scope} already up to date ({today}, {} stamped)",
+            outcome.already_current
+        );
     } else {
         eprintln!(
-            "doc-dates: updated {updated_count} file(s), {skipped_count} already current ({today})"
+            "doc-dates: updated {scope}: {} file(s) rewritten, {} already current ({today})",
+            outcome.updated, outcome.already_current
         );
     }
+}
 
-    Ok(())
+/// Whether `line` is a doc date stamp line.
+#[must_use]
+pub fn is_stamp_line(line: &str) -> bool {
+    line.trim_start().starts_with(STAMP_PREFIX)
 }
 
 // ---------------------------------------------------------------------------
@@ -107,7 +172,7 @@ fn update_doc_date(path: &Path, today: &str) -> Result<UpdateResult> {
     let content =
         fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
 
-    if !content.contains("Last updated: ") {
+    if !content.contains(STAMP_PREFIX) {
         return Ok(UpdateResult::NoStamp);
     }
 
@@ -128,7 +193,7 @@ fn update_doc_date(path: &Path, today: &str) -> Result<UpdateResult> {
 /// Lines that do not match the prefix are left unchanged. Only the first
 /// matching line is replaced so that embedded examples are not touched.
 fn rewrite_date(content: &str, today: &str) -> String {
-    let prefix = "Last updated: ";
+    let prefix = STAMP_PREFIX;
     let mut replaced = false;
     content
         .lines()
@@ -188,5 +253,82 @@ mod tests {
         // that content without the prefix is passed through unchanged.
         let result = rewrite_date(input, "2026-05-14");
         assert_eq!(result, input);
+    }
+
+    // ── stamp-line detection ─────────────────────────────────────────────
+
+    #[test]
+    fn is_stamp_line_recognises_the_stamp() {
+        assert!(is_stamp_line("Last updated: 2026-01-01"));
+        assert!(is_stamp_line("  Last updated: 2026-01-01"));
+    }
+
+    #[test]
+    fn is_stamp_line_rejects_other_content() {
+        assert!(!is_stamp_line("Last update: 2026-01-01"));
+        assert!(!is_stamp_line("## Last updated"));
+        assert!(!is_stamp_line("The last updated doc is 2026-01-01"));
+        assert!(!is_stamp_line("+added a real line"));
+    }
+
+    #[test]
+    fn is_stamp_line_expects_diff_marker_already_stripped() {
+        // The caller strips a leading +/- before asking. A surviving marker
+        // means the line is not the stamp, so it counts as a real change.
+        assert!(!is_stamp_line("-Last updated: 2026-01-01"));
+        assert!(!is_stamp_line("+Last updated: 2026-01-01"));
+    }
+
+    // ── scoped (commit-aware) updates ────────────────────────────────────
+
+    #[test]
+    fn update_staged_docs_only_touches_given_paths() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let staged = dir.path().join("STAGED.md");
+        let untouched = dir.path().join("UNTOUCHED.md");
+        for p in [&staged, &untouched] {
+            fs::write(p, "Last updated: 2020-01-01\nbody\n").expect("write");
+        }
+
+        let outcome = update_staged_docs(std::slice::from_ref(&staged));
+        assert_eq!(outcome.updated, 1);
+
+        let stamped = fs::read_to_string(&staged).expect("read");
+        assert_ne!(stamped, "Last updated: 2020-01-01\nbody\n");
+
+        // The path that was not passed in must be byte-identical.
+        let other = fs::read_to_string(&untouched).expect("read");
+        assert_eq!(
+            other, "Last updated: 2020-01-01\nbody\n",
+            "a doc outside the staged set must never be restamped"
+        );
+    }
+
+    #[test]
+    fn update_staged_docs_reports_already_current() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("DOC.md");
+        let today = Utc::now().format("%Y-%m-%d").to_string();
+        fs::write(&path, format!("Last updated: {today}\nbody\n")).expect("write");
+
+        let outcome = update_staged_docs(&[path]);
+        assert_eq!(outcome.updated, 0);
+        assert_eq!(outcome.already_current, 1);
+    }
+
+    #[test]
+    fn update_staged_docs_tolerates_a_missing_file() {
+        // A doc deleted between staging and the gate must not abort the gate.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("GONE.md");
+        let outcome = update_staged_docs(&[missing]);
+        assert_eq!(outcome.updated, 0);
+        assert_eq!(outcome.no_stamp, 1);
+    }
+
+    #[test]
+    fn update_staged_docs_with_empty_list_is_a_no_op() {
+        let outcome = update_staged_docs(&[]);
+        assert!(outcome.is_empty());
     }
 }
