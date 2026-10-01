@@ -115,10 +115,23 @@ pub(super) async fn prepare_run(
 
     if let Some(ref policy) = deps.execution_policy {
         use minibox_core::domain::PolicyDecision;
-        match policy.evaluate(&manifest) {
+        let decision = policy.evaluate(&manifest);
+        match decision {
             PolicyDecision::Allow => {}
             PolicyDecision::Deny(reason) => {
                 return Err(anyhow::anyhow!("execution policy denied: {reason}"));
+            }
+            // Refused, but not by a rule. The run cannot proceed until the
+            // question is answered, so this stops the run either way; the
+            // wording is what tells an operator whether to fix the workload or
+            // go answer something first.
+            PolicyDecision::Escalate { .. } | PolicyDecision::RequestInformation { .. } => {
+                let reason = decision
+                    .reason()
+                    .unwrap_or_else(|| "policy could not decide".to_string());
+                return Err(anyhow::anyhow!(
+                    "execution policy requires review: {reason}"
+                ));
             }
         }
     }

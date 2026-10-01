@@ -100,7 +100,7 @@ pub async fn handle_verify_manifest(
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
 ) {
-    use minibox_core::domain::{ExecutionManifest, ExecutionPolicy, PolicyDecision};
+    use minibox_core::domain::{ExecutionManifest, ExecutionPolicy};
 
     let record = if let Some(r) = state.get_container(&id).await {
         r
@@ -163,10 +163,12 @@ pub async fn handle_verify_manifest(
     };
 
     let decision = policy.evaluate(&manifest);
-    let (allowed, reason) = match decision {
-        PolicyDecision::Allow => (true, None),
-        PolicyDecision::Deny(reason) => (false, Some(reason)),
-    };
+    // The wire type is `(bool, Option<String>)` and stays that way: widening the
+    // socket protocol is a larger change than widening this enum, and it would
+    // need the CLI to move in step. So an escalation and an information request
+    // both report as not-permitted, and the reason string carries which it was.
+    let allowed = decision.permits();
+    let reason = decision.reason();
 
     if tx
         .send(DaemonResponse::VerifyResult { allowed, reason })
