@@ -185,3 +185,7 @@ dupehound-card.*
 .looprs/observability/
 .looprs/observability/runtime.jsonl
 .cc-audit.yaml
+
+# Local project-level daemon config. May enable privileged mode and bind
+# mounts, so it stays out of version control.
+minibox.toml
