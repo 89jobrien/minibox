@@ -79,7 +79,10 @@ steps:
         INNER
         )
         SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
+        # The DinD outer container needs bind mounts and privileged mode, both of
+        # which the daemon denies by default. This is the policy gate, not a bug.
         sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
+          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
           timeout 600 target/release/miniboxd &
         DAEMON_PID=$!
         sleep 3
@@ -171,7 +174,10 @@ steps:
         INNER
         )
         SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
+        # The DinD outer container needs bind mounts and privileged mode, both of
+        # which the daemon denies by default. This is the policy gate, not a bug.
         sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
+          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
           timeout 600 target/release/miniboxd &
         DAEMON_PID=$!
         sleep 3
@@ -257,7 +263,10 @@ steps:
         INNER
         )
         SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
+        # The DinD outer container needs bind mounts and privileged mode, both of
+        # which the daemon denies by default. This is the policy gate, not a bug.
         sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
+          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
           timeout 600 target/release/miniboxd &
         DAEMON_PID=$!
         sleep 3
