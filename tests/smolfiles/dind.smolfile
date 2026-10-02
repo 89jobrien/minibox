@@ -1,0 +1,45 @@
+# Minibox DinD smoke-test VM.
+#
+# Reproduces the environment `just smoke` (crux/dev/smoke.crux) needs:
+# Linux, root, cgroups v2 with delegation, and overlayfs. Those are provided
+# by the smolvm guest kernel, so the native adapter can run inside it.
+#
+# Usage:
+#   cargo build -p miniboxd -p minibox-cli --target aarch64-unknown-linux-musl
+#   smolvm machine create minibox-dind --smolfile tests/smolfiles/dind.smolfile
+#   smolvm machine start  --name minibox-dind
+#   smolvm machine exec   --name minibox-dind -- sudo bash tests/smolfiles/dind-smoke.sh
+#   smolvm machine stop   --name minibox-dind
+#
+# The binaries are bind-mounted into the inner container by the smoke script, so
+# the VM needs a writable /workspace view of the repo plus the musl target dir.
+
+image = "alpine:3.20"
+cpus = 2
+memory = 2048
+net = true
+storage = 10
+overlay = 4
+workdir = "/workspace"
+
+[dev]
+init = [
+    # bash: the smoke script is bash. util-linux/mount: the inner container
+    # needs to bind-mount and to mount proc/sys/cgroup2.
+    "apk add --no-cache bash coreutils util-linux mount",
+    "mkdir -p /var/lib/minibox /run/minibox",
+    # Delegate the resource controllers.
+    #
+    # On a normal Linux host systemd has already enabled these in the root's
+    # cgroup.subtree_control, so miniboxd finds `cpu memory pids io`
+    # available in its own cgroup. A bare VM has an *empty* root
+    # subtree_control, so children inherit no controllers at all and the first
+    # `pids.max` write EPERMs. This is the one piece of host preparation the
+    # native adapter cannot do for itself.
+    "sh -c 'echo \"+cpu +memory +pids +io\" > /sys/fs/cgroup/cgroup.subtree_control'",
+    "sh -c 'cat /sys/fs/cgroup/cgroup.subtree_control'",
+]
+volumes = ["./:/workspace"]
+
+[health]
+exec = ["test", "-x", "/workspace/target/aarch64-unknown-linux-musl/debug/miniboxd"]
