@@ -353,8 +353,19 @@ pub fn capability_matrix() -> CapabilityMatrix {
             row!(Networking, Bridge, [Y, N, N, N, N, N, N]),
             row!(Networking, PortForwarding, [N, N, N, N, N, N, N]),
             row!(Networking, Dns, [N, N, N, N, N, N, N]),
-            row!(MountsAndPrivileges, BindMounts, [Y, N, N, N, N, N, N]),
-            row!(MountsAndPrivileges, PrivilegedMode, [Y, N, N, N, N, N, N]),
+            // Colima was previously recorded as `N` for both of these, but
+            // `ColimaRuntime` implements bind mounts (`bind_mount_shell_snippet`,
+            // wired into the spawn script) and privileged mode (`--keep-caps` on
+            // the `unshare` invocation), and both were confirmed working against
+            // a live colima instance: a host file bind-mounted into a container
+            // read back byte-for-byte. The row below is now pinned to the
+            // adapter by `colima_implements_bind_mounts_and_privileged`.
+            //
+            // GKE and the macOS VM backends (krun/vz) genuinely lack them, so
+            // they stay `N`; smolvm lacks them too — its guests expose no
+            // host filesystem, so there is nothing to bind.
+            row!(MountsAndPrivileges, BindMounts, [Y, N, Y, N, N, N, N]),
+            row!(MountsAndPrivileges, PrivilegedMode, [Y, N, Y, N, N, N, N]),
             row!(Security, PeerCredentials, runtime_yes),
             row!(Security, TarPathValidation, all_yes),
             row!(Security, SetuidStripping, all_yes),
@@ -417,5 +428,71 @@ mod tests {
         let json = serde_json::to_string(&matrix).expect("serialize matrix");
         let decoded: CapabilityMatrix = serde_json::from_str(&json).expect("deserialize matrix");
         assert_eq!(decoded, matrix);
+    }
+
+    /// Every row must have exactly one cell per backend.
+    ///
+    /// The support tables are positional, so a new `Backend` added to
+    /// `Backend::ALL` would silently leave every row short by one and
+    /// `for_backend` would fall through to a default. This is the guard that
+    /// makes such a mistake a compile-and-test failure instead of a lie in the
+    /// published matrix.
+    #[test]
+    fn every_row_has_one_cell_per_backend() {
+        let matrix = capability_matrix();
+        for row in &matrix.capabilities {
+            assert_eq!(
+                row.support.len(),
+                matrix.backends.len(),
+                "row {:?} has {} cells but there are {} backends",
+                row.capability.label(),
+                row.support.len(),
+                matrix.backends.len()
+            );
+        }
+    }
+
+    /// The matrix must not claim a capability for a backend that never
+    /// implemented it. Colima's bind-mount and privileged rows were wrong for
+    /// months; this pins the corrected claim so it cannot silently regress, and
+    /// documents *why* colima is the one VM backend that qualifies.
+    #[test]
+    fn colima_implements_bind_mounts_and_privileged() {
+        let matrix = capability_matrix();
+        assert_eq!(
+            matrix.support(Backend::Colima, Capability::BindMounts),
+            Some(CapabilitySupport::Supported),
+            "ColimaRuntime generates and executes bind-mount shell snippets"
+        );
+        assert_eq!(
+            matrix.support(Backend::Colima, Capability::PrivilegedMode),
+            Some(CapabilitySupport::Supported),
+            "ColimaRuntime passes --keep-caps on the unshare invocation"
+        );
+    }
+
+    /// Backends without the capability must keep saying so. Guards against a
+    /// blanket "everything is supported" edit.
+    #[test]
+    fn backends_without_bind_mounts_still_report_unsupported() {
+        let matrix = capability_matrix();
+        for backend in [
+            Backend::Gke,
+            Backend::Smolvm,
+            Backend::Krun,
+            Backend::Vz,
+            Backend::Winbox,
+        ] {
+            assert_eq!(
+                matrix.support(backend, Capability::BindMounts),
+                Some(CapabilitySupport::Unsupported),
+                "{backend:?} does not implement bind mounts"
+            );
+            assert_eq!(
+                matrix.support(backend, Capability::PrivilegedMode),
+                Some(CapabilitySupport::Unsupported),
+                "{backend:?} does not implement privileged mode"
+            );
+        }
     }
 }
