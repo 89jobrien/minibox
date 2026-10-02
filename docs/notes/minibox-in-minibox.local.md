@@ -1,6 +1,6 @@
 # Minibox-in-Minibox (DinD) Analysis
 
-Last updated: 2026-10-01
+Last updated: 2026-10-02
 
 ---
 
@@ -160,8 +160,16 @@ Under deny-by-default the `--privileged` + `-v` request should be rejected at
 - The generated VM test script never exports the vars (`test_in_vm.rs:605-650`).
 - `daemon_handler_coverage_tests.rs:668-669` explicitly `remove_var`s both,
   confirming the gate is live.
-- `.crux/promote.crux:85,180,269` sets both, so the crux-driven path is the one
-  that satisfies it.
+- `crux/dev/smoke.crux:67` — the real DinD smoke test — *does* export
+  `MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true`, and it also
+  creates its own delegated cgroup slice (`smoke.crux:43-47`) before running.
+  So `just smoke` is the one path that satisfies the gate today.
+
+Note: an earlier revision of this document cited `.crux/promote.crux:85,180,269`
+as the env-var source. That is stale — `promote.crux:6-9` now deliberately
+excludes the container smoke tests, because they need root and cgroup
+delegation that GitHub-hosted runners do not provide. The smoke test moved to
+`crux/dev/smoke.crux`.
 
 **Not confirmed by execution** — on macOS the test cannot run at all (adapter
 capability), so the policy gate is unobservable there. It remains a live concern
@@ -242,8 +250,10 @@ reports `port_forwarding: unsupported` for every backend.
   privileged path, no DinD
 - `test_linux.rs:243-248` stages `system_tests` for the VM path, but
   `test-in-vm` cannot actually run it on macOS (see above)
-- `justfile:134` points at `crux run crux/dev/test_linux.crux`, which **does not
-  exist** — `.crux/` has no `test_linux.crux`
+- `justfile:134` → `crux run crux/dev/test_linux.crux` does exist and is
+  wired; it is not the problem. The gap is that the path it drives cannot
+  deliver on macOS (adapter capability + virtiofs), and CI cannot host the
+  privileged path at all.
 
 ### P5 (new) — Reject unsupported capabilities instead of no-op'ing
 
@@ -298,6 +308,15 @@ suites on a backend that cannot deliver them.
   `setup_runtime_directories(new_root)` is called twice back-to-back in
   `pivot_root_to`. Harmless but redundant.
 - `xtask/src/test_in_vm.rs:350-365` — `minibox_policy_allows()` is unit tested
-  but has no non-test caller; a half-wired guard.
-- `justfile:134` — `crux run crux/dev/test_linux.crux` references a file that
-  does not exist in `.crux/`.
+  but has no non-test caller; a half-wired guard. It also reads env vars only,
+  so it cannot see a policy granted through `minibox.toml` or the other config
+  layers, which makes `test-in-vm` silently pick the unprivileged backend.
+
+Corrections to earlier revisions of this document, for the record:
+
+- An earlier revision claimed `justfile:134` referenced a nonexistent
+  `crux/dev/test_linux.crux`. **It exists.** The mistake was looking in `.crux/`
+  when the pipelines live in `crux/dev/`.
+- An earlier revision cited `.crux/promote.crux` as the source of the `ALLOW_*`
+  env vars. **Stale** — `promote.crux:6-9` excludes the container smoke tests
+  entirely; the DinD smoke test is `crux/dev/smoke.crux`.
