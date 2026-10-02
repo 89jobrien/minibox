@@ -935,6 +935,53 @@ pub fn bind_mount_shell_snippet(
     }
 }
 
+/// Build the `unshare ... chroot` invocation that runs the container command.
+///
+/// procfs, sysfs, and cgroup2 are mounted *inside* the new mount namespace,
+/// i.e. after `unshare` has created it. Two consequences that matter:
+///
+/// - `/proc` reflects the container's own PID namespace rather than the VM's.
+/// - The mounts never leak into the Lima VM's mount namespace, so concurrent
+///   containers cannot observe each other's `/proc`.
+///
+/// cgroup2 needs its own `mount -t`: it is a separate filesystem, so a fresh
+/// `sysfs` does not carry `/sys/fs/cgroup` along, and a container that cannot
+/// see its cgroup tree cannot manage resource limits or nest further.
+///
+/// The image rootfs is mounted read-only — the overlay's lowerdir is
+/// VM-local while its upperdir is on the virtiofs-shared home directory, and
+/// the kernel does not allow an overlay to straddle two filesystems. tmpfs on
+/// `/tmp` and `/run` is therefore the container's writable surface, which is
+/// where the daemon's socket, run, and data state are expected to live. This
+/// matches what the native adapter's runtime-directory setup provides.
+///
+/// The inner `sh -c` receives the real command as its first argument after
+/// `$0`, so `"$@"` re-expands to the command and its arguments. Mounting is
+/// best-effort: a minimal image without a usable `mount` still gets a working
+/// container instead of a failed spawn, and each failure is reported on stderr
+/// rather than swallowed silently.
+fn namespace_exec_fragment(privileged: bool) -> String {
+    let privileged_flag = if privileged { " --keep-caps" } else { "" };
+    format!(
+        r#"sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
+    --fork --kill-child \
+    chroot "$ROOTFS" /bin/sh -c 'mount -t proc proc /proc \
+        || echo "colima: warning: could not mount /proc in container" >&2; \
+      mount -t sysfs sys /sys \
+        || echo "colima: warning: could not mount /sys in container" >&2; \
+      mkdir -p /sys/fs/cgroup 2>/dev/null; \
+      mount -t cgroup2 none /sys/fs/cgroup \
+        || echo "colima: warning: could not mount cgroup2 at /sys/fs/cgroup" >&2; \
+      mkdir -p /tmp /run 2>/dev/null; \
+      mount -t tmpfs tmpfs /tmp \
+        || echo "colima: warning: could not mount tmpfs at /tmp" >&2; \
+      mount -t tmpfs tmpfs /run \
+        || echo "colima: warning: could not mount tmpfs at /run" >&2; \
+      exec "$@"' \
+    sh "$COMMAND" "${{ARGS[@]}}""#
+    )
+}
+
 #[async_trait]
 impl ContainerRuntime for ColimaRuntime {
     /// Return the runtime capabilities advertised by this adapter.
@@ -987,25 +1034,19 @@ impl ContainerRuntime for ColimaRuntime {
             .collect::<anyhow::Result<Vec<_>>>()?
             .join("\n");
 
-        let privileged_flag = if config.privileged {
-            " --keep-caps"
-        } else {
-            ""
-        };
+        let namespace_exec = namespace_exec_fragment(config.privileged);
 
         if self.spawner.is_some() && config.capture_output {
             // Streaming path: foreground exec with piped stdout.
             // Uses `exec unshare` so the spawned process replaces the shell,
             // making child.id() the container init PID directly.
             let spawn_script = format!(
-                r#"ROOTFS={rootfs}
+                r"ROOTFS={rootfs}
 COMMAND={command}
 ARGS=({args})
 {bind_mount_cmds}
-exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
-    --fork --kill-child \
-    chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
-"#
+exec {namespace_exec}
+"
             );
 
             let mut child = self.lima_spawn(&["bash", "-lc", &spawn_script])?;
@@ -1050,19 +1091,17 @@ exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
         // Uses `jq` to extract fields from the JSON config, then runs
         // `unshare` with Linux namespace flags to isolate the container.
         let spawn_script = format!(
-            r#"
+            r"
             ROOTFS={rootfs}
             COMMAND={command}
             ARGS=({args})
 
             {bind_mount_cmds}
 
-            sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
-                --fork --kill-child \
-                chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}" &
+            {namespace_exec} &
 
             echo $!
-            "#
+            "
         );
 
         let output = self.ctx.lima_exec(&["bash", "-lc", &spawn_script])?;
@@ -1303,6 +1342,95 @@ mod tests {
         assert!(
             script.contains("world"),
             "spawn script missing arg 'world': {script}"
+        );
+    }
+
+    /// The spawn script must mount procfs and sysfs inside the new mount
+    /// namespace. Without them the container gets an *empty* `/proc` and
+    /// `/sys`, which silently breaks capability inspection
+    /// (`/proc/self/status`), filesystem probing (`/proc/filesystems`), and
+    /// every cgroup path — the three things nested-container and DinD use.
+    #[test]
+    fn namespace_exec_mounts_proc_and_sysfs() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains("mount -t proc proc /proc"),
+            "procfs mount missing from spawn fragment: {frag}"
+        );
+        assert!(
+            frag.contains("mount -t sysfs sys /sys"),
+            "sysfs mount missing from spawn fragment: {frag}"
+        );
+        // cgroup2 is a separate filesystem; a fresh sysfs does not carry
+        // /sys/fs/cgroup, so it needs its own mount.
+        assert!(
+            frag.contains("mount -t cgroup2 none /sys/fs/cgroup"),
+            "cgroup2 mount missing from spawn fragment: {frag}"
+        );
+        // The rootfs is read-only, so tmpfs is the only writable surface.
+        assert!(
+            frag.contains("mount -t tmpfs tmpfs /tmp"),
+            "writable /tmp missing from spawn fragment: {frag}"
+        );
+    }
+
+    /// The mounts must run *after* `unshare --mount`, otherwise they land in
+    /// the Lima VM's mount namespace and leak across containers.
+    #[test]
+    fn namespace_exec_mounts_after_unshare() {
+        let frag = namespace_exec_fragment(false);
+        let unshare_at = frag.find("unshare").expect("unshare present");
+        let mount_at = frag.find("mount -t proc").expect("proc mount present");
+        assert!(
+            unshare_at < mount_at,
+            "procfs must be mounted after unshare, else it leaks to the VM: {frag}"
+        );
+    }
+
+    /// A failed mount must not abort the spawn: a minimal image without a
+    /// usable `mount` should still get a working container, and the failure
+    /// must be reported rather than silently swallowed.
+    #[test]
+    fn namespace_exec_tolerates_mount_failure() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains("could not mount /proc"),
+            "proc mount failure must be reported: {frag}"
+        );
+        assert!(
+            frag.contains("could not mount /sys"),
+            "sys mount failure must be reported: {frag}"
+        );
+        assert!(
+            frag.contains("could not mount cgroup2"),
+            "cgroup2 mount failure must be reported: {frag}"
+        );
+        assert!(
+            frag.contains("could not mount tmpfs at /tmp"),
+            "tmpfs mount failure must be reported: {frag}"
+        );
+    }
+
+    /// Privileged containers still pass `--keep-caps`.
+    #[test]
+    fn namespace_exec_keeps_caps_when_privileged() {
+        assert!(namespace_exec_fragment(true).contains("--keep-caps"));
+        assert!(!namespace_exec_fragment(false).contains("--keep-caps"));
+    }
+
+    /// The container command must be re-expanded by the inner shell, not
+    /// swallowed. The `sh -c '...' sh "$COMMAND" ...` tail is what makes
+    /// `"$@"` resolve to the real command and its arguments.
+    #[test]
+    fn namespace_exec_reforwards_command_and_args() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains(r#"exec "$@""#),
+            "inner shell must exec its positional args: {frag}"
+        );
+        assert!(
+            frag.contains(r#"sh "$COMMAND" "${ARGS[@]}""#),
+            "command and args must be forwarded to the inner shell: {frag}"
         );
     }
 
