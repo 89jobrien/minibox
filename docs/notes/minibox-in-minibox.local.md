@@ -1,322 +1,233 @@
 # Minibox-in-Minibox (DinD) Analysis
 
 Last updated: 2026-10-02
+guest run)
 
 ---
 
-## Current State: Works ONLY on the `native` Linux adapter
+## Summary
 
-The headline finding from a live run on this machine: **the DinD test cannot run
-on macOS at all**, regardless of policy configuration. It requires the `native`
-Linux adapter (Linux namespaces + overlayfs + cgroups v2), which needs a real
-Linux host with root.
+Nested containers **do work on the `native` adapter** on a real Linux host —
+that is what `just smoke` (`crux/dev/smoke.crux`) exercises, and it is the only
+backend with genuine namespaces. The macOS VM adapters are the constrained ones,
+for substrate reasons rather than container-model reasons.
 
-The daemon's own `GetCapabilities` response reports, for the `smolvm` backend:
-
-| Capability            | smolvm status         |
-| --------------------- | --------------------- |
-| `bind_mounts`         | `unsupported`         |
-| `privileged_mode`     | `unsupported`         |
-| `overlay_fs`          | `unsupported`         |
-| `cgroups_v2`          | `provided_by` (`vm`)  |
-| `pid_namespace` & co. | `provided_by` (`vm`)  |
-
-Verified behavior on this machine (smolvm adapter, policy enabled):
-
-| Request                                    | Observed result                        |
-| ------------------------------------------ | -------------------------------------- |
-| `mbx run alpine -- /bin/echo hi`           | works, output streams                  |
-| `mbx run --privileged alpine -- /bin/echo` | **silently ignored**, reports success |
-| `mbx run -v /tmp/src:/mnt/x alpine -- cat` | **exit 1, no diagnostic, no output**   |
-| DinD test (privileged + 5 bind mounts)     | container stuck in `Created`, no output |
-
-The privileged path is not degraded-but-working on smolvm — it is a silent
-no-op for `--privileged` and a silent failure for `-v`. Nothing in the run path
-warns that the requested capability is unavailable.
-
-### The harness advertises a path that does not exist
-
-`xtask/src/test_in_vm.rs` picks a backend in `detect_backend` and decides
-privilege with `VmBackend::is_privileged()`:
-
-- `is_privileged()` returns `true` for the `Minibox` backend based **only** on
-  whether `MINIBOX_ALLOW_BIND_MOUNTS` / `MINIBOX_ALLOW_PRIVILEGED` are set
-  (`test_in_vm.rs:66-76`). It never consults the adapter's actual capability
-  matrix.
-- Because of that, `build_test_script(..., privileged = true, ...)` includes
-  `system_tests`, `cgroup_tests`, and `sandbox_tests` (`test_in_vm.rs:550-556`).
-- On macOS the underlying adapter is smolvm, which cannot honor those requests.
-
-Result: the suite list says privileged, the adapter cannot deliver, and the run
-hangs or silently no-ops with no error pointing at the real cause.
-
-### What works (native Linux adapter, root, cgroups v2)
-
-| Component                  | Status  | Notes                                   |
-| -------------------------- | ------- | --------------------------------------- |
-| Privileged mode            | Done    | `capset(2)` grants curated cap set      |
-| Cap exclusion list         | Done    | SYS_MODULE, SYS_BOOT, MAC_OVERRIDE/ADMIN |
-| Bind mounts into container | Done    | `-v host:container[:ro]` syntax         |
-| Cgroup delegation (auto)   | New     | Auto-delegated when `--privileged`      |
-| `--cgroup-parent` flag     | New     | Explicit parent slice selection         |
-| `/dev` population          | New     | tmpfs + host device bind mounts         |
-| Proc mount                 | New     | Explicit, `nosuid,nodev,noexec`         |
-| Nesting depth limit        | New     | `MINIBOX_NEST_DEPTH` / `MAX_NEST_DEPTH` |
-| Nested overlay probe       | New     | Empirical overlay-on-overlay detection  |
-| Cgroup root override       | Done    | `MINIBOX_CGROUP_ROOT` env override      |
-| Preflight cgroup probe     | Done    | `cgroup_subtree_delegatable` check      |
-| Port forwarding            | Missing | No implementation anywhere              |
-| User-facing docs           | Missing | No `docs/NESTING.md`                    |
-
-### Two divergent test implementations
-
-| Implementation       | Location                                            | Sets `ALLOW_*`? |
-| -------------------- | --------------------------------------------------- | --------------- |
-| Integration test     | `crates/miniboxd/tests/system_tests.rs:504`         | **no**          |
-| Showcase scenario    | `crates/minibox-testsuite/src/showcase/mounts_privileged.rs` | yes, via `spawn_daemon_with_env` |
+A live run during this pass found and fixed a real bug in the privileged path
+(see "Bug found and fixed" below). The remaining blockers are listed under
+"Open items", and each is specific rather than general.
 
 ---
 
-## Architecture of the DinD Test
+## Current State
 
-```
-Host (Linux, root, cgroups v2)
-  |
-  +-- outer miniboxd (host socket)
-        |
-        +-- alpine container (--privileged)
-              |  Bind mounts:
-              |    miniboxd binary -> /usr/local/bin/miniboxd
-              |    mbx binary     -> /usr/local/bin/minibox
-              |    /sys/fs/cgroup -> /sys/fs/cgroup
-              |    tmpfs data dir -> /minibox-data
-              |    tmpfs run dir  -> /minibox-run
-              |
-              +-- inner miniboxd (MINIBOX_CGROUP_ROOT=delegated slice)
-                    |
-                    +-- alpine container
-                          `echo hello-from-dind`
+| Backend | privileged | bind mounts | cgroups writable by container | Nesting |
+| ------- | ---------- | ----------- | ----------------------------- | ------- |
+| `native` (Linux) | yes | yes | parent-side only; delegated subtree works | **yes** |
+| `colima` (macOS) | yes (verified) | yes (verified) | yes (runs as VM root) | nested daemon verified; pull blocked on network |
+| `smolvm` (macOS) | no-op | no — no host FS via virtiofs | guest is itself a container | not viable |
+| `krun` / `vz` | untested | untested | untested | unknown |
+
+### Depth tracking
+
+`crates/minibox/src/nesting.rs`: `MINIBOX_NEST_DEPTH` / `MINIBOX_MAX_NEST_DEPTH`,
+default max 4. Enforced — `check_depth()` runs in `handle_run`
+(`request.rs:30-31`). The daemon increments the counter in the child env
+(`preparation.rs`); `integration_tests.rs:672` asserts a container sees
+`DEPTH=1`.
+
+Scope caveat: this only bounds nesting of *minibox daemons*. A container
+running Docker or podman directly never increments it, so the limit is advisory
+in that case.
+
+---
+
+## Bug found and fixed: privileged cgroup placement (`024233e3`)
+
+`delegate_subtree` creates an `init` leaf cgroup, documented as "the init leaf
+**where the container process will live**" (`cgroups.rs:365`). But
+`preparation.rs` handed the runtime the *subtree root*:
+
+```rust
+cgroup_path: cgroup_dir.clone().into(),   // the parent, not the leaf
 ```
 
-The inner daemon's data dir is on host tmpfs (via bind mount), not the outer
-container's overlay, which avoids the kernel's overlay-on-overlay limitation.
+The container process is then written to `<subtree>/cgroup.procs`
+(`process.rs:255-259`). cgroup v2 forbids a cgroup that **has children** from
+holding processes of its own, so every privileged run failed:
 
----
-
-## Enabling privileged mode (three levels)
-
-Policy is deny-by-default. `validate_policy`
-(`crates/minibox/src/daemon/handler/mod.rs:383`) rejects bind mounts and
-privileged requests before the runtime adapter ever sees them.
-
-| Mechanism              | Where                                                | Notes                     |
-| ---------------------- | ---------------------------------------------------- | ------------------------- |
-| Env vars               | `MINIBOX_ALLOW_BIND_MOUNTS`, `MINIBOX_ALLOW_PRIVILEGED` | Accepts `1/true/yes`; highest |
-| Config file            | `/etc/minibox/config.toml`, `~/.config/minibox/config.toml` | `crates/miniboxd/README.md:60` |
-| **Project config (new)** | `./minibox.toml`, walked up from CWD                 | Lowest precedence; gitignored |
-
-```toml
-# ./minibox.toml — gitignored, per-checkout
-adapter = "smolvm"
-log_level = "info"
-
-[policy]
-allow_privileged = true
-allow_bind_mounts = true
+```
+failed to add process 1413142 to cgroup /sys/fs/cgroup/minibox/<id>/cgroup.procs:
+Resource busy (os error 16)
 ```
 
-Load order is project -> system -> user -> env, so a checked-in file can never
-weaken a system-level lockdown, and `MINIBOX_ALLOW_PRIVILEGED=0` always wins.
-Verified at runtime: project alone enabled policy from a nested subdirectory; a
-user config then overrode it to `false`; an env var also overrode it.
+Fixed by placing the process in `cgroup_dir/init` when `privileged`. Verified
+live — the container now gets past cgroup placement, enters the namespace with
+`cap_eff=000001ffffffffff`, sets its hostname, and proceeds to filesystem setup.
 
-### Dead code: the `dev` profile
-
-`DaemonConfig::profile("dev")` (`config.rs:89`) sets `allow_privileged` and
-`allow_bind_mounts` to `true` — exactly the DinD opt-in — but **it is never
-called outside its own unit tests**. `main.rs:61` calls `DaemonConfig::load()`,
-and the only CLI flag is `--adapter`. There is no `--profile` flag and no
-`MINIBOX_PROFILE` env var, so the profile is unreachable at runtime.
-
-### The xtask cannot see the config file
-
-`xtask/src/test_in_vm.rs:350-365` (`minibox_policy_allows`) reads **only** env
-vars. With policy granted via config file alone, `detect_backend` silently
-selects the unprivileged smolvm backend and skips `system_tests` — the DinD
-test never runs and nothing reports why. The helper is unit-tested but has no
-non-test caller.
+Non-privileged containers were unaffected because they never call
+`delegate_subtree`. That asymmetry is why this survived: the broken path is
+exactly the DinD path.
 
 ---
 
-## Regression: `test_e2e_dind_pull_and_run` vs. the policy gate
+## Test environment
 
-`DaemonFixture::start()` (`crates/miniboxd/tests/helpers/mod.rs:181-190`) spawns
-`miniboxd` with `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`, `MINIBOX_SOCKET_PATH`,
-`MINIBOX_CGROUP_ROOT`, and `RUST_LOG` — but **not** the two `ALLOW_*` vars.
+### What works
 
-Under deny-by-default the `--privileged` + `-v` request should be rejected at
-`validate_policy`. Supporting evidence:
+`tests/smolfiles/dind.smolfile` + `tests/smolfiles/dind-smoke.sh` provide a
+reproducible Linux guest for this. Create once:
 
-- The generated VM test script never exports the vars (`test_in_vm.rs:605-650`).
-- `daemon_handler_coverage_tests.rs:668-669` explicitly `remove_var`s both,
-  confirming the gate is live.
-- `crux/dev/smoke.crux:67` — the real DinD smoke test — *does* export
-  `MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true`, and it also
-  creates its own delegated cgroup slice (`smoke.crux:43-47`) before running.
-  So `just smoke` is the one path that satisfies the gate today.
+```bash
+cargo build -p miniboxd -p minibox-cli --target aarch64-unknown-linux-musl
+smolvm machine create --name minibox-dind --smolfile tests/smolfiles/dind.smolfile
+smolvm machine start  --name minibox-dind
+smolvm machine exec   --name minibox-dind -- bash /workspace/tests/smolfiles/dind-smoke.sh
+smolvm machine stop   --name minibox-dind
+```
 
-Note: an earlier revision of this document cited `.crux/promote.crux:85,180,269`
-as the env-var source. That is stale — `promote.crux:6-9` now deliberately
-excludes the container smoke tests, because they need root and cgroup
-delegation that GitHub-hosted runners do not provide. The smoke test moved to
-`crux/dev/smoke.crux`.
+The smoke script mirrors `crux/dev/smoke.crux`: start an outer daemon, run a
+privileged container with the daemon bind-mounted, delegate a cgroup subtree
+*from inside that container*, start an inner daemon there, and have it pull and
+run an image.
 
-**Not confirmed by execution** — on macOS the test cannot run at all (adapter
-capability), so the policy gate is unobservable there. It remains a live concern
-only for Linux hosts where the native adapter is in play. Fix would be an
-`ALLOW_*` env variant on the fixture, or having the fixture read the project
-config.
+### Environment requirements discovered
 
-Note this supersedes the earlier framing in this document: the policy gate is
-**not** the reason the DinD test is unrunnable in general. Adapter capability is.
+1. **`MINIBOX_ADAPTER=native` is mandatory** in the guest. A smolvm guest is
+   itself a smolvm machine, so the `smolvm` binary is present and gets
+   auto-selected; the run then fails with `failed to execute smolvm`.
+2. **Do not set `MINIBOX_CGROUP_ROOT` on the outer daemon.** With it set, the
+   daemon creates a plain directory whose `subtree_control` was never enabled,
+   and the first `pids.max` write EPERMs. Left unset, the daemon resolves its
+   own supervisor cgroup correctly.
+3. **Controllers must be delegated in the guest root.** A bare VM has an empty
+   `/sys/fs/cgroup/cgroup.subtree_control`, so children inherit no controllers
+   and `pids.max` writes fail. The smolfile enables
+   `+cpu +memory +pids +io`. On a normal Linux host systemd has already done
+   this, which is why the native adapter cannot be relied on to do it itself.
+4. **`smolvm` volume mounts do work** for provisioning (`volumes = ["./:/workspace"]`
+   populated correctly), so the virtiofs limitation that blocks the *minibox
+   smolvm adapter's* `-v` flags does not apply to smolvm's own mount mechanism.
+   The two are separate code paths.
+5. **smolvm guests cannot host the native adapter's cgroup work.** The guest is
+   launched as a detached container, so its cgroup namespace is a delegated
+   subtree; `/sys/fs/cgroup/cgroup.type` is absent and adding a process to a
+   cgroup fails with EBUSY. `colima` (a real VM) does not have this problem and
+   is the better substrate — verified `mkdir` + `subtree_control` delegation +
+   process move all succeed there.
 
----
+Cross-compiling for the guest needs the musl linker, and the shell is not
+persistent between tool invocations, so the env has to be set in the same call:
 
-## Next Steps
+```bash
+CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc \
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc \
+  cargo build -p miniboxd -p minibox-cli --target aarch64-unknown-linux-musl
+```
 
-### P0 — Automatic cgroup delegation — CLOSED
-
-Both the doc's recommended option A and its "option B" now exist.
-
-**A) `--cgroup-parent` flag** (explicit path):
-
-- CLI: `crates/mbx/src/main.rs:184`, `crates/mbx/src/commands/run.rs:72`
-- Protocol: `crates/minibox-core/src/protocol.rs:199,954`
-- Validation: `validate_cgroup_parent` (`crates/minibox/src/container/cgroups.rs:71`)
-  rejects relative paths, anything outside `/sys/fs/cgroup/`, and `..`
-  components. Tests at `cgroups.rs:396-418`.
-- Wiring: `crates/minibox/src/daemon/handler/run/preparation.rs:164-195` builds
-  `CgroupManager::with_root(...)` then `create()`, which does `create_dir_all` +
-  `enable_subtree_controllers(parent)` (`cgroups.rs:126-139`). Non-Linux builds
-  reject the flag outright.
-
-**Automatic delegation on `--privileged`** (the "more magic" option, now the
-default):
-
-- `preparation.rs:198-211` calls `delegate_subtree` whenever `privileged` is set
-- `cgroups.rs:354-380` creates the subtree, enables controllers, and creates an
-  `init` leaf cgroup so the container process satisfies the cgroups v2 "no
-  internal processes" rule
-- Failure is non-fatal (debug log), so a privileged run still succeeds where
-  delegation is impossible
-
-### P1 — `/dev` population — CLOSED
-
-`setup_container_dev` (`crates/minibox/src/container/filesystem.rs:764-873`):
-
-- tmpfs at `/dev` (`nosuid,noexec`, 64 MB)
-- Host device nodes **bind-mounted** from `default_device_nodes()`
-- `devpts` at `/dev/pts` with `newinstance,ptmxmode=0666,mode=0620`
-- tmpfs at `/dev/shm` (`mode=1777`)
-- Symlinks from `default_dev_symlinks()`
-
-Deliberately **not** `mknod`: the child is cloned with `CLONE_NEWUSER`
-unconditionally and the kernel refuses device-node creation inside a user
-namespace (documented at `filesystem.rs:785-800`). Trade-off: node permission
-bits are the host's, since the bind mount shares the inode.
-
-Proc is mounted explicitly (`filesystem.rs:348-363`) with
-`nosuid,nodev,noexec`. Neither path is gated behind `--privileged` or a new
-flag — the doc's suggestion to gate behind `--init-dev` is moot.
-
-### P2 — User-facing documentation — OPEN
-
-No `docs/NESTING.md`. It must now also cover the three policy mechanisms, the
-project-level `minibox.toml`, nesting depth, `--cgroup-parent`, and the fact
-that privileged delegation is automatic. Existing design docs predate all of
-this: `docs/plans/2026-05-26-nested-containers.md`,
-`docs/plans/2026-05-26-nested-containers-impl.md`,
-`docs/ideas/nested-workflows.md`, `docs/ideas/dind-sysbox.md`.
-
-### P3 — Port forwarding — OPEN
-
-No implementation. `minibox-domain/src/capability.rs:30` references
-port-forward *conformance tests* as future work; the live capability matrix
-reports `port_forwarding: unsupported` for every backend.
-
-### P4 — CI coverage — OPEN, and mis-signalled
-
-- `.github/workflows/ci.yml` runs `cargo xtask verify` on `ubuntu-latest` — no
-  privileged path, no DinD
-- `test_linux.rs:243-248` stages `system_tests` for the VM path, but
-  `test-in-vm` cannot actually run it on macOS (see above)
-- `justfile:134` → `crux run crux/dev/test_linux.crux` does exist and is
-  wired; it is not the problem. The gap is that the path it drives cannot
-  deliver on macOS (adapter capability + virtiofs), and CI cannot host the
-  privileged path at all.
-
-### P5 (new) — Reject unsupported capabilities instead of no-op'ing
-
-Highest-value fix. The adapter should refuse a request it cannot honor rather
-than silently dropping the capability:
-
-- `--privileged` on smolvm currently reports success while doing nothing
-- `-v` on smolvm exits 1 with no diagnostic
-- The DinD test hangs in `Created` with no error
-
-`validate_policy` is the wrong layer for this — it is a policy question, not a
-capability question. The capability check belongs at admission against the
-adapter's own matrix, and the CLI should surface a named error
-("adapter `smolvm` does not support bind mounts").
-
-### P6 (new) — Fix `is_privileged()` in the test harness
-
-`VmBackend::is_privileged()` should consult the adapter capability matrix rather
-than the policy env vars, so `test-in-vm` does not claim to run privileged
-suites on a backend that cannot deliver them.
+`just smoke` expects `target/release/{miniboxd,mbx}`; a `--release` musl build
+failed to link here (the macOS linker was selected despite the env var), so the
+harness above uses the debug target dir instead.
 
 ---
 
-## Risk Assessment
+## Open items
 
-| Risk | Likelihood | Impact | Mitigation |
-| ---- | ---------- | ------ | ---------- |
-| Adapter silently ignores a requested capability | **High** | High | P5 — reject at admission with a named error |
-| `test-in-vm` claims privileged on a non-capable backend | **High** | High | P6 — derive from capability matrix |
-| DinD test unrunnable on macOS | Certain | Medium | Needs a Linux host with root; no macOS path exists |
-| Test harness hides that fact | **High** | Medium | Suite list implies privileged; nothing warns |
-| Policy gate blocks DinD setup | Medium | Medium | Three mechanisms now documented; fixture still omits `ALLOW_*` |
-| Overlay-on-overlay kernel bug | Low | High | tmpfs bind; `supports_nested_overlay()` probe |
-| Cgroup controller missing | Medium | Medium | Preflight probe; delegation failure non-fatal |
-| Inner daemon orphaned on outer crash | Medium | Medium | PID namespace + kill in cleanup |
-| Privilege escalation via nested privileged | Low | High | Cap exclusion list; no SYS_MODULE/SYS_BOOT |
-| `/dev` absence causes silent failures | Low | Low | `setup_container_dev` binds real device nodes |
+### P0 — rootfs ownership vs. the uid range (blocks native here)
+
+`UidRangeMode::Exclusive` (the default) allocates a distinct 65,536-ID host
+range per container, so container-uid-0 is **not** host-root. The rootfs is
+created by the daemon and owned by host root, and nothing chowns it to the
+container's mapped range — `chown` appears only in image/commit paths, never in
+the container rootfs setup.
+
+Consequence: the containerized child cannot create directories in a root-owned
+rootfs, which fails during `pivot_root`:
+
+```
+pivot_root: setup runtime directories
+  create .../merged/run
+  Permission denied (os error 13)
+```
+
+This is not colima-specific — the overlay there is `rw` and writable from a root
+shell, so the environment is fine and the mapping is the constraint.
+
+Two ways out, both design decisions rather than bugs to fix blindly:
+chown the rootfs to the container's mapped uid range, or create the runtime
+directories before entering the user namespace.
+
+Note this also explains the earlier bind-mount failure in the privileged path:
+`failed to create parent for bind mount target .../usr/local/bin/miniboxd` is
+the same inability, reached through a different code path.
+
+### P1 — Colima container networking
+
+Colima containers get loopback only — `/proc/net/dev` shows just `lo`,
+`/etc/resolv.conf` is empty — because the spawn script runs
+`unshare --net` with no veth, bridge, or DHCP behind it. The inner daemon
+cannot pull an image.
+
+`skip_network_namespace` exists in `ContainerSpawnConfig` but the colima adapter
+never reads it; it appears only in two test fixtures. This is unimplemented,
+not misconfigured.
+
+### P2 — `native_network_provider` undefined
+
+`crates/miniboxd/src/main.rs:1501,1516` call `native_network_provider` under
+`#[cfg(target_os = "linux")]`, but the function is not defined anywhere in the
+workspace. miniboxd's binary unit tests therefore fail to compile on Linux:
+
+```
+error[E0425]: cannot find function `native_network_provider` in this scope
+```
+
+macOS skips those tests via cfg, so a macOS-only dev loop never sees it. It
+blocks `cargo test --no-run -p miniboxd --target aarch64-unknown-linux-musl`,
+which is the command `test-in-vm` runs, so cross-compiling the suite for Linux
+currently fails outright.
+
+### P3 — Port forwarding
+
+Absent on every backend. `minibox-domain/src/capability.rs:30` references
+port-forward conformance tests as future work; the live capability matrix reports
+`port_forwarding: unsupported` for all backends.
 
 ---
 
-## Incidental Findings (out of scope, not fixed)
+## Things that were wrong in earlier revisions of this document
 
-- `crates/miniboxd/src/main.rs:1501,1516` — `native_network_provider` is called
-  under `#[cfg(target_os = "linux")]` but **is not defined anywhere**. The
-  miniboxd binary's unit tests therefore fail to compile on Linux:
-  `error[E0425]: cannot find function native_network_provider in this scope`.
-  macOS skips them via cfg, so a macOS-only dev loop never sees it. This blocks
-  `cargo test --no-run -p miniboxd --target aarch64-unknown-linux-musl`
-  (the exact command `test-in-vm` runs), so cross-compiling the test suite for
-  Linux currently fails outright.
-- `crates/minibox/src/container/filesystem.rs:342,346` —
-  `setup_runtime_directories(new_root)` is called twice back-to-back in
-  `pivot_root_to`. Harmless but redundant.
-- `xtask/src/test_in_vm.rs:350-365` — `minibox_policy_allows()` is unit tested
-  but has no non-test caller; a half-wired guard. It also reads env vars only,
-  so it cannot see a policy granted through `minibox.toml` or the other config
-  layers, which makes `test-in-vm` silently pick the unprivileged backend.
+Recorded so the corrections are not re-reintroduced:
 
-Corrections to earlier revisions of this document, for the record:
+- **`justfile:134` → `crux/dev/test_linux.crux` does exist.** An earlier revision
+  claimed otherwise. The mistake was looking in `.crux/` when the pipelines live
+  in `crux/dev/`.
+- **`.crux/promote.crux` is not the env-var source.** `promote.crux:6-9`
+  deliberately excludes the container smoke tests because GitHub-hosted runners
+  do not delegate cgroups. The DinD smoke test is `crux/dev/smoke.crux`.
+- **The policy gate is not why DinD is unrunnable in general.** It matters on a
+  Linux host where the native adapter is in play, but adapter capability is the
+  broader constraint.
+- **"A userns child cannot manage cgroups" was wrong.** `process.rs:238-250` says
+  the child cannot add *itself* to a cgroup — which is why the parent does it —
+  not that it cannot `mkdir` cgroup directories or write `cgroup.subtree_control`.
+  The smoke recipe depends on exactly those and they work. The real limitation is
+  narrower and is written up as P0 above.
 
-- An earlier revision claimed `justfile:134` referenced a nonexistent
-  `crux/dev/test_linux.crux`. **It exists.** The mistake was looking in `.crux/`
-  when the pipelines live in `crux/dev/`.
-- An earlier revision cited `.crux/promote.crux` as the source of the `ALLOW_*`
-  env vars. **Stale** — `promote.crux:6-9` excludes the container smoke tests
-  entirely; the DinD smoke test is `crux/dev/smoke.crux`.
+---
+
+## Verified working
+
+| Capability | Where |
+| ---------- | ----- |
+| Privileged mode via `capset(2)` | `process.rs:376-457`, excludes SYS_MODULE/SYS_BOOT/MAC_OVERRIDE/MAC_ADMIN |
+| Bind mounts `-v host:container[:ro]` | `system_tests.rs:526-530`; colima path verified live |
+| Bind target auto-creation (Docker parity) | `colima.rs` `bind_mount_shell_snippet` |
+| Automatic cgroup delegation on `--privileged` | `preparation.rs`, `cgroups.rs:354-380` |
+| `--cgroup-parent` flag with validation | `cgroups.rs:71-86` |
+| `/dev` device set | `colima.rs` `dev_setup_fragment`, from `fs_util::default_device_nodes()` |
+| proc / sysfs / cgroup2 / tmpfs mounts | `colima.rs` `namespace_exec_fragment` |
+| Writable container rootfs | `colima.rs` `overlay_base_dir` — VM-local upperdir |
+| `MINIBOX_CGROUP_ROOT` override | `cgroups.rs:53-65` |
+| Preflight `cgroup_subtree_delegatable` probe | `preflight.rs:28,50,92-97` |
+| Three-level policy opt-in | env vars, `config.toml`, project `minibox.toml` |
+| Capability drift gate | `cargo xtask capabilities verify --backend <name>` |
