@@ -916,21 +916,38 @@ pub fn bind_mount_shell_snippet(
     let target = rootfs.join(container_rel);
     let host_q = shell_single_quote(&m.host_path.display().to_string());
     let target_q = shell_single_quote(&target.display().to_string());
-    let target_check = format!(
-        "sudo test -e {target_q} || (echo {msg} >&2; exit 1)",
-        msg = shell_single_quote(&format!(
-            "bind mount target {} does not exist in image rootfs",
-            target.display()
-        )),
+
+    // Docker parity: a bind target that does not exist in the image is created,
+    // mirroring the source's type, rather than aborting the mount. The previous
+    // behaviour required every container path to pre-exist in the rootfs, so
+    // `-v src:/usr/bin/tool` failed on a stock image and reported only on
+    // stderr, which the CLI does not surface — a silent no-op.
+    //
+    // The host source is checked first so a typo'd path fails loudly instead of
+    // materialising an empty mountpoint.
+    let source_missing = shell_single_quote(&format!(
+        "bind mount source {} does not exist on the host",
+        m.host_path.display()
+    ));
+    let target_failed = shell_single_quote(&format!(
+        "bind mount target {} could not be created in the image rootfs",
+        target.display()
+    ));
+    let ensure_target = format!(
+        "sudo test -e {host_q} || (echo {source_missing} >&2; exit 1); \
+         if [ -d {host_q} ]; then sudo mkdir -p {target_q} \
+           || (echo {target_failed} >&2; exit 1); \
+         else sudo mkdir -p \"$(dirname {target_q})\" && sudo touch {target_q} \
+           || (echo {target_failed} >&2; exit 1); fi",
     );
 
     if m.read_only {
         Ok(format!(
-            "{target_check} && sudo mount --bind {host_q} {target_q} && sudo mount -o remount,ro,bind {target_q}"
+            "{ensure_target} && sudo mount --bind {host_q} {target_q} && sudo mount -o remount,ro,bind {target_q}"
         ))
     } else {
         Ok(format!(
-            "{target_check} && sudo mount --bind {host_q} {target_q}"
+            "{ensure_target} && sudo mount --bind {host_q} {target_q}"
         ))
     }
 }
@@ -1982,7 +1999,45 @@ mod bind_mount_tests {
         assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
         assert!(snippet.contains("/tmp/host"), "snippet: {snippet}");
         assert!(snippet.contains("/rootfs/guest"), "snippet: {snippet}");
-        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
+    }
+
+    /// Docker parity: a target that is absent from the image is created rather
+    /// than aborting the mount. The snippet must branch on the *source* type so
+    /// a file source does not become a directory mountpoint (or vice versa).
+    #[test]
+    fn bind_mount_shell_snippet_creates_missing_target() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest/deep/tool"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
+        assert!(
+            snippet.contains("if [ -d"),
+            "snippet must branch on source type: {snippet}"
+        );
+        assert!(
+            snippet.contains("sudo mkdir -p"),
+            "snippet must create the target: {snippet}"
+        );
+        assert!(
+            snippet.contains("sudo touch"),
+            "file sources must create a file target: {snippet}"
+        );
+        // The old failure mode reported only on stderr and produced a silent
+        // no-op; the source is now checked loudly.
+        assert!(
+            snippet.contains("does not exist on the host"),
+            "a missing source must fail loudly: {snippet}"
+        );
+        assert!(
+            snippet.contains("could not be created"),
+            "a target that cannot be created must fail loudly, not silently: {snippet}"
+        );
+        assert!(
+            !snippet.contains("does not exist in image rootfs"),
+            "an absent target must no longer be fatal: {snippet}"
+        );
     }
 
     #[test]
@@ -1999,7 +2054,17 @@ mod bind_mount_tests {
             snippet.contains("remount,ro,bind") || snippet.contains("remount,bind,ro"),
             "snippet: {snippet}"
         );
-        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
+        // The read-only remount must stay the last step, after the target is
+        // created and the bind is in place.
+        let mount_at = snippet.find("mount --bind").expect("bind mount");
+        let ro_at = snippet
+            .find("remount,ro,bind")
+            .or_else(|| snippet.find("remount,bind,ro"))
+            .expect("ro remount");
+        assert!(
+            mount_at < ro_at,
+            "read-only remount must follow the bind: {snippet}"
+        );
     }
 
     #[test]
