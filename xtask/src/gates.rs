@@ -2,7 +2,10 @@
 
 use anyhow::{Context, Result};
 use minibox_testsuite::harness::ConformanceResult;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use xshell::{Shell, cmd};
 
 use crate::checkpoint::{self, FileCheckpointStore, GateId, GitTreeProbe};
@@ -282,12 +285,56 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root, None).context("docs-lint failed")?;
-    // Keep the FEATURE_MATRIX Last-updated stamp current (idempotent).
-    crate::feature_matrix_date::update_feature_matrix_date(&root)
-        .context("update-feature-matrix-date failed")?;
+    // Keep the `Last updated:` stamps current, but only for the docs this
+    // commit actually changes. A blanket sweep restamped every doc in
+    // `docs/` on every commit, so any commit produced a wall of date-only
+    // diffs across docs/core/*.mbx.md. A doc whose only staged change is the
+    // stamp itself is skipped, so the date can never drift forward on its own.
+    restamp_staged_docs(sh)?;
     // Warn (non-fatal) if generated artifacts are tracked by git.
     check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
+    Ok(())
+}
+
+/// Advance the `Last updated:` stamp of each staged doc that has a real
+/// content change, then re-stage exactly those files.
+///
+/// The stamp is bumped in the working tree and re-staged only for docs that
+/// were *already* staged, mirroring `restage_staged_rust`'s discipline: a
+/// broad pathspec would sweep in another agent's or a parallel worktree's
+/// uncommitted doc edits.
+fn restamp_staged_docs(sh: &Shell) -> Result<()> {
+    let candidates = staged_doc_paths(sh)?;
+    if candidates.is_empty() {
+        return Ok(());
+    }
+
+    let mut to_restage: Vec<PathBuf> = Vec::new();
+    for path in &candidates {
+        if staged_change_beyond_stamp(sh, path)? {
+            to_restage.push(path.clone());
+        }
+    }
+
+    if to_restage.is_empty() {
+        eprintln!("doc-dates: no staged doc content changes — stamps left alone");
+        return Ok(());
+    }
+
+    let outcome = crate::feature_matrix_date::update_staged_docs(&to_restage);
+    if outcome.updated == 0 {
+        return Ok(());
+    }
+
+    let owned: Vec<String> = to_restage
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let paths: Vec<&str> = owned.iter().map(String::as_str).collect();
+    cmd!(sh, "git add -u -- {paths...}")
+        .run()
+        .context("git add after doc-date update failed")?;
     Ok(())
 }
 
@@ -1719,6 +1766,52 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
     Ok(staged
         .lines()
         .any(|l| l.starts_with(".github/workflows/") || l == ".github/actionlint.yaml"))
+}
+
+/// Staged markdown paths under `docs/`.
+///
+/// Used to scope the `Last updated:` stamp pass to the docs a commit actually
+/// touches, instead of restamping the entire docs tree on every commit.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+fn staged_doc_paths(sh: &Shell) -> Result<Vec<PathBuf>> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .filter(|l| l.starts_with("docs/") && l.ends_with(".md"))
+        .map(PathBuf::from)
+        .collect())
+}
+
+/// Returns true when the staged diff for `path` changes something other than a
+/// `Last updated:` stamp line.
+///
+/// A doc whose only staged change is the stamp itself is not meaningfully
+/// updated, so its stamp must not be advanced — otherwise committing an
+/// unrelated file walks every doc's date forward.
+fn staged_change_beyond_stamp(sh: &Shell, path: &Path) -> Result<bool> {
+    let path_str = path.to_string_lossy().into_owned();
+    let diff = cmd!(sh, "git diff --cached -U0 -- {path}")
+        .output()
+        .with_context(|| format!("git diff --cached failed for {path_str}"))?;
+    let diff = String::from_utf8_lossy(&diff.stdout);
+
+    for line in diff.lines() {
+        // Skip diff metadata and hunk headers; only +/- content lines matter.
+        let Some(body) = line.strip_prefix('+').or_else(|| line.strip_prefix('-')) else {
+            continue;
+        };
+        // A leading "++"/"--" would be a file header, not content.
+        if body.starts_with('+') || body.starts_with('-') {
+            continue;
+        }
+        if !crate::feature_matrix_date::is_stamp_line(body) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.

@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-09-26
+updated: 2026-10-01
 items:
 - id: gh-473
   name: feat-xtask---squash-chain-branches-during-promotion
@@ -9,7 +9,7 @@ items:
   title: 'feat(xtask): squash chain branches during promotion'
   description: CapabilityMatrix missing from terminal/non-terminal classification coverage
   extra:
-  - date: 2026-09-26
+  - date: 2026-10-01
     type: blocker
     note: CapabilityMatrix missing from terminal/non-terminal classification coverage
 - id: gh-507
@@ -19,46 +19,56 @@ items:
   title: 'feat(oci): stabilize push, commit, and build'
   description: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
   extra:
-  - date: 2026-09-26
+  - date: 2026-10-01
     type: blocker
     note: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
 - id: uncommitted-work
   name: uncommitted-work
   priority: P1
   status: open
-  title: Uncommitted changes (9 files)
+  title: Uncommitted changes (14 files)
   description: |-
     Working tree has uncommitted changes:
     .ctx/HANDOFF.md
     .ctx/HANDOFF.minibox.minibox.yaml
-    docs/designs/2026-09-21-global-fail-closed-isolation-profiles-design.md
-    docs/designs/2026-09-21-isolation-adapter-qualification-design.md
-    docs/designs/2026-09-21-isolation-admission-lifecycle-design.md
-    docs/designs/2026-09-21-isolation-conformance-rollout-design.md
-    docs/designs/2026-09-21-isolation-profile-contract-design.md
-    docs/designs/2026-09-21-isolation-protocol-migration-design.md
-    docs/designs/2026-09-21-native-standard-v1-enforcement-design.md
+    docs/PLATFORM_SUPPORT.md
+    docs/core/CRATE_TIERS.mbx.md
+    docs/core/FEATURE_MATRIX.mbx.md
+    docs/core/GOTCHAS.mbx.md
+    docs/core/ROADMAP.mbx.md
+    docs/core/SECURITY_INVARIANTS.mbx.md
+    docs/core/STABILITY_CHECKLIST.mbx.md
+    docs/core/STATE_MODEL.mbx.md
+    docs/core/SUPPORT_TIERS.mbx.md
+    docs/core/XTASK_CLI.mbx.md
+    docs/notes/minibox-in-minibox.local.md
+    taskit-todo-sync.lock
   files:
   - .ctx/HANDOFF.md
   - .ctx/HANDOFF.minibox.minibox.yaml
-  - docs/designs/2026-09-21-global-fail-closed-isolation-profiles-design.md
-  - docs/designs/2026-09-21-isolation-adapter-qualification-design.md
-  - docs/designs/2026-09-21-isolation-admission-lifecycle-design.md
-  - docs/designs/2026-09-21-isolation-conformance-rollout-design.md
-  - docs/designs/2026-09-21-isolation-profile-contract-design.md
-  - docs/designs/2026-09-21-isolation-protocol-migration-design.md
-  - docs/designs/2026-09-21-native-standard-v1-enforcement-design.md
+  - docs/PLATFORM_SUPPORT.md
+  - docs/core/CRATE_TIERS.mbx.md
+  - docs/core/FEATURE_MATRIX.mbx.md
+  - docs/core/GOTCHAS.mbx.md
+  - docs/core/ROADMAP.mbx.md
+  - docs/core/SECURITY_INVARIANTS.mbx.md
+  - docs/core/STABILITY_CHECKLIST.mbx.md
+  - docs/core/STATE_MODEL.mbx.md
+  - docs/core/SUPPORT_TIERS.mbx.md
+  - docs/core/XTASK_CLI.mbx.md
+  - docs/notes/minibox-in-minibox.local.md
+  - taskit-todo-sync.lock
 log:
-- date: '20260926.125351'
+- date: '20261001.105544'
   summary: done=66 running=0 pending=54 blocked=2
   commits:
-  - ea38b73ccd804d8e024897309fbbef1b7a53769f
-  - 9a3df530a778808303a32d178bb57ea4e449fa8a
-  - 5c2b07fa17527089d807dc3111203a4702b8bc98
-  - b0ae997ad41227fc067b8205f1b6a11c091e5e6b
-  - 4be92a67d5f572a53af2c2ab48df702328a880fd
-  - 7db55d7b655e1ec3b090cb3c6615e42b54ad67cb
-  - e2eecc710dc9d60807896e600a4cf394458ae4f3
-  - ab3f9103015b997dacf91ec5840bd0bff5fd0c24
-  - 660b39a8e78a737df1f2390c21a1c38f001ce91b
-  - 9f718646479f5a2a54ff48bc66e9b34b403f22bf
+  - 24106322a9b9ed54836af08d775fb386e6129f28
+  - 6e9d0d95f6df7004904fe586a3681eadc4d600c7
+  - c8b7aef33f42685a926b25ed9aa6f01b44ead4c3
+  - 22f29c4c2d4e6eb68988b249e4248563a4b4b9d9
+  - 6827ed4a370e7dbee608e6544f9b634f4c6a4f6c
+  - f218a717313c29dbfff06e1f1908548a7c155da4
+  - c69df2a63fbfd22107c81a9ea9d3bbe12eb37e5f
+  - 7f14e5ee4d068fcb70541d19ebf7ad4630cf85b6
+  - 5d2d33b8ef4c1e0f843a72e95e37ed0ae53707ba
+  - c80ebb815b73ab1e671d150d177cfff5b9ad3bce

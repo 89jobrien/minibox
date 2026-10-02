@@ -164,13 +164,19 @@ with `mount(MS_REMOUNT)` after container initialization.
 
 ## Configuration
 
-Configuration is layered from defaults, then system TOML, user TOML, and finally
-environment-variable overrides.
+Configuration is layered from defaults, then project TOML, system TOML, user TOML,
+and finally environment-variable overrides.
 
 **Config files** (later overrides earlier):
 
-1. `/etc/minibox/config.toml` (system)
-2. `~/.config/minibox/config.toml` (user)
+1. `minibox.toml` (project — discovered by walking up from the working
+   directory; lowest precedence, opt-in, gitignored)
+2. `/etc/minibox/config.toml` (system)
+3. `~/.config/minibox/config.toml` (user)
+
+The project layer lets a checkout carry its own dev settings without mutating host
+config. Being the weakest layer, a checked-in file can never weaken a system-level
+lockdown, and env vars can always override it back to deny.
 
 ```toml
 adapter = "smolvm"

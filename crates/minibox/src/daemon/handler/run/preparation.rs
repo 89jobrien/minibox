@@ -115,10 +115,23 @@ pub(super) async fn prepare_run(
 
     if let Some(ref policy) = deps.execution_policy {
         use minibox_core::domain::PolicyDecision;
-        match policy.evaluate(&manifest) {
+        let decision = policy.evaluate(&manifest);
+        match decision {
             PolicyDecision::Allow => {}
             PolicyDecision::Deny(reason) => {
                 return Err(anyhow::anyhow!("execution policy denied: {reason}"));
+            }
+            // Refused, but not by a rule. The run cannot proceed until the
+            // question is answered, so this stops the run either way; the
+            // wording is what tells an operator whether to fix the workload or
+            // go answer something first.
+            PolicyDecision::Escalate { .. } | PolicyDecision::RequestInformation { .. } => {
+                let reason = decision
+                    .reason()
+                    .unwrap_or_else(|| "policy could not decide".to_string());
+                return Err(anyhow::anyhow!(
+                    "execution policy requires review: {reason}"
+                ));
             }
         }
     }
@@ -183,7 +196,7 @@ pub(super) async fn prepare_run(
     let cgroup_dir = PathBuf::from(cgroup_dir_str);
 
     #[cfg(target_os = "linux")]
-    if privileged {
+    let process_cgroup_dir = if privileged {
         let delegation = crate::container::cgroups::DelegationPaths {
             subtree: cgroup_dir.clone(),
             init_leaf: cgroup_dir.join("init"),
@@ -195,7 +208,19 @@ pub(super) async fn prepare_run(
                 "cgroup delegation skipped (non-fatal)"
             );
         }
-    }
+        // The container process must be placed in the `init` leaf, not the
+        // subtree root. `delegate_subtree` just created `init` as a child of
+        // the subtree, and cgroup v2 forbids a cgroup that has children from
+        // holding processes of its own — writing the pid to
+        // `<subtree>/cgroup.procs` returns EBUSY. The leaf exists precisely so
+        // the process can live below the subtree that carries the delegated
+        // controllers.
+        delegation.init_leaf
+    } else {
+        cgroup_dir.clone()
+    };
+    #[cfg(not(target_os = "linux"))]
+    let process_cgroup_dir = cgroup_dir.clone();
 
     let network_config = minibox_core::domain::NetworkConfig {
         mode: net_mode,
@@ -245,7 +270,7 @@ pub(super) async fn prepare_run(
         command: spawn_command,
         args: spawn_args,
         env: container_env,
-        cgroup_path: cgroup_dir.clone().into(),
+        cgroup_path: process_cgroup_dir.clone().into(),
         hostname: format!("minibox-{}", &id[..8]),
         capture_output,
         hooks: ContainerHooks::default(),

@@ -2,7 +2,7 @@ name: Protocol Drift
 
 on:
   push:
-    branches: [main, staging, release, "feature/*", "hotfix/*"]
+    branches: [develop, main, staging, release, "feature/*", "hotfix/*"]
     paths:
       - "crates/minibox-domain/src/**"
       - "crates/minibox-core/src/protocol.rs"
@@ -12,7 +12,7 @@ on:
       - "xtask/protocol-drift.lock"
       - "xtask/src/protocol_drift.rs"
   pull_request:
-    branches: [main, staging]
+    branches: [develop, main, staging]
     paths:
       - "crates/minibox-domain/src/**"
       - "crates/minibox-core/src/protocol.rs"
@@ -25,14 +25,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   protocol-drift:
     name: core contract hash check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: verify core contract hashes
         run: cargo xtask check-protocol-drift
