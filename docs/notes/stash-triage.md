@@ -11,7 +11,8 @@ For each stash, every touched file's blob was compared against `develop`. A stas
 counts as *landed* only when **all** of its files are byte-identical to `develop`.
 Base-commit reachability was checked separately with `git merge-base --is-ancestor`.
 
-Reproduce with `.ctx/_WORKING_DIR/classify-stashes.sh`.
+Reproduce with `scripts/classify-stashes.sh` (read-only; it never applies, drops
+or mutates a stash).
 
 ## Result: 19 stashes, zero fully landed
 
