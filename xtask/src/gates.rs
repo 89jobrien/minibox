@@ -728,6 +728,8 @@ pub fn test_quickcheck(sh: &Shell) -> Result<()> {
 /// so the tests have the kernel privileges they need (cgroups v2, namespaces).
 /// `MINIBOX_TEST_BIN_DIR` is forwarded so helpers can locate `miniboxd`/`mbx`.
 pub fn test_integration(sh: &Shell) -> Result<()> {
+    require_linux_host("integration")?;
+
     cmd!(sh, "cargo build --release -p miniboxd -p minibox-cli")
         .run()
         .context("release build failed")?;
@@ -803,12 +805,35 @@ pub fn test_e2e(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Guard for suites whose test binary is `#![cfg(target_os = "linux")]`.
+///
+/// `crates/miniboxd/tests/system_tests.rs` carries that attribute at the crate
+/// root, so on a non-Linux host the test binary compiles to zero tests. Reaching
+/// `sudo` anyway spends a full release build to execute nothing — and once
+/// `sudo` *does* authenticate (via a TTY or an askpass helper) the empty run
+/// would report success, turning "did not run" into a false pass. Fail fast
+/// with the requirement and the supported alternative instead.
+fn require_linux_host(suite: &str) -> Result<()> {
+    if cfg!(not(target_os = "linux")) {
+        anyhow::bail!(
+            "{suite} is Linux-only and requires root, but this host is {}. \
+             The test binary is gated to Linux and compiles to zero tests here, so \
+             there is nothing to run. Use `cargo xtask test-linux` to execute the \
+             suite inside a minibox container, or invoke the suite on Linux.",
+            std::env::consts::OS,
+        );
+    }
+    Ok(())
+}
+
 /// System tests: full-stack daemon+CLI tests (Linux, root, cgroups v2 required).
 ///
 /// Renamed from `test_e2e_suite` — these tests exercise real kernel facilities
 /// (namespaces, overlay FS, cgroups v2) and live above integration tests in
 /// the tier hierarchy.
 pub fn test_system_suite(sh: &Shell) -> Result<()> {
+    require_linux_host("system-suite")?;
+
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
@@ -839,6 +864,8 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
 
 /// Sandbox contract tests (Linux, root, Docker Hub required)
 pub fn test_sandbox(sh: &Shell) -> Result<()> {
+    require_linux_host("sandbox")?;
+
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
