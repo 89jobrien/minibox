@@ -452,6 +452,34 @@ impl ImageLoader for ColimaRegistry {
 // Colima Filesystem Adapter
 // ============================================================================
 
+/// VM-local root under which colima container overlays are built.
+const VM_OVERLAY_ROOT: &str = "/tmp/minibox-overlay";
+
+/// VM-local directory holding a container's overlay mount.
+///
+/// # Why this is not `container_dir`
+///
+/// overlayfs requires `upperdir`/`workdir` to live on a filesystem that
+/// supports the xattrs overlay needs. The shared `$HOME` is virtiofs, which
+/// does not. The kernel does **not** report an error for this: it accepts the
+/// mount and silently presents it read-only, so every colima container had an
+/// immutable rootfs — no bind target could be created, and the writable state
+/// had nowhere to go.
+///
+/// Image layers already live VM-local (`/tmp/minibox-layers/...`), so the
+/// writable layer now joins them. `container_dir` stays the host-visible
+/// identity of the container; only the overlay's storage moves.
+///
+/// [`setup_rootfs`](Self::setup_rootfs) and [`cleanup`](Self::cleanup) both go
+/// through this helper so a mount can never be left behind by a path mismatch.
+fn overlay_base_dir(container_dir: &Path) -> PathBuf {
+    let id = container_dir.file_name().map_or_else(
+        || "container".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    PathBuf::from(VM_OVERLAY_ROOT).join(id)
+}
+
 /// Colima implementation of [`crate::domain::FilesystemProvider`].
 ///
 /// Sets up and tears down overlay mounts inside the Lima VM by running
@@ -506,17 +534,23 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
             .collect::<Vec<_>>()
             .join(":");
 
-        let upper_dir = container_dir.join("upper");
-        let work_dir = container_dir.join("work");
-        let merged_dir = container_dir.join("merged");
+        // The overlay must be VM-local; see `overlay_base_dir`. `container_dir`
+        // is still the container's host-visible identity, so the mount is
+        // addressed by the container id instead.
+        let overlay_base = overlay_base_dir(container_dir);
+        let upper_dir = overlay_base.join("upper");
+        let work_dir = overlay_base.join("work");
+        let merged_dir = overlay_base.join("merged");
 
         // Create the overlay support directories inside the VM.
         self.ctx
-            .lima_exec(&["mkdir", "-p", &upper_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "mkdir", "-p", &overlay_base.to_string_lossy()])?;
         self.ctx
-            .lima_exec(&["mkdir", "-p", &work_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "mkdir", "-p", &upper_dir.to_string_lossy()])?;
         self.ctx
-            .lima_exec(&["mkdir", "-p", &merged_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "mkdir", "-p", &work_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["sudo", "mkdir", "-p", &merged_dir.to_string_lossy()])?;
 
         // Mount the overlay filesystem inside the VM. Pass argv directly so
         // host paths such as "~/Library/Application Support/..." are handled
@@ -552,19 +586,24 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
         })
     }
 
-    /// Unmount the overlay and remove the container directory inside the VM.
+    /// Unmount the overlay and remove its VM-local directory inside the VM.
+    ///
+    /// Uses the same [`overlay_base_dir`] mapping as `setup_rootfs`; addressing
+    /// the two differently would leave the mount behind and the directory
+    /// behind it with it.
     ///
     /// # Errors
     ///
     /// Returns an error if `umount` or `rm -rf` fail inside the VM.
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
-        let merged_dir = container_dir.join("merged");
+        let overlay_base = overlay_base_dir(container_dir);
+        let merged_dir = overlay_base.join("merged");
 
         // Unmount the overlay before removing the directory tree.
         self.ctx
             .lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
         self.ctx
-            .lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "rm", "-rf", &overlay_base.to_string_lossy()])?;
 
         Ok(())
     }
@@ -1623,6 +1662,40 @@ mod tests {
                 "non-bootstrap device nodes should be best-effort: {later}"
             );
         }
+    }
+
+    /// The overlay must be addressed VM-local, keyed by container id.
+    ///
+    /// virtiofs cannot host an overlay upper layer: the kernel accepts the
+    /// mount and silently presents it read-only, which is what made every
+    /// colima rootfs immutable and every bind target uncreatable.
+    #[test]
+    fn overlay_base_dir_is_vm_local_and_id_keyed() {
+        let base = overlay_base_dir(Path::new(
+            "/Users/joe/Library/Application Support/minibox/containers/abc123",
+        ));
+        assert_eq!(base, PathBuf::from(VM_OVERLAY_ROOT).join("abc123"));
+        assert!(
+            !base.starts_with("/Users"),
+            "the overlay must not live on the virtiofs-shared home: {base:?}"
+        );
+    }
+
+    /// Distinct containers must not collide, or one container's mount would
+    /// overwrite another's.
+    #[test]
+    fn overlay_base_dir_differs_per_container() {
+        let a = overlay_base_dir(Path::new("/host/containers/aaaaaaaa"));
+        let b = overlay_base_dir(Path::new("/host/containers/bbbbbbbb"));
+        assert_ne!(a, b);
+    }
+
+    /// A container directory with no final component still yields a usable
+    /// path rather than panicking or collapsing onto the shared root.
+    #[test]
+    fn overlay_base_dir_tolerates_missing_basename() {
+        let base = overlay_base_dir(Path::new("/"));
+        assert_eq!(base, PathBuf::from(VM_OVERLAY_ROOT).join("container"));
     }
 
     #[test]
