@@ -935,6 +935,45 @@ pub fn bind_mount_shell_snippet(
     }
 }
 
+/// Build the shell fragment that populates a minimal `/dev` inside the container.
+///
+/// The image rootfs is mounted read-only, and the colima adapter has no
+/// separate device-setup step, so a stock container starts with *no* `/dev/null`
+/// — enough to break `/bin/sh` itself, let alone a nested daemon.
+///
+/// The node and symlink lists are generated from [`crate::fs_util::default_device_nodes`]
+/// and [`crate::fs_util::default_dev_symlinks`], the same data the native
+/// adapter uses, so the two paths cannot drift apart.
+///
+/// A tmpfs backs `/dev` (as Docker does) because the read-only rootfs cannot
+/// hold newly created device nodes. `mknod` succeeds here: the container is not
+/// in a user namespace, so the kernel permits device creation. Each node is
+/// created best-effort — a kernel without one of them still yields a usable
+/// container — but a tmpfs failure is fatal to the whole setup and is reported.
+fn dev_setup_fragment() -> String {
+    let mut lines = vec![
+        "mkdir -p /dev/shm".to_string(),
+        "mount -t tmpfs tmpfs /dev".to_string(),
+    ];
+    for node in crate::fs_util::default_device_nodes() {
+        lines.push(format!(
+            "mknod -m {mode:o} /dev/{name} c {major} {minor} 2>/dev/null || true",
+            mode = node.mode,
+            name = node.name,
+            major = node.major,
+            minor = node.minor
+        ));
+    }
+    for link in crate::fs_util::default_dev_symlinks() {
+        lines.push(format!(
+            "ln -sf {target} /dev/{name} 2>/dev/null || true",
+            target = link.target,
+            name = link.name
+        ));
+    }
+    lines.join("; \\\n      ")
+}
+
 /// Build the `unshare ... chroot` invocation that runs the container command.
 ///
 /// procfs, sysfs, and cgroup2 are mounted *inside* the new mount namespace,
@@ -955,6 +994,10 @@ pub fn bind_mount_shell_snippet(
 /// where the daemon's socket, run, and data state are expected to live. This
 /// matches what the native adapter's runtime-directory setup provides.
 ///
+/// `/dev` is built from [`dev_setup_fragment`] for the same reason: the
+/// read-only rootfs has no usable device set, and without `/dev/null` even
+/// `/bin/sh` misbehaves.
+///
 /// The inner `sh -c` receives the real command as its first argument after
 /// `$0`, so `"$@"` re-expands to the command and its arguments. Mounting is
 /// best-effort: a minimal image without a usable `mount` still gets a working
@@ -962,6 +1005,7 @@ pub fn bind_mount_shell_snippet(
 /// rather than swallowed silently.
 fn namespace_exec_fragment(privileged: bool) -> String {
     let privileged_flag = if privileged { " --keep-caps" } else { "" };
+    let dev_setup = dev_setup_fragment();
     format!(
         r#"sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
     --fork --kill-child \
@@ -977,6 +1021,7 @@ fn namespace_exec_fragment(privileged: bool) -> String {
         || echo "colima: warning: could not mount tmpfs at /tmp" >&2; \
       mount -t tmpfs tmpfs /run \
         || echo "colima: warning: could not mount tmpfs at /run" >&2; \
+      {dev_setup}; \
       exec "$@"' \
     sh "$COMMAND" "${{ARGS[@]}}""#
     )
@@ -1431,6 +1476,85 @@ mod tests {
         assert!(
             frag.contains(r#"sh "$COMMAND" "${ARGS[@]}""#),
             "command and args must be forwarded to the inner shell: {frag}"
+        );
+    }
+
+    /// The container needs a real device set. Without it `/dev/null` is
+    /// missing, which is enough to break `/bin/sh` itself and therefore any
+    /// nested daemon.
+    #[test]
+    fn namespace_exec_populates_dev() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains("mount -t tmpfs tmpfs /dev"),
+            "/dev must be a tmpfs (the rootfs is read-only): {frag}"
+        );
+        assert!(
+            frag.contains("mknod -m 666 /dev/null c 1 3"),
+            "/dev/null missing from spawn fragment: {frag}"
+        );
+        assert!(
+            frag.contains("mknod -m 666 /dev/urandom c 1 9")
+                || frag.contains("mknod -m 444 /dev/urandom c 1 9"),
+            "/dev/urandom missing from spawn fragment: {frag}"
+        );
+    }
+
+    /// The device set is generated from the same tables the native adapter
+    /// uses, so the two adapters cannot drift apart. Assert against the tables
+    /// rather than a hardcoded list.
+    #[test]
+    fn dev_setup_covers_every_shared_device_node() {
+        let setup = dev_setup_fragment();
+        for node in crate::fs_util::default_device_nodes() {
+            let expected = format!(
+                "mknod -m {mode:o} /dev/{name} c {major} {minor}",
+                mode = node.mode,
+                name = node.name,
+                major = node.major,
+                minor = node.minor
+            );
+            assert!(
+                setup.contains(&expected),
+                "device node {name} missing from dev setup: {setup}",
+                name = node.name
+            );
+        }
+    }
+
+    #[test]
+    fn dev_setup_covers_every_shared_dev_symlink() {
+        let setup = dev_setup_fragment();
+        for link in crate::fs_util::default_dev_symlinks() {
+            let expected = format!(
+                "ln -sf {target} /dev/{name}",
+                target = link.target,
+                name = link.name
+            );
+            assert!(
+                setup.contains(&expected),
+                "dev symlink {name} missing from dev setup: {setup}",
+                name = link.name
+            );
+        }
+    }
+
+    /// Regression: the `/dev` block is spliced in just before `exec "$@"`, so
+    /// its last command must be terminated. Without the separator the tail
+    /// becomes `... || true exec "$@"`, which runs `true` with the payload as
+    /// arguments and the container command never executes — every run exits 0
+    /// with no output.
+    #[test]
+    fn dev_setup_is_separated_from_the_container_command() {
+        let frag = namespace_exec_fragment(false);
+        let exec_at = frag.rfind(r#"exec "$@""#).expect("exec present");
+        // Collapse shell line continuations, which is what the shell does, so
+        // the assertion looks at the effective command line.
+        let effective = frag[..exec_at].replace("\\\n", " ");
+        assert!(
+            effective.trim_end().ends_with(';'),
+            "dev setup must end with ';' before exec: ...{}",
+            &effective[effective.len().saturating_sub(40)..]
         );
     }
 
