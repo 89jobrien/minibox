@@ -28,6 +28,7 @@ mod architecture;
 mod bench;
 mod borrow_fixtures;
 mod bump;
+mod capabilities;
 mod cas;
 mod cgroup_tests;
 mod changelog;
@@ -76,6 +77,19 @@ fn main() -> Result<()> {
         Some("test") => cmd_test(&sh, root),
         Some("check") => cmd_check(&sh, root, &argv[2..]),
         Some("docs") => cmd_docs(&sh, root),
+        Some("capabilities") => match env::args().nth(2).as_deref() {
+            Some("verify") => capabilities::verify(&sh, root),
+            other => {
+                eprintln!("Usage: cargo xtask capabilities verify");
+                eprintln!();
+                if let Some(o) = other {
+                    eprintln!("Unknown action: {o}");
+                }
+                eprintln!("Actions:");
+                eprintln!("  verify   probe the running backend and fail on matrix drift");
+                Ok(())
+            }
+        },
         Some("info") => cmd_info(&sh, root, &argv[2..]),
 
         // ── Quality gates (top-level) ────────────────────────────────

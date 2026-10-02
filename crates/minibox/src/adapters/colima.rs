@@ -967,19 +967,37 @@ pub fn bind_mount_shell_snippet(
 /// in a user namespace, so the kernel permits device creation. Each node is
 /// created best-effort — a kernel without one of them still yields a usable
 /// container — but a tmpfs failure is fatal to the whole setup and is reported.
+///
+/// `/dev/null` is created first and *without* a `2>/dev/null` guard. Redirecting
+/// the very node being bootstrapped makes the shell create `/dev/null` as an
+/// empty regular file for the redirect itself, after which `mknod` fails with
+/// "File exists" and the container is left with a 0-byte stand-in. That failure
+/// is invisible to a casual `echo hi > /dev/null`, which happily writes to a
+/// regular file, so it is asserted by
+/// `first_dev_node_is_null_and_unguarded` and probed live by
+/// `cargo xtask capabilities verify`.
 fn dev_setup_fragment() -> String {
     let mut lines = vec![
         "mkdir -p /dev/shm".to_string(),
         "mount -t tmpfs tmpfs /dev".to_string(),
     ];
-    for node in crate::fs_util::default_device_nodes() {
-        lines.push(format!(
-            "mknod -m {mode:o} /dev/{name} c {major} {minor} 2>/dev/null || true",
+    for (index, node) in crate::fs_util::default_device_nodes()
+        .into_iter()
+        .enumerate()
+    {
+        let cmd = format!(
+            "mknod -m {mode:o} /dev/{name} c {major} {minor}",
             mode = node.mode,
             name = node.name,
             major = node.major,
             minor = node.minor
-        ));
+        );
+        // The first node is the bootstrap dependency and must not be guarded.
+        if index == 0 {
+            lines.push(cmd);
+        } else {
+            lines.push(format!("{cmd} 2>/dev/null || true"));
+        }
     }
     for link in crate::fs_util::default_dev_symlinks() {
         lines.push(format!(
@@ -1573,6 +1591,38 @@ mod tests {
             "dev setup must end with ';' before exec: ...{}",
             &effective[effective.len().saturating_sub(40)..]
         );
+    }
+
+    /// The first device node is `/dev/null` and must be unguarded.
+    ///
+    /// A `2>/dev/null` guard on the node being bootstrapped makes the shell
+    /// materialise `/dev/null` as an empty regular file to serve as the
+    /// redirect target, so `mknod` then fails and the container keeps a 0-byte
+    /// stand-in that silently swallows writes instead of discarding them.
+    #[test]
+    fn first_dev_node_is_null_and_unguarded() {
+        let setup = dev_setup_fragment();
+        let nodes: Vec<&str> = setup
+            .split("; \\\n")
+            .filter(|line| line.trim_start().starts_with("mknod"))
+            .collect();
+        let first = nodes.first().expect("at least one mknod");
+        assert!(
+            first.contains("/dev/null"),
+            "the first device node must be /dev/null, got: {first}"
+        );
+        assert!(
+            !first.contains("2>/dev/null"),
+            "/dev/null must not be redirect-guarded while it is the redirect \
+             target itself: {first}"
+        );
+        // Every *later* node should still be best-effort.
+        for later in &nodes[1..] {
+            assert!(
+                later.contains("|| true"),
+                "non-bootstrap device nodes should be best-effort: {later}"
+            );
+        }
     }
 
     #[test]
