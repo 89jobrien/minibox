@@ -202,10 +202,15 @@ pub(super) async fn prepare_run(
             init_leaf: cgroup_dir.join("init"),
         };
         if let Err(error) = crate::container::cgroups::delegate_subtree(&delegation) {
-            tracing::debug!(
+            // Warn, not debug: a silently skipped delegation leaves the
+            // container without the resource limits the subtree was meant to
+            // carry, and the path that failed is the only clue as to where the
+            // daemon actually tried to create it.
+            tracing::warn!(
                 container_id = %id,
+                subtree = %delegation.subtree.display(),
                 %error,
-                "cgroup delegation skipped (non-fatal)"
+                "cgroup delegation failed; container will run without delegated limits"
             );
         }
         // The container process must be placed in the `init` leaf, not the
