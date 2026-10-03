@@ -2,159 +2,15 @@
 
 @.claude.local.md
 
-Guidance for Claude Code when working in this repository.
+**All agent guidance for this repository lives in [`AGENTS.md`](AGENTS.md).**
+Read that file first — it is the single source of truth for tooling, gates,
+architecture guardrails, security invariants, git workflow, test conventions,
+and subagent rules. Do not duplicate rules here; if this file and `AGENTS.md`
+disagree, `AGENTS.md` wins.
 
-## Project Snapshot
-
-Minibox is a Rust 2024 Docker-like container runtime with a daemon/CLI split, OCI image support, Linux namespace/cgroup isolation, overlay filesystems, and macOS adapter backends.
-
-Default adapter selection lives in `crates/minibox-core/src/adapter_registry.rs`: `smolvm` by default, falling back to `native` on Linux or `krun` on macOS when the `smolvm` binary is absent. Explicit `MINIBOX_ADAPTER=<value>` disables fallback.
-
-## Read First
-
-- `README.md` — user-facing overview and quickstart.
-- `DEVELOPMENT.md` — canonical developer workflow and command selection.
-- `docs/core/ARCHITECTURE.mbx.md` — workspace layout, crates, ports, adapter matrix, protocol overview.
-- `docs/core/GOTCHAS.mbx.md` — non-obvious Rust/container/protocol pitfalls.
-- `docs/core/TEST_INFRASTRUCTURE.mbx.md` — test categories, CI coverage, xtask commands.
-- `docs/core/XTASK_CLI.mbx.md` — full `cargo xtask` command reference; see also `xtask/schema/cli.schema.json`.
-- `docs/core/CRATE_INVENTORY.mbx.md` — crate/module inventory and current counts.
-- `docs/core/FEATURE_MATRIX.mbx.md` — platform and adapter capability matrix.
-- `docs/core/STATE_MODEL.mbx.md` — daemon persistence model.
-- `docs/core/SECURITY_INVARIANTS.mbx.md` — security rules to preserve.
-
-If changing container code, protocol types, adapters, or tests, read the relevant reference above instead of relying on this compact file.
-
-## Environment Rules
-
-- No vanilla Python: use `uv run` for Python scripts and `uv` for package management.
-- Prefer Nushell or Rust for new scripts; if Python is necessary, use a uv script with inline metadata.
-- No emojis in code or docs unless explicitly requested.
-- Prefer editing existing files over creating new ones.
-- Remove unused code completely; do not comment it out.
-- Never commit secrets, credentials, or API keys.
-- Fuzz seeds, corpus, and artifacts are gitignored via `**/fuzz/seeds/`,
-  `**/fuzz/corpus/`, `**/fuzz/artifacts/`. Do not commit generated fuzz data.
-
-## Test Daemon Gotchas
-
-- Never use `Stdio::piped()` for daemon stdout/stderr in tests unless you drain
-  the pipes in a background thread. Debug logging during slow operations (pull,
-  run) can exceed the 64KB OS pipe buffer and deadlock the daemon. Use
-  `Stdio::null()` or reduce log level to `warn`/`info`.
-- `cargo fmt --all --check` (run by pre-commit) formats ALL workspace files
-  including untracked ones. Run `cargo fmt --all` before committing if untracked
-  `.rs` files exist.
-- `tar::Builder::append_dir_all` follows symlinks by default. Container
-  rootfs layers often contain symlinks that only resolve inside a live
-  mount namespace (e.g. Alpine's `etc/mtab -> ../proc/mounts`) — call
-  `.follow_symlinks(false)` before tarring an extracted layer/rootfs dir,
-  or it fails with ENOENT on the host. See docker_archive.rs, commit.rs,
-  push.rs, colima_push.rs.
-- `cargo xtask demo`/showcase binary resolution prefers `target/release`
-  over `target/debug`. After fixing a bug, rebuild release too or the
-  demo silently runs the stale binary.
-
-## Core Commands
-
-Use `just` or `cargo xtask` for repeatable gates.
-
-- `cargo check --workspace` — compile/check workspace.
-- `cargo xtask verify` — read-only local gate: fmt check, workspace check, clippy with warnings denied, borrow fixtures, docs lint.
-- `cargo xtask borrow-fixtures` — standalone Rust borrow-reasoning must-pass/must-fail fixtures.
-- `cargo xtask pre-commit` — macOS-safe pre-commit gate: staged fmt/clippy plus config/docs checks.
-- `cargo xtask prepush` — broader gate: release build, release nextest, and conformance (use `cargo xtask coverage` separately for coverage reports).
-- `cargo xtask test unit` — cross-platform workspace library tests.
-- `cargo xtask test property` — property tests.
-- `just test-integration` — Linux+root cgroup tests.
-- `just test-e2e` — cross-platform protocol end-to-end tests.
-- `just test-system` — Linux+root full-stack daemon/CLI tests.
-- `cargo xtask nuke-test-state` — clean orphaned containers, overlays, cgroups, and temp state.
-- `cargo xtask build-test-image` — build cached Alpine kernel/agent image for macOS VM adapters.
-- `cargo xtask ci-watch [--branch <name>]` — watch latest GHA run with job-level detail; defaults
-  to current branch. Nushell wrapper: `nu scripts/ci-watch.nu [--branch <name>]`.
-- `cargo xtask bench` — run criterion benchmarks and save results to `bench/results/`.
-- `cargo xtask doctor` — canonical preflight: tool/env checks, secret-manager auth, Linux system
-  caps. Absorbed `scripts/preflight.nu`'s checks; that script is now just the fast SessionStart hook.
-
-No Python scripts are expected in the project; use Rust scripts or Nushell helpers for agent tooling.
-
-## Rust and Test Conventions
-
-- Rust edition is 2024. `std::env::set_var` and `remove_var` are unsafe; serialize env-mutating tests with a shared lock.
-- Treat warnings as errors in clippy runs: use `-D warnings` or the xtask/just gates.
-- Gate Linux-only code and imports carefully. macOS `cargo check` does not validate `#[cfg(target_os = "linux")]` paths.
-- Do not use `Command::cargo_bin()` for subprocess CLI tests; use the existing `find_minibox()`/`MINIBOX_TEST_BIN_DIR` pattern.
-- Protocol changes start in `crates/minibox-core/src/protocol.rs`; update handlers, CLI paths, and snapshot tests together.
-- New request fields should use `#[serde(default)]` when wire compatibility matters.
-- Never discard handler channel-send failures with `let _ = ...`; log dropped-client cases.
-
-## Architecture Guardrails
-
-- Domain ports live under `crates/minibox-domain/src/`; `minibox_core::domain`
-  and `minibox::domain` are compatibility re-exports of those same types.
-- `minibox` re-exports `minibox-core`; do not remove re-exports needed by `as_any!`/`adapt!` macro expansion.
-- `DaemonRequest`/`DaemonResponse` are canonical in `crates/minibox-core/src/protocol.rs`.
-- `DaemonResponse::ContainerOutput` is non-terminal; most other response variants end request streaming. Update terminal-response logic when adding variants.
-- `HandlerDependencies` changes require updating all adapter suite construction sites in `crates/miniboxd/src/main.rs`.
-
-## Security Invariants
-
-- Preserve tar extraction protections: reject `..`, absolute symlinks, device nodes, FIFOs, and setuid/setgid bits.
-- Keep overlay/path validation inside the target root.
-- Preserve native-adapter Unix socket peer credential checks and root-only access.
-- Enforce image pull size limits.
-- Container init must use `execve` with explicit env, not `execvp`.
-
-## Git Workflow
-
-Branches follow the stability pipeline:
-
-`develop` -> `staging` -> `release` -> `main` -> `v*` tag
-
-- Target feature, hotfix, and chore work at `develop`.
-- Do not promote `staging` to `release` without confirming `staging` CI is green.
-- Do not promote `release` to `main` without confirming `release` CI is green.
-- Do not commit unless explicitly asked.
-- `.ctx/HANDOFF.*.*.yaml` is gitignored by default; use `git add -f` only when intentionally tracking it.
-
-### Branch Protection
-
-- `main` is protected via GitHub rulesets. All changes land via PR
-  with required status checks. Branch must be up-to-date before merge.
-- `staging` and `release` block force pushes and deletions; require
-  `CI passed` status check.
-- `release` -> `main` promotion creates a PR automatically via CI.
-- Required status checks on `main`: `CI passed`, stability gates,
-  `actionlint`.
-- Version bumps must also update `<!-- fact:workspace_version=X.Y.Z -->`
-  markers in docs/core/{ARCHITECTURE,CRATE_INVENTORY}.mbx.md, or
-  `cargo xtask verify`'s docs-audit reports a mismatch.
-- If a file listed in taskit.toml's `[[protocol.surfaces]]` is deleted or
-  renamed, update the list and run `taskit protocol drift --update`
-  to regenerate taskit-protocol.lock, or the check breaks.
-
-## Hook Notes
-
-Claude hook config lives in `.claude/settings.json`. The `SessionStart` hook runs `nu scripts/preflight.nu`; it should be fast, read-only, and non-fatal so startup is not blocked by normal local state like an uncommitted working tree.
-
----
-
-## Quick Reference
-
-```text
-No .unwrap() in production        → use .context("description")?
-No println!/eprintln! in daemon   → use tracing::info!/warn!
-No platform imports in core       → minibox-core has zero OS deps
-No fork/clone in async fn         → use tokio::task::spawn_blocking
-No unsafe without SAFETY comment  → document the invariant
-No direct path from user input    → call validate_layer_path() first
-No env::set_var in parallel tests → use static Mutex<()> guard
-No new protocol field without     → #[serde(default)]
-  backward compat
-New adapter? Update composition   → crates/miniboxd/src/main.rs (all suites)
-New HandlerDependencies field?    → update all construction sites
-```
+The blocks below are machine-generated by external tooling (godmode, Claude Code
+toolbox) and are re-injected on regeneration. Edit the generator's template, not
+these blocks.
 
 <!-- cloude-code-toolbox:mcp-skills-awareness-begin -->
 
@@ -173,7 +29,6 @@ _Last synced: 2026-05-18T16:21:06.033093Z._
 #### User MCP
 
 - `/Users/joe/Library/Application Support/Code/User/mcp.json` — _servers defined_
-
 - **personal** (stdio)
 
 <!-- cloude-code-toolbox:mcp-skills-awareness-end -->
@@ -209,10 +64,14 @@ independent. After finishing, transition to VERIFY automatically.
 </godmode-phase>
 
 <godmode-phase name="VERIFY" mode="read + test" response-header="# Phase: VERIFY" skills="verification-before-completion">
-Run `cargo check`, `cargo clippy`, `cargo test` (or `godmode verify`).
-Invoke `godmode:verification-before-completion` for non-trivial changes.
-Report results. If failures exist, return to ACT to fix them. When
-green, state readiness and ask to SHIP.
+Run the repo's canonical gate, not bare cargo: `cargo xtask verify`
+(fmt check, workspace check, clippy `-D warnings`, feature matrix,
+architecture rings, borrow fixtures, docs audit), then `cargo xtask test unit`.
+Do not substitute `cargo check` / `cargo clippy` / `cargo test` — the repo is
+nextest-based and the xtask gate covers steps those miss. Invoke
+`godmode:verification-before-completion` for non-trivial changes. Report
+results. If failures exist, return to ACT to fix them. When green, state
+readiness and ask to SHIP.
 </godmode-phase>
 
 <godmode-phase name="SHIP" mode="commit/push" response-header="# Phase: SHIP" skills="cap, handoff">
@@ -240,10 +99,10 @@ Before responding in any phase, check if a godmode skill applies.
 
 ### Task graph
 
-Tasks live in @.ctx/GODMODE.tasks.yaml. Use `Bash(godmode task)` CLI for
+Tasks live in @.ctx/godmode/tasks.yaml. For the stale-uppercase warning and
+the full task-graph rules, see @AGENTS.md. Use `Bash(godmode task)` CLI for
 state transitions. Independent chains can run in parallel via
-`Skill(godmode:parallel-agents)`. A task is runnable when all `depends_on`
-items are `done`.
+`Skill(godmode:parallel-agents)`.
 
 ### Memory bank
 
@@ -259,7 +118,7 @@ items are `done`.
 
 ### Agent-specific guidance
 
-For subagent conventions, Codex integration, and memory-bank file
-inventory, see @AGENTS.md.
+For subagent conventions, Codex integration, memory-bank file inventory,
+gates, and git workflow, see @AGENTS.md — that file is authoritative.
 
 <!-- godmode-workflow:end -->
