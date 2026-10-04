@@ -53,14 +53,14 @@ reference above instead of relying on this compact file.
 Use `cargo xtask` (or `just`) for repeatable gates. Prefer `xtask` over bare
 `cargo` — the xtask gate runs steps the bare commands miss.
 
-| When                  | Run                           | Covers                                                                                                                                                               |
-| --------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Before any commit     | `cargo xtask verify`          | fmt check, workspace check, clippy `-D warnings`, feature matrix (18 flag combos), architecture rings, borrow fixtures, docs audit. Read-only; safe on a dirty tree. |
-| On commit (automatic) | `cargo xtask pre-commit`      | staged fmt/clippy plus config/docs checks, doc-dates, secret scan. **Never use `--no-verify`.**                                                                      |
-| Before pushing        | `cargo xtask prepush`         | release build, release nextest, conformance. Use `cargo xtask coverage` separately for coverage.                                                                     |
-| Unit tests            | `cargo xtask test unit`       | cross-platform workspace library tests.                                                                                                                              |
-| Property tests        | `cargo xtask test property`   | property tests.                                                                                                                                                      |
-| Standalone            | `cargo xtask borrow-fixtures` | borrow-reasoning must-pass/must-fail fixtures.                                                                                                                       |
+| When                  | Run                           | Covers                                                                                                                                                                                      |
+| --------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Before any commit     | `cargo xtask verify`          | fmt check, workspace check, clippy `-D warnings`, feature matrix (18 flag combos), architecture rings, borrow fixtures, docs audit. Read-only; safe on a dirty tree.                        |
+| On commit (automatic) | `cargo xtask pre-commit`      | clippy `-D warnings` + architecture on every commit; `cargo fmt --all` and re-stage only when Rust is staged, plus config/docs checks, doc-dates, secret scan. **Never use `--no-verify`.** |
+| Before pushing        | `cargo xtask prepush`         | release build, release nextest, conformance. Use `cargo xtask coverage` separately for coverage.                                                                                            |
+| Unit tests            | `cargo xtask test unit`       | cross-platform workspace library tests.                                                                                                                                                     |
+| Property tests        | `cargo xtask test property`   | property tests.                                                                                                                                                                             |
+| Standalone            | `cargo xtask borrow-fixtures` | borrow-reasoning must-pass/must-fail fixtures.                                                                                                                                              |
 
 - **The repo is nextest-based.** Do not substitute bare `cargo test` — use
   `cargo xtask test unit` / `test property`.
