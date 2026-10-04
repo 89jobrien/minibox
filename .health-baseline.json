@@ -1,23 +1,23 @@
 {
-  "date": "2026-08-15",
+  "date": "2026-10-03",
   "tests": {
-    "total": 2217,
-    "passed": 2217,
+    "total": 2690,
+    "passed": 2690,
     "failed": 0,
-    "skipped": 0
+    "skipped": 6
   },
   "clippy": {
     "warnings": 0,
     "errors": 0
   },
-  "todo_fixme": 29,
+  "todo_fixme": 30,
   "safety": {
-    "unwrap_count": 3337,
-    "warn_count": 149
+    "unwrap_count": 3754,
+    "warn_count": 161
   },
   "coverage": null,
-  "ci_duration_ms": 392771.0,
-  "crates": 16,
+  "ci_duration_ms": null,
+  "crates": 17,
   "versions_consistent": true,
-  "version": "0.32.0"
+  "version": "0.33.0"
 }
