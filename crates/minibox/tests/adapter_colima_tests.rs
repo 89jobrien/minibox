@@ -488,9 +488,15 @@ async fn runtime_spawn_script_embeds_args() {
 
 use minibox::adapters::{ColimaFilesystem, ColimaLimiter};
 
-/// setup_rootfs must pass the overlay mount as argv so spaced macOS paths work.
+/// setup_rootfs must mount the overlay at a **VM-local** path, passed as argv.
+///
+/// The path is deliberately not under the macOS container dir: virtiofs cannot
+/// host an overlay upper layer, and the kernel accepts such a mount while
+/// presenting it read-only, which silently produced immutable containers. The
+/// id is taken from the container dir's final component so the two stay
+/// associated.
 #[test]
-fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
+fn filesystem_setup_rootfs_mounts_vm_local_overlay() {
     use std::sync::{Arc, Mutex};
 
     let calls = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
@@ -512,8 +518,12 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
 
     assert_eq!(
         &*merged.merged_dir,
-        PathBuf::from("/Users/joe/Library/Application Support/minibox/container-test/merged")
-            .as_path()
+        PathBuf::from("/tmp/minibox-overlay/container-test/merged").as_path()
+    );
+    assert!(
+        !merged.merged_dir.starts_with("/Users"),
+        "the overlay must not live on the virtiofs-shared home: {:?}",
+        &*merged.merged_dir
     );
 
     let calls = calls.lock().expect("unwrap in test");
@@ -524,15 +534,15 @@ fn filesystem_setup_rootfs_uses_sudo_mount_with_spaced_paths() {
                 && call.get(1).map(String::as_str) == Some("mount")
         })
         .expect("expected sudo mount invocation");
-    assert!(
-        mount_call[6].starts_with("lowerdir=/tmp/layer0,upperdir=/Users/joe/Library/Application Support/minibox/container-test/upper,"),
-        "mount options must preserve the spaced host path, got: {}",
-        mount_call[6]
-    );
+    // The image layer still comes from the caller (VM-local under
+    // /tmp/minibox-layers), while the writable layer is VM-local too. Both are
+    // passed as a single argv element, so no shell quoting is involved.
     assert_eq!(
-        mount_call[7],
-        "/Users/joe/Library/Application Support/minibox/container-test/merged"
+        mount_call[6],
+        "lowerdir=/tmp/layer0,upperdir=/tmp/minibox-overlay/container-test/upper,\
+         workdir=/tmp/minibox-overlay/container-test/work"
     );
+    assert_eq!(mount_call[7], "/tmp/minibox-overlay/container-test/merged");
 }
 
 /// pivot_root is a no-op for the Colima adapter and always succeeds.
@@ -546,7 +556,11 @@ fn filesystem_pivot_root_is_noop() {
     );
 }
 
-/// cleanup must use sudo for the umount before removing the container dir.
+/// cleanup must use sudo for the umount, at the same VM-local path
+/// `setup_rootfs` mounted.
+///
+/// The two must agree: if cleanup addressed the container dir instead, the
+/// overlay mount and its upper layer would be left behind in the VM.
 #[test]
 fn filesystem_cleanup_uses_sudo_umount() {
     use std::sync::{Arc, Mutex};
@@ -570,15 +584,16 @@ fn filesystem_cleanup_uses_sudo_umount() {
         vec![
             "sudo".to_string(),
             "umount".to_string(),
-            "/tmp/container-test/merged".to_string()
+            "/tmp/minibox-overlay/container-test/merged".to_string()
         ]
     );
     assert_eq!(
         calls[1],
         vec![
+            "sudo".to_string(),
             "rm".to_string(),
             "-rf".to_string(),
-            "/tmp/container-test".to_string()
+            "/tmp/minibox-overlay/container-test".to_string()
         ]
     );
 }

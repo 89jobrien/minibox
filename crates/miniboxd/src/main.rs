@@ -298,8 +298,11 @@ use tokio::sync::Mutex as TokioMutex;
 #[cfg(unix)]
 use tracing::{info, warn};
 
-// Linux-only imports
-#[cfg(target_os = "linux")]
+// Linux-only imports.
+// BridgeNetwork is only the fallback when the `cni` feature is off; with `cni`
+// enabled the Bridge arm resolves to CniNetworkProvider and this import would
+// be orphaned under `-D warnings`.
+#[cfg(all(target_os = "linux", not(feature = "cni")))]
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
@@ -1493,36 +1496,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[cfg(target_os = "linux")]
-    async fn native_network_provider_rejects_unknown_mode() {
-        let error = native_network_provider("brdige")
-            .await
-            .expect_err("unknown network mode must be rejected");
-
-        assert!(
-            error
-                .to_string()
-                .contains("invalid MINIBOX_NETWORK_MODE=\"brdige\""),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    #[cfg(all(target_os = "linux", not(feature = "tailnet")))]
-    async fn native_network_provider_rejects_unavailable_tailnet_mode() {
-        let error = native_network_provider("tailnet")
-            .await
-            .expect_err("tailnet requires the tailnet feature");
-
-        assert!(
-            error
-                .to_string()
-                .contains("requires miniboxd to be built with the `tailnet` feature"),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[tokio::test]
     #[cfg(unix)]
     async fn krun_suite_wires_krun_adapters() {
         let temp_dir = tempfile::TempDir::new().expect("create temp dir");
@@ -1904,10 +1877,17 @@ mod network_mode_tests {
         }
     }
 
+    /// The error an operator sees must both echo back the value they actually
+    /// typed and list the valid set — without the first, a typo is unrecoverable
+    /// from the message alone.
     #[test]
-    fn rejected_mode_error_lists_every_valid_mode() {
+    fn rejected_mode_error_names_the_rejected_value_and_lists_every_valid_mode() {
         let err = parse_network_mode("nope").expect_err("unknown mode must be rejected");
         let msg = err.to_string();
+        assert!(
+            msg.contains("nope"),
+            "error must echo the rejected value: {msg}"
+        );
         for mode in NetworkMode::ALL {
             assert!(
                 msg.contains(mode.as_str()),

@@ -1,0 +1,18 @@
+---
+title: Container state machine including restart reconciliation to Orphaned
+---
+stateDiagram-v2
+  direction LR
+  [*] --> Created
+  Created --> Running : start
+  Running --> Paused : pause
+  Paused --> Running : resume
+  Running --> Stopped : stop
+  Running --> Failed : error
+  Failed --> Stopped : stop
+  Stopped --> [*]
+
+  state "any PID state" as anyState
+  anyState --> Orphaned : daemon restart
+  Orphaned --> Running : restart keeps Paused only if PID alive and cgroup.freeze=1
+  Orphaned --> Stopped : otherwise

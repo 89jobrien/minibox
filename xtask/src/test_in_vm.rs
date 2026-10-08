@@ -659,7 +659,7 @@ mod tests {
         let opts = Options::from_args(&["--skip-build".to_string()]);
         assert!(opts.skip_build);
         assert!(!opts.keep);
-        assert!(opts.test_args.is_empty());
+        assert_eq!(opts.test_args, Vec::<String>::new());
     }
 
     #[test]

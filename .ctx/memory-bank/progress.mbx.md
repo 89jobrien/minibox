@@ -92,6 +92,24 @@
 - e2e showcase suite (`crates/minibox-testsuite/src/showcase/`) — narrated demo
   scenarios (e.g. lifecycle: run/stop/rm), backs a CLI demo mode; xtask CLI schema
   at `xtask/schema/cli.schema.json` (02194fd9, 3b9b85bd)
+- **Platform-gated coverage gap:** `crates/minibox/src/lib.rs:57` declares
+  `#[cfg(target_os = "linux")] pub mod container;`, so the cgroups, namespace,
+  mount/seccomp, and overlay unit tests are not compiled into a darwin build at all. Any
+  macOS gate run has zero coverage of them. The QEMU aarch64 harness closes the gap:
+  `rust-script scripts/qemu-linux-tests/run.rs --filter <module>` runs the `minibox` **lib**
+  test binary on a real Linux kernel (`cargo xtask test-in-vm` does *not* — its script
+  collects only integration test binaries). Its 3 `container::filesystem::bind_mount_tests`
+  failures are expected: `mount_setattr(MOUNT_ATTR_IDMAP)` needs a user namespace the
+  `virt` kernel denies. Documented in `scripts/qemu-linux-tests/README.md`.
+
+### Gate behavior
+
+- `cargo xtask prepush` is the gate that builds, lints, and tests: musl cross-build,
+  release build, release lib tests, vm_checkpoint, and the 123-test conformance suite.
+- `cargo xtask pre-commit` is conditional. `xtask/src/gates.rs:245` wraps fmt, clippy, and
+  the architecture check in `if rust_staged`, so with no Rust staged it runs docs-lint only
+  and still prints "pre-commit checks passed". It runs no release build and no tests.
+  A gate that skips its work should report the skip rather than a generic pass.
 
 ### CI pipeline
 
@@ -117,6 +135,18 @@
 - `cargo xtask promote` — branch cascade (develop->staging->release->main)
 
 ## Recently completed
+- **Mock system duplication resolved (t23)** — `crates/minibox/src/adapters/mocks.rs` is now an
+  11-line `pub use minibox_core::adapters::mocks::*;` re-export; the ~1000-line duplicate
+  reimplementation this entry used to describe is gone. Verified by direct read 2026-10-08.
+- **cgroup root validation fix** — `cgroup_root()` no longer passes an unvalidated
+  `MINIBOX_CGROUP_ROOT` into `PathBuf::from`. An empty value previously produced a relative
+  container path, so privileged-container `mkdir` calls landed in the daemon's cwd and left a
+  real leaked cgroup at the repo root (`813f2623a2ee4712/` containing `cgroup.subtree_control`
+  and an `init/` leaf), which had been masked by a `.gitignore` entry. Both the env var and the
+  client-supplied `cgroup_parent` now route through the existing `validate_cgroup_parent` via a
+  pure `resolve_cgroup_root()`; 8 env-free regression tests; `delegate_subtree` failure promoted
+  from `debug!` to `warn!`. Verified 17/17 on `container::cgroups::` under the QEMU Linux
+  harness (1db50b86).
 - **Protocol drift expectation fix** — xtask's expected surface registry updated to track the
   already-split `domain-*` entries instead of the stale single `domain-ports` entry; file-level
   clippy allow for unwrap/expect/panic in `cli_subprocess.rs` (fe9bae3e).
@@ -246,6 +276,21 @@
 
 ## Known issues
 
+- **GitHub Actions is fully non-functional** — every recent run on `develop` and `main`
+  fails in 3-10s with "The job was not started because your account is locked due to a
+  billing issue." No workflow can validate a push until that clears (observed 2026-10-03).
+- **`validate_lima_paths` allowlist bypass on empty or `/` HOME** —
+  `Path::new("").starts_with(anything)` is `true`, so when `HOME` is empty or `/` the
+  Colima bind-mount host-path allowlist accepts *every* path. Pinned by the failing
+  `validate_lima_paths_rejects_opt` test, which passes on a dev machine only because
+  `$HOME` is a real directory. Same bug class as the cgroup root issue fixed in 1db50b86.
+  Not yet filed as an issue.
+- **`cargo xtask pre-commit` can report success without verifying anything** —
+  `gates.rs:245` gates fmt/clippy/architecture on `if rust_staged`. CLAUDE.md also
+  overstates it as including a release build. Prefer `cargo xtask prepush`.
+- **Duplicate memory banks** — canonical `.ctx/memory-bank/` (`*.mbx.md`) coexists with a
+  stale `.ctx/godmode/memory-bank/` (~2 weeks old). The `mistake-tracker` skill still writes
+  to the legacy path, so ledger entries can land in the wrong file.
 - Stabilization freeze (#127) closed 2026-08-22 — 5/6 acceptance sub-issues done
   (#122 protocol, #114 state, #120 docs, #123 security, #117 support tiers, #133
   CI enforcement); #116 (handler.rs coverage) remains open and tracked separately
@@ -254,11 +299,6 @@
 - Colima path validation bypass via `..` (P1)
 - Bind-mount teardown absent on container cleanup (P2)
 - `xtask` binary not currently available (preflight reports fail)
-- Mock system duplication — `crates/minibox/src/adapters/mocks.rs` is a ~1000-line
-  near-total reimplementation of `crates/minibox-core/src/adapters/mocks.rs` for the
-  same 5 mock types (~62 duplicate occurrences via `dupehound scan`). Fix candidate:
-  replace with `pub use minibox_core::adapters::mocks::{...}` re-export, consistent
-  with `minibox`'s existing re-export-of-`minibox-core` convention. Filed as task t23.
 - CI coverage gaps — sandbox tests and the feature-gated CLI subprocess suite are
   not in any CI workflow
 - macOS VZ.framework — restored behind the opt-in `vz` feature, but VM boot remains

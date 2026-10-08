@@ -487,7 +487,7 @@ mod tests {
     fn tar_empty_dir_produces_bytes() {
         let tmp = tempfile::TempDir::new().unwrap();
         let bytes = tar_directory(tmp.path()).unwrap();
-        assert!(!bytes.is_empty());
+        assert_ne!(bytes, Vec::<u8>::new());
     }
 
     /// Regression test: root filesystem layers commonly contain symlinks
@@ -501,7 +501,7 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         std::os::unix::fs::symlink("../proc/mounts", tmp.path().join("mtab")).unwrap();
         let bytes = tar_directory(tmp.path()).expect("tar despite dangling symlink");
-        assert!(!bytes.is_empty());
+        assert_ne!(bytes, Vec::<u8>::new());
     }
 
     #[test]

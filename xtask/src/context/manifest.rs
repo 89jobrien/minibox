@@ -419,6 +419,7 @@ fn validate_capability_keys(adapters: &[AdapterDeclaration], diagnostics: &mut V
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::ContextDiagnostic;
     use crate::context::collect::reconcile_adapters;
     use crate::context::model::ValidationState;
 
@@ -702,7 +703,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
             ),
         ]);
         let exact = reconcile_adapters(&manifest, &registry, &tested_capabilities);
-        assert!(exact.diagnostics.is_empty());
+        assert_eq!(exact.diagnostics, Vec::<ContextDiagnostic>::new());
         assert!(exact.adapters.iter().all(|adapter| {
             adapter.maturity.observed.is_none()
                 && adapter.maturity.validation.state == ValidationState::DeclaredOnly

@@ -1238,7 +1238,7 @@ mod tests {
         match cli.command {
             Commands::Update { all, images, .. } => {
                 assert!(all);
-                assert!(images.is_empty());
+                assert_eq!(images, Vec::<String>::new());
             }
             _ => panic!("expected Update"),
         }

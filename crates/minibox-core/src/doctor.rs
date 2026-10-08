@@ -1118,6 +1118,6 @@ mod tests {
             probe_daemon: false,
         })
         .await;
-        assert!(!report.sections.is_empty());
+        assert_ne!(report.sections, Vec::<Section>::new());
     }
 }

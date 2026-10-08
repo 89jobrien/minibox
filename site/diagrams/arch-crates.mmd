@@ -1,0 +1,49 @@
+---
+title: "17 workspace members: enforced domain to core to runtime direction"
+---
+flowchart BT
+  subgraph BIN["binaries and tooling"]
+    direction LR
+    ail["ail"]
+    miniboxd["miniboxd"]
+    cli["minibox-cli"]
+    plug["crux plugin<br/>JSON-RPC"]
+    mcp["minibox-mcp<br/>MCP stdio"]
+    suite["testsuite<br/>conformance"]
+    bench["bench"]
+    xtask["xtask"]
+  end
+
+  subgraph LIB["adapters + runtime"]
+    direction LR
+    macbox["macbox"]
+    smolbox["smolbox"]
+    winbox["winbox"]
+    cni["minibox-cni"]
+    tui["minibox-tui"]
+    mbx["minibox<br/>adapters + daemon runtime"]
+  end
+
+  subgraph CORE["canonical"]
+    direction LR
+    domain["minibox-domain<br/>canonical ports + values"]
+    core["minibox-core<br/>protocol + image/client"]
+    macros["minibox-macros<br/>proc macros"]
+    core --> domain
+  end
+
+  macbox --> mbx
+  smolbox --> mbx
+  winbox --> mbx
+  cni --> core
+  tui --> core
+  mbx --> core
+  mbx --> macros
+
+  ail --> mbx
+  miniboxd --> core
+  cli --> core
+  plug --> core
+  mcp --> core
+  suite --> mbx
+  bench --> mbx

@@ -133,6 +133,13 @@ test-sandbox:
 test-linux:
     crux run crux/dev/test_linux.crux
 
+# DinD container smoke test (Linux, root, cgroups v2, overlay fs).
+# Runs the release binaries inside a container minibox created itself.
+# Local only: GitHub-hosted runners do not delegate cgroups far enough, so a
+# CI copy fails for reasons unrelated to the code under test.
+smoke:
+    crux run crux/dev/smoke.crux
+
 # Run e2e suite on VPS (pulls latest main, runs as root, streams output)
 test-e2e-vps:
     crux run crux/dev/test_e2e_vps.crux

@@ -1,0 +1,21 @@
+---
+title: Adapter selection and capability boundaries
+---
+flowchart TD
+  q1{"explicit adapter?<br/>CLI &gt; env &gt; config"}
+  q1 -->|"yes"| v["validate exact choice<br/>unknown / unavailable = error<br/>no fallback"]
+  q1 -->|"no"| q2{"smolvm probe<br/>binary on PATH?"}
+  q2 -->|"present"| smol["smolvm<br/>experimental VM suite"]
+  q2 -->|"absent"| q3{"host OS"}
+  q3 -->|"Linux"| nat["native<br/>production, root required"]
+  q3 -->|"macOS"| kru["krun<br/>experimental VM fallback"]
+
+  nat --> comp["compose port suite<br/>also selectable: GKE production, Colima exp.<br/>when platform/build permits"]
+  kru --> comp
+  smol --> comp
+
+  blocked["not working paths<br/>VZ boot-blocked, winbox stub<br/>not fallback targets"]
+  gap["optional/no-op ports expose gaps"]
+
+  comp -.-> blocked
+  comp -.-> gap

@@ -604,7 +604,10 @@ mod tests {
     #[test]
     fn decode_defaults_optional_cni_path_and_args() {
         let request = PluginRequest::decode(&add_env(), BRIDGE_CONFIG.as_bytes()).expect("decode");
-        assert!(request.attachment.cni_path.is_empty());
+        assert_eq!(
+            request.attachment.cni_path,
+            Vec::<std::path::PathBuf>::new()
+        );
         assert!(request.attachment.cni_args.is_empty());
     }
 
@@ -813,7 +816,7 @@ mod tests {
             var: ENV_CNI_IFNAME.to_string(),
         };
         let payload = error_payload(&error);
-        assert!(!payload.msg.is_empty());
+        assert_ne!(payload.msg, "");
         assert!(payload.msg.contains(ENV_CNI_IFNAME));
     }
 }
