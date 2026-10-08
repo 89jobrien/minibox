@@ -685,12 +685,21 @@ pre code {
 }
 
 .terminal pre {
-  min-height: var(--terminal-min-height, auto);
   margin: 0;
   border: 0;
   border-radius: 0;
   background: none;
   color: var(--color-terminal-fg);
+}
+
+/*
+ * Only the hero terminal is a fixed-height showcase. Everywhere else the block
+ * is exactly as tall as its own content: padding a one-line command out to
+ * 18rem puts a third of the viewport of empty space under it, which is what
+ * made a page of short commands read as a page of long ones.
+ */
+.hero .terminal pre {
+  min-height: var(--terminal-min-height, auto);
 }
 
 .terminal .prompt {

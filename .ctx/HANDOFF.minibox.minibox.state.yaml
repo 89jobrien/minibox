@@ -7,9 +7,9 @@ updated: '20260726.044634'
 notes: 'crates/mcp (minibox-mcp) landed and verified live over stdio; smolvm demo path broken — filed GH #465'
 touched_files:
 - .claude/rules/rust-patterns.md
-- .ctx/memory-bank/activeContext.mbx.md
+- .ctx/memory-bank/active-context.mbx.md
 - .ctx/memory-bank/progress.mbx.md
-- .ctx/memory-bank/systemPatterns.mbx.md
+- .ctx/memory-bank/system-patterns.mbx.md
 - Cargo.lock
 - Cargo.toml
 - README.md

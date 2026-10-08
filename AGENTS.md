@@ -38,6 +38,17 @@ reference above instead of relying on this compact file.
 
 ## Environment Rules
 
+- **All Bash tool calls must be `nu -c "..."`.** Bare commands and `bash -c` are both
+  blocked by a course-correct hook. In nu, `&&` is `;`, `2>/dev/null` is `| ignore`,
+  `$HOME` is `$env.HOME`, and `cmd > f` is `cmd | save -f f`. A parse error anywhere in a
+  `;`-chained command aborts the **whole line** — no segment runs and no segment is
+  reported — so never chain a destructive or verifying command with a risky one.
+- **Never `cd` to change directory.** Use the Bash tool's `workdir` parameter, or
+  `git -C <path>` for one-off git calls. `cd` in an orchestration command is blocked.
+- **Use the dedicated tools, not shell equivalents**: `Grep`, `Glob`, `Read`, `Edit`.
+  `grep`, `ls`, `find`, `cat`, `sed`, and `head`/`tail` are blocked in Bash. The denials
+  are loud and name the replacement, but they cost a full reissue each — this is the
+  single largest source of wasted tool calls in this repo.
 - No vanilla Python: use `uv run` for Python scripts and `uv` for package management.
 - Prefer Nushell or Rust for new scripts; if Python is necessary, use a uv script with inline metadata.
 - No Python scripts are expected in the project; use Rust scripts or Nushell helpers for agent tooling.
@@ -205,18 +216,18 @@ graph. If the two ever disagree, the lowercase path is authoritative.
 Persistent context lives in `.ctx/memory-bank/`. Read before substantive work;
 update after milestones.
 
-| File                    | Purpose                              |
-| ----------------------- | ------------------------------------ |
-| `projectbrief.mbx.md`   | Scope, non-goals, success criteria   |
-| `productContext.mbx.md` | Problem, users, UX principles        |
-| `systemPatterns.mbx.md` | Crate layout, data flow, conventions |
-| `techContext.mbx.md`    | Stack, env vars, build commands      |
-| `activeContext.mbx.md`  | Current focus and in-progress work   |
-| `progress.mbx.md`       | What works, backlog, known issues    |
+| File                     | Purpose                              |
+| ------------------------ | ------------------------------------ |
+| `project-brief.mbx.md`   | Scope, non-goals, success criteria   |
+| `product-context.mbx.md` | Problem, users, UX principles        |
+| `system-patterns.mbx.md` | Crate layout, data flow, conventions |
+| `tech-context.mbx.md`    | Stack, env vars, build commands      |
+| `active-context.mbx.md`  | Current focus and in-progress work   |
+| `progress.mbx.md`        | What works, backlog, known issues    |
 
 Context layers (read deeper after foundations):
-**projectbrief** -> **productContext** / **systemPatterns** / **techContext**
--> **activeContext** -> **progress**.
+**project-brief** -> **product-context** / **system-patterns** / **tech-context**
+-> **active-context** -> **progress**.
 
 ## Subagent Rules
 

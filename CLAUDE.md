@@ -108,7 +108,7 @@ state transitions. Independent chains can run in parallel via
 
 - Persistent context lives in @.ctx/memory-bank/
 - Read before substantive work: !`ls .ctx/memory-bank/`
-- update after milestones: @.ctx/memory-bank/activeContext.mbx.md and @.ctx/memory-bank/progress.mbx.md
+- update after milestones: @.ctx/memory-bank/active-context.mbx.md and @.ctx/memory-bank/progress.mbx.md
 - See @AGENTS.md for the full file list
 
 ### Context Graph
