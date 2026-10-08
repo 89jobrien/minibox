@@ -364,7 +364,7 @@ fn daemon_request_commit_backward_compat_omits_optional_fields() {
         } => {
             assert!(author.is_none());
             assert!(message.is_none());
-            assert!(env_overrides.is_empty());
+            assert_eq!(env_overrides, Vec::<String>::new());
             assert!(cmd_override.is_none());
         }
         other => panic!("expected DaemonRequest::Commit, got {other:?}"),
@@ -386,7 +386,7 @@ fn daemon_request_build_backward_compat_omits_optional_fields() {
             no_cache,
             ..
         } => {
-            assert!(build_args.is_empty());
+            assert_eq!(build_args, Vec::<(String, String)>::new());
             assert!(!no_cache);
         }
         other => panic!("expected DaemonRequest::Build, got {other:?}"),

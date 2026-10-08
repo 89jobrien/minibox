@@ -1378,6 +1378,12 @@ build = "build.rs"
             ],
         ] {
             let status = Command::new("git")
+                // The fixture stages a path under `metrics/target/`, which a
+                // developer or CI global `core.excludesFile` (commonly a bare
+                // `target/` rule) would ignore. Neutralise it so the fixture
+                // describes the collector's behaviour rather than the host's
+                // git configuration.
+                .args(["-c", "core.excludesFile="])
                 .args(args)
                 .current_dir(root)
                 .status()
@@ -1825,7 +1831,7 @@ edition = "2024"
                     .find(|file| file.path == changed.path)
             );
         }
-        assert!(context_map.collector_tasks.is_empty());
+        assert_eq!(context_map.collector_tasks, Vec::<CollectorTask>::new());
     }
     #[test]
     fn collector_tasks_reflect_requested_execution() {

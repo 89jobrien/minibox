@@ -1,0 +1,91 @@
+pipeline: smoke
+# Minibox-in-minibox (DinD) container smoke test.
+#
+# Runs the release binaries inside a container the runtime itself created:
+# privileged, with the binaries bind-mounted read-only, host cgroups mounted,
+# and the inner state dirs on tmpfs to avoid overlay-on-overlay. This is the
+# same recipe as crates/miniboxd/tests/system_tests.rs::test_e2e_dind_pull_and_run.
+#
+# Requirements: Linux, root, cgroups v2, overlay fs, network.
+#
+# This deliberately does NOT run in CI. GitHub-hosted runners do not delegate
+# cgroups far enough for the outer container ("failed to add process to cgroup
+# /sys/fs/cgroup/"), so a CI-hosted version of this test fails for reasons that
+# have nothing to do with the code under test. Run it locally:
+#
+#   just smoke
+#
+budget: { calls: 4 }
+
+steps:
+  - step: build
+    handler: shell::capture
+    args:
+      # The package is minibox-cli; `mbx` is the binary it emits, so -p mbx
+      # does not resolve.
+      cmd: "cargo build --release -p miniboxd -p minibox-cli"
+
+  - step: smoke_dind
+    handler: shell::capture
+    args:
+      cmd: |
+        set -eu
+        echo "--- DinD smoke test ---"
+        RUN_DIR="${MINIBOX_RUN_DIR:-/tmp/minibox-smoke}"
+        DATA_DIR="${MINIBOX_DATA_DIR:-/tmp/minibox-smoke-data}"
+        INNER_DATA=/tmp/minibox-dind-data
+        INNER_RUN=/tmp/minibox-dind-run
+        CGROUP_NAME="minibox-smoke-$$"
+        rm -rf "$RUN_DIR" "$DATA_DIR" "$INNER_DATA" "$INNER_RUN"
+        mkdir -p "$RUN_DIR" "$DATA_DIR" "$INNER_DATA" "$INNER_RUN"
+        SCRIPT=$(cat <<'INNER'
+        set -eu
+        mkdir -p /sys/fs/cgroup/__CGROUP__
+        echo '+memory +cpu +pids' > /sys/fs/cgroup/__CGROUP__/cgroup.subtree_control
+        MINIBOX_DATA_DIR=/minibox-data \
+          MINIBOX_RUN_DIR=/minibox-run \
+          MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/__CGROUP__ \
+          RUST_LOG=error \
+          /usr/local/bin/miniboxd &
+        DAEMON_PID=$!
+        i=0
+        while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
+          sleep 0.1; i=$((i+1))
+        done
+        [ -S /minibox-run/miniboxd.sock ] || { echo 'inner daemon socket timeout' >&2; kill "$DAEMON_PID" || true; exit 1; }
+        MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox pull alpine >/dev/null
+        OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock timeout 120 /usr/local/bin/minibox run alpine -- /bin/sh -c 'echo dind-ok && uname -r')
+        echo "$OUT" | grep -q dind-ok || { echo "unexpected output: $OUT" >&2; kill "$DAEMON_PID" || true; exit 2; }
+        kill "$DAEMON_PID" 2>/dev/null || true
+        wait "$DAEMON_PID" 2>/dev/null || true
+        echo dind-ok
+        INNER
+        )
+        SCRIPT=$(printf '%s' "$SCRIPT" | sed "s/__CGROUP__/$CGROUP_NAME/g")
+        # Bind mounts and privileged mode are denied by daemon policy by default.
+        sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" \
+          MINIBOX_ALLOW_BIND_MOUNTS=true MINIBOX_ALLOW_PRIVILEGED=true \
+          timeout 600 target/release/miniboxd &
+        DAEMON_PID=$!
+        sleep 3
+        mbx() { sudo -E env MINIBOX_RUN_DIR="$RUN_DIR" MINIBOX_DATA_DIR="$DATA_DIR" timeout 600 target/release/mbx "$@"; }
+        mbx pull alpine:latest
+        mbx run --privileged \
+          -v "$PWD/target/release/miniboxd:/usr/local/bin/miniboxd:ro" \
+          -v "$PWD/target/release/mbx:/usr/local/bin/minibox:ro" \
+          -v /sys/fs/cgroup:/sys/fs/cgroup \
+          -v "$INNER_DATA:/minibox-data" \
+          -v "$INNER_RUN:/minibox-run" \
+          alpine:latest -- /bin/sh -c "$SCRIPT"
+        mbx ps
+        mbx prune
+        kill $DAEMON_PID 2>/dev/null || true
+        wait $DAEMON_PID 2>/dev/null || true
+        sudo rm -rf "/sys/fs/cgroup/$CGROUP_NAME" 2>/dev/null || true
+        rm -rf "$RUN_DIR" "$DATA_DIR" "$INNER_DATA" "$INNER_RUN"
+        echo "smoke test passed"
+
+  - step: done
+    handler: ctrl::log
+    args:
+      msg: "DinD smoke test passed"

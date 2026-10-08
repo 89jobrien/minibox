@@ -568,7 +568,7 @@ async fn minibox_run_returns_bounded_truncated_output() {
 
     assert_eq!(output.stdout.len() + output.stderr.len(), 5);
     assert_eq!(output.stdout, "hello");
-    assert!(output.stderr.is_empty());
+    assert_eq!(output.stderr, "");
     assert!(output.truncated);
     assert_eq!(output.exit_code, Some(0));
 

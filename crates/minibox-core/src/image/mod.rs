@@ -910,7 +910,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let store = ImageStore::new(tmp.path()).unwrap();
         let images = store.list_all_images().await.unwrap();
-        assert!(images.is_empty());
+        assert_eq!(images, Vec::<String>::new());
     }
 
     #[tokio::test]

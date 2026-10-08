@@ -660,6 +660,9 @@ fn build_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::model::{
+        AdapterSnapshot, CollectorTask, DependencySnapshot, ExecutableTest, FileOwnership,
+    };
 
     #[test]
     fn context_v3_collects_complete_snapshot() {
@@ -994,9 +997,12 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
                     && profile.status == ProfileStatus::Validated)
         );
         assert_eq!(snapshot.tests.validated_unique_tests.len(), 1);
-        assert!(!snapshot.context_map.files.is_empty());
-        assert!(!snapshot.context_map.collector_tasks.is_empty());
-        assert!(!snapshot.adapters.is_empty());
+        assert_ne!(snapshot.context_map.files, Vec::<FileOwnership>::new());
+        assert_ne!(
+            snapshot.context_map.collector_tasks,
+            Vec::<CollectorTask>::new()
+        );
+        assert_ne!(snapshot.adapters, Vec::<AdapterSnapshot>::new());
         assert_ne!(
             snapshot.environment.rustc_version.observed.as_deref(),
             snapshot.workspace.msrv.observed.as_deref(),
@@ -1008,7 +1014,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             .iter()
             .find(|package| package.name == "sample")
             .expect("sample package should be present");
-        assert!(!sample.dependencies.is_empty());
+        assert_ne!(sample.dependencies, Vec::<DependencySnapshot>::new());
         let dependency_keys = sample
             .dependencies
             .iter()
@@ -1054,7 +1060,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             .iter()
             .find(|profile| profile.status == ProfileStatus::Unavailable)
             .expect("foreign unavailable profile should be represented");
-        assert!(unavailable.executable_tests.is_empty());
+        assert_eq!(unavailable.executable_tests, Vec::<ExecutableTest>::new());
         assert!(unavailable.unavailable_reason.is_some());
         assert!(snapshot.context_map.files.iter().any(|file| {
             file.path.as_str() == "sample/src/lib.rs"
@@ -1325,7 +1331,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
         let stale = read_profile_evidence(stale_dir.path(), &expected, &packages)
             .expect("stale evidence should remain diagnostic data");
         assert_eq!(stale[0].status, ProfileStatus::Stale);
-        assert!(stale[0].executable_tests.is_empty());
+        assert_eq!(stale[0].executable_tests, Vec::<ExecutableTest>::new());
 
         let validate_all_strict = ContextOptions {
             strict: true,

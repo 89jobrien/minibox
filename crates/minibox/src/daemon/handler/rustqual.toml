@@ -1,0 +1,15 @@
+# Module-level rustqual policy for daemon request handlers.
+#
+# Handlers are orchestration boundaries: they validate protocol input, delegate
+# to adapters, update daemon state, and stream responses. Their complexity
+# limits therefore allow the current cohesive orchestration paths while keeping
+# tighter crate-wide limits in crates/minibox/rustqual.toml unchanged.
+#
+# Validate with:
+# rustqual crates/minibox/src/daemon/handler --findings --no-fail
+
+[complexity]
+max_cognitive = 22
+max_cyclomatic = 15
+max_nesting_depth = 6
+max_function_lines = 320

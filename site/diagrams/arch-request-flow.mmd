@@ -1,0 +1,22 @@
+---
+title: Request / response sequence through miniboxd
+---
+sequenceDiagram
+    autonumber
+    participant C as DaemonClient
+    participant A as accept + auth
+    participant F as bounded frame<br/>parse JSON
+    participant D as dispatch
+    participant H as handler + ports<br/>selected adapters
+
+    C->>A: connect Unix socket
+    C->>F: one tagged DaemonRequest + newline
+    A->>F: authorized stream
+    F->>D: typed request
+    D->>H: mpsc sender + shared state
+    H-->>D: 0..n DaemonResponse
+    D-->>C: serialize each response + newline and flush
+
+    Note over C,H: continue while non-terminal<br/>stop on terminal response or channel/socket close
+    Note over A: native suite: UID 0 required
+    Note over F: maximum frame: 1 MiB

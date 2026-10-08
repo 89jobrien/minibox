@@ -1,0 +1,12 @@
+---
+title: "Crate tier promotion: Experimental may graduate, Internal never does"
+---
+flowchart LR
+  exp["Experimental"]
+  plat["Platform<br/>gates met"]
+  core["Core<br/>gates met"]
+  internal["Internal<br/>never promoted"]
+
+  exp -->|"gates met"| plat
+  plat -->|"gates met"| core
+  exp -.->|"never promoted"| internal

@@ -25,7 +25,7 @@ use std::{
 const PLACEHOLDER: &str = "(fill in next session)";
 const PATTERNS_HEADING: &str = "## Patterns & Surprises";
 const ARCHIVE_DIR: &str = ".ctx/logs/self-review";
-const ACTIVE_CONTEXT: &str = ".ctx/memory-bank/activeContext.mbx.md";
+const ACTIVE_CONTEXT: &str = ".ctx/memory-bank/active-context.mbx.md";
 const PROGRESS_CONTEXT: &str = ".ctx/memory-bank/progress.mbx.md";
 
 #[derive(Parser)]
@@ -792,7 +792,7 @@ fn missing_reflect_is_created_from_memory_bank() -> Result<()> {
     let memory_bank = root.join(".ctx/memory-bank");
     fs::create_dir_all(&memory_bank)?;
     fs::write(
-        memory_bank.join("activeContext.mbx.md"),
+        memory_bank.join("active-context.mbx.md"),
         r#"# Active context
 
 **In progress:**

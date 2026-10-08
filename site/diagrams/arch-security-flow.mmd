@@ -1,0 +1,37 @@
+---
+title: Distinct security and policy trust checks
+---
+flowchart TB
+  subgraph IN["UNTRUSTED INPUT"]
+    direction LR
+    ap["agent policy<br/>MCP mutation / mount /<br/>privilege / host-net gates"]
+    sa["socket access<br/>mode + peer credentials<br/>native root-auth"]
+    fr["framing + decode<br/>1 MiB bound<br/>tagged typed JSON"]
+    ap --> sa --> fr
+  end
+
+  subgraph VAL["DAEMON-VALIDATED INTENT"]
+    direction LR
+    cp["daemon ContainerPolicy<br/>bind mounts + privileged + priority<br/>deny defaults, operator override"]
+    ii["image pull integrity<br/>manifest / layer / aggregate limits<br/>content digest verification<br/>registry routing"]
+    fc["filesystem containment<br/>tar + overlay path validation<br/>device rejection, mode stripping<br/>bind destination checks"]
+    em["execution manifest<br/>seal measured inputs before spawn<br/>optional ExecutionPolicy admission<br/>env values stored as SHA-256"]
+    cp --> ii --> fc --> em
+  end
+
+  subgraph EXEC["VERIFIED ASSETS TO CHILD EXECUTION BOUNDARY"]
+    direction LR
+    ns["namespace + rootfs<br/>clone, bind, pivot_root"]
+    cg["cgroup attachment"]
+    mr["mount ratchet<br/>deny remount,rw<br/>after init mounts"]
+    ph["process hygiene<br/>close fds &gt; 2<br/>capability whitelist if privileged"]
+    ev["execve<br/>explicit argv + envp<br/>no daemon env inheritance"]
+    ns --> cg --> mr --> ph --> ev
+  end
+
+  IN --> VAL
+  VAL --> EXEC
+  EXEC --> tree["isolated workload process tree"]
+
+  note["each preceding gate protects a different asset and failure mode<br/>passing socket auth does not bypass policy, image verification, path checks, or child isolation"]
+  tree -.-> note
