@@ -467,6 +467,6 @@ mod tests {
         assert_eq!(decoded.artifacts, result.artifacts);
         assert!(decoded.outcomes[1].result.is_fail());
         assert_eq!(decoded.report_version, "1.0");
-        assert!(!decoded.generated_at.is_empty());
+        assert_ne!(decoded.generated_at, "");
     }
 }

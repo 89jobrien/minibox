@@ -1585,7 +1585,7 @@ mod tests {
                 privileged, mounts, ..
             } => {
                 assert!(privileged);
-                assert!(mounts.is_empty());
+                assert_eq!(mounts, Vec::<BindMount>::new());
             }
             _ => panic!("wrong variant"),
         }
@@ -1650,7 +1650,7 @@ mod tests {
             DaemonRequest::Run {
                 mounts, privileged, ..
             } => {
-                assert!(mounts.is_empty());
+                assert_eq!(mounts, Vec::<BindMount>::new());
                 assert!(!privileged);
             }
             _ => panic!("expected Run"),
@@ -2138,7 +2138,7 @@ mod tests {
         match req {
             DaemonRequest::Update { all, images, .. } => {
                 assert!(all);
-                assert!(images.is_empty());
+                assert_eq!(images, Vec::<String>::new());
             }
             _ => panic!("expected Update"),
         }

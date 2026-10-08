@@ -140,7 +140,7 @@ fn step_state_from_errored() {
 fn execution_context_to_env_empty() {
     let ctx = ExecutionContext::new();
     let env = minibox_core::protocol::execution_context_to_env(&ctx);
-    assert!(env.is_empty());
+    assert_eq!(env, Vec::<String>::new());
 }
 
 #[test]

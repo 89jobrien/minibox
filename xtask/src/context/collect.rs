@@ -1831,7 +1831,7 @@ edition = "2024"
                     .find(|file| file.path == changed.path)
             );
         }
-        assert!(context_map.collector_tasks.is_empty());
+        assert_eq!(context_map.collector_tasks, Vec::<CollectorTask>::new());
     }
     #[test]
     fn collector_tasks_reflect_requested_execution() {

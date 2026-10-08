@@ -56,5 +56,8 @@ fn empty_query_lists_all_repositories_with_stable_limit() {
 
 #[test]
 fn zero_limit_returns_no_results() {
-    assert!(search_image_refs(refs(), "alpine", 0).is_empty());
+    assert_eq!(
+        search_image_refs(refs(), "alpine", 0),
+        Vec::<ImageSearchResult>::new()
+    );
 }
