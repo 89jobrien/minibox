@@ -1,0 +1,34 @@
+---
+title: Events, metrics, tracing, and read-only TUI
+---
+flowchart LR
+  src["daemon handlers + selected adapters<br/>operations, lifecycle transitions,<br/>structured spans"]
+
+  sink["EventSink"]
+  broker["BroadcastEventBroker"]
+  sub["EventSource subscription"]
+  metrics["MetricsRecorder<br/>Prometheus or NoOp<br/>counter, histogram, gauge"]
+  tracing["tracing subscriber<br/>fmt + EnvFilter<br/>optional OTEL layer"]
+
+  src --> sink --> broker --> sub
+  src --> metrics
+  src --> tracing
+
+  responses["daemon Event responses<br/>SubscribeEvents stream<br/>non-terminal until disconnect"]
+  prom["Prometheus HTTP<br/>feature-gated /metrics<br/>same injected recorder"]
+  logs["logs + OTLP<br/>local structured output<br/>optional batch span export"]
+
+  broker --> responses
+  metrics --> prom
+  tracing --> logs
+
+  tui["minibox-tui (read-only)"]
+  list["List every 1s + live Event tail<br/>no run / stop / exec controls"]
+  state["container state<br/>DaemonRequest::List<br/>polled through socket client"]
+
+  tui --> list
+  tui --> state
+  sub --> list
+  responses --> state
+
+  vary["adapter composition varies:<br/>real, no-op, or disconnected"]

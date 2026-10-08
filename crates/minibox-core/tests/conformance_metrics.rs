@@ -114,7 +114,7 @@ fn conformance_counter_no_labels() {
     let counters = recorder.counters.lock().unwrap();
     assert_eq!(counters.len(), 1);
     assert_eq!(counters[0].0, "requests_total");
-    assert!(counters[0].1.is_empty());
+    assert_eq!(counters[0].1, Vec::<(String, String)>::new());
 }
 
 #[test]

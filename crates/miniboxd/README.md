@@ -61,9 +61,18 @@ RUST_LOG=debug ./target/debug/miniboxd --adapter smolvm
 
 `DaemonConfig::load()` overlays these sources in order:
 
-1. `/etc/minibox/config.toml`;
-2. `$HOME/.config/minibox/config.toml`; and
-3. supported `MINIBOX_*` environment variables.
+1. `minibox.toml` (project — discovered by walking up from the working
+   directory; lowest precedence);
+2. `/etc/minibox/config.toml`;
+3. `$HOME/.config/minibox/config.toml`; and
+4. supported `MINIBOX_*` environment variables.
+
+The project layer lets a checkout carry its own dev settings without mutating
+host config. It is deliberately the weakest layer — a checked-in file can never
+weaken a system-level lockdown, and env vars can always override it back to
+deny. It is opt-in: nothing is read unless a `minibox.toml` is actually present
+in an ancestor directory. `minibox.toml` is gitignored in this repo because it
+typically grants the privileged + bind-mount opt-in that DinD testing needs.
 
 The current daemon startup consumes the TOML `adapter` and policy fields. Runtime paths are
 resolved from the path environment variables shown below; the public config struct also contains

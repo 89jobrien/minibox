@@ -1221,7 +1221,10 @@ async fn test_handle_build_removes_temporary_dockerfile_after_parser_failure() {
     .await;
     let response = rx.recv().await.expect("receive parser error");
     assert!(matches!(response, DaemonResponse::Error { .. }));
-    assert!(temporary_dockerfiles(temp_dir.path()).is_empty());
+    assert_eq!(
+        temporary_dockerfiles(temp_dir.path()),
+        Vec::<std::path::PathBuf>::new()
+    );
 }
 
 // ---------------------------------------------------------------------------

@@ -230,7 +230,7 @@ fn conformance_image_error_is_debug() {
         tag: "latest".to_string(),
     };
     let debug_str = format!("{:?}", err);
-    assert!(!debug_str.is_empty());
+    assert_ne!(debug_str, "");
     assert!(debug_str.contains("NotFound"));
 }
 
@@ -335,7 +335,7 @@ fn conformance_registry_error_is_debug() {
         platform: "linux/amd64".into(),
     };
     let debug_str = format!("{:?}", err);
-    assert!(!debug_str.is_empty());
+    assert_ne!(debug_str, "");
     assert!(debug_str.contains("NoPlatformManifest"));
 }
 
@@ -347,12 +347,12 @@ fn conformance_registry_error_is_debug() {
 fn conformance_image_error_is_std_error() {
     use std::error::Error as StdError;
     let err: Box<dyn StdError> = Box::new(ImageError::LayerExtract("test".to_string()));
-    assert!(!err.to_string().is_empty());
+    assert_ne!(err.to_string(), "");
 }
 
 #[test]
 fn conformance_registry_error_is_std_error() {
     use std::error::Error as StdError;
     let err: Box<dyn StdError> = Box::new(RegistryError::Other("test".to_string()));
-    assert!(!err.to_string().is_empty());
+    assert_ne!(err.to_string(), "");
 }

@@ -44,9 +44,7 @@ so intermediate build containers also run as system containers:
 
 ## Relevance to minibox
 
-- The `VOLUME` directive masking layer data is a trap if minibox ever
-  supports image preloading or commit workflows — the writable layer
-  silently loses data when a volume is declared over it.
+- Minibox commit reads Dockerfile `VOLUME` declarations from the cached image config. It excludes those paths by default and warns when they contain writable data. `mbx commit <container> <image> --include-volumes` opts into capturing them. Host bind mounts remain excluded.
 - PID file cleanup pattern applies to any init/daemon lifecycle
   management inside containers.
 - Commit-only-captures-writable-layer constraint is relevant to

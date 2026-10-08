@@ -2,7 +2,10 @@
 
 use anyhow::{Context, Result};
 use minibox_testsuite::harness::ConformanceResult;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use xshell::{Shell, cmd};
 
 use crate::checkpoint::{self, FileCheckpointStore, GateId, GitTreeProbe};
@@ -234,7 +237,8 @@ pub fn fix(sh: &Shell) -> Result<()> {
 
 /// Pre-commit gate: staged formatting, clippy, and repository checks (macOS-safe, fast).
 ///
-/// Formats and re-stages staged Rust files, but does not apply clippy fixes.
+/// Formatting and re-staging are scoped to the staged set; clippy and the
+/// architecture check always run. clippy fixes are not applied here.
 /// Release build and conformance suite run at pre-push time, not here.
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
@@ -246,14 +250,18 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         // output lands in this commit without pulling in unrelated dirty files.
         // See `restage_staged_rust` for why the `*.rs` glob is not equivalent.
         restage_staged_rust(sh, &staged_before)?;
-        cmd!(
-            sh,
-            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
-        )
-        .run()
-        .context("clippy failed")?;
-        crate::architecture::run(&sh.current_dir()).context("architecture check failed")?;
     }
+
+    // Unconditional: neither depends on the staged set. Gating them on
+    // `rust_staged` let this hook print "pre-commit checks passed" for a
+    // docs- or config-only commit without compiling a single line.
+    cmd!(
+        sh,
+        "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
+    )
+    .run()
+    .context("clippy failed")?;
+    crate::architecture::run(&sh.current_dir()).context("architecture check failed")?;
 
     // Agent config lint: validate .claude/, .codex/, .agents/, .cursor/ files.
     if staged_agent_files(sh)? {
@@ -282,12 +290,56 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root, None).context("docs-lint failed")?;
-    // Keep the FEATURE_MATRIX Last-updated stamp current (idempotent).
-    crate::feature_matrix_date::update_feature_matrix_date(&root)
-        .context("update-feature-matrix-date failed")?;
+    // Keep the `Last updated:` stamps current, but only for the docs this
+    // commit actually changes. A blanket sweep restamped every doc in
+    // `docs/` on every commit, so any commit produced a wall of date-only
+    // diffs across docs/core/*.mbx.md. A doc whose only staged change is the
+    // stamp itself is skipped, so the date can never drift forward on its own.
+    restamp_staged_docs(sh)?;
     // Warn (non-fatal) if generated artifacts are tracked by git.
     check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
+    Ok(())
+}
+
+/// Advance the `Last updated:` stamp of each staged doc that has a real
+/// content change, then re-stage exactly those files.
+///
+/// The stamp is bumped in the working tree and re-staged only for docs that
+/// were *already* staged, mirroring `restage_staged_rust`'s discipline: a
+/// broad pathspec would sweep in another agent's or a parallel worktree's
+/// uncommitted doc edits.
+fn restamp_staged_docs(sh: &Shell) -> Result<()> {
+    let candidates = staged_doc_paths(sh)?;
+    if candidates.is_empty() {
+        return Ok(());
+    }
+
+    let mut to_restage: Vec<PathBuf> = Vec::new();
+    for path in &candidates {
+        if staged_change_beyond_stamp(sh, path)? {
+            to_restage.push(path.clone());
+        }
+    }
+
+    if to_restage.is_empty() {
+        eprintln!("doc-dates: no staged doc content changes — stamps left alone");
+        return Ok(());
+    }
+
+    let outcome = crate::feature_matrix_date::update_staged_docs(&to_restage);
+    if outcome.updated == 0 {
+        return Ok(());
+    }
+
+    let owned: Vec<String> = to_restage
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let paths: Vec<&str> = owned.iter().map(String::as_str).collect();
+    cmd!(sh, "git add -u -- {paths...}")
+        .run()
+        .context("git add after doc-date update failed")?;
     Ok(())
 }
 
@@ -681,6 +733,8 @@ pub fn test_quickcheck(sh: &Shell) -> Result<()> {
 /// so the tests have the kernel privileges they need (cgroups v2, namespaces).
 /// `MINIBOX_TEST_BIN_DIR` is forwarded so helpers can locate `miniboxd`/`mbx`.
 pub fn test_integration(sh: &Shell) -> Result<()> {
+    require_linux_host("integration")?;
+
     cmd!(sh, "cargo build --release -p miniboxd -p minibox-cli")
         .run()
         .context("release build failed")?;
@@ -756,12 +810,35 @@ pub fn test_e2e(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Guard for suites whose test binary is `#![cfg(target_os = "linux")]`.
+///
+/// `crates/miniboxd/tests/system_tests.rs` carries that attribute at the crate
+/// root, so on a non-Linux host the test binary compiles to zero tests. Reaching
+/// `sudo` anyway spends a full release build to execute nothing — and once
+/// `sudo` *does* authenticate (via a TTY or an askpass helper) the empty run
+/// would report success, turning "did not run" into a false pass. Fail fast
+/// with the requirement and the supported alternative instead.
+fn require_linux_host(suite: &str) -> Result<()> {
+    if cfg!(not(target_os = "linux")) {
+        anyhow::bail!(
+            "{suite} is Linux-only and requires root, but this host is {}. \
+             The test binary is gated to Linux and compiles to zero tests here, so \
+             there is nothing to run. Use `cargo xtask test-linux` to execute the \
+             suite inside a minibox container, or invoke the suite on Linux.",
+            std::env::consts::OS,
+        );
+    }
+    Ok(())
+}
+
 /// System tests: full-stack daemon+CLI tests (Linux, root, cgroups v2 required).
 ///
 /// Renamed from `test_e2e_suite` — these tests exercise real kernel facilities
 /// (namespaces, overlay FS, cgroups v2) and live above integration tests in
 /// the tier hierarchy.
 pub fn test_system_suite(sh: &Shell) -> Result<()> {
+    require_linux_host("system-suite")?;
+
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
@@ -792,6 +869,8 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
 
 /// Sandbox contract tests (Linux, root, Docker Hub required)
 pub fn test_sandbox(sh: &Shell) -> Result<()> {
+    require_linux_host("sandbox")?;
+
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
@@ -1095,13 +1174,25 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
     Some(&after_start[..next_fn_offset])
 }
 
+/// Extracts the body of `pub fn pre_commit` from `gates.rs` source text.
+///
+/// Returns the substring from the `pub fn pre_commit(` signature up to (but not
+/// including) the next top-level `pub fn` declaration.
+#[cfg(test)]
+fn extract_pre_commit_body(source: &str) -> Option<&str> {
+    let start = source.find("pub fn pre_commit(")?;
+    let after_start = &source[start..];
+    let next_fn_offset = after_start[1..].find("\npub fn ")? + 1;
+    Some(&after_start[..next_fn_offset])
+}
+
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::{
-        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, musl_check_required,
-        nextest_output_is_zero_tests, parse_conformance_result, parse_handler_fn_coverage,
-        phase_2_skipped,
+        GATES_SOURCE, cfg_predicate_has_test, extract_pre_commit_body, extract_test_unit_body,
+        musl_check_required, nextest_output_is_zero_tests, parse_conformance_result,
+        parse_handler_fn_coverage, phase_2_skipped,
     };
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
@@ -1426,6 +1517,54 @@ mod tests {
         );
     }
 
+    /// `pre_commit` must compile on every commit, not only when Rust is staged.
+    ///
+    /// The gate once wrapped clippy and the architecture check in
+    /// `if rust_staged`, so a docs- or config-only commit printed
+    /// "pre-commit checks passed" without compiling a single line. Formatting
+    /// and re-staging legitimately stay staged-scoped; these two must not.
+    ///
+    /// If this test fails: a compile step was re-gated behind
+    /// `staged_rust_files()`, so the hook can report success while verifying
+    /// nothing.
+    #[test]
+    fn pre_commit_compiles_unconditionally() {
+        let body = extract_pre_commit_body(GATES_SOURCE)
+            .expect("could not locate `pub fn pre_commit` in gates.rs source");
+
+        // Anchor on the end of the staged-scoped block. `restage_staged_rust` is
+        // its last statement, and the block closes at a 4-space `}`. Anything
+        // past that brace is unconditional; anything before it is still gated.
+        const RESTAGE: &str = "restage_staged_rust(sh, &staged_before)?;";
+        let restage_end = body
+            .find(RESTAGE)
+            .map(|i| i + RESTAGE.len())
+            .expect("pre-commit must still re-stage formatted Rust");
+        let block_end = body[restage_end..]
+            .find("\n    }")
+            .map(|i| restage_end + i)
+            .expect("the `if rust_staged` block must close after re-staging");
+
+        let clippy = body
+            .find("cargo clippy")
+            .expect("pre-commit must run clippy");
+        let architecture = body
+            .find("crate::architecture::run")
+            .expect("pre-commit must run the architecture guard");
+
+        assert!(
+            clippy > block_end,
+            "cargo clippy must appear after the `if rust_staged` block closes in \
+             `pre_commit` — inside it, a docs- or config-only commit reports \
+             success without compiling anything"
+        );
+        assert!(
+            architecture > block_end,
+            "the architecture guard must appear after the `if rust_staged` block \
+             closes in `pre_commit` — see the clippy assertion above"
+        );
+    }
+
     #[test]
     fn conformance_report_output_returns_typed_result() {
         use minibox_testsuite::harness::{
@@ -1719,6 +1858,52 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
     Ok(staged
         .lines()
         .any(|l| l.starts_with(".github/workflows/") || l == ".github/actionlint.yaml"))
+}
+
+/// Staged markdown paths under `docs/`.
+///
+/// Used to scope the `Last updated:` stamp pass to the docs a commit actually
+/// touches, instead of restamping the entire docs tree on every commit.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+fn staged_doc_paths(sh: &Shell) -> Result<Vec<PathBuf>> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .filter(|l| l.starts_with("docs/") && l.ends_with(".md"))
+        .map(PathBuf::from)
+        .collect())
+}
+
+/// Returns true when the staged diff for `path` changes something other than a
+/// `Last updated:` stamp line.
+///
+/// A doc whose only staged change is the stamp itself is not meaningfully
+/// updated, so its stamp must not be advanced — otherwise committing an
+/// unrelated file walks every doc's date forward.
+fn staged_change_beyond_stamp(sh: &Shell, path: &Path) -> Result<bool> {
+    let path_str = path.to_string_lossy().into_owned();
+    let diff = cmd!(sh, "git diff --cached -U0 -- {path}")
+        .output()
+        .with_context(|| format!("git diff --cached failed for {path_str}"))?;
+    let diff = String::from_utf8_lossy(&diff.stdout);
+
+    for line in diff.lines() {
+        // Skip diff metadata and hunk headers; only +/- content lines matter.
+        let Some(body) = line.strip_prefix('+').or_else(|| line.strip_prefix('-')) else {
+            continue;
+        };
+        // A leading "++"/"--" would be a file header, not content.
+        if body.starts_with('+') || body.starts_with('-') {
+            continue;
+        }
+        if !crate::feature_matrix_date::is_stamp_line(body) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.

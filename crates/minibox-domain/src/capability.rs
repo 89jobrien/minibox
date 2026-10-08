@@ -375,7 +375,7 @@ mod tests {
     fn hook_spec_default() {
         let hook = HookSpec::default();
         assert_eq!(hook.command, "");
-        assert!(hook.args.is_empty());
+        assert_eq!(hook.args, Vec::<String>::new());
         assert!(hook.timeout_secs.is_none());
     }
 

@@ -176,7 +176,7 @@ fn sandbox_concurrent_runs_isolated() {
         "alpine",
         &["sh", "-c", "echo AAA > /tmp/id && sleep 1 && cat /tmp/id"],
     );
-    let mut child_b = sb.spawn_container(
+    let child_b = sb.spawn_container(
         "alpine",
         &["sh", "-c", "echo BBB > /tmp/id && sleep 1 && cat /tmp/id"],
     );

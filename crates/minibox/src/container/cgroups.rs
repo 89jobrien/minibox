@@ -52,35 +52,68 @@ pub struct CgroupManager {
 /// Default root of the minibox cgroup slice inside the cgroupfs mount point.
 const DEFAULT_MINIBOX_CGROUP_ROOT: &str = "/sys/fs/cgroup/minibox";
 
+/// Resolve the cgroup root from a configured value.
+///
+/// Returns `configured` when it is a valid cgroupfs path, and
+/// [`DEFAULT_MINIBOX_CGROUP_ROOT`] when it is absent or invalid.
+///
+/// An invalid root must never be passed through. An empty or relative root
+/// makes every derived container path relative, so the daemon's `mkdir` calls
+/// land in whatever directory it happened to start in rather than on cgroupfs.
+/// That is how a stray `<cwd>/<container-id>/` tree — complete with a
+/// `cgroup.subtree_control` file and an `init/` leaf — appeared in a checkout.
+/// Falling back keeps a misconfigured daemon creating cgroups somewhere
+/// harmless and observable instead of littering the cwd.
+fn resolve_cgroup_root(configured: Option<&str>) -> PathBuf {
+    let Some(root) = configured else {
+        return PathBuf::from(DEFAULT_MINIBOX_CGROUP_ROOT);
+    };
+    match validate_cgroup_parent(root) {
+        Ok(()) => PathBuf::from(root),
+        Err(error) => {
+            warn!(
+                %error,
+                configured_root = root,
+                "cgroup: ignoring invalid configured cgroup root, using default"
+            );
+            PathBuf::from(DEFAULT_MINIBOX_CGROUP_ROOT)
+        }
+    }
+}
+
 /// Return the cgroup root directory.
 ///
-/// Reads `MINIBOX_CGROUP_ROOT` from the environment, falling back to
-/// [`DEFAULT_MINIBOX_CGROUP_ROOT`] when the variable is absent.
+/// Reads `MINIBOX_CGROUP_ROOT` from the environment and applies the same
+/// [`validate_cgroup_parent`] check as the client-supplied `cgroup_parent`,
+/// falling back to [`DEFAULT_MINIBOX_CGROUP_ROOT`] when the variable is absent
+/// or invalid.
 fn cgroup_root() -> PathBuf {
-    if let Ok(root) = std::env::var("MINIBOX_CGROUP_ROOT") {
-        PathBuf::from(root)
-    } else {
-        PathBuf::from(DEFAULT_MINIBOX_CGROUP_ROOT)
-    }
+    let configured = std::env::var("MINIBOX_CGROUP_ROOT").ok();
+    resolve_cgroup_root(configured.as_deref())
 }
 
 /// Validate that a cgroup parent path is under `/sys/fs/cgroup/`.
 ///
-/// Rejects relative paths, paths outside the cgroupfs mount, and paths
-/// containing `..` components to prevent directory traversal.
+/// Rejects relative paths (including the empty string), paths outside the
+/// cgroupfs mount, and paths containing `..` components to prevent directory
+/// traversal.
+///
+/// Applied to both the client-supplied `cgroup_parent` and the
+/// `MINIBOX_CGROUP_ROOT` environment variable, so a rejected path can never
+/// reach [`cgroup_root`].
 pub fn validate_cgroup_parent(path: &str) -> anyhow::Result<()> {
     let p = std::path::Path::new(path);
     if !p.is_absolute() {
-        anyhow::bail!("--cgroup-parent must be an absolute path, got {path:?}");
+        anyhow::bail!("cgroup parent must be an absolute path, got {path:?}");
     }
     // Reject `..` components before canonicalization to prevent traversal.
     for component in p.components() {
         if component == std::path::Component::ParentDir {
-            anyhow::bail!("--cgroup-parent must not contain '..': {path:?}");
+            anyhow::bail!("cgroup parent must not contain '..': {path:?}");
         }
     }
     if !path.starts_with("/sys/fs/cgroup/") && path != "/sys/fs/cgroup" {
-        anyhow::bail!("--cgroup-parent must be under /sys/fs/cgroup/, got {path:?}");
+        anyhow::bail!("cgroup parent must be under /sys/fs/cgroup/, got {path:?}");
     }
     Ok(())
 }
@@ -415,6 +448,77 @@ mod tests {
     #[test]
     fn validate_cgroup_parent_accepts_nested_path() {
         assert!(super::validate_cgroup_parent("/sys/fs/cgroup/user.slice/minibox").is_ok());
+    }
+
+    #[test]
+    fn validate_cgroup_parent_rejects_empty_path() {
+        // An empty root yields a relative container path, so the daemon's
+        // mkdir calls land in its cwd. This is the exact regression that
+        // produced a stray `<cwd>/<container-id>/` tree.
+        assert!(super::validate_cgroup_parent("").is_err());
+    }
+
+    #[test]
+    fn resolve_cgroup_root_defaults_when_unset() {
+        assert_eq!(
+            resolve_cgroup_root(None),
+            std::path::Path::new(DEFAULT_MINIBOX_CGROUP_ROOT)
+        );
+    }
+
+    #[test]
+    fn resolve_cgroup_root_defaults_when_empty() {
+        assert_eq!(
+            resolve_cgroup_root(Some("")),
+            std::path::Path::new(DEFAULT_MINIBOX_CGROUP_ROOT)
+        );
+    }
+
+    #[test]
+    fn resolve_cgroup_root_defaults_when_relative() {
+        assert_eq!(
+            resolve_cgroup_root(Some("minibox-dind")),
+            std::path::Path::new(DEFAULT_MINIBOX_CGROUP_ROOT)
+        );
+    }
+
+    #[test]
+    fn resolve_cgroup_root_defaults_when_outside_cgroupfs() {
+        assert_eq!(
+            resolve_cgroup_root(Some("/tmp/cgroup-fake")),
+            std::path::Path::new(DEFAULT_MINIBOX_CGROUP_ROOT)
+        );
+    }
+
+    #[test]
+    fn resolve_cgroup_root_defaults_when_escaping_cgroupfs() {
+        assert_eq!(
+            resolve_cgroup_root(Some("/sys/fs/cgroup/../../tmp")),
+            std::path::Path::new(DEFAULT_MINIBOX_CGROUP_ROOT)
+        );
+    }
+
+    #[test]
+    fn resolve_cgroup_root_honours_valid_override() {
+        assert_eq!(
+            resolve_cgroup_root(Some("/sys/fs/cgroup/minibox.slice/miniboxd.service")),
+            std::path::Path::new("/sys/fs/cgroup/minibox.slice/miniboxd.service")
+        );
+    }
+
+    #[test]
+    fn cgroup_path_for_is_always_absolute_under_cgroupfs() {
+        // Guards the invariant the leak violated: whatever MINIBOX_CGROUP_ROOT
+        // holds, a container path must stay absolute and inside cgroupfs.
+        let path = cgroup_path_for("0123456789abcdef");
+        assert!(
+            path.is_absolute(),
+            "container cgroup path must be absolute, got {path:?}"
+        );
+        assert!(
+            path.starts_with("/sys/fs/cgroup/"),
+            "container cgroup path must live under cgroupfs, got {path:?}"
+        );
     }
 
     #[test]

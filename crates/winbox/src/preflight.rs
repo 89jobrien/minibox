@@ -38,7 +38,8 @@ pub type Executor = Box<dyn Fn(&[&str]) -> Result<String> + Send + Sync>;
 /// Spawns a child process using [`std::process::Command`] and returns its
 /// stdout. Stderr is not captured. Returns an error if the process cannot
 /// be spawned or if stdout is not valid UTF-8.
-#[must_use]
+#[must_use = "default_executor() builds the real subprocess Executor; dropping it \
+              immediately performs no process checks and silently no-ops preflight"]
 pub fn default_executor() -> Executor {
     Box::new(|args: &[&str]| {
         let out = std::process::Command::new(args[0])

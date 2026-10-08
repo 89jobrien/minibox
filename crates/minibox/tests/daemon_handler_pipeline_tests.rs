@@ -251,7 +251,7 @@ async fn test_handle_pipeline_reads_trace_file_from_upper_dir() {
                 container_id,
                 exit_code: _,
             }) => {
-                assert!(!container_id.is_empty());
+                assert_ne!(container_id, "");
                 // Trace is either the planted file or the {"steps":[]} fallback.
                 assert!(
                     trace.is_object(),

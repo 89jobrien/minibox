@@ -1,6 +1,504 @@
 {
   "nodes": [
     {
+      "id": "a81e33ff-3022-4fd3-b0e1-ae0486481270",
+      "name": ".ctx/godmode.tasks.yaml",
+      "type": "file",
+      "supporting_text": ".ctx/GODMODE.tasks.yaml is a stale leftover and should be ignored.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "ece9eceb-6368-43ea-883f-8bebceebccd7",
+      "name": ".ctx/godmode/tasks.yaml",
+      "type": "file",
+      "supporting_text": "Tasks live in .ctx/godmode/tasks.yaml; .ctx/GODMODE.tasks.yaml is a stale leftover and should be ignored.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "d84d9acf-cffc-4149-956c-1dabd9ef78fc",
+      "name": ".ctx/memory-bank/",
+      "type": "file",
+      "supporting_text": "Persistent context lives in .ctx/memory-bank/.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "7e732b91-9978-4e2a-8f60-47183ba3acf1",
+      "name": "1db50b86",
+      "type": "commit_sha",
+      "supporting_text": "develop at 1db50b86, 8 commits ahead of origin/develop, unpushed",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "577fc890-2988-41db-955a-99048e2f9199",
+      "name": "CRI compliance not started",
+      "type": "backlog_item",
+      "supporting_text": "CRI compliance: zero protobuf/gRPC, no RuntimeService/ImageService",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "b41547d7-f964-4d31-9953-ae921ff3a906",
+      "name": "Colima path traversal bypass",
+      "type": "issue",
+      "supporting_text": "Colima path validation bypass via .. (P1)",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "1d9661e0-40f6-4b16-8567-3526ae2e426c",
+      "name": "ColimaContainerCommitter",
+      "type": "struct",
+      "supporting_text": "Colima commit adapter + image lease conformance (1ae7528e) — new ColimaContainerCommitter (nerdctl commit/save -> docker-archive import)",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "56faf79f-87ce-4538-b825-9439a5d9ce27",
+      "name": "ContainerPolicy auth gate",
+      "type": "security_control",
+      "supporting_text": "Auth-policy gate: ContainerPolicy deny-by-default for bind mounts and privileged mode, Env-var opt-in (MINIBOX_ALLOW_BIND_MOUNTS, MINIBOX_ALLOW_PRIVILEGED), validate_policy() enforced on every run request",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "755729e9-0aa7-49b8-b1f3-699fbfdf3f45",
+      "name": "DinD partial support",
+      "type": "backlog_item",
+      "supporting_text": "Container-in-container (DinD): UX — works today via privileged mode + bind mounts ... Missing: turnkey --dind flag, auto-provisioned inner daemon, socket forwarding, shared image cache",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "eff1a299-aaab-43d1-b7ce-c303e9a141a2",
+      "name": "GitHub Actions billing lock",
+      "type": "issue",
+      "supporting_text": "GitHub Actions is fully down — every recent run on develop and main fails in 3-10s with The job was not started because your account is locked due to a billing issue",
+      "source_docs": [
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "05a63869-1cc7-4981-a2af-046b5e5e975c",
+      "name": "OCI image pull",
+      "type": "feature",
+      "supporting_text": "Pull: OCI image pull from Docker Hub v2 + ghcr.io, anonymous auth, parallel layer downloads, content-addressed caching",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "d521cb7b-140a-46a1-9809-46bea838e934",
+      "name": "OTEL trace export",
+      "type": "feature",
+      "supporting_text": "OTEL trace export: full OTLP/gRPC exporter via opentelemetry 0.32, batch export, graceful fallback, OtelGuard shutdown. Wired in miniboxd main",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "abd62ff2-3fce-4941-ab18-9d5b7746b080",
+      "name": "SO_PEERCRED auth mandatory",
+      "type": "security_control",
+      "supporting_text": "SO_PEERCRED auth is mandatory — The UID==0 check in minibox/src/daemon/server.rs must run before any request processing. Never bypass or weaken it",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "7afeef30-04f7-45e4-ba46-2da62413c04b",
+      "name": "ValidatedPath newtype not started",
+      "type": "backlog_item",
+      "supporting_text": "ValidatedPath newtype: all validation is function-call based (validate_layer_path()), no type-level guarantee",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "2e3c99aa-d82e-417c-9e54-42385af59788",
+      "name": "WSL2 adapter partial",
+      "type": "backlog_item",
+      "supporting_text": "Windows (WSL2) adapter: ~40% scaffolded. Wsl2Runtime/Wsl2Filesystem/Wsl2Limiter implement traits via wsl.exe delegation ... Not wired into miniboxd",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "e1c0fde8-b847-4231-9722-a41afaa0e982",
+      "name": "absolute symlink host leakage",
+      "type": "issue",
+      "supporting_text": "absolute symlink targets must be rewritten to container-relative paths via relative_path(), fixed in commit 2fc7036.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "d388d355-3ba3-4850-9742-72c2ff5c6a9d",
+      "name": "adapt! macro",
+      "type": "tool",
+      "supporting_text": "adapt! requires new() -> Self; adapt! calls default_new! which implements Default via Self::new().",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "905fcb72-19d6-4d1b-9030-3284d58eb1bb",
+      "name": "adapter_from_env",
+      "type": "concept",
+      "supporting_text": "Adapter selection logic is in crates/minibox-core/src/adapter_registry.rs:adapter_from_env.",
+      "source_docs": [
+        "architecture_mbx",
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "5e8ad500-6800-451a-9f17-8a525637d2ff",
+      "name": "agents.md",
+      "type": "file",
+      "supporting_text": "AGENTS.md is the single source of truth for agent guidance in the minibox repository.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "a3bc19ef-fe1d-4f46-97b3-8d500ace2986",
+      "name": "ail",
+      "type": "system",
+      "supporting_text": "ail is a placeholder binary for the agent-improvement loop with no implementation yet.",
+      "source_docs": [
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "b7a4b256-8b4b-4120-bfa1-f347ad0a6ef5",
+      "name": "as_any! macro",
+      "type": "tool",
+      "supporting_text": "as_any!, default_new!, adapt!, provide!, require_capability!, normalize_name!/normalize_digest!/normalize!/denormalize_digest!, test_run!.",
+      "source_docs": [
+        "crate_inventory_mbx",
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "c0c85ca5-fbda-405b-9a8d-a2aba5410f35",
+      "name": "bind-mount teardown absent",
+      "type": "issue",
+      "supporting_text": "Bind-mount teardown absent on container cleanup (P2)",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "abac3a3e-bbd5-4071-844c-0820428a1717",
+      "name": "capability dropping partial",
+      "type": "backlog_item",
+      "supporting_text": "Capability dropping: Grant path implemented (apply_full_capabilities with curated whitelist minus SYS*MODULE/SYS_BOOT/MAC*_) ... Drop path for unprivileged containers missing",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "b0a4fe8f-13e3-48ac-ac94-61ab90a03984",
+      "name": "cargo fmt --all footgun",
+      "type": "issue",
+      "supporting_text": "cargo fmt --all without --check rewrites all workspace .rs files including untracked ones, which can clobber another writer's uncommitted changes.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "bcfec654-5bc9-4f53-8f96-d41292aa6654",
+      "name": "cargo xtask bump",
+      "type": "tool",
+      "supporting_text": "cargo xtask bump bumps the workspace version; optionally promotes release fragments into the changelog with --changelog.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "795d5ecd-9488-49a6-b6c1-b0acb3c7dd1a",
+      "name": "cargo xtask check protocol-drift",
+      "type": "tool",
+      "supporting_text": "cargo xtask check protocol-drift verifies core contract hashes against xtask/protocol-drift.lock.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "df29ce1d-b307-4638-82bb-466beb587f9d",
+      "name": "cargo xtask check protocol-sites",
+      "type": "tool",
+      "supporting_text": "cargo xtask check protocol-sites verifies HandlerDependencies construction-site count, default file crates/miniboxd/src/main.rs, default expected 4.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "dde3cedd-69e5-4c1f-a844-ef00840b7342",
+      "name": "cargo xtask docs audit",
+      "type": "tool",
+      "supporting_text": "cargo xtask docs audit audits docs/core/ facts against code.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "5c5e537a-0412-4328-9990-aa69e7da3cbc",
+      "name": "cargo xtask info context",
+      "type": "tool",
+      "supporting_text": "cargo xtask info context emits the evidence-ledger context snapshot v3, replacing snapshot v2's ambiguous summary fields.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "f241abda-3d5d-4e70-af13-96900832dfdf",
+      "name": "cargo xtask musl-check",
+      "type": "tool",
+      "supporting_text": "cargo xtask musl-check cross-builds miniboxd and minibox-cli for x86_64-unknown-linux-musl.",
+      "source_docs": [
+        "xtask_cli_mbx",
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "0a3cc6a1-1f0c-4140-9d23-49e96249ed44",
+      "name": "cargo xtask pre-commit",
+      "type": "tool",
+      "supporting_text": "cargo xtask pre-commit runs clippy -D warnings and architecture on every commit, and cargo fmt --all only when Rust is staged.",
+      "source_docs": [
+        "agents_md",
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "9f54f276-f4c7-4c6e-8465-6aec5c5eb81f",
+      "name": "cargo xtask pre-commit vacuous pass",
+      "type": "issue",
+      "supporting_text": "xtask/src/gates.rs:245 wraps fmt, clippy, and the architecture check in if rust_staged. With nothing staged it printed docs-lint: checked 0 files and pre-commit checks passed without compiling a line",
+      "source_docs": [
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "name": "cargo xtask prepush",
+      "type": "tool",
+      "supporting_text": "cargo xtask prepush runs release build, release nextest, and conformance before pushing.",
+      "source_docs": [
+        "agents_md",
+        "xtask_cli_mbx",
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "f6455905-e024-4f71-ab37-839d7d3902cc",
+      "name": "cargo xtask promote",
+      "type": "tool",
+      "supporting_text": "cargo xtask promote cascade-merges one stability tier into the next (develop -> staging -> release -> main).",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "c2af765c-892f-41c8-aa3b-c7727917a692",
+      "name": "cargo xtask test conformance",
+      "type": "tool",
+      "supporting_text": "cargo xtask test conformance runs the commit+build+push conformance suite plus reports.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "2b36eaf7-3060-4f27-a27a-9fa62eed6192",
+      "name": "cargo xtask test unit",
+      "type": "tool",
+      "supporting_text": "cargo xtask test unit runs workspace --lib tests plus the minibox-testsuite zero-test guard.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "399770be-73c1-4c46-aa31-02011ed9a301",
+      "name": "cargo xtask verify",
+      "type": "tool",
+      "supporting_text": "cargo xtask verify runs fmt check, workspace check, clippy -D warnings, feature matrix, architecture rings, borrow fixtures, docs audit; it is read-only and safe on a dirty tree.",
+      "source_docs": [
+        "agents_md",
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "2711c61e-4308-4905-a618-8759bf9b1e89",
+      "name": "cgroup root validation fix",
+      "type": "commit",
+      "supporting_text": "cgroup root validation fix (1db50b86) — cgroup_root() passed MINIBOX_CGROUP_ROOT into PathBuf::from with no validation",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "e83839ca-9418-4448-b7d8-34228fb53552",
+      "name": "ci.yml",
+      "type": "file",
+      "supporting_text": "CI workflows include ci.yml, pr.yml, merge.yml for main gates.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "13d16fbd-960f-4688-b331-c124c7b0168a",
+      "name": "claude.md",
+      "type": "file",
+      "supporting_text": "CLAUDE.md is a pointer to this file and must not duplicate its rules.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "c44e72c0-d2c5-4c29-b5d3-41a8ee41faa8",
+      "name": "cleanup on failure pattern",
+      "type": "pattern",
+      "supporting_text": "Cleanup on failure (mandatory for resource-creating functions) — clean up overlay mount if cgroup setup fails",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "b77b22fa-7c37-4967-8b8f-7ba1178cc5ce",
+      "name": "clippy test module allows pattern",
+      "type": "pattern",
+      "supporting_text": "Workspace lints deny unwrap_used/expect_used/panic across all targets, including tests ... Add the allow directly on the test module, not workspace-wide",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "88b48f44-b6f7-41f4-89c5-0b106d6bd451",
+      "name": "clippy::get_first",
+      "type": "lint",
+      "supporting_text": "slice.first() ... Clippy lint (denied): clippy::get_first",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "b562e7b6-a5e0-43e0-b7e6-3291626e1af1",
+      "name": "clippy::io_other_error",
+      "type": "lint",
+      "supporting_text": "std::io::Error::other(e) ... Clippy lint (denied): clippy::io_other_error",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "db0f34d9-c22e-406c-86e1-5a9ddde4a124",
+      "name": "clippy::len_zero",
+      "type": "lint",
+      "supporting_text": "collection.is_empty() ... Clippy lint (denied): clippy::len_zero",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "f5185bc3-a870-4a1d-8425-ee22a31040c5",
+      "name": "close_extra_fds",
+      "type": "concept",
+      "supporting_text": "close_extra_fds uses close_range(2) fast path, falling back to /proc/self/fd iteration which must collect FD numbers into a Vec before closing.",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "a2bdbd8d-5c5c-4ecf-94b2-7ece654a7856",
+      "name": "colima adapter",
+      "type": "concept",
+      "supporting_text": "colima (linux, macos, experimental)",
+      "source_docs": [
+        "feature_matrix_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "399012c7-d8b0-4edc-8295-9ec34afc1bf5",
+      "name": "complexity qual code",
+      "type": "lint_code",
+      "supporting_text": "complexity (branching/control-flow that can't be reduced without obscuring intent, e.g. a poisoned-mutex-is-fatal path)",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "1dcf7e0b-c7dd-4e1c-b784-8e00cde88186",
+      "name": "conformance.rs",
+      "type": "file",
+      "supporting_text": "conformance.rs the conformance harness.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "061b6d5b-36e7-4a00-b2d0-a1401296ca21",
+      "name": "conformance.yml",
+      "type": "file",
+      "supporting_text": "conformance.yml for conformance/property/krun/CLI/borrow/quickcheck.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "1db078b5-bed6-4193-ab77-ff8d79f8452f",
+      "name": "container module cfg linux gate",
+      "type": "issue",
+      "supporting_text": "crates/minibox/src/lib.rs:57 gates the whole container module on #[cfg(target_os = \"linux\")]. Every macOS gate in this repo therefore has zero coverage of cgroups, namespaces, mount/seccomp, and overlay code",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "83d71387-9db9-4546-a0b6-8698a4cb599b",
+      "name": "container state machine",
+      "type": "concept",
+      "supporting_text": "Container state machine: Created -> Running -> Stopped, Running -> Failed, Running -> Paused -> Running (resume) or Stopped, daemon restart -> Orphaned.",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "82624229-6c40-4721-ad71-3f5ccb68d423",
+      "name": "containerruntime",
+      "type": "concept",
+      "supporting_text": "ContainerRuntime ... are the primary ports wired in HandlerDependencies.",
+      "source_docs": [
+        "architecture_mbx"
+      ]
+    },
+    {
+      "id": "d0f9639b-6f0e-4072-87db-44a88db400b5",
+      "name": "context-snapshot.yml",
+      "type": "file",
+      "supporting_text": "context-snapshot.yml for cross-platform evidence collection.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
       "id": "e32cc34d-0b2f-408a-8263-b61e4e5ce44f",
       "name": "daemon client",
       "type": "system",
@@ -28,12 +526,162 @@
       ]
     },
     {
+      "id": "3e9f5594-34df-40ba-87ce-2227be221dab",
+      "name": "daemonrequest",
+      "type": "concept",
+      "supporting_text": "DaemonRequest/DaemonResponse are canonical in crates/minibox-core/src/protocol.rs.",
+      "source_docs": [
+        "agents_md",
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "7fd55e52-fc8f-4391-a298-54f593d24f37",
+      "name": "daemonresponse",
+      "type": "concept",
+      "supporting_text": "DaemonResponse::ContainerOutput is non-terminal.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "f01e660b-d5bc-4f87-932c-8706d06a978b",
+      "name": "daemonstate",
+      "type": "concept",
+      "supporting_text": "DaemonState persists container records to disk via atomic rename on every add/remove.",
+      "source_docs": [
+        "architecture_mbx",
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "1b148f98-88d9-465b-bd22-045578f7b75d",
+      "name": "develop branch",
+      "type": "concept",
+      "supporting_text": "Branches follow the stability pipeline develop -> staging -> release -> main -> v* tag. develop is the default working branch.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "93ce1e9e-3d11-4b26-b03d-a484e4169548",
+      "name": "device node extraction rejection",
+      "type": "issue",
+      "supporting_text": "tar entries of type Block or Char must be rejected outright, fixed in commit 8ea4f73.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "63e4a789-c153-4e88-98f6-668d05f56c6e",
+      "name": "docker_desktop adapter",
+      "type": "concept",
+      "supporting_text": "docker_desktop adapter exists ... but is not registered in AdapterSuite or wired into the daemon.",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
       "id": "bc2720bf-47c5-4ec3-9e78-634bd3382c73",
       "name": "domain ports",
       "type": "concept",
       "supporting_text": "Runtime, filesystem, image, and networking traits are domain ports (crates/minibox-domain/src/runtime.rs:168-219).",
       "source_docs": [
         "minibox-context-map-f5481a94"
+      ]
+    },
+    {
+      "id": "6b0e5f54-9454-4876-ac49-1a602242699a",
+      "name": "duplicate memory banks",
+      "type": "issue",
+      "supporting_text": "Reconcile the duplicate memory banks: .ctx/memory-bank/ (canonical, *.mbx.md) and a stale .ctx/godmode/memory-bank/ (~2 weeks old, plain .md)",
+      "source_docs": [
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "ad147f7b-2b05-4399-9f6d-795ad8ae11a4",
+      "name": "execution manifest integrity",
+      "type": "concept",
+      "supporting_text": "every container run persists an execution-manifest.json before the container process is spawned, environment values represented only by SHA-256 digests.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "474dd877-6196-4e9b-b835-e64486ce358b",
+      "name": "execution-manifest.json",
+      "type": "concept",
+      "supporting_text": "Every container run produces a persisted execution-manifest.json ... before the process is spawned.",
+      "source_docs": [
+        "architecture_mbx",
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "72aa18cd-7d95-4cbf-8d6a-959e126804fd",
+      "name": "executionpolicy",
+      "type": "concept",
+      "supporting_text": "ExecutionPolicy evaluates a manifest against a rule set.",
+      "source_docs": [
+        "architecture_mbx"
+      ]
+    },
+    {
+      "id": "fde3828a-c70c-4d67-aa34-daa311ace7a1",
+      "name": "execve not execvp",
+      "type": "concept",
+      "supporting_text": "container init must use execve with explicit env, not execvp.",
+      "source_docs": [
+        "agents_md",
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "7499b194-3d09-49e9-a124-70d10aa52b60",
+      "name": "fd-leak prevention",
+      "type": "concept",
+      "supporting_text": "the container child process must close all file descriptors above stderr before calling execve, via close_extra_fds().",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "4f1b39a1-da3c-4dd8-a9a4-655e2290fa11",
+      "name": "fifo non-crash guarantee",
+      "type": "concept",
+      "supporting_text": "tar entries of type Fifo must not cause a panic or corrupt daemon state.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "b12a48e8-5f62-4f08-aba2-c426387136bf",
+      "name": "find_minibox() pattern",
+      "type": "concept",
+      "supporting_text": "Subprocess tests must use Command::from_std(std::process::Command::new(find_minibox())) plus MINIBOX_TEST_BIN_DIR env var, never Command::cargo_bin().",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "45bca99e-8751-4ff9-bc93-ef2b5c10f7fb",
+      "name": "gke adapter",
+      "type": "concept",
+      "supporting_text": "gke (linux, production)",
+      "source_docs": [
+        "feature_matrix_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "9d73dcaf-5253-4263-bbf2-c30254c32f51",
+      "name": "handle_run param chain",
+      "type": "concept",
+      "supporting_text": "adding a parameter requires updating in order daemon/server.rs dispatch, handle_run, handle_run_streaming, run_inner_capture, run_inner; all five sites must change together.",
+      "source_docs": [
+        "gotchas_mbx"
       ]
     },
     {
@@ -46,6 +694,24 @@
       ]
     },
     {
+      "id": "4192e931-d0cf-4fcb-9460-af4a55b00365",
+      "name": "handlerdependencies",
+      "type": "concept",
+      "supporting_text": "HandlerDependencies changes require updating all adapter suite construction sites in crates/miniboxd/src/main.rs.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "60b0b613-1277-4da9-88ee-3895f8d7e6ef",
+      "name": "handlerdependencies construction sites",
+      "type": "concept",
+      "supporting_text": "adding fields requires updating the four normal dependency builders (native, gke, smolvm, krun) plus the delegated Colima builder in macbox.",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
       "id": "2b3c1ff0-6c84-4cbb-99ce-9e8418029ed0",
       "name": "hexagonal architecture",
       "type": "concept",
@@ -55,12 +721,105 @@
       ]
     },
     {
+      "id": "242d7e76-93db-4a56-a32e-5b4ac87b1c04",
+      "name": "image pull resource limits",
+      "type": "concept",
+      "supporting_text": "MAX_MANIFEST_SIZE = 10 MiB, MAX_LAYER_SIZE = 10 GiB per layer, MAX_TOTAL_IMAGE_SIZE = 50 GiB aggregate.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "383b9f18-75ca-4c76-9f89-0039f1a2e467",
+      "name": "imageregistry",
+      "type": "concept",
+      "supporting_text": "ImageRegistry ... are the primary ports wired in HandlerDependencies.",
+      "source_docs": [
+        "architecture_mbx"
+      ]
+    },
+    {
+      "id": "28dc18cd-363e-4cba-a73a-64d8019d160c",
+      "name": "install_mount_immutability_filter",
+      "type": "concept",
+      "supporting_text": "install_mount_immutability_filter() in crates/minibox/src/container/mount_seccomp.rs, called from child_init() immediately after pivot_root_to().",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "b6dac7b5-dd22-4987-ab8a-ba0159f32c94",
+      "name": "iosp qual code",
+      "type": "lint_code",
+      "supporting_text": "Known codes: iosp (I/O-boundary orchestration — a function that necessarily coordinates several side effects: bind socket, spawn process, stream output)",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "77279421-c406-4800-b2a9-ddb602917356",
+      "name": "isolated worktrees rule",
+      "type": "concept",
+      "supporting_text": "Parallel subagents editing code must use isolated worktrees, not a shared checkout, to avoid one agent's commit sweeping in another agent's uncommitted edits.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "ba896823-23db-4556-b3ff-9ee596a45105",
+      "name": "issue 228 lint policy",
+      "type": "policy",
+      "supporting_text": "Preferred Idioms — Lint Policy (Issue #228) ... denies a small set of named lints on top of the all/pedantic/nursery groups",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "3c368bfa-916b-47fb-9d85-498009d8a250",
+      "name": "jsonfilerepository",
+      "type": "concept",
+      "supporting_text": "the production adapter is JsonFileRepository using atomic JSON file writes.",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "f7650520-5d35-42b3-a760-9c78318b1af2",
+      "name": "krun adapter",
+      "type": "concept",
+      "supporting_text": "krun (linux, macos, experimental, macos_fallback)",
+      "source_docs": [
+        "feature_matrix_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "e4ffd308-bbe1-4e0a-80fa-6c3bb66abfc0",
+      "name": "krun metrics inconsistency",
+      "type": "issue",
+      "supporting_text": "krun metrics inconsistency — constructs its own NoOpMetricsRecorder internally rather than accepting the shared broker",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
       "id": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
       "name": "macbox",
       "type": "system",
       "supporting_text": "Macbox provides macOS platform composition (crates/macbox/src/lib.rs:19-24).",
       "source_docs": [
-        "minibox-context-map-f5481a94"
+        "minibox-context-map-f5481a94",
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "5d3c03d7-c1e4-4f22-8749-9f97b380838d",
+      "name": "main branch",
+      "type": "concept",
+      "supporting_text": "Run git branch --show-current before every commit; if the answer is main, STOP.",
+      "source_docs": [
+        "agents_md"
       ]
     },
     {
@@ -69,7 +828,44 @@
       "type": "tool",
       "supporting_text": "mbx constructs daemon protocol requests (crates/mbx/src/commands/run.rs:119-142).",
       "source_docs": [
-        "minibox-context-map-f5481a94"
+        "minibox-context-map-f5481a94",
+        "architecture_mbx"
+      ]
+    },
+    {
+      "id": "87f24ed4-3b07-4acd-bdff-285cc127665b",
+      "name": "mbx completions",
+      "type": "tool",
+      "supporting_text": "mbx completions — hidden subcommand generating a Nushell completion script via clap_complete/clap_complete_nushell",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "dfffab4f-0dfd-43da-acc5-527606b39d8f",
+      "name": "mbx doctor",
+      "type": "tool",
+      "supporting_text": "mbx doctor — preflight diagnostics (compiled adapters, capabilities)",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "62d50e66-a6b6-49c9-b5ee-1431bea0a55b",
+      "name": "mbx verify",
+      "type": "tool",
+      "supporting_text": "all adapters that support run inherit manifest persist, mbx manifest, mbx verify, and admission-policy gating.",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "2e661a09-6134-4e2c-9d29-e9749415eb4b",
+      "name": "miette error handling convention",
+      "type": "convention",
+      "supporting_text": "anyhow is deprecated in this repo. New code and any code touched during a refactor must use miette (Result<T>, IntoDiagnostic, WrapErr/Context) instead",
+      "source_docs": [
+        "rust_patterns_md"
       ]
     },
     {
@@ -78,7 +874,9 @@
       "type": "system",
       "supporting_text": "Minibox contains the workspace runtime and tooling components (Cargo.toml:3-20).",
       "source_docs": [
-        "minibox-context-map-f5481a94"
+        "minibox-context-map-f5481a94",
+        "agents_md",
+        "crate_inventory_mbx"
       ]
     },
     {
@@ -154,12 +952,607 @@
       ]
     },
     {
+      "id": "0f6335df-6e38-4f87-ac28-88730d57c297",
+      "name": "minibox-bench",
+      "type": "system",
+      "supporting_text": "minibox-bench depends on minibox, minibox-core, minibox-macros.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "8e73fd4b-56fb-403b-9cad-d74fb3b96811",
+      "name": "minibox-cli",
+      "type": "system",
+      "supporting_text": "minibox-cli (binary mbx) is the CLI client that connects to the daemon via Unix socket.",
+      "source_docs": [
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "58e85cdc-cc8c-4311-bce5-cfceff73635b",
+      "name": "minibox-cni",
+      "type": "system",
+      "supporting_text": "minibox-cni depends on minibox-core.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "b59686d1-76d2-492e-87c7-32b3521cec81",
+      "name": "minibox-cni crate",
+      "type": "crate",
+      "supporting_text": "minibox-cni crate landing (a333e28b, 7b4ee0a5, 1b577da1) — new minibox-cni workspace member for CNI plugin exec protocol and chain orchestration",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "name": "minibox-core",
+      "type": "system",
+      "supporting_text": "minibox re-exports minibox-core. DaemonRequest/DaemonResponse are canonical in crates/minibox-core/src/protocol.rs.",
+      "source_docs": [
+        "agents_md",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "0f9942ca-3c64-413e-a929-8ba582f56d29",
+      "name": "minibox-core::adapters::mocks.rs",
+      "type": "file",
+      "supporting_text": "minibox-core::adapters (behind test-utils) provides mocks.rs as the canonical cross-platform mock adapters.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "d4f046b0-ccd6-4ef4-9213-7f8ba6ec5196",
+      "name": "minibox-crux-plugin",
+      "type": "system",
+      "supporting_text": "minibox-crux-plugin depends on minibox-core.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "5289662f-c37e-46dc-b3d4-fafbffc6e1cc",
+      "name": "minibox-domain",
+      "type": "system",
+      "supporting_text": "Domain ports live under crates/minibox-domain/src/; minibox_core::domain and minibox::domain are compatibility re-exports.",
+      "source_docs": [
+        "agents_md",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "296ee630-aae8-4782-9f2d-5ff4c95af203",
+      "name": "minibox-macros",
+      "type": "system",
+      "supporting_text": "minibox-macros has no deps.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "7ad19dc8-1dc4-4a24-a9c3-21ec3f5a22e4",
+      "name": "minibox-mcp",
+      "type": "system",
+      "supporting_text": "minibox-mcp depends on minibox-core.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "7e01501c-18e0-4aae-bbb9-624423198521",
+      "name": "minibox-testsuite",
+      "type": "system",
+      "supporting_text": "minibox-testsuite depends on minibox and minibox-core.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "dc56f955-5eee-45dd-9bbb-7eb957bcb07b",
+      "name": "minibox-tui",
+      "type": "system",
+      "supporting_text": "minibox-tui depends on minibox-core.",
+      "source_docs": [
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "b9a54ae4-7b71-41a5-819b-6f3279b99b93",
+      "name": "minibox-tui crate",
+      "type": "crate",
+      "supporting_text": "minibox-tui crate (adf70510) — new read-only TUI dashboard crate (ratatui + crossterm)",
+      "source_docs": [
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "7ee71fd5-2634-497f-908d-95dcdc06b099",
+      "name": "minibox::testing",
+      "type": "concept",
+      "supporting_text": "minibox::testing (behind the test-utils feature) provides mocks ... fixtures ... helpers ... backend descriptors.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "ce4dac16-34e3-4ce0-8228-8886b718dbc8",
+      "name": "minibox_adapter env var",
+      "type": "concept",
+      "supporting_text": "Valid MINIBOX_ADAPTER values are native, gke, colima, smolvm, krun, and feature-gated vz.",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "name": "miniboxd",
+      "type": "system",
+      "supporting_text": "HandlerDependencies changes require updating all adapter suite construction sites in crates/miniboxd/src/main.rs.",
+      "source_docs": [
+        "agents_md",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "347f5042-3c68-4827-9078-6a814640834c",
+      "name": "mockregistry",
+      "type": "concept",
+      "supporting_text": "mocks (MockRegistry, MockFilesystem, MockLimiter, MockRuntime, MockNetwork, MockExecRuntime, MockImagePusher, MockContainerCommitter, MockImageBuilder).",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "85ec3378-2167-47f1-a9fc-f36132474256",
+      "name": "mount immutability ratchet",
+      "type": "concept",
+      "supporting_text": "no process in the container may widen a mount back to read-write via mount(2, MS_REMOUNT).",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "b368090e-5c56-413a-b8bf-be8e2112f594",
+      "name": "mount seccomp kernel test gap",
+      "type": "issue",
+      "supporting_text": "The kernel-enforcing integration test for the mount immutability ratchet has not yet been run on real Linux plus root.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "0cc7aec4-ebf1-4b68-9645-ad6433d8ab5b",
+      "name": "namespace isolation run",
+      "type": "feature",
+      "supporting_text": "Run: Full namespace isolation (PID, NET, UTS, IPC, MNT), cgroups v2 resource limits (memory, CPU weight, PID limit), overlay filesystem layering",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "abe9d931-c1ac-4b48-8862-edf1b5b614f8",
+      "name": "native adapter",
+      "type": "concept",
+      "supporting_text": "native (linux, production, linux_fallback)",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "e0204da4-1fdd-4170-99cc-bc27ee99f077",
+      "name": "no unwrap in production rule",
+      "type": "rule",
+      "supporting_text": "No .unwrap() in production — Use .into_diagnostic().wrap_err(\"description\")? (or .wrap_err(\"description\")? directly for miette-native error types). Tests: use expect(\"reason\")",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "1eda8ff3-d287-4631-8553-6d7bceeb6909",
+      "name": "overlay mount",
+      "type": "concept",
+      "supporting_text": "creates overlay mount, spawn_blocking forks child with clone(CLONE_NEWPID|NS|UTS|IPC|NET)",
+      "source_docs": [
+        "architecture_mbx"
+      ]
+    },
+    {
+      "id": "9aff05e6-a9f6-4d9f-a633-cce258406cc7",
+      "name": "pivot_root ms_private requirement",
+      "type": "issue",
+      "supporting_text": "pivot_root requires MS_PRIVATE first: after CLONE_NEWNS the child inherits shared mount propagation; pivot_root fails EINVAL unless you call mount with MS_REC|MS_PRIVATE.",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "a25bfa5a-9e80-4730-bf77-e2e9d62958e4",
+      "name": "platform-gated coverage gap",
+      "type": "issue",
+      "supporting_text": "Platform-gated coverage gap: crates/minibox/src/lib.rs:57 declares #[cfg(target_os = \"linux\")] pub mod container;, so the cgroups, namespace, mount/seccomp, and overlay unit tests are not compiled into a darwin build at all",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "fadf15eb-11aa-42c8-8997-bac42e150cd7",
+      "name": "processchecker port",
+      "type": "concept",
+      "supporting_text": "PID liveness is checked through the ProcessChecker port, default adapter uses kill(pid, 0).",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "71099855-ac9a-40f9-8cbd-2273f070b0f3",
+      "name": "promote.yml",
+      "type": "file",
+      "supporting_text": "promote.yml for branch promotion.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "6f1f667b-f8df-43e1-9bd0-2e7443ad9a4f",
+      "name": "protocol-drift.yml",
+      "type": "file",
+      "supporting_text": "protocol-drift.yml and protocol-sites.yml for protocol and construction-site drift.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "d0620eb1-b70b-470e-a3ed-f887ad5b6ea0",
+      "name": "qemu-linux-tests harness",
+      "type": "tool",
+      "supporting_text": "Verification requires rust-script scripts/qemu-linux-tests/run.rs --filter <module>, which gave 17/17 on container::cgroups:: and 55 passed / 3 failed on container::",
+      "source_docs": [
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "ea3e1e2d-a6f7-48f4-82a5-8721f4d48351",
+      "name": "reconcile_on_startup",
+      "type": "concept",
+      "supporting_text": "On daemon start, load_from_disk() followed by reconcile_on_startup() adjusts stale records.",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "6e3537a7-cb1d-485d-bf62-fa206981bad5",
+      "name": "request size limit",
+      "type": "concept",
+      "supporting_text": "daemon request reads are bounded by MAX_REQUEST_SIZE = 1 MB to prevent memory exhaustion.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "fa751721-a295-45ae-8d9b-e6a6127f71c2",
+      "name": "resolve_cgroup_root",
+      "type": "function",
+      "supporting_text": "both entry points now share it via a pure resolve_cgroup_root()",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "828464f8-c384-4f8f-98f0-0f5c1ac194ad",
+      "name": "rootless support not started",
+      "type": "backlog_item",
+      "supporting_text": "Rootless support: blocked on user namespace impl, no slirp4netns, no fuse-overlayfs, no unprivileged cgroup delegation",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "326c5abc-09ab-425b-a01d-b69e8dd9a3d5",
+      "name": "rust 2024 edition",
+      "type": "standard",
+      "supporting_text": "Rust edition is 2024; std::env::set_var and remove_var are unsafe and must be serialized with a shared lock.",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "6e7f0ed0-2246-4633-a33e-0193a8651a58",
+      "name": "rustqual qual:allow convention",
+      "type": "convention",
+      "supporting_text": "Workspace-wide SRP/complexity lints are enforced via the rustqual tool ... suppress with an explicit code and reason, immediately above the item",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "41a08272-637b-4aa9-b36c-b2ea8b017f6f",
+      "name": "sandbox tests ci gap",
+      "type": "issue",
+      "supporting_text": "Sandbox tests (about 17) and CLI subprocess tests (30) are not tested in any CI workflow.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "80cd19bf-a2b0-40af-bd45-4bb84c72acd2",
+      "name": "seccomp filters not started",
+      "type": "backlog_item",
+      "supporting_text": "Seccomp filters: zero code, no BPF profiles, no syscall filtering",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "a95d5af4-67d6-4560-ad2a-817f419bbc0b",
+      "name": "set_var unsafe gotcha",
+      "type": "issue",
+      "supporting_text": "std::env::set_var/remove_var are unsafe in Rust 2024; wrap in unsafe {} and serialise with a static Mutex<()> guard to prevent parallel test races.",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "c4e94218-6a22-4624-a534-ce2558655fbe",
+      "name": "setns exec with PTY",
+      "type": "feature",
+      "supporting_text": "Exec: setns-based exec with PTY support (-it), interactive terminal",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "800ba8c6-4ae0-458f-a2b8-0f5ee3c42b0b",
+      "name": "setuid/setgid bit stripping",
+      "type": "concept",
+      "supporting_text": "regular files extracted from OCI layers must have setuid, setgid, and sticky bits stripped before writing to disk.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "7199d316-7d5a-4987-914b-d1a4629a20c8",
+      "name": "silent channel-send discard",
+      "type": "issue",
+      "supporting_text": "Silent channel-send discards are a bug: never let _ = tx.send(...).await.",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
       "id": "9e37686e-6687-44e5-808c-e49bac878c43",
       "name": "smolbox",
       "type": "system",
       "supporting_text": "Smolbox exposes smolvm and krun platform implementations (crates/smolbox/src/lib.rs:1-11).",
       "source_docs": [
-        "minibox-context-map-f5481a94"
+        "minibox-context-map-f5481a94",
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "b862c324-42ee-4434-9548-7ae2e4d8daed",
+      "name": "smolvm adapter",
+      "type": "concept",
+      "supporting_text": "smolvm (linux, macos, experimental, unix_default)",
+      "source_docs": [
+        "feature_matrix_mbx",
+        "active_context_mbx",
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "29d5b8df-64b7-4d42-80a0-276112b3702c",
+      "name": "so_peercred auth",
+      "type": "concept",
+      "supporting_text": "preserve native-adapter SO_PEERCRED checks and root-only access.",
+      "source_docs": [
+        "agents_md",
+        "state_model_mbx",
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "0b4665b5-92ef-4d2b-a171-5156c8799714",
+      "name": "spawn_blocking rule",
+      "type": "rule",
+      "supporting_text": "spawn_blocking for fork/clone/exec — Container creation operations must not run inline in async fn. Always wrap in tokio::task::spawn_blocking",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "cbb1a85d-d3ac-4afb-b02f-3b0210027f7f",
+      "name": "stability-gates.yml",
+      "type": "file",
+      "supporting_text": "stability-gates.yml for docs/adapter/no-unwrap/handler coverage.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "0a699224-d392-4ddb-8fd8-b6b05f820698",
+      "name": "state.json",
+      "type": "file",
+      "supporting_text": "State is persisted to a JSON file after every mutation via atomic rename so readers never see a partial write.",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "0d12f013-b71a-4943-9d3e-760d3ad7fb47",
+      "name": "staterepository trait",
+      "type": "concept",
+      "supporting_text": "The StateRepository trait abstracts persistence with load_containers and save_containers.",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "4562b7b1-3dff-4337-b7e6-15c1d6276fbc",
+      "name": "t23 mock duplication resolved",
+      "type": "fix",
+      "supporting_text": "Mock system duplication resolved (t23) — crates/minibox/src/adapters/mocks.rs is now an 11-line pub use minibox_core::adapters::mocks::*; re-export; the ~1000-line duplicate reimplementation this entry used to describe is gone. Verified by direct read 2026-10-08",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "437e81c5-c576-4f6d-bf66-fb66931ed64c",
+      "name": "tar extraction protections",
+      "type": "concept",
+      "supporting_text": "Security invariants: preserve tar extraction protections (reject .., absolute symlinks, device nodes, FIFOs, setuid/setgid bits).",
+      "source_docs": [
+        "agents_md"
+      ]
+    },
+    {
+      "id": "473845db-ab3c-4a0f-92a6-f855a2b8b542",
+      "name": "tar root entry skip",
+      "type": "concept",
+      "supporting_text": "the tar archive root marker entries . and ./ must be silently skipped rather than passed to path validation.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "b965cc4d-fdb9-4c90-834c-22716cf93f7c",
+      "name": "test_fixtures.rs",
+      "type": "file",
+      "supporting_text": "test_fixtures.rs shared fixtures.",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "a8f5369f-4cbe-40fd-ae93-34fb193a4eea",
+      "name": "tracing structured fields rule",
+      "type": "rule",
+      "supporting_text": "Tracing structured fields — Use key = value syntax in tracing::info!/warn!/error!/debug! macros. Never embed structured values in the message string",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "2d620199-4001-4347-9190-1b9e53d829fd",
+      "name": "uidrangemode",
+      "type": "concept",
+      "supporting_text": "implemented via UidRangeMode in crates/minibox-domain/src/runtime.rs.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "670b2f7d-151b-4284-9887-9fef59e4aacc",
+      "name": "unsafe SAFETY comment rule",
+      "type": "rule",
+      "supporting_text": "unsafe blocks require documented invariants — Every unsafe {} must have a comment explaining what invariant the caller upholds and why it cannot be expressed in the type system",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "6345721a-956d-4b52-b6d8-9d3cb9e1b8a7",
+      "name": "update_container_state",
+      "type": "concept",
+      "supporting_text": "Valid transitions are enforced by update_container_state; invalid transitions return an error.",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "8e964f44-2375-490d-8b63-5b564acd3ae2",
+      "name": "user namespace remapping not started",
+      "type": "backlog_item",
+      "supporting_text": "User namespace remapping: RuntimeCapabilities.supports_user_namespaces field exists on every adapter ... no CLONE_NEWUSER ... purely informational today",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "f975780f-1e2b-4fe6-8249-bd77332913a2",
+      "name": "user namespace uid range isolation",
+      "type": "concept",
+      "supporting_text": "native containers create a user namespace and default to an exclusive, contiguous 65,536-ID host UID/GID range.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "92cecddb-0084-4d7d-8df9-8547e746fe23",
+      "name": "validate_cgroup_parent",
+      "type": "function",
+      "supporting_text": "validate_cgroup_parent() already rejected relative paths but was applied only to the client-supplied cgroup_parent",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "46cebb8a-e12e-4448-94dd-31660ef1f8a0",
+      "name": "validate_layer_path",
+      "type": "function",
+      "supporting_text": "Path validation on all user input — Every path derived from user input or external data (tar entries, image refs, CLI args) must go through validate_layer_path() or equivalent canonicalize+prefix-check",
+      "source_docs": [
+        "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "bf6dd596-3c11-4436-9046-e64a8d547535",
+      "name": "validate_lima_paths allowlist bypass",
+      "type": "issue",
+      "supporting_text": "validate_lima_paths allowlist bypass on empty or / HOME — Path::new(\"\").starts_with(anything) is true, so when HOME is empty or / the Colima bind-mount host-path allowlist accepts every path",
+      "source_docs": [
+        "progress_mbx"
+      ]
+    },
+    {
+      "id": "97fd7468-7b20-49d8-b465-fc26d2832ca9",
+      "name": "validate_lima_paths_rejects_opt",
+      "type": "test",
+      "supporting_text": "Open bug, same class: adapters::colima::bind_mount_tests::validate_lima_paths_rejects_opt — Path::new(\"\").starts_with(anything) is true, so HOME empty or / makes the bind-mount allowlist accept every host path",
+      "source_docs": [
+        "active_context_mbx"
+      ]
+    },
+    {
+      "id": "f16d3ee2-16c2-4be3-9ab7-99af6e19c1e9",
+      "name": "validate_tar_entry_path",
+      "type": "concept",
+      "supporting_text": "enforced by validate_tar_entry_path() in crates/minibox-core/src/image/layer.rs, fixed in commit 8ea4f73.",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "f2fbeea8-8f02-416d-b9aa-00a9effcca7c",
+      "name": "vz adapter",
+      "type": "concept",
+      "supporting_text": "vz (macos, blocked)",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "74539fc4-6cc5-4b68-8556-cca91ae6da95",
+      "name": "vzlinuxbootloader failure",
+      "type": "issue",
+      "supporting_text": "VZLinuxBootLoader still fails with VZErrorDomain code=1 on macOS 26.4.",
+      "source_docs": [
+        "feature_matrix_mbx"
       ]
     },
     {
@@ -168,7 +1561,18 @@
       "type": "system",
       "supporting_text": "Winbox is the Windows platform stub (crates/winbox/src/lib.rs:44-57).",
       "source_docs": [
-        "minibox-context-map-f5481a94"
+        "minibox-context-map-f5481a94",
+        "architecture_mbx",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "273da00d-8c9c-4233-ac8f-074aef832a12",
+      "name": "winbox adapter",
+      "type": "concept",
+      "supporting_text": "winbox (windows, stub)",
+      "source_docs": [
+        "feature_matrix_mbx"
       ]
     },
     {
@@ -177,7 +1581,26 @@
       "type": "tool",
       "supporting_text": "xtask orchestrates repository quality and test gates (xtask/src/gates.rs:58-101).",
       "source_docs": [
-        "minibox-context-map-f5481a94"
+        "minibox-context-map-f5481a94",
+        "crate_inventory_mbx"
+      ]
+    },
+    {
+      "id": "edf271f5-8bd8-42a2-ac62-3aba4e745c3d",
+      "name": "xtask/protocol-drift.lock",
+      "type": "file",
+      "supporting_text": "cargo xtask check protocol-drift verifies core contract hashes against xtask/protocol-drift.lock.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "4e65a913-ac89-4c95-955b-146a6b70bcaf",
+      "name": "zip slip / path traversal",
+      "type": "issue",
+      "supporting_text": "tar entries whose paths contain .. components must be rejected before any filesystem write occurs.",
+      "source_docs": [
+        "security_invariants_mbx"
       ]
     }
   ],
@@ -397,6 +1820,825 @@
       "confidence": 1.0,
       "supporting_text": "xtask depends on minibox-testsuite (xtask/Cargo.toml:12-28).",
       "source_doc": "minibox-context-map-f5481a94"
+    },
+    {
+      "id": "2ca67cb2-6a2c-4499-85ba-386da4206865",
+      "source": "13d16fbd-960f-4688-b331-c124c7b0168a",
+      "target": "5e8ad500-6800-451a-9f17-8a525637d2ff",
+      "type": "related_to",
+      "confidence": 0.9,
+      "supporting_text": "CLAUDE.md is a pointer to this file and must not duplicate its rules.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "243f0c67-3876-4969-b798-3245fd391ea9",
+      "source": "5e8ad500-6800-451a-9f17-8a525637d2ff",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "contains",
+      "confidence": 0.8,
+      "supporting_text": "AGENTS.md is the single source of truth for agent guidance in the minibox repository.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "1913b3d7-8e97-4e47-b2af-d0c1260a9a90",
+      "source": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "minibox re-exports minibox-core.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "7c3089fb-dfcd-40a2-92c5-73f09f81cf7c",
+      "source": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "target": "5289662f-c37e-46dc-b3d4-fafbffc6e1cc",
+      "type": "depends_on",
+      "confidence": 0.8,
+      "supporting_text": "Domain ports live under crates/minibox-domain/src/; minibox_core::domain ... are compatibility re-exports.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "2ab249ec-292b-4bb5-99eb-ca8cc27238fb",
+      "source": "3e9f5594-34df-40ba-87ce-2227be221dab",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "contains",
+      "confidence": 0.9,
+      "supporting_text": "DaemonRequest/DaemonResponse are canonical in crates/minibox-core/src/protocol.rs.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "19ce672f-c11c-4167-addc-e095447cc755",
+      "source": "4192e931-d0cf-4fcb-9460-af4a55b00365",
+      "target": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "HandlerDependencies changes require updating all adapter suite construction sites in crates/miniboxd/src/main.rs.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "86f038f3-effe-4701-b83f-28858ae32daa",
+      "source": "0a3cc6a1-1f0c-4140-9d23-49e96249ed44",
+      "target": "b0a4fe8f-13e3-48ac-ac94-61ab90a03984",
+      "type": "related_to",
+      "confidence": 0.7,
+      "supporting_text": "cargo fmt --all without --check rewrites all workspace .rs files including untracked ones.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "6ff50ff6-63f0-4492-a50d-961d2b0a4a5b",
+      "source": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "target": "399770be-73c1-4c46-aa31-02011ed9a301",
+      "type": "related_to",
+      "confidence": 0.6,
+      "supporting_text": "cargo xtask prepush runs release build, release nextest, and conformance before pushing; cargo xtask verify is read-only and safe on a dirty tree.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "3bc98ba8-319f-488f-97f5-63c922aa6277",
+      "source": "1b148f98-88d9-465b-bd22-045578f7b75d",
+      "target": "5d3c03d7-c1e4-4f22-8749-9f97b380838d",
+      "type": "related_to",
+      "confidence": 0.8,
+      "supporting_text": "Branches follow the stability pipeline develop -> staging -> release -> main -> v* tag.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "5c4230eb-4301-447a-8f53-219277a8faca",
+      "source": "a81e33ff-3022-4fd3-b0e1-ae0486481270",
+      "target": "ece9eceb-6368-43ea-883f-8bebceebccd7",
+      "type": "supersedes",
+      "confidence": 0.7,
+      "supporting_text": ".ctx/GODMODE.tasks.yaml is a stale leftover and should be ignored; the lowercase path is authoritative.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "2d847f9e-b429-4579-9ba1-23c7a8598466",
+      "source": "77279421-c406-4800-b2a9-ddb602917356",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "related_to",
+      "confidence": 0.6,
+      "supporting_text": "Parallel subagents editing code must use isolated worktrees, not a shared checkout.",
+      "source_doc": "agents_md"
+    },
+    {
+      "id": "29287ff6-e176-46a2-b23a-ab37cdba9f19",
+      "source": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "target": "5289662f-c37e-46dc-b3d4-fafbffc6e1cc",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "minibox-core depends on minibox-domain and minibox-macros.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "b52c3244-1c0f-4630-8ce3-46fbaa722c06",
+      "source": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "target": "296ee630-aae8-4782-9f2d-5ff4c95af203",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "minibox-core depends on minibox-domain and minibox-macros.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "21ebc614-3303-4086-bbfd-1c6f31fe6da7",
+      "source": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "minibox depends on minibox-core and minibox-macros.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "3150dc04-708d-42ff-8595-57fdc08c8782",
+      "source": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "macbox depends on minibox and minibox-core.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "3ebbb2b9-48f8-4fed-ad7f-7d2986dafec9",
+      "source": "9e37686e-6687-44e5-808c-e49bac878c43",
+      "target": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "smolbox depends on minibox and macbox.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "ab690984-06e4-466a-a246-abd6c7c281c7",
+      "source": "e646bca7-c787-4b10-ab04-df95b2a13596",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "winbox depends on minibox and minibox-core.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "de890834-d118-4acc-bf90-77d2600e47d3",
+      "source": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "target": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "type": "depends_on",
+      "confidence": 0.8,
+      "supporting_text": "miniboxd depends on minibox, minibox-core, macbox/smolbox on unix, winbox on windows.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "f88e164d-ef9d-4b25-ad4e-fccf8796fae5",
+      "source": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "target": "e646bca7-c787-4b10-ab04-df95b2a13596",
+      "type": "depends_on",
+      "confidence": 0.8,
+      "supporting_text": "miniboxd depends on minibox, minibox-core, macbox/smolbox on unix, winbox on windows.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "d15e2665-51c9-4cf3-815a-346b54e7a62c",
+      "source": "22b49672-2713-4827-af21-68358a3fae70",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "mbx depends on minibox-core.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "0056b892-3696-474e-8078-723aef04a3c9",
+      "source": "7e01501c-18e0-4aae-bbb9-624423198521",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "minibox-testsuite depends on minibox and minibox-core.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "5e691def-63d1-4928-88ce-6c1414a1edbc",
+      "source": "0f6335df-6e38-4f87-ac28-88730d57c297",
+      "target": "296ee630-aae8-4782-9f2d-5ff4c95af203",
+      "type": "depends_on",
+      "confidence": 0.8,
+      "supporting_text": "minibox-bench depends on minibox, minibox-core, minibox-macros.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "5c2959c5-329d-46ef-bc70-525700656680",
+      "source": "905fcb72-19d6-4d1b-9030-3284d58eb1bb",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "contains",
+      "confidence": 0.9,
+      "supporting_text": "Adapter selection logic is in crates/minibox-core/src/adapter_registry.rs:adapter_from_env.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "4ea323b9-93a2-455d-be10-888dc1bfe02d",
+      "source": "4192e931-d0cf-4fcb-9460-af4a55b00365",
+      "target": "383b9f18-75ca-4c76-9f89-0039f1a2e467",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "ImageRegistry ... are the primary ports wired in HandlerDependencies.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "633150b1-100d-4f6e-b092-c2f04c6e077a",
+      "source": "4192e931-d0cf-4fcb-9460-af4a55b00365",
+      "target": "82624229-6c40-4721-ad71-3f5ccb68d423",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "ContainerRuntime ... are the primary ports wired in HandlerDependencies.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "6a07f679-c828-4d94-9b25-3a4e8b81558e",
+      "source": "474dd877-6196-4e9b-b835-e64486ce358b",
+      "target": "72aa18cd-7d95-4cbf-8d6a-959e126804fd",
+      "type": "uses",
+      "confidence": 0.7,
+      "supporting_text": "ExecutionPolicy evaluates a manifest against a rule set.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "0c92f93f-95d7-45de-b6a4-23e7f84fdb31",
+      "source": "f01e660b-d5bc-4f87-932c-8706d06a978b",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "contains",
+      "confidence": 0.7,
+      "supporting_text": "DaemonState persists container records to disk via atomic rename on every add/remove.",
+      "source_doc": "architecture_mbx"
+    },
+    {
+      "id": "5d9adb64-e42d-486f-b4a0-e9770774bae7",
+      "source": "58e85cdc-cc8c-4311-bce5-cfceff73635b",
+      "target": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "the native bridge path uses it when miniboxd is built with the opt-in cni feature.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "b3a314bb-f742-4b80-9047-4b5503bc14a3",
+      "source": "dc56f955-5eee-45dd-9bbb-7eb957bcb07b",
+      "target": "8e73fd4b-56fb-403b-9cad-d74fb3b96811",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "minibox-tui ... used by minibox-cli only when its tui feature is enabled.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "52d685b9-ef6e-495a-809c-8184efdf2617",
+      "source": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "target": "e646bca7-c787-4b10-ab04-df95b2a13596",
+      "type": "uses",
+      "confidence": 0.7,
+      "supporting_text": "platform-dispatches Unix to run_daemon(), Windows to winbox::start().",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "184093f6-30ba-473c-a1b1-9e89ef4ff3f9",
+      "source": "9e37686e-6687-44e5-808c-e49bac878c43",
+      "target": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
+      "type": "uses",
+      "confidence": 0.7,
+      "supporting_text": "smolbox is a compatibility facade for smolvm and krun adapter imports; krun implementations live in macbox::krun.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "ab8376d4-3283-450d-aa8c-ba0663c7e3d8",
+      "source": "d4f046b0-ccd6-4ef4-9213-7f8ba6ec5196",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "depends_on",
+      "confidence": 0.9,
+      "supporting_text": "depends on minibox-core only, the former crux-plugin dependency has been removed.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "1b45b024-06f9-4d20-bec2-53a6a1b87ee4",
+      "source": "7e01501c-18e0-4aae-bbb9-624423198521",
+      "target": "b65dd825-1a0e-40db-9b5f-553a5e1a58c0",
+      "type": "uses",
+      "confidence": 0.7,
+      "supporting_text": "not published, used internally by cargo xtask test conformance.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "deb4c64f-f950-4688-90c1-81bd7485fdf3",
+      "source": "b7a4b256-8b4b-4120-bfa1-f347ad0a6ef5",
+      "target": "296ee630-aae8-4782-9f2d-5ff4c95af203",
+      "type": "contains",
+      "confidence": 0.9,
+      "supporting_text": "minibox-macros contains declarative macro_rules! macros for adapter boilerplate reduction.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "6dc6f44d-bb7e-455e-b852-48577c4a7096",
+      "source": "0f6335df-6e38-4f87-ac28-88730d57c297",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "depends_on",
+      "confidence": 0.7,
+      "supporting_text": "the only place where the test-utils features of the lib crates are enabled.",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "ac339963-065c-414f-acc5-2b1ec68177db",
+      "source": "f2fbeea8-8f02-416d-b9aa-00a9effcca7c",
+      "target": "74539fc4-6cc5-4b68-8556-cca91ae6da95",
+      "type": "causes",
+      "confidence": 0.9,
+      "supporting_text": "the adapter is currently non-functional because VZLinuxBootLoader still fails with VZErrorDomain code=1 on macOS 26.4.",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "d30f7057-b09e-4e77-a2db-f1323fcf6120",
+      "source": "f7650520-5d35-42b3-a760-9c78318b1af2",
+      "target": "b862c324-42ee-4434-9548-7ae2e4d8daed",
+      "type": "related_to",
+      "confidence": 0.8,
+      "supporting_text": "krun fallback platform-splits: native on Linux, krun on macOS, when smolvm binary is absent.",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "5ad61350-9405-44cc-a63e-2095b0907fa7",
+      "source": "abe9d931-c1ac-4b48-8862-edf1b5b614f8",
+      "target": "b862c324-42ee-4434-9548-7ae2e4d8daed",
+      "type": "related_to",
+      "confidence": 0.8,
+      "supporting_text": "falls back to native on Linux or krun on macOS when the binary is absent.",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "75ef2396-b021-4503-be55-0ffab858fac7",
+      "source": "62d50e66-a6b6-49c9-b5ee-1431bea0a55b",
+      "target": "474dd877-6196-4e9b-b835-e64486ce358b",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "all adapters that support run inherit manifest persist, mbx manifest, mbx verify, and admission-policy gating.",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "064417eb-248c-4a11-ab72-26f189e07733",
+      "source": "f01e660b-d5bc-4f87-932c-8706d06a978b",
+      "target": "0a699224-d392-4ddb-8fd8-b6b05f820698",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "State is persisted to a JSON file after every mutation via atomic rename.",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "66c33415-8aab-43eb-adb3-84a33ceb31c2",
+      "source": "ea3e1e2d-a6f7-48f4-82a5-8721f4d48351",
+      "target": "83d71387-9db9-4546-a0b6-8698a4cb599b",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "reconcile_on_startup() adjusts stale records ... Running in any PID state becomes Orphaned.",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "593325b1-a0f6-4535-a614-79384aa0a537",
+      "source": "ea3e1e2d-a6f7-48f4-82a5-8721f4d48351",
+      "target": "fadf15eb-11aa-42c8-8997-bac42e150cd7",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "PID liveness is checked through the ProcessChecker port, default adapter uses kill(pid, 0).",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "24f18f8d-adbf-4884-9711-833734875a83",
+      "source": "6345721a-956d-4b52-b6d8-9d3cb9e1b8a7",
+      "target": "83d71387-9db9-4546-a0b6-8698a4cb599b",
+      "type": "implements",
+      "confidence": 0.9,
+      "supporting_text": "Valid transitions are enforced by update_container_state; invalid transitions return an error.",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "7054023d-b8f7-4063-b523-3443039f8320",
+      "source": "3c368bfa-916b-47fb-9d85-498009d8a250",
+      "target": "0d12f013-b71a-4943-9d3e-760d3ad7fb47",
+      "type": "implements",
+      "confidence": 0.9,
+      "supporting_text": "the production adapter is JsonFileRepository using atomic JSON file writes.",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "8e4f4e46-d50c-4d86-b894-e3a4a1e972f1",
+      "source": "f01e660b-d5bc-4f87-932c-8706d06a978b",
+      "target": "0d12f013-b71a-4943-9d3e-760d3ad7fb47",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "DaemonState::with_repository() accepts an Arc<dyn StateRepository> for dependency injection.",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "1c6c967a-a6d1-4560-bfb9-5a44d0ba9562",
+      "source": "29d5b8df-64b7-4d42-80a0-276112b3702c",
+      "target": "f01e660b-d5bc-4f87-932c-8706d06a978b",
+      "type": "related_to",
+      "confidence": 0.7,
+      "supporting_text": "SO_PEERCRED auth on the daemon socket prevents unauthorized state queries.",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "e9da24ae-7d1e-4761-9e0c-0361fafe61ff",
+      "source": "f16d3ee2-16c2-4be3-9ab7-99af6e19c1e9",
+      "target": "4e65a913-ac89-4c95-955b-146a6b70bcaf",
+      "type": "causes",
+      "confidence": 0.9,
+      "supporting_text": "fixed in commit 8ea4f73.",
+      "source_doc": "security_invariants_mbx"
+    },
+    {
+      "id": "b621e878-ce0a-488c-8244-1a2c578236c8",
+      "source": "7499b194-3d09-49e9-a124-70d10aa52b60",
+      "target": "fde3828a-c70c-4d67-aa34-daa311ace7a1",
+      "type": "related_to",
+      "confidence": 0.6,
+      "supporting_text": "both enforced inside child_init before execve.",
+      "source_doc": "security_invariants_mbx"
+    },
+    {
+      "id": "a82230ea-43d4-48be-9311-8be2a3055756",
+      "source": "28dc18cd-363e-4cba-a73a-64d8019d160c",
+      "target": "85ec3378-2167-47f1-a9fc-f36132474256",
+      "type": "implements",
+      "confidence": 0.9,
+      "supporting_text": "the filter is built by build_mount_immutability_program() and installed by install_mount_immutability_filter().",
+      "source_doc": "security_invariants_mbx"
+    },
+    {
+      "id": "1fa5459f-ef8d-428f-a2dd-10af953050b2",
+      "source": "85ec3378-2167-47f1-a9fc-f36132474256",
+      "target": "b368090e-5c56-413a-b8bf-be8e2112f594",
+      "type": "related_to",
+      "confidence": 0.8,
+      "supporting_text": "The kernel-enforcing integration test for the mount immutability ratchet has not yet been run on real Linux plus root.",
+      "source_doc": "security_invariants_mbx"
+    },
+    {
+      "id": "9b0e86c7-4766-4783-9e7f-a2c10bf969ad",
+      "source": "2d620199-4001-4347-9190-1b9e53d829fd",
+      "target": "f975780f-1e2b-4fe6-8249-bd77332913a2",
+      "type": "implements",
+      "confidence": 0.9,
+      "supporting_text": "implemented via UidRangeMode in crates/minibox-domain/src/runtime.rs.",
+      "source_doc": "security_invariants_mbx"
+    },
+    {
+      "id": "819c9aef-c596-4af1-ae66-ad390fc80e69",
+      "source": "7ee71fd5-2634-497f-908d-95dcdc06b099",
+      "target": "347f5042-3c68-4827-9078-6a814640834c",
+      "type": "contains",
+      "confidence": 0.9,
+      "supporting_text": "minibox::testing (behind the test-utils feature) provides mocks (MockRegistry, ...).",
+      "source_doc": "test_infrastructure_mbx"
+    },
+    {
+      "id": "40f003af-8d30-45bd-a2eb-36f81bd17d56",
+      "source": "7ee71fd5-2634-497f-908d-95dcdc06b099",
+      "target": "0f9942ca-3c64-413e-a929-8ba582f56d29",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "minibox-core::adapters ... provides mocks.rs as the canonical cross-platform mock adapters, which minibox::testing::mocks re-exports.",
+      "source_doc": "test_infrastructure_mbx"
+    },
+    {
+      "id": "e4aa0bb5-ef92-4f91-829b-2e65403955f7",
+      "source": "0f9942ca-3c64-413e-a929-8ba582f56d29",
+      "target": "b965cc4d-fdb9-4c90-834c-22716cf93f7c",
+      "type": "related_to",
+      "confidence": 0.6,
+      "supporting_text": "minibox-core::adapters (behind test-utils) provides mocks.rs ...; test_fixtures.rs shared fixtures.",
+      "source_doc": "test_infrastructure_mbx"
+    },
+    {
+      "id": "e7b0522f-1b0b-49a8-9ad6-2e1f79ecde41",
+      "source": "1dcf7e0b-c7dd-4e1c-b784-8e00cde88186",
+      "target": "061b6d5b-36e7-4a00-b2d0-a1401296ca21",
+      "type": "uses",
+      "confidence": 0.6,
+      "supporting_text": "conformance.rs the conformance harness; conformance.yml for conformance/property/krun/CLI/borrow/quickcheck.",
+      "source_doc": "test_infrastructure_mbx"
+    },
+    {
+      "id": "7997d3f6-cb58-4b64-83e8-f2384c486dd7",
+      "source": "795d5ecd-9488-49a6-b6c1-b0acb3c7dd1a",
+      "target": "edf271f5-8bd8-42a2-ac62-3aba4e745c3d",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "cargo xtask check protocol-drift verifies core contract hashes against xtask/protocol-drift.lock.",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "3b9ba05e-ce06-419b-a136-359674812ce6",
+      "source": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "target": "f241abda-3d5d-4e70-af13-96900832dfdf",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "cargo xtask prepush, if Rust is in the push range, starts with musl-check.",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "ef8a7d7e-5913-44ac-aa70-2a09b6cfd48d",
+      "source": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "target": "c2af765c-892f-41c8-aa3b-c7727917a692",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "cargo xtask prepush ... then release build, release library nextest, and conformance.",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "684e3c9c-53b8-42e2-a6c5-df54607d1153",
+      "source": "399770be-73c1-4c46-aa31-02011ed9a301",
+      "target": "0a3cc6a1-1f0c-4140-9d23-49e96249ed44",
+      "type": "conflicts_with",
+      "confidence": 0.6,
+      "supporting_text": "cargo xtask verify does not mutate files; cargo xtask pre-commit ... also runs cargo fmt --all and re-stages tracked .rs changes.",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "eb2bc031-640d-4f3f-8fb7-aa9247c26f00",
+      "source": "df29ce1d-b307-4638-82bb-466beb587f9d",
+      "target": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "type": "uses",
+      "confidence": 0.8,
+      "supporting_text": "cargo xtask check protocol-sites verifies HandlerDependencies construction-site count, default file crates/miniboxd/src/main.rs.",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "962d7faf-0dc8-4255-8294-d36877399f81",
+      "source": "f6455905-e024-4f71-ab37-839d7d3902cc",
+      "target": "1b148f98-88d9-465b-bd22-045578f7b75d",
+      "type": "uses",
+      "confidence": 0.7,
+      "supporting_text": "cargo xtask promote cascade-merges one stability tier into the next (develop -> staging -> release -> main).",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "16e33d90-cafb-4f38-b2b2-a5c988d65f56",
+      "source": "b7a4b256-8b4b-4120-bfa1-f347ad0a6ef5",
+      "target": "d388d355-3ba3-4850-9742-72c2ff5c6a9d",
+      "type": "related_to",
+      "confidence": 0.7,
+      "supporting_text": "adapters whose new() returns Result<Self> must use as_any! only.",
+      "source_doc": "gotchas_mbx"
+    },
+    {
+      "id": "9586da14-a114-44ed-8368-51ab6aa85deb",
+      "source": "60b0b613-1277-4da9-88ee-3895f8d7e6ef",
+      "target": "9d73dcaf-5253-4263-bbf2-c30254c32f51",
+      "type": "related_to",
+      "confidence": 0.6,
+      "supporting_text": "both describe multi-site update requirements in the protocol/handler layer.",
+      "source_doc": "gotchas_mbx"
+    },
+    {
+      "id": "bf5643b6-12fb-4680-b276-cfb074dd55c5",
+      "source": "ce4dac16-34e3-4ce0-8228-8886b718dbc8",
+      "target": "905fcb72-19d6-4d1b-9030-3284d58eb1bb",
+      "type": "uses",
+      "confidence": 0.9,
+      "supporting_text": "Unset MINIBOX_ADAPTER: adapter_from_env() probes for the smolvm binary on PATH.",
+      "source_doc": "gotchas_mbx"
+    },
+    {
+      "id": "46312879-e9e9-474f-9e4e-97764dda1f97",
+      "source": "2711c61e-4308-4905-a618-8759bf9b1e89",
+      "target": "7e732b91-9978-4e2a-8f60-47183ba3acf1",
+      "type": "implemented_in",
+      "confidence": 1.0,
+      "supporting_text": "cgroup root validation fix (1db50b86)",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "6df98ca5-8966-4a06-a8f3-8c82213c141a",
+      "source": "2711c61e-4308-4905-a618-8759bf9b1e89",
+      "target": "fa751721-a295-45ae-8d9b-e6a6127f71c2",
+      "type": "introduces",
+      "confidence": 0.9,
+      "supporting_text": "both entry points now share it via a pure resolve_cgroup_root()",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "9fd4bd00-b571-4948-9cb4-fa881e25a826",
+      "source": "fa751721-a295-45ae-8d9b-e6a6127f71c2",
+      "target": "92cecddb-0084-4d7d-8df9-8547e746fe23",
+      "type": "wraps",
+      "confidence": 0.8,
+      "supporting_text": "validate_cgroup_parent() already rejected relative paths but was applied only to the client-supplied cgroup_parent; both entry points now share it",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "e64269f8-5267-4eb2-99b9-dee4ff53f680",
+      "source": "2711c61e-4308-4905-a618-8759bf9b1e89",
+      "target": "d0620eb1-b70b-470e-a3ed-f887ad5b6ea0",
+      "type": "verified_by",
+      "confidence": 0.9,
+      "supporting_text": "verified 17/17 on container::cgroups:: under the QEMU Linux harness",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "f02d3e80-4f8d-48df-91e2-4a17d9dbb8f2",
+      "source": "1db078b5-bed6-4193-ab77-ff8d79f8452f",
+      "target": "d0620eb1-b70b-470e-a3ed-f887ad5b6ea0",
+      "type": "mitigated_by",
+      "confidence": 0.85,
+      "supporting_text": "The QEMU aarch64 harness closes the gap",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "7554c30c-0133-46c9-a93d-b4d11f90d8d1",
+      "source": "9f54f276-f4c7-4c6e-8465-6aec5c5eb81f",
+      "target": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "type": "superseded_by_for_verification",
+      "confidence": 0.85,
+      "supporting_text": "cargo xtask prepush is the gate that actually builds, lints, and tests",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "cdf624b1-5d9f-4ffc-a726-87209fd1eec3",
+      "source": "97fd7468-7b20-49d8-b465-fc26d2832ca9",
+      "target": "2711c61e-4308-4905-a618-8759bf9b1e89",
+      "type": "same_bug_class_as",
+      "confidence": 0.7,
+      "supporting_text": "Same bug class as the cgroup root issue fixed in 1db50b86",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "5a8ce64a-ff4e-43a3-a9e2-932b763ae08e",
+      "source": "eff1a299-aaab-43d1-b7ce-c303e9a141a2",
+      "target": "7e732b91-9978-4e2a-8f60-47183ba3acf1",
+      "type": "blocks_validation_of",
+      "confidence": 0.7,
+      "supporting_text": "Nothing will validate a push until that clears",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "bbff99f6-855a-4522-a72c-b5615315f7b1",
+      "source": "1d9661e0-40f6-4b16-8567-3526ae2e426c",
+      "target": "f241abda-3d5d-4e70-af13-96900832dfdf",
+      "type": "co_landed_with",
+      "confidence": 0.6,
+      "supporting_text": "Colima commit adapter + image lease conformance (1ae7528e)... new xtask musl-check gate wired into prepush",
+      "source_doc": "active_context_mbx"
+    },
+    {
+      "id": "b594c0ea-ce0d-45a5-a78e-781080f879da",
+      "source": "a25bfa5a-9e80-4730-bf77-e2e9d62958e4",
+      "target": "d0620eb1-b70b-470e-a3ed-f887ad5b6ea0",
+      "type": "mitigated_by",
+      "confidence": 0.9,
+      "supporting_text": "The QEMU aarch64 harness closes the gap",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "87d6a1a9-daf4-4efb-bcc2-9c64b4ca0f3f",
+      "source": "9f54f276-f4c7-4c6e-8465-6aec5c5eb81f",
+      "target": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "type": "superseded_by_for_verification",
+      "confidence": 0.85,
+      "supporting_text": "Prefer cargo xtask prepush",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "f9043016-9a1a-41c1-9630-88e0be5b2627",
+      "source": "f241abda-3d5d-4e70-af13-96900832dfdf",
+      "target": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "type": "part_of",
+      "confidence": 0.8,
+      "supporting_text": "new prepush gate catching cfg(target_os = \"linux\") build failures against the musl target before CI",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "73c0f017-9eda-4c59-90d1-baa04301b88d",
+      "source": "a2bdbd8d-5c5c-4ecf-94b2-7ece654a7856",
+      "target": "b41547d7-f964-4d31-9953-ae921ff3a906",
+      "type": "affected_by",
+      "confidence": 0.7,
+      "supporting_text": "Colima path validation bypass via .. (P1)",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "bfdf7252-42a2-4a94-b8ed-08fa80fe775d",
+      "source": "a2bdbd8d-5c5c-4ecf-94b2-7ece654a7856",
+      "target": "bf6dd596-3c11-4436-9046-e64a8d547535",
+      "type": "affected_by",
+      "confidence": 0.7,
+      "supporting_text": "the Colima bind-mount host-path allowlist accepts every path",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "c03cfdbc-cf15-47c1-963e-2eecc6457c54",
+      "source": "bf6dd596-3c11-4436-9046-e64a8d547535",
+      "target": "b41547d7-f964-4d31-9953-ae921ff3a906",
+      "type": "same_bug_class_as",
+      "confidence": 0.6,
+      "supporting_text": "Same bug class as the cgroup root issue fixed in 1db50b86",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "de4e4ba0-a336-4ecd-ac91-b37710d4add8",
+      "source": "8e964f44-2375-490d-8b63-5b564acd3ae2",
+      "target": "828464f8-c384-4f8f-98f0-0f5c1ac194ad",
+      "type": "blocks",
+      "confidence": 0.8,
+      "supporting_text": "Rootless support: blocked on user namespace impl",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "d1454a92-b37c-4144-a7a1-fe4b3a6e56ed",
+      "source": "7ad19dc8-1dc4-4a24-a9c3-21ec3f5a22e4",
+      "target": "dfffab4f-0dfd-43da-acc5-527606b39d8f",
+      "type": "exposes",
+      "confidence": 0.6,
+      "supporting_text": "MCP stdio server exposing agent-safe daemon tools for doctor, ps, images, logs, manifest, pull, run, stop, and rm",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "2477105f-df4c-4c62-a9e2-ffaeb0b3f3aa",
+      "source": "56faf79f-87ce-4538-b825-9439a5d9ce27",
+      "target": "b41547d7-f964-4d31-9953-ae921ff3a906",
+      "type": "does_not_cover",
+      "confidence": 0.6,
+      "supporting_text": "deny-by-default for bind mounts and privileged mode ... Colima path validation bypass via .. (P1) remains open",
+      "source_doc": "progress_mbx"
+    },
+    {
+      "id": "d29a1f9e-162b-4bc0-9b32-db2830499d80",
+      "source": "e0204da4-1fdd-4170-99cc-bc27ee99f077",
+      "target": "46cebb8a-e12e-4448-94dd-31660ef1f8a0",
+      "type": "co_located_rule_with",
+      "confidence": 0.6,
+      "supporting_text": "Non-Negotiable Minibox Rules: No .unwrap() in production; Path validation on all user input",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "28bfc6a0-199b-427a-b0d6-27496e8f6381",
+      "source": "abd62ff2-3fce-4941-ab18-9d5b7746b080",
+      "target": "e0204da4-1fdd-4170-99cc-bc27ee99f077",
+      "type": "co_located_rule_with",
+      "confidence": 0.6,
+      "supporting_text": "Non-Negotiable Minibox Rules",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "619e82f4-a625-4006-8200-f096ea03768d",
+      "source": "2e661a09-6134-4e2c-9d29-e9749415eb4b",
+      "target": "e0204da4-1fdd-4170-99cc-bc27ee99f077",
+      "type": "implements",
+      "confidence": 0.85,
+      "supporting_text": "Use .into_diagnostic().wrap_err(\"description\")? ... miette (Result<T>, IntoDiagnostic, WrapErr/Context)",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "bcd26d97-6ae1-44b1-a79b-8c7c59a27452",
+      "source": "6e7f0ed0-2246-4633-a33e-0193a8651a58",
+      "target": "b6dac7b5-dd22-4987-ab8a-ba0159f32c94",
+      "type": "defines",
+      "confidence": 0.9,
+      "supporting_text": "Known codes: iosp",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "9dc0b363-b248-448e-b626-f92e3d553c3f",
+      "source": "6e7f0ed0-2246-4633-a33e-0193a8651a58",
+      "target": "399012c7-d8b0-4edc-8295-9ec34afc1bf5",
+      "type": "defines",
+      "confidence": 0.9,
+      "supporting_text": "Known codes: ... complexity",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "5ba01df9-b905-4f2e-b20a-e7d38453136b",
+      "source": "ba896823-23db-4556-b3ff-9ee596a45105",
+      "target": "b562e7b6-a5e0-43e0-b7e6-3291626e1af1",
+      "type": "enforces",
+      "confidence": 0.8,
+      "supporting_text": "denies a small set of named lints ... clippy::io_other_error",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "491a788e-a909-48aa-8717-a6123d8b34e2",
+      "source": "ba896823-23db-4556-b3ff-9ee596a45105",
+      "target": "88b48f44-b6f7-41f4-89c5-0b106d6bd451",
+      "type": "enforces",
+      "confidence": 0.8,
+      "supporting_text": "denies a small set of named lints ... clippy::get_first",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "350ce139-40a9-41c1-8f21-d7a23d0e5bf3",
+      "source": "ba896823-23db-4556-b3ff-9ee596a45105",
+      "target": "db0f34d9-c22e-406c-86e1-5a9ddde4a124",
+      "type": "enforces",
+      "confidence": 0.8,
+      "supporting_text": "denies a small set of named lints ... clippy::len_zero",
+      "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "d007e992-b94b-445c-b7c6-2ada1ff3c4d5",
+      "source": "670b2f7d-151b-4284-9887-9fef59e4aacc",
+      "target": "0b4665b5-92ef-4d2b-a171-5156c8799714",
+      "type": "co_located_rule_with",
+      "confidence": 0.6,
+      "supporting_text": "Non-Negotiable Minibox Rules",
+      "source_doc": "rust_patterns_md"
     }
   ]
 }

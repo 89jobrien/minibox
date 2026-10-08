@@ -228,7 +228,7 @@ mod tests {
             .create("alpine", &["/bin/true".into()], &[])
             .await
             .expect("create should succeed");
-        assert!(!id.is_empty());
+        assert_ne!(id, "");
         // Should be a valid UUID
         assert!(uuid::Uuid::parse_str(&id).is_ok(), "ID should be a UUID");
     }

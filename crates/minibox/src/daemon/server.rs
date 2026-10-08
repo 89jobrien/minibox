@@ -552,6 +552,13 @@ async fn dispatch(
             message,
             env_overrides,
             cmd_override,
+            // KNOWN GAP (#452): the wire field is accepted for compatibility but
+            // the commit path on this lineage does not yet exclude declared volume
+            // data from the committed image. The `commit_upper_dir_to_image_with_volumes`
+            // implementation that honoured it was replaced by the layer-stack
+            // architecture. Port volume exclusion onto `commit_layer_stack_to_image`
+            // before treating `--include-volumes` as meaningful.
+            include_volumes: _,
         } => {
             handler::handle_commit(
                 container_id,
