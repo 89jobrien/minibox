@@ -165,17 +165,16 @@ impl ExecutionPolicy {
         }
 
         // Check network mode
-        if let Some(allowed_modes) = &self.allowed_network_modes {
-            if !allowed_modes
+        if let Some(allowed_modes) = &self.allowed_network_modes
+            && !allowed_modes
                 .iter()
                 .any(|m| m == &manifest.runtime.network_mode)
-            {
-                return PolicyDecision::Deny(format!(
-                    "network mode '{}' not allowed (allowed: {})",
-                    manifest.runtime.network_mode,
-                    allowed_modes.join(", ")
-                ));
-            }
+        {
+            return PolicyDecision::Deny(format!(
+                "network mode '{}' not allowed (allowed: {})",
+                manifest.runtime.network_mode,
+                allowed_modes.join(", ")
+            ));
         }
 
         // Check privileged
@@ -184,16 +183,14 @@ impl ExecutionPolicy {
         }
 
         // Check memory limit
-        if let Some(max_mem) = self.max_memory_bytes {
-            if let Some(ref limits) = manifest.runtime.resource_limits {
-                if let Some(mem) = limits.memory_limit_bytes {
-                    if mem > max_mem {
-                        return PolicyDecision::Deny(format!(
-                            "memory limit {mem} exceeds policy maximum {max_mem}"
-                        ));
-                    }
-                }
-            }
+        if let Some(max_mem) = self.max_memory_bytes
+            && let Some(ref limits) = manifest.runtime.resource_limits
+            && let Some(mem) = limits.memory_limit_bytes
+            && mem > max_mem
+        {
+            return PolicyDecision::Deny(format!(
+                "memory limit {mem} exceeds policy maximum {max_mem}"
+            ));
         }
 
         // Check mount prefixes

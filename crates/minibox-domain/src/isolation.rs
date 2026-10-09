@@ -261,10 +261,10 @@ impl LinuxCapability {
         if let Some((_, id)) = CAPABILITY_NAMES.iter().find(|(name, _)| *name == input) {
             return Ok(Self(*id));
         }
-        if let Some(digits) = input.strip_prefix("CAP_") {
-            if let Ok(id) = digits.parse::<u16>() {
-                return Ok(Self(id));
-            }
+        if let Some(digits) = input.strip_prefix("CAP_")
+            && let Ok(id) = digits.parse::<u16>()
+        {
+            return Ok(Self(id));
         }
         Err(IsolationError::UnknownCapabilityName(input.to_string()))
     }

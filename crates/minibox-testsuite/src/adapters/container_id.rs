@@ -2,7 +2,7 @@
 //!
 //! Two groups of tests:
 //!
-//! 1. `ContainerId::new` — unit-level validation of the domain type.
+//! 1. `ContainerId::try_new` — unit-level validation of the domain type.
 //! 2. Handler-level — daemon handlers reject unknown/empty/mismatched IDs
 //!    without touching the filesystem or real processes.
 
@@ -135,7 +135,7 @@ crate::conformance_test! {
 }
 
 // ---------------------------------------------------------------------------
-// ContainerId::new — domain-type validation tests
+// ContainerId::try_new — domain-type validation tests
 // ---------------------------------------------------------------------------
 
 crate::conformance_test! {
@@ -143,8 +143,8 @@ crate::conformance_test! {
     adapter: "container_id",
     category: EdgeCase,
     |ctx| {
-        let result = ContainerId::new(String::new());
-        ctx.assert_err(result, "ContainerId::new rejects empty string");
+        let result = ContainerId::try_new(String::new());
+        ctx.assert_err(result, "ContainerId::try_new rejects empty string");
         ctx.result()
     }
 }
@@ -154,8 +154,8 @@ crate::conformance_test! {
     adapter: "container_id",
     category: EdgeCase,
     |ctx| {
-        let result = ContainerId::new("   ".to_string());
-        ctx.assert_err(result, "ContainerId::new rejects whitespace-only string");
+        let result = ContainerId::try_new("   ".to_string());
+        ctx.assert_err(result, "ContainerId::try_new rejects whitespace-only string");
         ctx.result()
     }
 }
@@ -167,8 +167,8 @@ crate::conformance_test! {
     |ctx| {
         // 65 alphanumeric characters — one over the 64-char limit.
         let long_id = "a".repeat(65);
-        let result = ContainerId::new(long_id);
-        ctx.assert_err(result, "ContainerId::new rejects IDs longer than 64 chars");
+        let result = ContainerId::try_new(long_id);
+        ctx.assert_err(result, "ContainerId::try_new rejects IDs longer than 64 chars");
         ctx.result()
     }
 }
@@ -180,8 +180,8 @@ crate::conformance_test! {
     |ctx| {
         // Exactly 64 alphanumeric characters — at the limit.
         let max_id = "a".repeat(64);
-        let result = ContainerId::new(max_id);
-        ctx.assert_ok(result, "ContainerId::new accepts 64-char alphanumeric ID");
+        let result = ContainerId::try_new(max_id);
+        ctx.assert_ok(result, "ContainerId::try_new accepts 64-char alphanumeric ID");
         ctx.result()
     }
 }
@@ -200,10 +200,10 @@ crate::conformance_test! {
             "abc@example", // at-sign
         ];
         for id in &cases {
-            let result = ContainerId::new((*id).to_string());
+            let result = ContainerId::try_new((*id).to_string());
             ctx.assert_err(
                 result,
-                &format!("ContainerId::new rejects special-char ID: {id:?}"),
+                &format!("ContainerId::try_new rejects special-char ID: {id:?}"),
             );
         }
         ctx.result()
@@ -223,10 +223,10 @@ crate::conformance_test! {
             "DeadBeef01234567",
         ];
         for id in &cases {
-            let result = ContainerId::new((*id).to_string());
+            let result = ContainerId::try_new((*id).to_string());
             ctx.assert_ok(
                 result,
-                &format!("ContainerId::new accepts valid alphanumeric ID: {id:?}"),
+                &format!("ContainerId::try_new accepts valid alphanumeric ID: {id:?}"),
             );
         }
         ctx.result()

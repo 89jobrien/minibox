@@ -14,7 +14,7 @@ fn rt() -> tokio::runtime::Runtime {
 }
 
 fn container_id() -> ContainerId {
-    ContainerId::new("ccmt001abc".to_string()).expect("valid container id")
+    ContainerId::try_new("ccmt001abc".to_string()).expect("valid container id")
 }
 
 const fn commit_config() -> CommitConfig {

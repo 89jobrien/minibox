@@ -787,7 +787,7 @@ impl ConformanceTest for ExecReturnsHandle {
     fn category(&self) -> TestCategory { TestCategory::Unit }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let exec = MockExecRuntime::new();
-        let cid = ContainerId::new("test-exec-c1".into()).expect("valid id");
+        let cid = ContainerId::try_new("testexecc1".to_string()).expect("valid id");
         let spec = ExecSpec {
             cmd: vec!["echo".into(), "hello".into()],
             env: vec![],
@@ -896,7 +896,7 @@ impl ConformanceTest for CommitReturnsImageMetadata {
     fn category(&self) -> TestCategory { TestCategory::Unit }
     fn run_sync(&self, ctx: &mut TestContext) -> TestResult {
         let committer = MockContainerCommitter::new();
-        let cid = ContainerId::new("test-commit-c1".into()).expect("valid id");
+        let cid = ContainerId::try_new("testcommitc1".to_string()).expect("valid id");
         let config = CommitConfig {
             author: Some("test".into()),
             message: Some("test commit".into()),

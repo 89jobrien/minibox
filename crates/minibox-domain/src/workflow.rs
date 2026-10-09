@@ -427,10 +427,10 @@ fn determine_step_completion(
                 return StepCompletion::Failed { terminal: true };
             }
             if let Some(retry) = retry_cfg {
-                if let Some(timeout_secs) = retry.timeout_secs {
-                    if elapsed.as_secs() > timeout_secs {
-                        return StepCompletion::Failed { terminal: false };
-                    }
+                if let Some(timeout_secs) = retry.timeout_secs
+                    && elapsed.as_secs() > timeout_secs
+                {
+                    return StepCompletion::Failed { terminal: false };
                 }
                 if error_count >= retry.error_threshold {
                     return StepCompletion::Failed { terminal: false };
