@@ -138,6 +138,73 @@ impl XtaskProbe for ProcessXtaskProbe {
 }
 
 // ---------------------------------------------------------------------------
+// Selected-adapter operational prerequisites
+// ---------------------------------------------------------------------------
+
+/// Result of checking the adapter that will actually be selected at runtime.
+#[derive(Debug, PartialEq, Eq)]
+struct AdapterReport {
+    adapter: String,
+    messages: Vec<String>,
+}
+
+/// Probe whether `tool` is on `PATH` via `which`.
+fn tool_on_path(tool: &str) -> bool {
+    std::process::Command::new("which")
+        .arg(tool)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Determine the adapter that will be selected given platform and overrides,
+/// and report whether its concrete prerequisite binary is present.
+///
+/// Mirrors the precedence in `minibox_core::adapter_registry::adapter_from_env`:
+/// an explicit `MINIBOX_ADAPTER` is honoured outright (native requires no
+/// extra binary — it is built in); otherwise smolvm is preferred when present,
+/// falling back to native on Linux or krun on macOS.
+fn selected_adapter_report(
+    is_linux: bool,
+    adapter_env: Option<&str>,
+    smolvm_present: bool,
+    krun_present: bool,
+) -> AdapterReport {
+    let fallback = if is_linux { "native" } else { "krun" };
+
+    let adapter = match adapter_env {
+        Some(explicit) => explicit.to_string(),
+        None if smolvm_present => "smolvm".to_string(),
+        None => fallback.to_string(),
+    };
+
+    let messages = match adapter.as_str() {
+        "smolvm" if smolvm_present => {
+            vec!["[ok]   smolvm on PATH — selected adapter available".to_string()]
+        }
+        "smolvm" => {
+            vec!["[fail] smolvm selected (MINIBOX_ADAPTER=smolvm) but not on PATH".to_string()]
+        }
+        "krun" if krun_present => {
+            vec!["[ok]   krun on PATH — selected adapter available".to_string()]
+        }
+        "krun" => vec!["[fail] krun selected but not on PATH".to_string()],
+        "native" if is_linux => {
+            vec!["[info] native adapter selected — see Linux capability checks below".to_string()]
+        }
+        "native" => {
+            vec!["[fail] native adapter selected but is Linux-only on this platform".to_string()]
+        }
+        other => vec![format!(
+            "[info] {other} adapter selected — no local binary prerequisite tracked by doctor"
+        )],
+    };
+
+    AdapterReport { adapter, messages }
+}
+
+// ---------------------------------------------------------------------------
 // Doctor: full preflight checks including env vars and system capabilities
 // ---------------------------------------------------------------------------
 
@@ -201,21 +268,27 @@ pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
         }
     }
 
-    // --- smolvm on PATH (info, mirrors preflight.nu) ---
-    // smolvm is the default macOS adapter; absence triggers fallback to krun/native.
+    // --- selected-adapter operational prerequisites ---
+    // Determine which adapter will actually be selected at runtime
+    // (MINIBOX_ADAPTER override, else platform default) and report whether its
+    // concrete prerequisite is satisfied, rather than always reporting on smolvm
+    // regardless of what will actually run.
     {
-        let found = std::process::Command::new("which")
-            .arg("smolvm")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success());
-        if found {
-            println!("[info] smolvm on PATH — default adapter available");
-        } else {
-            println!(
-                "[info] smolvm not on PATH — will fall back to native (Linux) or krun (macOS)"
-            );
+        let smolvm_present = tool_on_path("smolvm");
+        let krun_present = tool_on_path("krun");
+        let adapter_env = std::env::var("MINIBOX_ADAPTER").ok();
+        let report = selected_adapter_report(
+            cfg!(target_os = "linux"),
+            adapter_env.as_deref(),
+            smolvm_present,
+            krun_present,
+        );
+        println!("[info] selected adapter: {}", report.adapter);
+        for line in &report.messages {
+            println!("{line}");
+            if line.starts_with("[fail]") {
+                failures.push(line.trim_start_matches("[fail] ").to_string());
+            }
         }
     }
 
@@ -302,6 +375,35 @@ fn check_linux_capabilities(failures: &mut Vec<String>) {
     } else {
         println!("[warn] could not read /proc/version");
     }
+
+    // privileges: the native adapter needs UID 0 for namespace creation,
+    // overlay mounts, and cgroup v2 management (see
+    // `adapter_registry::warn_if_native_without_root`). Advisory here since
+    // doctor also runs for non-native adapters that don't need root.
+    match std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| parse_effective_uid(&s))
+    {
+        Some(0) => println!("[ok]   running as root (UID 0) — native adapter operations permitted"),
+        Some(uid) => println!(
+            "[warn] running as UID {uid} — native adapter requires root for namespaces, overlay mounts, and cgroup v2 management"
+        ),
+        None => println!("[warn] could not determine effective UID from /proc/self/status"),
+    }
+}
+
+/// Parse the real UID from the `Uid:` line of `/proc/self/status` content.
+///
+/// The line has the form `Uid:\t<real>\t<effective>\t<saved>\t<filesystem>`.
+/// Only called from the Linux-only privilege check, but kept test-visible
+/// cross-platform so the parsing logic is covered without a Linux-only run.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn parse_effective_uid(status_contents: &str) -> Option<u32> {
+    status_contents
+        .lines()
+        .find_map(|line| line.strip_prefix("Uid:"))
+        .and_then(|rest| rest.split_whitespace().next())
+        .and_then(|first| first.parse().ok())
 }
 
 // ---------------------------------------------------------------------------
@@ -400,6 +502,72 @@ mod tests {
         let probe = ProcessProbe;
         let result = probe.probe("__xtask_nonexistent_binary_xyz__");
         assert!(result.is_err());
+    }
+
+    // ---------------------------------------------------------------------------
+    // Selected-adapter prerequisite tests (pure, no IO)
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn selected_adapter_defaults_to_smolvm_when_present() {
+        let report = selected_adapter_report(true, None, true, false);
+        assert_eq!(report.adapter, "smolvm");
+        assert!(report.messages.iter().any(|m| m.starts_with("[ok]")));
+    }
+
+    #[test]
+    fn selected_adapter_falls_back_to_native_on_linux_without_smolvm() {
+        let report = selected_adapter_report(true, None, false, false);
+        assert_eq!(report.adapter, "native");
+    }
+
+    #[test]
+    fn selected_adapter_falls_back_to_krun_on_macos_without_smolvm() {
+        let report = selected_adapter_report(false, None, false, false);
+        assert_eq!(report.adapter, "krun");
+    }
+
+    #[test]
+    fn selected_adapter_explicit_smolvm_fails_when_absent() {
+        let report = selected_adapter_report(true, Some("smolvm"), false, false);
+        assert_eq!(report.adapter, "smolvm");
+        assert!(report.messages.iter().any(|m| m.starts_with("[fail]")));
+    }
+
+    #[test]
+    fn selected_adapter_explicit_krun_fails_when_absent() {
+        let report = selected_adapter_report(false, Some("krun"), false, false);
+        assert!(report.messages.iter().any(|m| m.starts_with("[fail]")));
+    }
+
+    #[test]
+    fn selected_adapter_native_on_non_linux_fails() {
+        let report = selected_adapter_report(false, Some("native"), false, false);
+        assert!(report.messages.iter().any(|m| m.starts_with("[fail]")));
+    }
+
+    #[test]
+    fn selected_adapter_unknown_name_reports_info_only() {
+        let report = selected_adapter_report(true, Some("colima"), false, false);
+        assert_eq!(report.adapter, "colima");
+        assert!(report.messages.iter().any(|m| m.starts_with("[info]")));
+    }
+
+    #[test]
+    fn parse_effective_uid_reads_root() {
+        let status = "Name:\tcargo\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\n";
+        assert_eq!(parse_effective_uid(status), Some(0));
+    }
+
+    #[test]
+    fn parse_effective_uid_reads_non_root() {
+        let status = "Name:\tcargo\nUid:\t1000\t1000\t1000\t1000\n";
+        assert_eq!(parse_effective_uid(status), Some(1000));
+    }
+
+    #[test]
+    fn parse_effective_uid_missing_line_returns_none() {
+        assert_eq!(parse_effective_uid("Name:\tcargo\n"), None);
     }
 
     // ---------------------------------------------------------------------------
