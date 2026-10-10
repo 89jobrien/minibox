@@ -17,6 +17,8 @@ const ADAPTER_SUITES_BEGIN: &str = "<!-- BEGIN GENERATED: adapter-suites -->";
 const ADAPTER_SUITES_END: &str = "<!-- END GENERATED: adapter-suites -->";
 const ADAPTER_CAPABILITIES_BEGIN: &str = "<!-- BEGIN GENERATED: adapter-capabilities -->";
 const ADAPTER_CAPABILITIES_END: &str = "<!-- END GENERATED: adapter-capabilities -->";
+const PRODUCTION_PREREQUISITES_BEGIN: &str = "<!-- BEGIN GENERATED: production-prerequisites -->";
+const PRODUCTION_PREREQUISITES_END: &str = "<!-- END GENERATED: production-prerequisites -->";
 
 pub(in crate::context) fn sync_adapter_matrix(
     document: &str,
@@ -26,12 +28,77 @@ pub(in crate::context) fn sync_adapter_matrix(
     let capabilities = render_adapter_capabilities(manifest)?;
     let document =
         replace_generated_block(document, ADAPTER_SUITES_BEGIN, ADAPTER_SUITES_END, &suites)?;
-    replace_generated_block(
+    let document = replace_generated_block(
         &document,
         ADAPTER_CAPABILITIES_BEGIN,
         ADAPTER_CAPABILITIES_END,
         &capabilities,
-    )
+    )?;
+    if document.contains(PRODUCTION_PREREQUISITES_BEGIN) {
+        let prerequisites = render_production_prerequisites(manifest);
+        replace_generated_block(
+            &document,
+            PRODUCTION_PREREQUISITES_BEGIN,
+            PRODUCTION_PREREQUISITES_END,
+            &prerequisites,
+        )
+    } else {
+        Ok(document)
+    }
+}
+
+/// Derive, per adapter, the capabilities declared `No` in the manifest — i.e.
+/// operations that are not production-ready and the concrete use cases an
+/// operator cannot rely on. Source data is the same manifest reconciled
+/// against the live adapter registry (`reconcile_adapters`), so this section
+/// tracks declared capability status rather than restating it by hand.
+fn render_production_prerequisites(manifest: &ContextManifest) -> String {
+    render_production_prerequisites_for(&manifest.adapters)
+}
+
+fn render_production_prerequisites_for(
+    adapters: &[crate::context::manifest::AdapterDeclaration],
+) -> String {
+    let mut adapters = adapters.iter().collect::<Vec<_>>();
+    adapters.sort_by(|left, right| left.id.cmp(&right.id));
+
+    let mut lines = vec![
+        "| Adapter | Platforms (prerequisite) | Unsupported capabilities |".to_string(),
+        "| --- | --- | --- |".to_string(),
+    ];
+    for adapter in adapters {
+        let mut platforms = adapter.platforms.clone();
+        platforms.sort();
+        platforms.dedup();
+        let platforms = platforms
+            .iter()
+            .map(|platform| format!("`{platform}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let mut unsupported = adapter
+            .capabilities
+            .iter()
+            .filter(|(_, support)| matches!(support, CapabilitySupport::No))
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+        unsupported.sort();
+        let unsupported = if unsupported.is_empty() {
+            "--".to_string()
+        } else {
+            unsupported
+                .iter()
+                .map(|name| format!("`{name}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        lines.push(format!(
+            "| `{}` | {} | {} |",
+            adapter.id, platforms, unsupported
+        ));
+    }
+    lines.join("\n")
 }
 
 fn replace_generated_block(
@@ -1099,5 +1166,53 @@ mod tests {
                 "action is not SHA-pinned: {reference}"
             );
         }
+    }
+
+    fn adapter_declaration(
+        id: &str,
+        platforms: &[&str],
+        capabilities: &[(&str, CapabilitySupport)],
+    ) -> crate::context::manifest::AdapterDeclaration {
+        crate::context::manifest::AdapterDeclaration {
+            id: id.to_string(),
+            maturity: AdapterMaturity::Production,
+            platforms: platforms.iter().map(ToString::to_string).collect(),
+            default_roles: Vec::new(),
+            capabilities: capabilities
+                .iter()
+                .map(|(name, support)| (name.to_string(), support.clone()))
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn production_prerequisites_lists_unsupported_capabilities() {
+        let adapters = vec![
+            adapter_declaration(
+                "krun",
+                &["macos"],
+                &[
+                    ("run", CapabilitySupport::Yes),
+                    ("exec", CapabilitySupport::No),
+                    ("logs", CapabilitySupport::No),
+                ],
+            ),
+            adapter_declaration("native", &["linux"], &[("run", CapabilitySupport::Yes)]),
+        ];
+        let rendered = render_production_prerequisites_for(&adapters);
+        assert!(rendered.contains("| `krun` | `macos` | `exec`, `logs` |"));
+        assert!(rendered.contains("| `native` | `linux` | -- |"));
+    }
+
+    #[test]
+    fn production_prerequisites_sorts_adapters_by_id() {
+        let adapters = vec![
+            adapter_declaration("zeta", &["linux"], &[]),
+            adapter_declaration("alpha", &["linux"], &[]),
+        ];
+        let rendered = render_production_prerequisites_for(&adapters);
+        let alpha_pos = rendered.find("`alpha`").expect("alpha present");
+        let zeta_pos = rendered.find("`zeta`").expect("zeta present");
+        assert!(alpha_pos < zeta_pos);
     }
 }
