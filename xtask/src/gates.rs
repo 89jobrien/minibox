@@ -1796,6 +1796,11 @@ fn agentlint_check(agent_files: &[String]) -> Result<()> {
                              (not in xtask/schema/cli.schema.json)"
                         ));
                     }
+                } else {
+                    eprintln!(
+                        "agentlint: xtask command schema unreadable/unparsable, skipping \
+                         semantic check"
+                    );
                 }
             }
             "yaml" | "yml" => {
