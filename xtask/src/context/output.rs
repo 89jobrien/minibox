@@ -76,13 +76,14 @@ fn render_production_prerequisites_for(
             .collect::<Vec<_>>()
             .join(", ");
 
-        let mut unsupported = adapter
+        // `capabilities` is a BTreeMap<String, _>, so `.iter()` already yields
+        // capability names in sorted order; no `.sort()` needed after collecting.
+        let unsupported = adapter
             .capabilities
             .iter()
             .filter(|(_, support)| matches!(support, CapabilitySupport::No))
             .map(|(name, _)| name.clone())
             .collect::<Vec<_>>();
-        unsupported.sort();
         let unsupported = if unsupported.is_empty() {
             "--".to_string()
         } else {
