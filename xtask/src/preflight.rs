@@ -392,7 +392,7 @@ fn check_linux_capabilities(failures: &mut Vec<String>) {
     }
 }
 
-/// Parse the real UID from the `Uid:` line of `/proc/self/status` content.
+/// Parse the effective UID from the `Uid:` line of `/proc/self/status` content.
 ///
 /// The line has the form `Uid:\t<real>\t<effective>\t<saved>\t<filesystem>`.
 /// Only called from the Linux-only privilege check, but kept test-visible
@@ -402,8 +402,8 @@ fn parse_effective_uid(status_contents: &str) -> Option<u32> {
     status_contents
         .lines()
         .find_map(|line| line.strip_prefix("Uid:"))
-        .and_then(|rest| rest.split_whitespace().next())
-        .and_then(|first| first.parse().ok())
+        .and_then(|rest| rest.split_whitespace().nth(1))
+        .and_then(|effective| effective.parse().ok())
 }
 
 // ---------------------------------------------------------------------------
@@ -563,6 +563,15 @@ mod tests {
     fn parse_effective_uid_reads_non_root() {
         let status = "Name:\tcargo\nUid:\t1000\t1000\t1000\t1000\n";
         assert_eq!(parse_effective_uid(status), Some(1000));
+    }
+
+    #[test]
+    fn parse_effective_uid_differs_from_real_uid() {
+        // setuid/sudo-with-cap-drop style line: real UID 1000, effective UID 0.
+        // Pins the field index — a regression to .next() (real UID) would
+        // wrongly return 1000 here instead of 0.
+        let status = "Name:\tcargo\nUid:\t1000\t0\t0\t1000\n";
+        assert_eq!(parse_effective_uid(status), Some(0));
     }
 
     #[test]
