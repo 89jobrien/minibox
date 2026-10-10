@@ -705,9 +705,9 @@ mod tests {
                         Vec::new()
                     }
                     ("rustc", args) if args == ["-vV"] => {
-                        b"rustc 1.85.0\nhost: aarch64-apple-darwin\n".to_vec()
+                        b"rustc 1.98.0\nhost: aarch64-apple-darwin\n".to_vec()
                     }
-                    ("cargo", args) if args == ["--version"] => b"cargo 1.85.0\n".to_vec(),
+                    ("cargo", args) if args == ["--version"] => b"cargo 1.98.0\n".to_vec(),
                     ("cargo", args) if args == ["nextest", "--version"] => {
                         b"cargo-nextest 0.9.100\n".to_vec()
                     }
@@ -815,7 +815,7 @@ members = ["sample"]
 name = "sample"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.98"
 
 "#,
         )
@@ -1288,8 +1288,8 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             target: "target-windows".to_string(),
             features: Vec::new(),
             no_default_features: false,
-            cargo_version: "cargo 1.85.0".to_string(),
-            rustc_version: "rustc 1.85.0".to_string(),
+            cargo_version: "cargo 1.98.0".to_string(),
+            rustc_version: "rustc 1.98.0".to_string(),
             nextest_version: "cargo-nextest 0.9".to_string(),
         };
         let artifact = |cache_key: &ProfileEvidenceCacheKey| {
@@ -1391,7 +1391,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
 
         let missing_host = Runner(CommandOutput {
             exit_code: Some(0),
-            stdout: b"rustc 1.85.0\n".to_vec(),
+            stdout: b"rustc 1.98.0\n".to_vec(),
             stderr: Vec::new(),
         });
         assert!(collect_environment(&missing_host, root, "now").is_err());

@@ -584,15 +584,15 @@ mod tests {
                 "host": "aarch64-apple-darwin",
                 "target": "aarch64-apple-darwin",
                 "enabled_features": [],
-                "rustc_version": fact(serde_json::Value::Null, serde_json::json!("rustc 1.85.0")),
-                "cargo_version": fact(serde_json::Value::Null, serde_json::json!("cargo 1.85.0")),
+                "rustc_version": fact(serde_json::Value::Null, serde_json::json!("rustc 1.98.0")),
+                "cargo_version": fact(serde_json::Value::Null, serde_json::json!("cargo 1.98.0")),
                 "nextest_version": fact(serde_json::Value::Null, serde_json::json!("cargo-nextest 0.9")),
                 "generated_at": "2026-09-12T00:00:00Z"
             },
             "workspace": {
                 "version": fact(serde_json::json!("0.1.0"), serde_json::json!("0.1.0")),
                 "edition": fact(serde_json::json!("2024"), serde_json::json!("2024")),
-                "msrv": fact(serde_json::json!("1.85"), serde_json::json!("1.85")),
+                "msrv": fact(serde_json::json!("1.98"), serde_json::json!("1.98")),
                 "packages": [{
                     "package_id": "path+file:///workspace/pkg#0.1.0",
                     "name": "pkg",
@@ -797,8 +797,8 @@ mod tests {
             target: "aarch64-apple-darwin".to_string(),
             features: Vec::new(),
             no_default_features: false,
-            cargo_version: "cargo 1.85.0".to_string(),
-            rustc_version: "rustc 1.85.0".to_string(),
+            cargo_version: "cargo 1.98.0".to_string(),
+            rustc_version: "rustc 1.98.0".to_string(),
             nextest_version: "cargo-nextest 0.9".to_string(),
         }
     }

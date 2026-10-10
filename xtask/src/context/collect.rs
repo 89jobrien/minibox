@@ -1193,7 +1193,7 @@ members = ["renamed", "helper", "dev-helper"]
 [workspace.package]
 version = "1.2.3"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.98"
 "#,
         )
         .expect("workspace manifest should be written");
@@ -1537,8 +1537,8 @@ build = "build.rs"
             target: "x86_64-unknown-linux-gnu".to_string(),
             features: vec!["zeta".to_string(), "alpha".to_string()],
             no_default_features: false,
-            cargo_version: "cargo 1.85.0".to_string(),
-            rustc_version: "rustc 1.85.0".to_string(),
+            cargo_version: "cargo 1.98.0".to_string(),
+            rustc_version: "rustc 1.98.0".to_string(),
             nextest_version: "cargo-nextest 0.9.100".to_string(),
         };
         let mut reordered = baseline.clone();

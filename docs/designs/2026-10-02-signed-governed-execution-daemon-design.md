@@ -557,7 +557,7 @@ reload. Verification does not re-read the filesystem per request.
 - [ ] **New external dependency** — yes, `ed25519-dalek`, plus the RFC 8785 vectors vendored as
       test fixtures. Justified: Ed25519 is the wire format, so the signature type is concrete rather
       than abstracted behind a trait; verification logic remains behind `AuthorizationVerifier`.
-  - Version: `3.x`, whose MSRV is **1.85 — exactly this workspace's `rust-version`**
+  - Version: `3.x`, whose MSRV is **1.98 — exactly this workspace's `rust-version`**
     (`Cargo.toml:30`). 2.x requires only 1.60. If 3.x is still pre-release at implementation time,
     pin 2.x explicitly and re-check `verify_strict` availability.
   - `legacy_compatibility` MUST NOT be enabled; it reinstates signature malleability.

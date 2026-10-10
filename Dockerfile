@@ -1,5 +1,5 @@
 # Stage 1: Build miniboxd and mbx for musl (static binaries)
-FROM rust:1.98-alpine AS builder
+FROM rust:1-alpine AS builder
 
 # The builder follows Alpine's rolling package set, so exact package versions are image-pinned.
 # hadolint ignore=DL3018

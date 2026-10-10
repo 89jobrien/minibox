@@ -29,10 +29,10 @@ Two, both deliberate and flagged here rather than applied silently:
 
 ## Tech Stack
 
-- **Rust edition**: 2024. MSRV **1.85** (`Cargo.toml:30`).
+- **Rust edition**: 2024. MSRV **1.98** (`Cargo.toml:30`).
 - **Workspace lints** (`Cargo.toml:112-124`): `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented` all `deny`; `missing_docs` `deny`; pedantic and nursery at `warn`. Tests are exempt — `crates/minibox-domain/src/lib.rs:1-13` applies `#![cfg_attr(test, allow(...))]` for `unwrap_used`, `expect_used`, `panic`, and five others. **Every new public item needs a doc comment.**
 - **New dependencies**:
-  - `ed25519-dalek` **3.x** — MSRV 1.85, exactly matching this workspace. 2.x needs only 1.60. If 3.x is still pre-release when Task 5 runs, pin 2.x and confirm `verify_strict` exists on it.
+  - `ed25519-dalek` **3.x** — MSRV 1.98, exactly matching this workspace. 2.x needs only 1.60. If 3.x is still pre-release when Task 5 runs, pin 2.x and confirm `verify_strict` exists on it.
   - No other new dependencies. JCS is implemented in-tree against vendored RFC 8785 vectors.
 - **Forbidden for the verifier**: the `legacy_compatibility` feature. It reinstates signature malleability. `VerifyingKey::verify_strict` is mandatory; plain `verify()` permits weak low-order keys that sign almost any message.
 
