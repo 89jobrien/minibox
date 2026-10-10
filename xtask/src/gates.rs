@@ -127,9 +127,6 @@ fn feature_matrix(sh: &Shell, root: &Path) -> Result<()> {
     Ok(())
 }
 
-// TODO(feature-idea-02): extend agentlint with semantic checks for local paths, Cargo package
-// names, and documented xtask commands so stale agent guidance fails validation.
-
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
@@ -1693,6 +1690,59 @@ fn collect_files_recursive(dir: &Path, out: &mut Vec<String>) {
     }
 }
 
+/// Load the set of top-level `cargo xtask <command>` names this workspace
+/// recognizes, from `xtask/schema/cli.schema.json`'s `$defs.commands` keys.
+///
+/// Returns `None` (never an error) if the schema is missing or unparsable —
+/// this check is best-effort agent-doc hygiene, not a hard dependency on the
+/// schema file always being present at a particular relative path.
+fn known_xtask_commands() -> Option<std::collections::BTreeSet<String>> {
+    // The real `xtask` binary runs with cwd = workspace root, so the schema
+    // lives at `xtask/schema/cli.schema.json` relative to cwd. `cargo test`
+    // instead sets cwd to this crate's own manifest directory (`xtask/`), so
+    // fall back to a path relative to `CARGO_MANIFEST_DIR` (baked in at
+    // compile time) for that case.
+    let candidates = [
+        PathBuf::from("xtask/schema/cli.schema.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/cli.schema.json"),
+    ];
+    let content = candidates
+        .iter()
+        .find_map(|path| fs::read_to_string(path).ok())?;
+    let schema: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let commands = schema.get("$defs")?.get("commands")?.as_object()?;
+    Some(commands.keys().cloned().collect())
+}
+
+/// Find every `cargo xtask <word>` reference in `content` whose `<word>` is
+/// not in `known`.
+///
+/// Deliberately requires the literal `cargo xtask ` prefix, not a bare
+/// `xtask ` — prose like "the xtask crate" or "xtask's gates" is common in
+/// agent docs and is not a command invocation. Requiring `cargo xtask`
+/// trades a few missed references (e.g. a doc that only says `xtask verify`)
+/// for not flagging ordinary prose as stale.
+fn stale_xtask_command_references(
+    content: &str,
+    known: &std::collections::BTreeSet<String>,
+) -> Vec<String> {
+    const PREFIX: &str = "cargo xtask ";
+    let mut stale = Vec::new();
+    let mut rest = content;
+    while let Some(idx) = rest.find(PREFIX) {
+        rest = &rest[idx + PREFIX.len()..];
+        let token = rest
+            .split(|c: char| c.is_whitespace() || c == '`' || c == ',' || c == ')')
+            .next()
+            .unwrap_or("")
+            .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-');
+        if !token.is_empty() && !known.contains(token) {
+            stale.push(token.to_string());
+        }
+    }
+    stale
+}
+
 fn agentlint_check(agent_files: &[String]) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
     let mut linted: usize = 0;
@@ -1732,6 +1782,18 @@ fn agentlint_check(agent_files: &[String]) -> Result<()> {
                         errors.push(format!(
                             "{file}: skill frontmatter missing required keys: {}",
                             missing.join(", ")
+                        ));
+                    }
+                }
+                // Semantic check: every `cargo xtask <command>` reference must
+                // name a command this workspace's xtask actually understands,
+                // so a renamed/removed subcommand fails agent guidance validation
+                // instead of silently rotting (see xtask/schema/cli.schema.json).
+                if let Some(known) = known_xtask_commands() {
+                    for stale in stale_xtask_command_references(&content, &known) {
+                        errors.push(format!(
+                            "{file}: references unknown xtask command `cargo xtask {stale}` \
+                             (not in xtask/schema/cli.schema.json)"
                         ));
                     }
                 }
@@ -1819,6 +1881,80 @@ fn lint_script(file: &str, content: &str, errors: &mut Vec<String>) {
                 errors.push(format!("{file}: script is not executable (mode {mode:o})"));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod agentlint_semantic_tests {
+    use super::*;
+
+    fn known() -> std::collections::BTreeSet<String> {
+        ["verify", "test", "demo", "fuzz"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn recognized_command_is_not_flagged() {
+        let stale = stale_xtask_command_references(
+            "Run `cargo xtask verify` before every commit.",
+            &known(),
+        );
+        assert!(
+            stale.is_empty(),
+            "expected no stale references, got {stale:?}"
+        );
+    }
+
+    #[test]
+    fn renamed_command_is_flagged() {
+        // Mirrors a real regression this workspace hit: docs referenced the
+        // deprecated `cargo xtask test-unit` alias after it was renamed to
+        // `cargo xtask test unit`.
+        let stale =
+            stale_xtask_command_references("See `cargo xtask test-unit` for details.", &known());
+        assert_eq!(stale, vec!["test-unit".to_string()]);
+    }
+
+    #[test]
+    fn bare_xtask_prose_is_not_flagged() {
+        // "the xtask crate" is ordinary prose, not a command invocation —
+        // only the `cargo xtask <word>` form should ever be checked.
+        let stale = stale_xtask_command_references(
+            "The xtask crate owns every workspace quality gate.",
+            &known(),
+        );
+        assert!(
+            stale.is_empty(),
+            "expected no stale references, got {stale:?}"
+        );
+    }
+
+    #[test]
+    fn multiple_references_are_all_checked() {
+        let stale = stale_xtask_command_references(
+            "Run `cargo xtask verify` then `cargo xtask sync-adapters`.",
+            &known(),
+        );
+        assert_eq!(stale, vec!["sync-adapters".to_string()]);
+    }
+
+    #[test]
+    fn trailing_punctuation_is_stripped_before_comparison() {
+        let stale = stale_xtask_command_references("Finish with cargo xtask verify.", &known());
+        assert!(
+            stale.is_empty(),
+            "trailing period must not break the match: {stale:?}"
+        );
+    }
+
+    #[test]
+    fn known_xtask_commands_includes_verify_and_test() {
+        let known = known_xtask_commands().expect("schema should parse from the workspace root");
+        assert!(known.contains("verify"));
+        assert!(known.contains("test"));
+        assert!(known.contains("agentlint"));
     }
 }
 
