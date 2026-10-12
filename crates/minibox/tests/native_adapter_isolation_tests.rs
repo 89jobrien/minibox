@@ -105,12 +105,13 @@ fn fake_layer(dir: &std::path::Path) {
 // OverlayFilesystem
 // ---------------------------------------------------------------------------
 
-#[rstest]
-fn overlay_write_goes_to_upper_not_lower(overlay_env: OverlayEnv) {
+#[test]
+fn overlay_write_goes_to_upper_not_lower() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
+    let overlay_env = overlay_env();
     fs::write(overlay_env.merged_dir().join("newfile"), b"hello").expect("unwrap in test");
 
     assert!(
