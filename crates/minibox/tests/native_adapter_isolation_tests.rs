@@ -105,12 +105,13 @@ fn fake_layer(dir: &std::path::Path) {
 // OverlayFilesystem
 // ---------------------------------------------------------------------------
 
-#[rstest]
-fn overlay_write_goes_to_upper_not_lower(overlay_env: OverlayEnv) {
+#[test]
+fn overlay_write_goes_to_upper_not_lower() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
+    let overlay_env = overlay_env();
     fs::write(overlay_env.merged_dir().join("newfile"), b"hello").expect("unwrap in test");
 
     assert!(
@@ -177,12 +178,13 @@ fn overlay_multiple_layers_all_visible_in_merged() {
     fs_adapter.cleanup(&container_dir).expect("unwrap in test");
 }
 
-#[rstest]
-fn overlay_cleanup_unmounts_merged(overlay_env: OverlayEnv) {
+#[test]
+fn overlay_cleanup_unmounts_merged() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
+    let overlay_env = overlay_env();
     assert!(overlay_env.merged_dir().exists());
     overlay_env.teardown();
 
@@ -371,12 +373,13 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
 /// `upper_dir` (or a lower layer) escaped `images_base`, the container would
 /// expose host state through the mount, and no amount of `pivot_root` would
 /// stop it. Runtime-level containment is covered by the system suite.
-#[rstest]
-fn overlay_mount_paths_stay_inside_the_supplied_base(overlay_env: OverlayEnv) {
+#[test]
+fn overlay_mount_paths_stay_inside_the_supplied_base() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
     require_capability!(caps, overlay_fs, "requires overlay FS");
 
+    let overlay_env = overlay_env();
     let base = overlay_env.tmp.path();
 
     let Some(minibox_core::domain::BackendRootfsMetadata::Overlay { upper_dir, .. }) =

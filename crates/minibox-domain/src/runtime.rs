@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use async_trait::async_trait;
+#[cfg(unix)]
 use std::os::fd::OwnedFd;
 use std::sync::Arc;
 

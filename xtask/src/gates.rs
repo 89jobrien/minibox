@@ -969,14 +969,17 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
         sh,
         "cargo llvm-cov nextest --package minibox --features test-utils --json --summary-only"
     )
+    .ignore_status()
     .output()
     .context("failed to spawn cargo llvm-cov nextest")?;
 
     if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!(
-            "cargo llvm-cov nextest exited with {}: {}",
+            "cargo llvm-cov nextest exited with {}\nstdout:\n{}\nstderr:\n{}",
             output.status,
+            stdout.trim(),
             stderr.trim()
         );
     }

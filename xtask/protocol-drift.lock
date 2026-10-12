@@ -5,7 +5,7 @@
     {
       "name": "domain-root",
       "path": "crates/minibox-domain/src/lib.rs",
-      "hash": "6702d18e1e8c50c7fa2e6c9864e74fef8ba065e5561935fbb733f0e33e68aeb5"
+      "hash": "eb1e7462cf583823395a9988133a705eba3059bffaddc570a4e777a948e9f7d2"
     },
     {
       "name": "domain-compatibility-facade",
@@ -45,7 +45,7 @@
     {
       "name": "domain-ids",
       "path": "crates/minibox-domain/src/ids.rs",
-      "hash": "f639db882fd776f283234792bf802643bfb44617c943021d80be1296210c10d6"
+      "hash": "8fd6762c0e8cef882257f88f8a7ee0338af79b183953afb3b322473310b01aa6"
     },
     {
       "name": "domain-image",
@@ -65,7 +65,7 @@
     {
       "name": "domain-runtime",
       "path": "crates/minibox-domain/src/runtime.rs",
-      "hash": "0f1fa1ce721ff7949e7292b77ba375d99a5cb0a59fc962645eda287561eded95"
+      "hash": "b0e5ca9844e228325cd6a27f1fdc6eddd1bd914c35ca8e624fd52fa629304783"
     },
     {
       "name": "domain-state",
@@ -75,7 +75,7 @@
     {
       "name": "domain-workflow",
       "path": "crates/minibox-domain/src/workflow.rs",
-      "hash": "8a7a0b458c15fcb675b0dd15ff592a21c66ad86ea1c089a0fde4c70e8770859e"
+      "hash": "021237a0e64fdc9653f5441b87e25441ac1ffa4add936b62dd0cc7af101309bb"
     },
     {
       "name": "domain-networking",
@@ -100,7 +100,7 @@
     {
       "name": "execution-policy",
       "path": "crates/minibox-domain/src/execution_policy.rs",
-      "hash": "c6b57567e59cb8369e3d7e5084da61c03669aa9b9311b3131918b3ee1ee77fef"
+      "hash": "da4c162dda1425d80e2b801c57b12266ce085a8bca618ac946a24910fd89a40a"
     },
     {
       "name": "domain-progress",

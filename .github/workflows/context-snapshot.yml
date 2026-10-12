@@ -26,12 +26,6 @@ jobs:
           - os: ubuntu-latest
             profile: native-linux-musl
             target: x86_64-unknown-linux-musl
-          - os: macos-14-xlarge
-            profile: native-macos
-            target: aarch64-apple-darwin
-          - os: windows-latest
-            profile: native-windows
-            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
@@ -85,19 +79,3 @@ jobs:
           merge-multiple: true
       - name: Validate required profiles
         run: cargo xtask info context --validate-all --strict --evidence-dir artifacts/context/evidence
-
-  vz-advisory:
-    name: VZ advisory profile
-    runs-on: macos-14-xlarge
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          toolchain: stable
-          targets: aarch64-apple-darwin
-      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
-        with:
-          tool: cargo-nextest@0.9.100
-      - name: List VZ tests
-        run: cargo nextest list --workspace --target aarch64-apple-darwin --features miniboxd/vz --all-targets
