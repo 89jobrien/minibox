@@ -718,7 +718,8 @@ mod commit_conformance {
             return;
         }
         let committer = descriptor.make_committer.as_ref().expect("unwrap in test")();
-        let container_id = ContainerId::new("testcontainer01".to_string()).expect("unwrap in test");
+        let container_id =
+            ContainerId::try_new("testcontainer01".to_string()).expect("unwrap in test");
         let config = CommitConfig {
             author: Some("conformance-test".to_string()),
             message: Some("commit test".to_string()),
@@ -762,7 +763,8 @@ mod commit_conformance {
             .make_committer
             .as_ref()
             .expect("unwrap in test")();
-        let container_id = ContainerId::new("testcontainer02".to_string()).expect("unwrap in test");
+        let container_id =
+            ContainerId::try_new("testcontainer02".to_string()).expect("unwrap in test");
         let config = CommitConfig {
             author: None,
             message: None,

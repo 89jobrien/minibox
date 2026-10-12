@@ -247,20 +247,20 @@ impl TestRunner {
     }
 
     fn passes_filter(&self, t: &dyn ConformanceTest) -> bool {
-        if let Some(ref a) = self.filter.adapter {
-            if t.adapter() != a {
-                return false;
-            }
+        if let Some(ref a) = self.filter.adapter
+            && t.adapter() != a
+        {
+            return false;
         }
-        if let Some(cat) = self.filter.category {
-            if t.category() != cat {
-                return false;
-            }
+        if let Some(cat) = self.filter.category
+            && t.category() != cat
+        {
+            return false;
         }
-        if let Some(ref pat) = self.filter.name_pattern {
-            if !t.name().contains(pat.as_str()) {
-                return false;
-            }
+        if let Some(ref pat) = self.filter.name_pattern
+            && !t.name().contains(pat.as_str())
+        {
+            return false;
         }
         true
     }
@@ -292,23 +292,22 @@ impl TestRunner {
             }
 
             // Auto-skip if required capability is not supported.
-            if let Some(cap) = test.required_capability() {
-                if let Some(ref desc) = self.descriptor {
-                    if !desc.capabilities.supports(cap) {
-                        results.push(TestRunResult {
-                            id: test.id(),
-                            name: test.name().to_string(),
-                            adapter: test.adapter().to_string(),
-                            category: test.category(),
-                            result: TestResult::Skipped {
-                                reason: format!("backend does not support {cap:?}"),
-                            },
-                            duration_ms: 0,
-                            failures: Vec::new(),
-                        });
-                        continue;
-                    }
-                }
+            if let Some(cap) = test.required_capability()
+                && let Some(ref desc) = self.descriptor
+                && !desc.capabilities.supports(cap)
+            {
+                results.push(TestRunResult {
+                    id: test.id(),
+                    name: test.name().to_string(),
+                    adapter: test.adapter().to_string(),
+                    category: test.category(),
+                    result: TestResult::Skipped {
+                        reason: format!("backend does not support {cap:?}"),
+                    },
+                    duration_ms: 0,
+                    failures: Vec::new(),
+                });
+                continue;
             }
 
             let start = Instant::now();
@@ -467,6 +466,6 @@ mod tests {
         assert_eq!(decoded.artifacts, result.artifacts);
         assert!(decoded.outcomes[1].result.is_fail());
         assert_eq!(decoded.report_version, "1.0");
-        assert!(!decoded.generated_at.is_empty());
+        assert_ne!(decoded.generated_at, "");
     }
 }

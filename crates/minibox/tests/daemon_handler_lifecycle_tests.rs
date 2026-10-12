@@ -125,7 +125,7 @@ async fn test_handle_run_with_cached_image() {
 
     match response {
         DaemonResponse::ContainerCreated { id } => {
-            assert!(!id.is_empty());
+            assert_ne!(id, "");
             assert_eq!(id.len(), 16); // UUID truncated to 16 chars
 
             // Verify container was added to state

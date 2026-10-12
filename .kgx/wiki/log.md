@@ -5,3 +5,17 @@
 - write: Adapter Composition
 - write: Minibox Context Map
 - write: Minibox
+- write: AGENTS.md Summary
+- write: ARCHITECTURE.mbx.md Summary
+- write: CRATE_INVENTORY.mbx.md Summary
+- write: FEATURE_MATRIX.mbx.md Summary
+- write: STATE_MODEL.mbx.md Summary
+- write: SECURITY_INVARIANTS.mbx.md Summary
+- write: TEST_INFRASTRUCTURE.mbx.md Summary
+- write: XTASK_CLI.mbx.md Summary
+- write: GOTCHAS.mbx.md Summary
+- write: Active Context (develop)
+- write: Progress
+- write: Rust Patterns
+- write: Active Context (develop)
+- write: Progress

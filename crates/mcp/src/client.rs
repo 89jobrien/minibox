@@ -101,22 +101,22 @@ impl MiniboxDaemonClient {
 
         while let Some(mut response) = stream.next().await.map_err(map_client_error)? {
             let is_container_output = matches!(response, DaemonResponse::ContainerOutput { .. });
-            if accounting == OutputAccounting::TruncateContainerOutput {
-                if let DaemonResponse::ContainerOutput { data, .. } = &mut response {
-                    let decoded = base64::engine::general_purpose::STANDARD
-                        .decode(&*data)
-                        .map_err(|error| McpServerError::ProtocolError(error.to_string()))?;
-                    let remaining = max_output_bytes.saturating_sub(output_bytes);
-                    let take = decoded.len().min(remaining);
-                    output_bytes = output_bytes.saturating_add(take);
-                    if take < decoded.len() {
-                        output_truncated = true;
-                    }
-                    if take == 0 {
-                        continue;
-                    }
-                    *data = base64::engine::general_purpose::STANDARD.encode(&decoded[..take]);
+            if accounting == OutputAccounting::TruncateContainerOutput
+                && let DaemonResponse::ContainerOutput { data, .. } = &mut response
+            {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(&*data)
+                    .map_err(|error| McpServerError::ProtocolError(error.to_string()))?;
+                let remaining = max_output_bytes.saturating_sub(output_bytes);
+                let take = decoded.len().min(remaining);
+                output_bytes = output_bytes.saturating_add(take);
+                if take < decoded.len() {
+                    output_truncated = true;
                 }
+                if take == 0 {
+                    continue;
+                }
+                *data = base64::engine::general_purpose::STANDARD.encode(&decoded[..take]);
             }
 
             let is_terminal = response.is_terminal();

@@ -76,15 +76,13 @@ mod tests {
 
     #[test]
     fn missing_or_null_volumes_are_empty() {
-        assert!(
-            parse_volume_paths(b"{\"config\":{}}")
-                .expect("parse")
-                .is_empty()
+        assert_eq!(
+            parse_volume_paths(b"{\"config\":{}}").expect("parse"),
+            Vec::<PathBuf>::new()
         );
-        assert!(
-            parse_volume_paths(b"{\"config\":{\"Volumes\":null}}")
-                .expect("parse")
-                .is_empty()
+        assert_eq!(
+            parse_volume_paths(b"{\"config\":{\"Volumes\":null}}").expect("parse"),
+            Vec::<PathBuf>::new()
         );
     }
 

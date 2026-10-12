@@ -53,7 +53,7 @@ Parse and validate domain values before crossing into infrastructure code:
 ```rust
 use minibox_domain::{BindMount, ContainerId, NetworkConfig, NetworkMode};
 
-let id = ContainerId::new("abc123".to_string())?;
+let id = ContainerId::try_new("abc123".to_string())?;
 let mount = BindMount::parse_volume("/tmp/input:/work/input:ro")?;
 let network = NetworkConfig {
     mode: NetworkMode::None,
@@ -79,7 +79,7 @@ assert_ne!(entry.value_digest, "secret-value");
 
 ## Constraints and features
 
-- Rust 2024; workspace MSRV is Rust 1.85.
+- Rust 2024; workspace MSRV is Rust 1.98.
 - `default` is empty.
 - `test-utils` exposes test-oriented domain helpers; it does not add infrastructure adapters.
 - Ports may be async through `async-trait`, but the crate does not depend on an async runtime in

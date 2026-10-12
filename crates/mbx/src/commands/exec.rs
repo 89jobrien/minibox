@@ -255,7 +255,7 @@ mod tests {
                 } => {
                     assert_eq!(container_id, "abc123");
                     assert_eq!(cmd, vec!["/bin/sh"]);
-                    assert!(env.is_empty());
+                    assert_eq!(env, Vec::<String>::new());
                     assert_eq!(working_dir, None);
                     assert!(!tty);
                     assert_eq!(user, None);

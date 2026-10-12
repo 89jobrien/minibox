@@ -169,6 +169,20 @@ fn run_context(
     // graduation using conformance, security, capability, and benchmark results.
     // TODO(feature-idea-34): validate architectural claims about adapter
     // swappability, shared policy boundaries, and capability evidence.
+    //
+    // `tested_capabilities` is intentionally empty today: no executable check in
+    // this workspace yet produces evidence keyed by production adapter id (the
+    // conformance suite's `TestRunResult.adapter` field is a port/mock grouping
+    // label such as `"exec_runtime"`, not a real backend id like `"native"` or
+    // `"smolvm"`, and `required_capability()` isn't serialized into its report
+    // schema). `reconcile_adapter` already treats an empty map correctly: every
+    // declared `Yes`/`Limited` capability is flagged `adapter.capability_unvalidated`
+    // (warning, non-blocking) rather than silently accepted — see
+    // `context_v3_flags_unvalidated_capabilities_without_evidence` below. Wiring
+    // real per-adapter evidence requires a capability field on the conformance
+    // report and a mapping from test subsystem to production adapter id; that is
+    // a schema change in `minibox-testsuite`, not a one-file xtask fix, and is
+    // out of scope here.
     let tested_capabilities = BTreeMap::new();
     let reconciliation = reconcile_adapters(&manifest, &registry, &tested_capabilities);
     let mut diagnostics = reconciliation.diagnostics;
@@ -660,6 +674,9 @@ fn build_evidence(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::model::{
+        AdapterSnapshot, CollectorTask, DependencySnapshot, ExecutableTest, FileOwnership,
+    };
 
     #[test]
     fn context_v3_collects_complete_snapshot() {
@@ -702,9 +719,9 @@ mod tests {
                         Vec::new()
                     }
                     ("rustc", args) if args == ["-vV"] => {
-                        b"rustc 1.85.0\nhost: aarch64-apple-darwin\n".to_vec()
+                        b"rustc 1.98.0\nhost: aarch64-apple-darwin\n".to_vec()
                     }
-                    ("cargo", args) if args == ["--version"] => b"cargo 1.85.0\n".to_vec(),
+                    ("cargo", args) if args == ["--version"] => b"cargo 1.98.0\n".to_vec(),
                     ("cargo", args) if args == ["nextest", "--version"] => {
                         b"cargo-nextest 0.9.100\n".to_vec()
                     }
@@ -812,7 +829,7 @@ members = ["sample"]
 name = "sample"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.98"
 
 "#,
         )
@@ -994,9 +1011,12 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
                     && profile.status == ProfileStatus::Validated)
         );
         assert_eq!(snapshot.tests.validated_unique_tests.len(), 1);
-        assert!(!snapshot.context_map.files.is_empty());
-        assert!(!snapshot.context_map.collector_tasks.is_empty());
-        assert!(!snapshot.adapters.is_empty());
+        assert_ne!(snapshot.context_map.files, Vec::<FileOwnership>::new());
+        assert_ne!(
+            snapshot.context_map.collector_tasks,
+            Vec::<CollectorTask>::new()
+        );
+        assert_ne!(snapshot.adapters, Vec::<AdapterSnapshot>::new());
         assert_ne!(
             snapshot.environment.rustc_version.observed.as_deref(),
             snapshot.workspace.msrv.observed.as_deref(),
@@ -1008,7 +1028,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             .iter()
             .find(|package| package.name == "sample")
             .expect("sample package should be present");
-        assert!(!sample.dependencies.is_empty());
+        assert_ne!(sample.dependencies, Vec::<DependencySnapshot>::new());
         let dependency_keys = sample
             .dependencies
             .iter()
@@ -1054,7 +1074,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             .iter()
             .find(|profile| profile.status == ProfileStatus::Unavailable)
             .expect("foreign unavailable profile should be represented");
-        assert!(unavailable.executable_tests.is_empty());
+        assert_eq!(unavailable.executable_tests, Vec::<ExecutableTest>::new());
         assert!(unavailable.unavailable_reason.is_some());
         assert!(snapshot.context_map.files.iter().any(|file| {
             file.path.as_str() == "sample/src/lib.rs"
@@ -1140,6 +1160,53 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             4
         );
     }
+    #[test]
+    fn context_v3_flags_unvalidated_capabilities_without_evidence() {
+        // Pins the call site at `tested_capabilities = BTreeMap::new()` (see the
+        // comment above it): with no executable-check evidence wired in, every
+        // declared `Yes`/`Limited` capability must surface as
+        // `adapter.capability_unvalidated` (a non-blocking warning), never as a
+        // silently-accepted claim. If this test starts failing because the map
+        // is no longer always empty, that's progress on TODO(feature-idea-34) —
+        // update this test to assert against real evidence instead of deleting it.
+        use manifest::{AdapterDeclaration, AdapterRegistryObservation};
+        use model::{AdapterMaturity, CapabilitySupport, DiagnosticSeverity};
+
+        let declaration = AdapterDeclaration {
+            id: "native".to_string(),
+            maturity: AdapterMaturity::Production,
+            platforms: vec!["linux".to_string()],
+            default_roles: Vec::new(),
+            capabilities: BTreeMap::from([("run".to_string(), CapabilitySupport::Yes)]),
+        };
+        let manifest = ContextManifest {
+            schema_version: 1,
+            adapters: vec![declaration],
+            profiles: Vec::new(),
+        };
+        let registry = AdapterRegistryObservation {
+            adapter_ids: BTreeSet::from(["native".to_string()]),
+            platforms: BTreeMap::from([("native".to_string(), "linux".to_string())]),
+            default_roles: BTreeMap::new(),
+        };
+        let tested_capabilities = BTreeMap::new();
+        let reconciliation = reconcile_adapters(&manifest, &registry, &tested_capabilities);
+
+        let unvalidated = reconciliation
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == "adapter.capability_unvalidated")
+            .expect("declared Yes capability with no evidence must be flagged, not accepted");
+        assert_eq!(unvalidated.severity, DiagnosticSeverity::Warning);
+        assert!(
+            !reconciliation
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "adapter.capability_mismatch"),
+            "absence of evidence is not the same as contradicting evidence"
+        );
+    }
+
     #[test]
     fn strict_modes_enforce_their_required_profiles() {
         use model::{ExecutableTest, ProfileStatus};
@@ -1282,8 +1349,8 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
             target: "target-windows".to_string(),
             features: Vec::new(),
             no_default_features: false,
-            cargo_version: "cargo 1.85.0".to_string(),
-            rustc_version: "rustc 1.85.0".to_string(),
+            cargo_version: "cargo 1.98.0".to_string(),
+            rustc_version: "rustc 1.98.0".to_string(),
             nextest_version: "cargo-nextest 0.9".to_string(),
         };
         let artifact = |cache_key: &ProfileEvidenceCacheKey| {
@@ -1325,7 +1392,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
         let stale = read_profile_evidence(stale_dir.path(), &expected, &packages)
             .expect("stale evidence should remain diagnostic data");
         assert_eq!(stale[0].status, ProfileStatus::Stale);
-        assert!(stale[0].executable_tests.is_empty());
+        assert_eq!(stale[0].executable_tests, Vec::<ExecutableTest>::new());
 
         let validate_all_strict = ContextOptions {
             strict: true,
@@ -1385,7 +1452,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
 
         let missing_host = Runner(CommandOutput {
             exit_code: Some(0),
-            stdout: b"rustc 1.85.0\n".to_vec(),
+            stdout: b"rustc 1.98.0\n".to_vec(),
             stderr: Vec::new(),
         });
         assert!(collect_environment(&missing_host, root, "now").is_err());

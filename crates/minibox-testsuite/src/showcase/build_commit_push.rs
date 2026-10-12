@@ -185,8 +185,8 @@ impl BuildCommitPush {
             upper_dir: upper.upper_dir.clone(),
         });
 
-        let cid = ContainerId::new("showcasebuildcommit1".to_string())
-            .map_err(|e| anyhow::anyhow!("ContainerId::new: {e}"))?;
+        let cid = ContainerId::try_new("showcasebuildcommit1".to_string())
+            .map_err(|e| anyhow::anyhow!("ContainerId::try_new: {e}"))?;
         let commit_config = CommitConfig {
             author: Some("showcase".to_string()),
             message: Some("showcase build_commit_push scenario".to_string()),

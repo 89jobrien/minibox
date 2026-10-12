@@ -8,9 +8,18 @@
 //! compatibility with existing import styles.
 
 pub use macbox::krun::{
-    filesystem::KrunFilesystem, limiter::KrunLimiter, process::SmolvmProcess,
-    registry::KrunRegistry, runtime::KrunRuntime,
+    exec::{KrunExecRuntime, krun_exec_runtime},
+    filesystem::KrunFilesystem,
+    limiter::KrunLimiter,
+    process::SmolvmProcess,
+    registry::KrunRegistry,
+    runtime::KrunRuntime,
 };
+
+/// Re-export `macbox::krun::exec` for module-path imports.
+pub mod exec {
+    pub use macbox::krun::exec::*;
+}
 
 /// Re-export `macbox::krun::filesystem` for module-path imports.
 pub mod filesystem {

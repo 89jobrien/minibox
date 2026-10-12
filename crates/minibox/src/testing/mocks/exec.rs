@@ -129,7 +129,7 @@ mod tests {
     #[tokio::test]
     async fn records_call_and_returns_handle() {
         let mock = MockExecRuntime::new();
-        let id = ContainerId::new("c1abc123".to_string()).unwrap();
+        let id = ContainerId::try_new("c1abc123".to_string()).unwrap();
         let spec = ExecSpec {
             cmd: vec!["sh".into()],
             env: vec![],
@@ -147,7 +147,7 @@ mod tests {
     #[tokio::test]
     async fn with_failure_returns_error() {
         let mock = MockExecRuntime::new().with_failure();
-        let id = ContainerId::new("c2abc123".to_string()).unwrap();
+        let id = ContainerId::try_new("c2abc123".to_string()).unwrap();
         let spec = ExecSpec {
             cmd: vec!["sh".into()],
             env: vec![],
@@ -162,7 +162,7 @@ mod tests {
     #[tokio::test]
     async fn call_count_increments_on_failure() {
         let mock = MockExecRuntime::new().with_failure();
-        let id = ContainerId::new("c3abc123".to_string()).unwrap();
+        let id = ContainerId::try_new("c3abc123".to_string()).unwrap();
         let spec = ExecSpec {
             cmd: vec!["ls".into()],
             env: vec![],

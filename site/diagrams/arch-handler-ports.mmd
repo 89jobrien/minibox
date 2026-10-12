@@ -1,0 +1,30 @@
+---
+title: Handler ports and dependency composition
+---
+flowchart TD
+  root["miniboxd composition root<br/>build_*_handler_dependencies(selected suite)"]
+  arc["Arc&lt;HandlerDependencies&gt;<br/>shared state + policy + composed trait objects"]
+  root --> arc
+
+  subgraph HANDLERS["handler dependency slices"]
+    direction LR
+    img["ImageDeps<br/>registry / load<br/>GC / store"]
+    life["LifecycleDeps<br/>fs / limits / runtime<br/>network / paths"]
+    exe["ExecDeps<br/>Option&lt;ExecRuntime&gt;<br/>PTY sessions"]
+    build["BuildDeps<br/>optional push<br/>commit / build"]
+    evt["EventDeps<br/>sink / source<br/>metrics"]
+  end
+
+  arc --> img
+  arc --> life
+  arc --> exe
+  arc --> build
+  arc --> evt
+
+  img --> ip["image ports<br/>ImageRegistry<br/>RegistryRouter<br/>ImageLoader"]
+  life --> lp["lifecycle ports<br/>FilesystemProvider<br/>ResourceLimiter<br/>Runtime / Network"]
+  exe --> ep["exec / checkpoint<br/>ExecRuntime<br/>PTY session registry<br/>VmCheckpoint (noop)"]
+  build --> mp["image mutation<br/>ImagePusher<br/>ContainerCommitter<br/>ImageBuilder"]
+  evt --> op["observability<br/>EventSink<br/>EventSource<br/>MetricsRecorder"]
+
+  op -.-> note["canonical domain values and domain ports originate in minibox-domain<br/>handlers live under daemon/handlers"]

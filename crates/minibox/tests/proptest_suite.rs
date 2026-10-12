@@ -177,6 +177,9 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         message,
                         env_overrides,
                         cmd_override,
+                        // KNOWN GAP (#452): accepted on the wire, not yet honoured
+                        // by the commit path. See the note in daemon/server.rs.
+                        include_volumes: false,
                     }
                 },
             ),

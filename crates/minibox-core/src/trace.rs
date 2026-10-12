@@ -170,15 +170,15 @@ impl TraceStore for FileTraceStore {
             };
 
             // Apply filter criteria.
-            if let Some(ref since) = filter.since {
-                if record.timestamp < *since {
-                    continue;
-                }
+            if let Some(ref since) = filter.since
+                && record.timestamp < *since
+            {
+                continue;
             }
-            if let Some(ref pipeline) = filter.pipeline {
-                if record.pipeline != *pipeline {
-                    continue;
-                }
+            if let Some(ref pipeline) = filter.pipeline
+                && record.pipeline != *pipeline
+            {
+                continue;
             }
 
             let step_count = record

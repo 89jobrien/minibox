@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Write, generate, or update project documentation in this repo, and audit existing docs for staleness, dead links, and misplaced files. Enforces where a doc lives (.ctx/memory-bank/ for agent memory, top-level ALL-CAPS.md for repo docs, docs/core/*.mbx.md for reference docs), stamps every generated doc with YAML frontmatter recording the source commit SHA it was derived from, verifies links with real HTTP requests, and finishes by naming every doc whose source files have changed since that SHA. Make sure to use this whenever the user asks to write/update/refresh/generate a doc, README, CHANGELOG, architecture or testing doc, memory-bank file, or asks "are the docs stale", "check the docs", "which docs need updating", "do the links still work", or where a doc should live — including when they name a specific file like TESTING.md or activeContext.mbx.md rather than saying "docs".
+description: Write, generate, or update project documentation in this repo, and audit existing docs for staleness, dead links, and misplaced files. Enforces where a doc lives (.ctx/memory-bank/ for agent memory, top-level ALL-CAPS.md for repo docs, docs/core/*.mbx.md for reference docs), stamps every generated doc with YAML frontmatter recording the source commit SHA it was derived from, verifies links with real HTTP requests, and finishes by naming every doc whose source files have changed since that SHA. Make sure to use this whenever the user asks to write/update/refresh/generate a doc, README, CHANGELOG, architecture or testing doc, memory-bank file, or asks "are the docs stale", "check the docs", "which docs need updating", "do the links still work", or where a doc should live — including when they name a specific file like TESTING.md or active-context.mbx.md rather than saying "docs".
 ---
 
 # Docs
@@ -16,11 +16,11 @@ than assumed.
 Three homes, each with a different audience. Putting a doc in the wrong one is
 the most common mistake because the content often reads fine either way.
 
-| Home                     | Contents                                                                                                                                 | Audience                                                                              |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `.ctx/memory-bank/`      | `activeContext.mbx.md`, `progress.mbx.md`, `projectbrief.mbx.md`, `systemPatterns.mbx.md`, `techContext.mbx.md`, `productContext.mbx.md` | Agents resuming work. Session state, current focus, what's in flight.                 |
-| Top level, `ALL-CAPS.md` | `README.md`, `CHANGELOG.md`, `TESTING.md`, `CONTRIBUTING.md`, `USAGE.md`, `DEVELOPMENT.md`, `AGENTS.md`, `CLAUDE.md`                     | Humans arriving at the repo. Entry points someone expects to find without being told. |
-| `docs/core/*.mbx.md`     | `ARCHITECTURE`, `GOTCHAS`, `SECURITY_INVARIANTS`, `CRATE_INVENTORY`, `STATE_MODEL`, …                                                    | Humans and agents going deep on one subsystem. Reference material, not entry points.  |
+| Home                     | Contents                                                                                                                                      | Audience                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `.ctx/memory-bank/`      | `active-context.mbx.md`, `progress.mbx.md`, `project-brief.mbx.md`, `system-patterns.mbx.md`, `tech-context.mbx.md`, `product-context.mbx.md` | Agents resuming work. Session state, current focus, what's in flight.                 |
+| Top level, `ALL-CAPS.md` | `README.md`, `CHANGELOG.md`, `TESTING.md`, `CONTRIBUTING.md`, `USAGE.md`, `DEVELOPMENT.md`, `AGENTS.md`, `CLAUDE.md`                          | Humans arriving at the repo. Entry points someone expects to find without being told. |
+| `docs/core/*.mbx.md`     | `ARCHITECTURE`, `GOTCHAS`, `SECURITY_INVARIANTS`, `CRATE_INVENTORY`, `STATE_MODEL`, …                                                         | Humans and agents going deep on one subsystem. Reference material, not entry points.  |
 
 Deciding between top level and `docs/core/`: ask whether a newcomer would look
 for it before they know the codebase. `TESTING.md` answers "how do I run the

@@ -78,7 +78,7 @@ libc = { workspace = true }
 [package.metadata.cargo-machete]
 # minibox-cni: optional dep behind the "cni" feature. CNI protocol/chain
 # orchestration landed in the minibox-cni crate but isn't wired into this
-# crate's adapters yet (see .ctx/memory-bank/activeContext.mbx.md) — kept
+# crate's adapters yet (see .ctx/memory-bank/active-context.mbx.md) — kept
 # as a declared dependency for the in-progress wiring work.
 ignored = ["minibox-cni"]
 

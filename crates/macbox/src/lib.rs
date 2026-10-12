@@ -21,7 +21,7 @@ pub mod krun;
 pub mod paths;
 pub mod preflight;
 
-#[cfg(feature = "vz")]
+#[cfg(all(feature = "vz", target_os = "macos"))]
 pub mod vz;
 
 use anyhow::{Context, Result};
@@ -252,7 +252,7 @@ pub async fn start() -> Result<()> {
         Arc::new(ImageGc::new(Arc::clone(&state.image_store), lease_service));
 
     // ── VZ branch ────────────────────────────────────────────────────────
-    #[cfg(feature = "vz")]
+    #[cfg(all(feature = "vz", target_os = "macos"))]
     if std::env::var("MINIBOX_ADAPTER").as_deref() == Ok("vz") {
         return start_vz(
             socket_path,
@@ -376,6 +376,7 @@ async fn start_krun(
             .context("krun: creating registry adapter")?,
     );
     let registry_port: DynImageRegistry = registry;
+    let krun_runtime = Arc::new(KrunRuntime::new());
 
     let deps = Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
@@ -390,13 +391,16 @@ async fn start_krun(
         lifecycle: minibox::daemon::handler::LifecycleDeps {
             filesystem: Arc::new(KrunFilesystem::new()),
             resource_limiter: Arc::new(KrunLimiter::new()),
-            runtime: Arc::new(KrunRuntime::new()),
+            runtime: Arc::clone(&krun_runtime) as minibox_core::domain::DynContainerRuntime,
             network_provider: Arc::new(NoopNetwork::new()),
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
         },
         exec: minibox::daemon::handler::ExecDeps {
-            exec_runtime: None,
+            exec_runtime: Some(krun::exec::krun_exec_runtime(
+                Arc::clone(&krun_runtime),
+                Arc::clone(&state) as minibox::container_state::StateHandle,
+            )),
             pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
                 minibox::daemon::handler::PtySessionRegistry::default(),
             )),
@@ -444,7 +448,7 @@ async fn start_krun(
 /// [`HandlerDependencies`], and then runs the standard socket server accept
 /// loop.
 // qual:allow(iosp) reason: "daemon entrypoint — GCD main-queue VM boot, wire deps, bind socket, run server"
-#[cfg(feature = "vz")]
+#[cfg(all(feature = "vz", target_os = "macos"))]
 async fn start_vz(
     socket_path: std::path::PathBuf,
     images_dir: std::path::PathBuf,

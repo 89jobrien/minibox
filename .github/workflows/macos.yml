@@ -2,20 +2,33 @@ name: macOS
 
 on:
   push:
-    branches: [main, staging, release, "feature/*", "hotfix/*", "chore/*"]
+    branches:
+      [
+        develop,
+        main,
+        staging,
+        release,
+        "feature/*",
+        "hotfix/*",
+        "chore/*",
+        "feat/*",
+      ]
   pull_request:
-    branches: [main, staging]
+    branches: [develop, main, staging]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   fmt-check:
     name: fmt check
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - name: cargo fmt --all --check
         run: cargo fmt --all --check

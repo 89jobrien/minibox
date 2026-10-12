@@ -393,7 +393,7 @@ mod tests {
         );
 
         let fact = Fact::new(
-            Some("1.85".to_string()),
+            Some("1.98".to_string()),
             None,
             Validation {
                 state: ValidationState::DeclaredOnly,
@@ -461,7 +461,7 @@ mod tests {
         let workspace = WorkspaceSnapshot {
             version: declared("0.1.0"),
             edition: declared("2024"),
-            msrv: declared("1.85"),
+            msrv: declared("1.98"),
             packages: Vec::new(),
         };
         let environment = EnvironmentSnapshot {
@@ -480,7 +480,7 @@ mod tests {
 
         assert_eq!(
             value.pointer("/workspace/msrv/declared"),
-            Some(&serde_json::json!("1.85"))
+            Some(&serde_json::json!("1.98"))
         );
         assert_eq!(
             value.pointer("/environment/rustc_version/observed"),
@@ -525,7 +525,7 @@ mod tests {
             workspace: WorkspaceSnapshot {
                 version: observed("0.1.0"),
                 edition: observed("2024"),
-                msrv: observed("1.85"),
+                msrv: observed("1.98"),
                 packages: Vec::new(),
             },
             adapters: Vec::new(),

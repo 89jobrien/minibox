@@ -102,7 +102,7 @@ mod tests {
         let result: CniResult = serde_json::from_str(json).expect("deserialize");
         assert!(result.interfaces.is_empty());
         assert!(result.ips.is_empty());
-        assert!(result.dns.nameservers.is_empty());
+        assert_eq!(result.dns.nameservers, Vec::<String>::new());
     }
 
     #[test]

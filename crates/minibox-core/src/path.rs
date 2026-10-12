@@ -42,16 +42,16 @@ impl ValidatedPath {
         let canonical_base = base_dir
             .canonicalize()
             .with_context(|| format!("canonicalize base {}", base_dir.display()))?;
-        if let Some(parent) = full.parent() {
-            if parent.exists() {
-                let canonical = parent.canonicalize()?;
-                if !canonical.starts_with(&canonical_base) {
-                    bail!(
-                        "path validation failed: {} resolves outside base {}",
-                        path.display(),
-                        base_dir.display()
-                    );
-                }
+        if let Some(parent) = full.parent()
+            && parent.exists()
+        {
+            let canonical = parent.canonicalize()?;
+            if !canonical.starts_with(&canonical_base) {
+                bail!(
+                    "path validation failed: {} resolves outside base {}",
+                    path.display(),
+                    base_dir.display()
+                );
             }
         }
         if full.exists() {

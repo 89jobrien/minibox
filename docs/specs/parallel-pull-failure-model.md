@@ -1,6 +1,7 @@
 # Parallel Pull Failure Model
 
-**Status**: Specified
+**Status**: Implemented — spec documents existing behaviour at
+`crates/minibox-core/src/image/registry.rs` (see §6 for remaining test gaps)
 **Issue**: #148
 **Related**: #149 (layer storage state machine), #150 (LimitedStream contract), #151 (digest in task failures)
 

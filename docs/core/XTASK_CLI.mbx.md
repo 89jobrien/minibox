@@ -15,7 +15,7 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-09-29
+Last updated: 2026-10-04
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -148,7 +148,7 @@ The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `
 | `verify` | No | fmt check, workspace check, targeted clippy, architecture guard, borrow fixtures, docs lint, and quick docs audit. Checkpointed. |
 | `lint` | No | fmt check, targeted clippy (`minibox`, domain, macros, CLI, core, macbox, miniboxd, winbox, ail), workspace check, and architecture guard. Checkpointed. |
 | `fix` | **Yes** | `cargo fmt --all`, re-stage, version bump, `clippy --fix --allow-dirty --allow-staged`, re-stage again. Only runs the mutating steps if Rust files are currently staged. |
-| `pre-commit` | **Yes, conditionally** | With staged Rust, runs `cargo fmt --all`, re-stages tracked `.rs` changes, targeted clippy, and architecture. Also conditionally runs agentlint/actionlint, always lints docs, refreshes the FEATURE_MATRIX date, and warns on tracked generated artifacts. No release build or conformance. |
+| `pre-commit` | **Yes, conditionally** | Always runs targeted clippy and the architecture guard. With staged Rust, also runs `cargo fmt --all` and re-stages tracked `.rs` changes. Conditionally runs agentlint/actionlint; always lints docs, refreshes the FEATURE_MATRIX date, and warns on tracked generated artifacts. No release build or conformance. |
 | `prepush` | No | If Rust is in the push range: starts with `musl-check`, then release build (`miniboxd`, `minibox-core`, `minibox-cli`, `minibox`, `minibox-macros`), release library nextest, and conformance. `SKIP_PHASE_2=1` only skips conformance locally. |
 | `musl-check` | No | Cross-build `miniboxd` and `minibox-cli` for `x86_64-unknown-linux-musl`; warns/skips when prerequisites are absent unless `MINIBOX_REQUIRE_MUSL_CHECK=1`. |
 | `agentlint [--all]` | No | Lint agent config files (`.claude/`, `.codex/`, `.agents/`, `.cursor/`). Without `--all`, only staged files are linted. |

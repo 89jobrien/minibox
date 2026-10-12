@@ -14,6 +14,11 @@ pub trait ContainerStateAccess: Send + Sync {
     /// Return the host-namespace PID of a running container's init process.
     async fn get_container_pid(&self, container_id: &str) -> anyhow::Result<u32>;
 
+    /// Return the adapter-internal runtime identifier recorded for a
+    /// container, for adapters (e.g. krun) whose own registry is keyed by a
+    /// value distinct from the daemon's `ContainerId`.
+    async fn get_container_runtime_id(&self, container_id: &str) -> anyhow::Result<String>;
+
     /// Return the path to the container's overlay upper (writable) layer.
     async fn get_overlay_upper(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf>;
 

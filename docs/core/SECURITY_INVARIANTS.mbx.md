@@ -362,6 +362,14 @@ relying on this invariant in production.
 
 ---
 
+## 14. User Namespace UID Range Isolation
+
+**Decision:** Native containers create a user namespace and default to an exclusive, contiguous 65,536-ID host UID/GID range. Reusing a host range weakens tenant isolation because an escaped process can address files from another container with the same mapped IDs, so it requires the explicit `mbx run --shared-uid-range` opt-in. The shared pool is kept disjoint from the exclusive allocator.
+
+**Code path:** `UidRangeMode` in `crates/minibox-domain/src/runtime.rs`; range allocation in `crates/minibox/src/adapters/runtime.rs`; `CLONE_NEWUSER` and parent-side `uid_map`/`gid_map` setup in `crates/minibox/src/container/{namespace,process}.rs`.
+
+---
+
 ## Mutation Audit Coverage Checklist
 
 Every invariant below has at least one test that passes **only** because the

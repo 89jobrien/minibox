@@ -753,7 +753,7 @@ mod tests {
                 std::env::set_var("MINIBOX_ADAPTER", name);
             }
             let descriptor = descriptor_for_active_adapter();
-            assert!(!descriptor.name.is_empty());
+            assert_ne!(descriptor.name, "");
         }
         unsafe {
             std::env::remove_var("MINIBOX_ADAPTER");
