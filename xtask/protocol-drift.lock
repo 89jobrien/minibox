@@ -65,7 +65,7 @@
     {
       "name": "domain-runtime",
       "path": "crates/minibox-domain/src/runtime.rs",
-      "hash": "0f1fa1ce721ff7949e7292b77ba375d99a5cb0a59fc962645eda287561eded95"
+      "hash": "b0e5ca9844e228325cd6a27f1fdc6eddd1bd914c35ca8e624fd52fa629304783"
     },
     {
       "name": "domain-state",
