@@ -311,6 +311,9 @@ pub enum DaemonRequest {
         /// Optional replacement image command.
         #[serde(default)]
         cmd_override: Option<Vec<String>>,
+        /// Include image-declared volume paths in the committed layer.
+        #[serde(default)]
+        include_volumes: bool,
     },
 
     /// Build an image from a Dockerfile.
@@ -1582,7 +1585,7 @@ mod tests {
                 privileged, mounts, ..
             } => {
                 assert!(privileged);
-                assert!(mounts.is_empty());
+                assert_eq!(mounts, Vec::<BindMount>::new());
             }
             _ => panic!("wrong variant"),
         }
@@ -1647,7 +1650,7 @@ mod tests {
             DaemonRequest::Run {
                 mounts, privileged, ..
             } => {
-                assert!(mounts.is_empty());
+                assert_eq!(mounts, Vec::<BindMount>::new());
                 assert!(!privileged);
             }
             _ => panic!("expected Run"),
@@ -2135,7 +2138,7 @@ mod tests {
         match req {
             DaemonRequest::Update { all, images, .. } => {
                 assert!(all);
-                assert!(images.is_empty());
+                assert_eq!(images, Vec::<String>::new());
             }
             _ => panic!("expected Update"),
         }

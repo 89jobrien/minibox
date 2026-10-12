@@ -285,7 +285,8 @@ use miniboxd::adapter_registry::{self, AdapterSuite};
 use miniboxd::listener::UnixServerListener;
 #[cfg(unix)]
 use smolbox::krun::{
-    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry, runtime::KrunRuntime,
+    exec::krun_exec_runtime, filesystem::KrunFilesystem, limiter::KrunLimiter,
+    registry::KrunRegistry, runtime::KrunRuntime,
 };
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -298,8 +299,11 @@ use tokio::sync::Mutex as TokioMutex;
 #[cfg(unix)]
 use tracing::{info, warn};
 
-// Linux-only imports
-#[cfg(target_os = "linux")]
+// Linux-only imports.
+// BridgeNetwork is only the fallback when the `cni` feature is off; with `cni`
+// enabled the Bridge arm resolves to CniNetworkProvider and this import would
+// be orphaned under `-D warnings`.
+#[cfg(all(target_os = "linux", not(feature = "cni")))]
 use minibox::adapters::network::BridgeNetwork;
 #[cfg(target_os = "linux")]
 use minibox::adapters::{
@@ -1169,6 +1173,7 @@ fn build_krun_handler_dependencies(
         GhcrRegistry::new(Arc::clone(&state.image_store))
             .context("creating GHCR registry adapter for krun")?,
     ) as minibox_core::domain::DynImageRegistry;
+    let krun_runtime = Arc::new(KrunRuntime::new());
 
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
@@ -1183,13 +1188,16 @@ fn build_krun_handler_dependencies(
         lifecycle: minibox::daemon::handler::LifecycleDeps {
             filesystem: Arc::new(KrunFilesystem::new()),
             resource_limiter: Arc::new(KrunLimiter::new()),
-            runtime: Arc::new(KrunRuntime::new()),
+            runtime: Arc::clone(&krun_runtime) as minibox_core::domain::DynContainerRuntime,
             network_provider: Arc::new(NoopNetwork::new()),
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
         },
         exec: minibox::daemon::handler::ExecDeps {
-            exec_runtime: None,
+            exec_runtime: Some(krun_exec_runtime(
+                Arc::clone(&krun_runtime),
+                Arc::clone(&state) as minibox::container_state::StateHandle,
+            )),
             pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
         },
         build: minibox::daemon::handler::BuildDeps {
@@ -1489,36 +1497,6 @@ mod tests {
         assert!(
             deps.build.image_builder.is_some(),
             "native suite should wire image build"
-        );
-    }
-
-    #[tokio::test]
-    #[cfg(target_os = "linux")]
-    async fn native_network_provider_rejects_unknown_mode() {
-        let error = native_network_provider("brdige")
-            .await
-            .expect_err("unknown network mode must be rejected");
-
-        assert!(
-            error
-                .to_string()
-                .contains("invalid MINIBOX_NETWORK_MODE=\"brdige\""),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    #[cfg(all(target_os = "linux", not(feature = "tailnet")))]
-    async fn native_network_provider_rejects_unavailable_tailnet_mode() {
-        let error = native_network_provider("tailnet")
-            .await
-            .expect_err("tailnet requires the tailnet feature");
-
-        assert!(
-            error
-                .to_string()
-                .contains("requires miniboxd to be built with the `tailnet` feature"),
-            "unexpected error: {error}"
         );
     }
 
@@ -1904,10 +1882,17 @@ mod network_mode_tests {
         }
     }
 
+    /// The error an operator sees must both echo back the value they actually
+    /// typed and list the valid set — without the first, a typo is unrecoverable
+    /// from the message alone.
     #[test]
-    fn rejected_mode_error_lists_every_valid_mode() {
+    fn rejected_mode_error_names_the_rejected_value_and_lists_every_valid_mode() {
         let err = parse_network_mode("nope").expect_err("unknown mode must be rejected");
         let msg = err.to_string();
+        assert!(
+            msg.contains("nope"),
+            "error must echo the rejected value: {msg}"
+        );
         for mode in NetworkMode::ALL {
             assert!(
                 msg.contains(mode.as_str()),

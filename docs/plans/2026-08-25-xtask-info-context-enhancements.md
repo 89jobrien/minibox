@@ -1,3 +1,7 @@
+---
+status: superseded
+---
+
 # Plan: xtask-info-context enhancements
 
 > **Superseded by V3:** This v2 plan is retained as a historical implementation record.

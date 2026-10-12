@@ -1,59 +1,32 @@
 //! Validated identifiers for containers and interactive sessions.
 
-use anyhow::Result;
-
 /// Container identifier type.
 ///
-/// Provides type safety for container IDs throughout the domain.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// Provides type safety for container IDs throughout the domain. The invariant
+/// (non-empty, ASCII alphanumeric, at most 64 characters) is enforced by
+/// [`nutype`], so it holds on the construction path *and* on the serde
+/// deserialization path.
+#[nutype::nutype(
+    validate(
+        not_empty,
+        len_char_max = 64,
+        predicate = |id: &str| id.chars().all(|c| c.is_ascii_alphanumeric()),
+    ),
+    derive(Debug, Clone, PartialEq, Eq, Hash, AsRef, Serialize, Deserialize),
+)]
 pub struct ContainerId(String);
 
 impl ContainerId {
-    /// Create a new container ID.
-    ///
-    /// # Validation
-    ///
-    /// IDs must be:
-    /// - Non-empty
-    /// - Alphanumeric (a-z, A-Z, 0-9)
-    /// - Between 1 and 64 characters
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if any validation rule is violated.
-    pub fn new(id: String) -> Result<Self> {
-        const MAX_CONTAINER_ID_LEN: usize = 64;
-        if id.is_empty() {
-            anyhow::bail!("container ID cannot be empty");
-        }
-        if id.len() > MAX_CONTAINER_ID_LEN {
-            anyhow::bail!(
-                "container ID too long: {} (max {MAX_CONTAINER_ID_LEN})",
-                id.len()
-            );
-        }
-        if !id.chars().all(|c| c.is_ascii_alphanumeric()) {
-            anyhow::bail!("container ID must be alphanumeric");
-        }
-        Ok(Self(id))
-    }
-
     /// Get the ID as a string slice.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        self.as_ref()
     }
 }
 
 impl std::fmt::Display for ContainerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl AsRef<str> for ContainerId {
-    fn as_ref(&self) -> &str {
-        &self.0
+        f.write_str(self.as_str())
     }
 }
 
@@ -114,3 +87,44 @@ impl From<&str> for SessionId {
 }
 
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::ContainerId;
+
+    /// The whole point of routing `ContainerId` through `nutype`: the invariant
+    /// holds on the *deserialization* path too, not just `try_new`.
+    #[test]
+    fn deserialize_rejects_invalid_ids() {
+        for bad in ["", "abc-123", "abc 123", &"a".repeat(65)] {
+            assert!(
+                serde_json::from_str::<ContainerId>(&format!("\"{bad}\"")).is_err(),
+                "deserialization must reject {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn deserialize_accepts_valid_id() {
+        let id: ContainerId = serde_json::from_str("\"abc123\"").expect("valid id");
+        assert_eq!(id.as_str(), "abc123");
+    }
+
+    /// Round-trips through serde without loss.
+    #[test]
+    fn roundtrips_through_serde() {
+        let id = ContainerId::try_new("deadbeef".to_string()).expect("valid id");
+        let json = serde_json::to_string(&id).expect("serializes");
+        let back: ContainerId = serde_json::from_str(&json).expect("deserializes");
+        assert_eq!(id, back);
+    }
+
+    /// The invariant is still enforced on the construction path.
+    #[test]
+    fn try_new_enforces_invariant() {
+        assert!(ContainerId::try_new("abc123".to_string()).is_ok());
+        assert!(ContainerId::try_new(String::new()).is_err());
+        assert!(ContainerId::try_new("abc-123".to_string()).is_err());
+        assert!(ContainerId::try_new("a".repeat(65)).is_err());
+    }
+}

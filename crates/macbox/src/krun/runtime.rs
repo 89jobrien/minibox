@@ -19,22 +19,30 @@
 //! `ContainerRuntime` port's create/start lifecycle and to allow callers to
 //! attach output readers between the two steps.
 
-use crate::krun::process::SmolvmProcess;
+use crate::krun::process::{self, SmolvmProcess};
 use anyhow::{Context, Result, bail};
 use minibox_core::domain::{
     AsAny, ContainerRuntime, ContainerSpawnConfig, RuntimeCapabilities, SpawnResult,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::process::Child;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 /// State for a single container managed by `KrunRuntime`.
+///
+/// `process` is `Arc<Mutex<_>>`-wrapped so callers only need the outer
+/// `containers` map lock long enough to clone this handle — the actual
+/// `wait()`/`stop()`/etc. then run under the per-container lock, never the
+/// map lock, so a long-running `wait()` on one container no longer blocks
+/// `exec_in_container`/`create`/`start`/`destroy` on every other container
+/// (or concurrent `exec_in_container` calls on the same one).
 struct ContainerState {
     image: String,
     command: Vec<String>,
     env: Vec<(String, String)>,
-    process: Option<SmolvmProcess>,
+    process: Option<Arc<Mutex<SmolvmProcess>>>,
 }
 
 /// Higher-level container lifecycle manager backed by `SmolvmProcess`.
@@ -96,13 +104,42 @@ impl KrunRuntime {
             bail!("krun: container {id} is already started");
         }
 
-        let proc = SmolvmProcess::spawn(&state.image, &state.command, &state.env)
+        let proc = SmolvmProcess::spawn(id, &state.image, &state.command, &state.env)
             .await
             .with_context(|| format!("krun: spawn failed for container {id}"))?;
 
-        state.process = Some(proc);
+        state.process = Some(Arc::new(Mutex::new(proc)));
         tracing::info!(container_id = %id, image = %state.image, "krun: container started");
         Ok(())
+    }
+
+    /// Run a command inside the named machine backing `id`, which must already
+    /// be running (i.e. `start`/`spawn_process` has been called for it).
+    ///
+    /// Returns the spawned `smolvm machine exec` child with piped stdout/stderr
+    /// for the caller to stream; the container's own tracked process (the main
+    /// command from `spawn`) is untouched by this call.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` if the container ID is unknown or has not been started.
+    pub async fn exec_in_container(
+        &self,
+        id: &str,
+        cmd: &[String],
+        env: &[(String, String)],
+        tty: bool,
+    ) -> Result<Child> {
+        {
+            let map = self.containers.lock().await;
+            let state = map
+                .get(id)
+                .with_context(|| format!("krun: unknown container id {id}"))?;
+            if state.process.is_none() {
+                bail!("krun: container {id} has no PID (not running?)");
+            }
+        }
+        process::exec_in_machine(id, cmd, env, tty)
     }
 
     /// Wait for the container process to exit and return its exit code.
@@ -112,17 +149,23 @@ impl KrunRuntime {
     /// Returns `Err` if the container ID is unknown or the process has not
     /// been started.
     pub async fn wait(&self, id: &str) -> Result<i32> {
-        let mut map = self.containers.lock().await;
-        let state = map
-            .get_mut(id)
-            .with_context(|| format!("krun: unknown container id {id}"))?;
+        let proc = {
+            let map = self.containers.lock().await;
+            let state = map
+                .get(id)
+                .with_context(|| format!("krun: unknown container id {id}"))?;
+            state
+                .process
+                .clone()
+                .with_context(|| format!("krun: container {id} has not been started"))?
+        };
 
-        let proc = state
-            .process
-            .as_mut()
-            .with_context(|| format!("krun: container {id} has not been started"))?;
-
+        // Locked only for this container, and only for the duration of the
+        // await below — the outer `containers` map lock was already
+        // released, so every other krun operation stays unblocked.
         let code = proc
+            .lock()
+            .await
             .wait()
             .await
             .with_context(|| format!("krun: wait failed for container {id}"))?;
@@ -136,13 +179,18 @@ impl KrunRuntime {
     /// No-op if the process is not running. Does not remove the container
     /// record — call [`destroy`](Self::destroy) after stop to release resources.
     pub async fn stop(&self, id: &str) -> Result<()> {
-        let mut map = self.containers.lock().await;
-        let state = map
-            .get_mut(id)
-            .with_context(|| format!("krun: unknown container id {id}"))?;
+        let proc = {
+            let map = self.containers.lock().await;
+            let state = map
+                .get(id)
+                .with_context(|| format!("krun: unknown container id {id}"))?;
+            state.process.clone()
+        };
 
-        if let Some(proc) = state.process.as_mut() {
-            proc.stop()
+        if let Some(proc) = proc {
+            proc.lock()
+                .await
+                .stop()
                 .await
                 .with_context(|| format!("krun: stop failed for container {id}"))?;
             tracing::info!(container_id = %id, "krun: container stopped");
@@ -154,16 +202,25 @@ impl KrunRuntime {
     ///
     /// If the process is still running it is stopped first (best-effort).
     pub async fn destroy(&self, id: &str) -> Result<()> {
-        let mut map = self.containers.lock().await;
-        if let Some(mut state) = map.remove(id)
-            && let Some(proc) = state.process.as_mut()
-            && let Err(e) = proc.stop().await
+        let state = { self.containers.lock().await.remove(id) };
+        if let Some(state) = state
+            && let Some(proc) = state.process
         {
-            tracing::warn!(
-                container_id = %id,
-                error = %e,
-                "krun: best-effort stop on destroy failed"
-            );
+            let mut proc = proc.lock().await;
+            if let Err(e) = proc.stop().await {
+                tracing::warn!(
+                    container_id = %id,
+                    error = %e,
+                    "krun: best-effort stop on destroy failed"
+                );
+            }
+            if let Err(e) = proc.delete().await {
+                tracing::warn!(
+                    container_id = %id,
+                    error = %e,
+                    "krun: best-effort machine delete on destroy failed"
+                );
+            }
         }
         tracing::debug!(container_id = %id, "krun: container destroyed");
         Ok(())
@@ -173,17 +230,20 @@ impl KrunRuntime {
     ///
     /// Returns the output and implicitly waits for the process to finish.
     pub async fn collect_stdout(&self, id: &str) -> Result<String> {
-        let mut map = self.containers.lock().await;
-        let state = map
-            .get_mut(id)
-            .with_context(|| format!("krun: unknown container id {id}"))?;
+        let proc = {
+            let map = self.containers.lock().await;
+            let state = map
+                .get(id)
+                .with_context(|| format!("krun: unknown container id {id}"))?;
+            state
+                .process
+                .clone()
+                .with_context(|| format!("krun: container {id} has not been started"))?
+        };
 
-        let proc = state
-            .process
-            .as_mut()
-            .with_context(|| format!("krun: container {id} has not been started"))?;
-
-        proc.collect_stdout()
+        proc.lock()
+            .await
+            .collect_stdout()
             .await
             .with_context(|| format!("krun: collect_stdout failed for container {id}"))
     }
@@ -228,7 +288,7 @@ mod tests {
             .create("alpine", &["/bin/true".into()], &[])
             .await
             .expect("create should succeed");
-        assert!(!id.is_empty());
+        assert_ne!(id, "");
         // Should be a valid UUID
         assert!(uuid::Uuid::parse_str(&id).is_ok(), "ID should be a UUID");
     }
@@ -308,6 +368,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn exec_in_container_unknown_id_returns_err() {
+        let rt = KrunRuntime::new();
+        let result = rt
+            .exec_in_container("nonexistent-id", &["echo".to_string()], &[], false)
+            .await;
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("unknown container id"));
+    }
+
+    #[tokio::test]
+    async fn exec_in_container_before_start_returns_err() {
+        let rt = KrunRuntime::new();
+        let id = rt.create("alpine", &[], &[]).await.expect("create");
+        let result = rt
+            .exec_in_container(&id, &["echo".to_string()], &[], false)
+            .await;
+        assert!(result.is_err());
+        let msg = format!("{:#}", result.unwrap_err());
+        assert!(msg.contains("has no PID"));
+    }
+
+    #[tokio::test]
     async fn collect_stdout_before_start_returns_err() {
         let rt = KrunRuntime::new();
         let id = rt.create("alpine", &[], &[]).await.expect("create");
@@ -382,7 +465,7 @@ impl ContainerRuntime for KrunRuntime {
         let id = self.create(&image, &command, &env).await?;
 
         // Spawn the process and extract stdout fd before storing.
-        let mut proc = SmolvmProcess::spawn(&image, &command, &env)
+        let mut proc = SmolvmProcess::spawn(&id, &image, &command, &env)
             .await
             .with_context(|| format!("krun: spawn failed for container {id}"))?;
 
@@ -399,7 +482,7 @@ impl ContainerRuntime for KrunRuntime {
         {
             let mut map = self.containers.lock().await;
             if let Some(state) = map.get_mut(&id) {
-                state.process = Some(proc);
+                state.process = Some(Arc::new(Mutex::new(proc)));
             }
         }
 

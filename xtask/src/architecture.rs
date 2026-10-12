@@ -9,6 +9,10 @@ const ALLOWED_DOMAIN_DEPENDENCIES: &[&str] = &[
     "anyhow",
     "async-trait",
     "hex",
+    // Proc macro for validated newtypes (ContainerId). Compile-time only: it
+    // generates no runtime code and pulls in no platform dependencies, so it
+    // does not weaken the domain crate's platform-independence contract.
+    "nutype",
     "serde",
     "serde_json",
     "sha2",

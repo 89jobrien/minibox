@@ -93,8 +93,12 @@ impl Container {
         base_dir: &Path,
         _cgroup_config: CgroupConfig,
     ) -> anyhow::Result<Self> {
+        // `simple()` strips the UUID's hyphens before truncation. Truncating
+        // `to_string()` instead would keep the hyphen at offset 8, yielding an
+        // id like "550e8400-e29b" that `ContainerId::try_new` rejects.
         const CONTAINER_ID_LEN: usize = 12;
         let id = Uuid::new_v4()
+            .simple()
             .to_string()
             .chars()
             .take(CONTAINER_ID_LEN)
@@ -307,5 +311,44 @@ impl Container {
         self.state = NativeContainerState::Removed;
         info!("container {} removed", self.id);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod id_tests {
+    use super::Container;
+    use minibox_core::domain::ContainerId;
+
+    /// Regression: `Container::new` truncated a hyphenated `Uuid::to_string()`,
+    /// which put a `-` at offset 8 and produced ids like `550e8400-e29b`.
+    /// `ContainerId::try_new` rejects hyphens, so such an id failed validation.
+    /// A truncated `Uuid` is still only checked once, so loop to cover the
+    /// character positions a hyphen could have occupied.
+    #[test]
+    fn generated_id_passes_container_id_validation() {
+        let base = tempfile::TempDir::new().expect("unwrap in test");
+        for _ in 0..64 {
+            let c = Container::new("test-image", vec![], base.path(), Default::default())
+                .expect("Container::new");
+            assert!(
+                ContainerId::try_new(c.id.clone()).is_ok(),
+                "generated id {:?} must satisfy ContainerId",
+                c.id
+            );
+        }
+    }
+
+    /// The generated id is exactly 12 ASCII-alphanumeric characters.
+    #[test]
+    fn generated_id_is_twelve_alphanumeric_chars() {
+        let base = tempfile::TempDir::new().expect("unwrap in test");
+        let c = Container::new("test-image", vec![], base.path(), Default::default())
+            .expect("Container::new");
+        assert_eq!(c.id.len(), 12, "id must be 12 chars; got {:?}", c.id);
+        assert!(
+            c.id.chars().all(|ch| ch.is_ascii_alphanumeric()),
+            "id must be alphanumeric; got {:?}",
+            c.id
+        );
     }
 }

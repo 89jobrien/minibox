@@ -259,7 +259,7 @@ async fn test_run_with_all_success_adapters() {
 
     match response {
         DaemonResponse::ContainerCreated { id } => {
-            assert!(!id.is_empty());
+            assert_ne!(id, "");
             assert_eq!(id.len(), 16);
 
             // Verify container landed in state

@@ -230,7 +230,7 @@ duplicate `minibox` implementations, and enforce the resulting dependency direct
 
 **Crate**: workspace
 **Files**: `docs/core/ARCHITECTURE.mbx.md`, `docs/core/CRATE_TIERS.mbx.md`,
-`.ctx/memory-bank/systemPatterns.mbx.md`, `.ctx/rustqual-baseline.json`
+`.ctx/memory-bank/system-patterns.mbx.md`, `.ctx/rustqual-baseline.json`
 **Run**: `cargo xtask pre-commit`
 
 1. Update architecture docs from the implemented graph and correct the stale domain source path.

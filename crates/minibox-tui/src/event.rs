@@ -88,10 +88,10 @@ pub fn spawn_input_reader(tx: mpsc::UnboundedSender<Message>) {
                 },
                 _ => None,
             };
-            if let Some(msg) = msg {
-                if tx.send(msg).is_err() {
-                    return;
-                }
+            if let Some(msg) = msg
+                && tx.send(msg).is_err()
+            {
+                return;
             }
         }
     });

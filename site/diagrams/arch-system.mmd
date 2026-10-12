@@ -1,0 +1,33 @@
+---
+title: System boundaries and control surfaces
+---
+flowchart TB
+  subgraph U["USER / AUTOMATION"]
+    direction LR
+    mbx["mbx<br/>Unix-socket CLI"]
+    mcp["minibox-mcp<br/>policy + MCP stdio"]
+    crux["crux plugin<br/>JSON-RPC stdio"]
+    tui["minibox-tui<br/>optional read-only"]
+  end
+
+  subgraph CP["miniboxd CONTROL PLANE"]
+    direction LR
+    sock["socket server<br/>auth + framing"]
+    disp["dispatch<br/>typed requests"]
+    hand["handlers<br/>policy + state"]
+    adapt["adapter suite<br/>composed ports"]
+    sock --> disp --> hand --> adapt
+    state[("state.json + traces")]
+    store[("image store + leases")]
+    obs[("events + metrics + tracing")]
+  end
+
+  subgraph P["EXECUTION / PLATFORM BOUNDARY"]
+    direction LR
+    native["native Linux<br/>namespaces, cgroups v2, overlayfs<br/>bridge/netfilter or optional CNI"]
+    managed["adapter-managed boundary<br/>GKE proot/copy or Colima/smolvm/krun VM<br/>capabilities differ by composed ports"]
+    blocked["unavailable paths<br/>VZ: feature-gated, boot-blocked<br/>winbox: startup stub"]
+  end
+
+  U -.->|"local transport boundary"| CP
+  CP -.-> P

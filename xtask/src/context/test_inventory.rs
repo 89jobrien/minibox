@@ -512,15 +512,15 @@ crate::conformance_test! {
         assert_eq!(async_case.kind, TestDeclarationKind::Function);
 
         let cfg_attr = declaration("cfg_attr_case");
-        assert!(cfg_attr.module_path.is_empty());
+        assert_eq!(cfg_attr.module_path, Vec::<String>::new());
         assert_eq!(
             cfg_attr.cfg_predicates,
             ["cfg_attr(target_os=\"linux\",cfg(feature=\"linux-only\"))"]
         );
 
         let macro_case = declaration("macro_case");
-        assert!(macro_case.module_path.is_empty());
-        assert!(macro_case.cfg_predicates.is_empty());
+        assert_eq!(macro_case.module_path, Vec::<String>::new());
+        assert_eq!(macro_case.cfg_predicates, Vec::<String>::new());
         assert_eq!(macro_case.kind, TestDeclarationKind::MacroInvocation);
         assert_eq!(
             macro_case.stable_id,
@@ -814,7 +814,7 @@ crate::conformance_test! {
             &validation_profile(),
         );
         assert_eq!(malformed.status, ProfileStatus::Failed);
-        assert!(malformed.executable_tests.is_empty());
+        assert_eq!(malformed.executable_tests, Vec::<ExecutableTest>::new());
 
         let nonzero = collect_test_profile(
             &FakeRunner::new(2, "", "error: test listing failed"),

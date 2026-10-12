@@ -159,7 +159,7 @@ async fn commit_returns_metadata() -> Result<()> {
         return Ok(()); // skip
     }
 
-    let cid = ContainerId::new("conformancecommit01".to_string()).expect("ContainerId");
+    let cid = ContainerId::try_new("conformancecommit01".to_string()).expect("ContainerId");
     let meta = committer
         .commit(&cid, "conformance/test-image:v1", &default_commit_config())
         .await?;
@@ -190,7 +190,7 @@ async fn commit_writes_layer_artifact_to_store() -> Result<()> {
         return Ok(()); // skip
     }
 
-    let cid = ContainerId::new("conformancecommit02".to_string()).expect("ContainerId");
+    let cid = ContainerId::try_new("conformancecommit02".to_string()).expect("ContainerId");
     let meta = committer
         .commit(
             &cid,
@@ -238,7 +238,7 @@ async fn commit_metadata_is_consistent_across_calls() -> Result<()> {
         return Ok(()); // skip
     }
 
-    let cid = ContainerId::new("conformancecommit03".to_string()).expect("ContainerId");
+    let cid = ContainerId::try_new("conformancecommit03".to_string()).expect("ContainerId");
 
     let meta_a = committer_a
         .commit(&cid, "conformance/image-a:v1", &default_commit_config())
@@ -287,7 +287,7 @@ async fn commit_empty_upperdir_returns_error() -> Result<()> {
         return Ok(()); // skip
     }
 
-    let cid = ContainerId::new("00000000000000000000".to_string()).expect("ContainerId");
+    let cid = ContainerId::try_new("00000000000000000000".to_string()).expect("ContainerId");
     let result = committer
         .commit(&cid, "conformance/empty-upper:v1", &default_commit_config())
         .await;
@@ -335,7 +335,7 @@ async fn commit_nonexistent_container_id_is_accepted() -> Result<()> {
         return Ok(()); // skip
     }
 
-    let cid = ContainerId::new("00000000000000000000".to_string()).expect("ContainerId");
+    let cid = ContainerId::try_new("00000000000000000000".to_string()).expect("ContainerId");
     let meta = committer
         .commit(&cid, "conformance/zero-id:v1", &default_commit_config())
         .await?;
