@@ -826,6 +826,17 @@ impl crate::container_state::ContainerStateAccess for DaemonState {
             .ok_or_else(|| anyhow::anyhow!("container {container_id} has no pid (not running)"))
     }
 
+    async fn get_container_runtime_id(&self, container_id: &str) -> anyhow::Result<String> {
+        let map = self.containers.read().await;
+        let record = map
+            .get(container_id)
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} not found"))?;
+        record
+            .runtime_id
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("container {container_id} has no runtime id"))
+    }
+
     async fn get_overlay_upper(&self, container_id: &str) -> anyhow::Result<std::path::PathBuf> {
         let map = self.containers.read().await;
         let record = map

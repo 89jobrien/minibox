@@ -285,7 +285,8 @@ use miniboxd::adapter_registry::{self, AdapterSuite};
 use miniboxd::listener::UnixServerListener;
 #[cfg(unix)]
 use smolbox::krun::{
-    filesystem::KrunFilesystem, limiter::KrunLimiter, registry::KrunRegistry, runtime::KrunRuntime,
+    exec::krun_exec_runtime, filesystem::KrunFilesystem, limiter::KrunLimiter,
+    registry::KrunRegistry, runtime::KrunRuntime,
 };
 #[cfg(unix)]
 use std::path::PathBuf;
@@ -1172,6 +1173,7 @@ fn build_krun_handler_dependencies(
         GhcrRegistry::new(Arc::clone(&state.image_store))
             .context("creating GHCR registry adapter for krun")?,
     ) as minibox_core::domain::DynImageRegistry;
+    let krun_runtime = Arc::new(KrunRuntime::new());
 
     Ok(Arc::new(HandlerDependencies {
         image: minibox::daemon::handler::ImageDeps {
@@ -1186,13 +1188,16 @@ fn build_krun_handler_dependencies(
         lifecycle: minibox::daemon::handler::LifecycleDeps {
             filesystem: Arc::new(KrunFilesystem::new()),
             resource_limiter: Arc::new(KrunLimiter::new()),
-            runtime: Arc::new(KrunRuntime::new()),
+            runtime: Arc::clone(&krun_runtime) as minibox_core::domain::DynContainerRuntime,
             network_provider: Arc::new(NoopNetwork::new()),
             containers_base: containers_dir,
             run_containers_base: run_containers_dir,
         },
         exec: minibox::daemon::handler::ExecDeps {
-            exec_runtime: None,
+            exec_runtime: Some(krun_exec_runtime(
+                Arc::clone(&krun_runtime),
+                Arc::clone(&state) as minibox::container_state::StateHandle,
+            )),
             pty_sessions: Arc::new(TokioMutex::new(PtySessionRegistry::default())),
         },
         build: minibox::daemon::handler::BuildDeps {

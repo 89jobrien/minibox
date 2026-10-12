@@ -96,6 +96,7 @@ mod suite {
     async fn krun_adapter_missing_binary_returns_error() {
         let result = SmolvmProcess::spawn_with_bin(
             std::path::Path::new("/nonexistent/smolvm"),
+            "krun-test-missing-binary",
             "alpine",
             &["/bin/true".to_string()],
             &[],
@@ -108,9 +109,14 @@ mod suite {
     #[tokio::test]
     async fn krun_process_exits_zero_for_true_command() {
         skip_if_no_smolvm!();
-        let mut proc = SmolvmProcess::spawn("alpine", &["/bin/true".to_string()], &[])
-            .await
-            .expect("spawn failed");
+        let mut proc = SmolvmProcess::spawn(
+            "krun-test-exit-zero",
+            "alpine",
+            &["/bin/true".to_string()],
+            &[],
+        )
+        .await
+        .expect("spawn failed");
         let exit = tokio::time::timeout(Duration::from_secs(30), proc.wait())
             .await
             .expect("timed out")
@@ -123,6 +129,7 @@ mod suite {
     async fn krun_stdout_is_captured() {
         skip_if_no_smolvm!();
         let mut proc = SmolvmProcess::spawn(
+            "krun-test-stdout-captured",
             "alpine",
             &[
                 "/bin/sh".to_string(),
@@ -150,6 +157,7 @@ mod suite {
     async fn krun_nonzero_exit_code_propagated() {
         skip_if_no_smolvm!();
         let mut proc = SmolvmProcess::spawn(
+            "krun-test-nonzero-exit",
             "alpine",
             &[
                 "/bin/sh".to_string(),
@@ -173,6 +181,7 @@ mod suite {
     async fn krun_env_var_passed_to_process() {
         skip_if_no_smolvm!();
         let mut proc = SmolvmProcess::spawn(
+            "krun-test-env-var",
             "alpine",
             &[
                 "/bin/sh".to_string(),
@@ -205,6 +214,7 @@ mod suite {
             .unwrap_or_default();
 
         let mut proc = SmolvmProcess::spawn(
+            "krun-test-hostname-differs",
             "alpine",
             &[
                 "/bin/sh".to_string(),

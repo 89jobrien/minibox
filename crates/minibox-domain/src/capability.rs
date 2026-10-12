@@ -30,8 +30,10 @@ use std::sync::Arc;
 // connectivity, teardown, DNS, NAT, and port-forward conformance tests.
 // TODO(feature-idea-25): stabilize OCI push, commit, and build by completing
 // control-surface exposure, policy coverage, and concrete adapter tests.
-// TODO(feature-idea-26): provide VM-backed exec-into-running and historical log
-// retrieval for supported macOS adapters.
+// TODO(feature-idea-26): krun now provides VM-backed exec-into-running (via
+// `smolvm machine exec` against a persistent named machine) and historical log
+// retrieval (via the adapter-agnostic stdout.log/stderr.log tee); colima and vz
+// still have no exec/log-retrieval path.
 // TODO(feature-idea-27): consolidate the WSL2 implementations and wire a
 // conformant Windows daemon transport, helper, and lifecycle adapter.
 
