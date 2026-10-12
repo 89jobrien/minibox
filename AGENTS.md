@@ -59,6 +59,42 @@ reference above instead of relying on this compact file.
 - Fuzz seeds, corpus, and artifacts are gitignored via `**/fuzz/seeds/`,
   `**/fuzz/corpus/`, `**/fuzz/artifacts/`. Do not commit generated fuzz data.
 
+## Scope Discipline
+
+- Do exactly what was asked. Do not escalate a narrow request into a broader sweep
+  (e.g. a single-crate fix does not become a workspace-wide refactor; a docs tweak
+  does not become a doc audit).
+- Never edit global/machine-level config (`~/.config/*`, the user's global
+  `~/.claude/CLAUDE.md`, shell rc files) from inside a minibox session without
+  explicit confirmation first.
+- If a follow-up instruction is ambiguous ("take that line out", "update the config
+  too"), ask one targeted clarifying question — naming the specific file or crate —
+  before editing, rather than guessing at the referent.
+
+## Verify Before Claiming
+
+- Never assert what a crate, adapter, or dependency does without checking: grep the
+  source, run `cargo tree -i <crate>`, or run the binary's `--help`. Do not answer
+  from memory about this workspace's own code.
+- After implementing, run the actual gate (`cargo xtask verify`, `cargo xtask test
+unit`), not just `cargo check`/`cargo build` — see **Gates and Toolchain** below.
+  Never report "done" on a change you have not run through the real gate.
+- When verifying container code gated `#[cfg(target_os = "linux")]`, use the QEMU
+  Linux harness (`rust-script scripts/qemu-linux-tests/run.rs --filter <module>`),
+  not a macOS `cargo check` — a green macOS run proves nothing about that code path.
+
+## Pipelines & Multi-Step Work
+
+- Run the complete chain, including the final step, not just the parts that look
+  like progress. A godmode phase that ends in SHIP is not done until `godmode
+handoff` has actually run and the push has landed — not when the commit is staged.
+- Before dispatching a subagent or entering ACT, make sure there is a concrete
+  target (a file list, crate name, issue number, or diff range). If none exists,
+  ask for one instead of dispatching a vague prompt that a subagent will bounce
+  back as ambiguous.
+- Do not repeat the same blocked-status report turn after turn. State the blocker
+  once, and wait for the user or for the blocking condition to change.
+
 ## Gates and Toolchain
 
 Use `cargo xtask` (or `just`) for repeatable gates. Prefer `xtask` over bare
