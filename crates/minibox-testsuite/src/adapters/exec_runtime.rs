@@ -14,7 +14,7 @@ fn rt() -> tokio::runtime::Runtime {
 }
 
 fn container_id() -> ContainerId {
-    ContainerId::new("cexec001abc".to_string()).expect("valid container id")
+    ContainerId::try_new("cexec001abc".to_string()).expect("valid container id")
 }
 
 fn basic_spec() -> ExecSpec {

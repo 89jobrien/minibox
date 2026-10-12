@@ -254,7 +254,7 @@ impl<'d> TestContext<'d> {
 
     /// Returns `true` if any assertion has failed.
     #[must_use]
-    pub fn has_failures(&self) -> bool {
+    pub const fn has_failures(&self) -> bool {
         !self.failures.is_empty()
     }
 

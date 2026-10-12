@@ -62,7 +62,7 @@ fn default_spec() -> ExecSpec {
 }
 
 fn make_container_id(s: &str) -> ContainerId {
-    ContainerId::new(s.to_string()).unwrap_or_else(|e| panic!("invalid ContainerId '{s}': {e}"))
+    ContainerId::try_new(s.to_string()).unwrap_or_else(|e| panic!("invalid ContainerId '{s}': {e}"))
 }
 
 // ---------------------------------------------------------------------------

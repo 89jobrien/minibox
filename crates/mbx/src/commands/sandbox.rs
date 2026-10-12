@@ -233,7 +233,7 @@ mod tests {
     fn detect_python() {
         let (interp, args) = detect_interpreter(Path::new("script.py")).unwrap();
         assert_eq!(interp, "python3");
-        assert!(args.is_empty());
+        assert_eq!(args, Vec::<String>::new());
     }
 
     #[test]
@@ -353,7 +353,7 @@ mod tests {
         let tmp = tempfile::Builder::new().suffix(".sh").tempfile().unwrap();
         let req = br(&tmp, "sandbox", 512, vec![], false).unwrap();
         if let DaemonRequest::Run { mounts, .. } = req {
-            assert!(!mounts.is_empty());
+            assert_ne!(mounts, Vec::<BindMount>::new());
             let script_mount = &mounts[0];
             assert_eq!(
                 script_mount.container_path,

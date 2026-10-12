@@ -452,6 +452,34 @@ impl ImageLoader for ColimaRegistry {
 // Colima Filesystem Adapter
 // ============================================================================
 
+/// VM-local root under which colima container overlays are built.
+const VM_OVERLAY_ROOT: &str = "/tmp/minibox-overlay";
+
+/// VM-local directory holding a container's overlay mount.
+///
+/// # Why this is not `container_dir`
+///
+/// overlayfs requires `upperdir`/`workdir` to live on a filesystem that
+/// supports the xattrs overlay needs. The shared `$HOME` is virtiofs, which
+/// does not. The kernel does **not** report an error for this: it accepts the
+/// mount and silently presents it read-only, so every colima container had an
+/// immutable rootfs — no bind target could be created, and the writable state
+/// had nowhere to go.
+///
+/// Image layers already live VM-local (`/tmp/minibox-layers/...`), so the
+/// writable layer now joins them. `container_dir` stays the host-visible
+/// identity of the container; only the overlay's storage moves.
+///
+/// [`setup_rootfs`](Self::setup_rootfs) and [`cleanup`](Self::cleanup) both go
+/// through this helper so a mount can never be left behind by a path mismatch.
+fn overlay_base_dir(container_dir: &Path) -> PathBuf {
+    let id = container_dir.file_name().map_or_else(
+        || "container".to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    );
+    PathBuf::from(VM_OVERLAY_ROOT).join(id)
+}
+
 /// Colima implementation of [`crate::domain::FilesystemProvider`].
 ///
 /// Sets up and tears down overlay mounts inside the Lima VM by running
@@ -506,17 +534,23 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
             .collect::<Vec<_>>()
             .join(":");
 
-        let upper_dir = container_dir.join("upper");
-        let work_dir = container_dir.join("work");
-        let merged_dir = container_dir.join("merged");
+        // The overlay must be VM-local; see `overlay_base_dir`. `container_dir`
+        // is still the container's host-visible identity, so the mount is
+        // addressed by the container id instead.
+        let overlay_base = overlay_base_dir(container_dir);
+        let upper_dir = overlay_base.join("upper");
+        let work_dir = overlay_base.join("work");
+        let merged_dir = overlay_base.join("merged");
 
         // Create the overlay support directories inside the VM.
         self.ctx
-            .lima_exec(&["mkdir", "-p", &upper_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "mkdir", "-p", &overlay_base.to_string_lossy()])?;
         self.ctx
-            .lima_exec(&["mkdir", "-p", &work_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "mkdir", "-p", &upper_dir.to_string_lossy()])?;
         self.ctx
-            .lima_exec(&["mkdir", "-p", &merged_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "mkdir", "-p", &work_dir.to_string_lossy()])?;
+        self.ctx
+            .lima_exec(&["sudo", "mkdir", "-p", &merged_dir.to_string_lossy()])?;
 
         // Mount the overlay filesystem inside the VM. Pass argv directly so
         // host paths such as "~/Library/Application Support/..." are handled
@@ -552,19 +586,24 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
         })
     }
 
-    /// Unmount the overlay and remove the container directory inside the VM.
+    /// Unmount the overlay and remove its VM-local directory inside the VM.
+    ///
+    /// Uses the same [`overlay_base_dir`] mapping as `setup_rootfs`; addressing
+    /// the two differently would leave the mount behind and the directory
+    /// behind it with it.
     ///
     /// # Errors
     ///
     /// Returns an error if `umount` or `rm -rf` fail inside the VM.
     fn cleanup(&self, container_dir: &Path) -> Result<()> {
-        let merged_dir = container_dir.join("merged");
+        let overlay_base = overlay_base_dir(container_dir);
+        let merged_dir = overlay_base.join("merged");
 
         // Unmount the overlay before removing the directory tree.
         self.ctx
             .lima_exec(&["sudo", "umount", &merged_dir.to_string_lossy()])?;
         self.ctx
-            .lima_exec(&["rm", "-rf", &container_dir.to_string_lossy()])?;
+            .lima_exec(&["sudo", "rm", "-rf", &overlay_base.to_string_lossy()])?;
 
         Ok(())
     }
@@ -809,22 +848,61 @@ impl ColimaRuntime {
     }
 }
 
+/// Resolve `$HOME` into a prefix that is safe to use as an allowlist entry.
+///
+/// Returns `None` when `$HOME` is absent, empty, relative, or the filesystem
+/// root. `Path::starts_with` reports both the empty path and `/` as a prefix of
+/// *every* path, so folding either into the allowlist would silently accept any
+/// host path — exactly what `validate_lima_paths` exists to prevent. Dropping
+/// the prefix fails closed: only `/tmp` stays usable, and a caller mounting out
+/// of its home directory gets a clear error rather than a silent pass.
+fn home_allowlist_prefix() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    let path = std::path::PathBuf::from(home);
+    if path.as_os_str().is_empty() || !path.is_absolute() {
+        return None;
+    }
+    // `/`, `.` and `..` carry no real prefix information.
+    let meaningful = path.components().any(|c| {
+        !matches!(
+            c,
+            std::path::Component::RootDir
+                | std::path::Component::CurDir
+                | std::path::Component::ParentDir
+        )
+    });
+    if !meaningful {
+        return None;
+    }
+    Some(path)
+}
+
 /// Validate that all bind mount host paths are accessible inside the Lima VM.
 ///
 /// Lima shares `$HOME` and `/tmp` into the VM by default. Paths outside those
 /// prefixes are not visible and will cause silent mount failures.
+///
+/// # Security
+///
+/// The `$HOME` prefix comes from [`home_allowlist_prefix`], which drops a blank
+/// or root `$HOME`. Without that, an environment with `HOME=/` or `HOME=""`
+/// would make the allowlist vacuous and permit mounting any host path into the
+/// VM.
 pub fn validate_lima_paths(mounts: &[minibox_core::domain::BindMount]) -> anyhow::Result<()> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
-    let home_path = std::path::Path::new(&home);
+    let home = home_allowlist_prefix();
+    let home_display = home.as_ref().map_or_else(
+        || "<unset or unusable>".to_string(),
+        |p| p.display().to_string(),
+    );
 
     for m in mounts {
         let p = &m.host_path;
-        let in_home = p.starts_with(home_path);
+        let in_home = home.as_ref().is_some_and(|h| p.starts_with(h));
         let in_tmp = p.starts_with("/tmp");
         if !in_home && !in_tmp {
             anyhow::bail!(
                 "bind mount source {p:?} is not accessible inside the Lima VM.\n\
-                 hint: Lima shares $HOME ({home}) and /tmp — move the source or add it to lima.yaml shared dirs."
+                 hint: Lima shares $HOME ({home_display}) and /tmp — move the source or add it to lima.yaml shared dirs."
             );
         }
     }
@@ -877,23 +955,150 @@ pub fn bind_mount_shell_snippet(
     let target = rootfs.join(container_rel);
     let host_q = shell_single_quote(&m.host_path.display().to_string());
     let target_q = shell_single_quote(&target.display().to_string());
-    let target_check = format!(
-        "sudo test -e {target_q} || (echo {msg} >&2; exit 1)",
-        msg = shell_single_quote(&format!(
-            "bind mount target {} does not exist in image rootfs",
-            target.display()
-        )),
+
+    // Docker parity: a bind target that does not exist in the image is created,
+    // mirroring the source's type, rather than aborting the mount. The previous
+    // behaviour required every container path to pre-exist in the rootfs, so
+    // `-v src:/usr/bin/tool` failed on a stock image and reported only on
+    // stderr, which the CLI does not surface — a silent no-op.
+    //
+    // The host source is checked first so a typo'd path fails loudly instead of
+    // materialising an empty mountpoint.
+    let source_missing = shell_single_quote(&format!(
+        "bind mount source {} does not exist on the host",
+        m.host_path.display()
+    ));
+    let target_failed = shell_single_quote(&format!(
+        "bind mount target {} could not be created in the image rootfs",
+        target.display()
+    ));
+    let ensure_target = format!(
+        "sudo test -e {host_q} || (echo {source_missing} >&2; exit 1); \
+         if [ -d {host_q} ]; then sudo mkdir -p {target_q} \
+           || (echo {target_failed} >&2; exit 1); \
+         else sudo mkdir -p \"$(dirname {target_q})\" && sudo touch {target_q} \
+           || (echo {target_failed} >&2; exit 1); fi",
     );
 
     if m.read_only {
         Ok(format!(
-            "{target_check} && sudo mount --bind {host_q} {target_q} && sudo mount -o remount,ro,bind {target_q}"
+            "{ensure_target} && sudo mount --bind {host_q} {target_q} && sudo mount -o remount,ro,bind {target_q}"
         ))
     } else {
         Ok(format!(
-            "{target_check} && sudo mount --bind {host_q} {target_q}"
+            "{ensure_target} && sudo mount --bind {host_q} {target_q}"
         ))
     }
+}
+
+/// Build the shell fragment that populates a minimal `/dev` inside the container.
+///
+/// The image rootfs is mounted read-only, and the colima adapter has no
+/// separate device-setup step, so a stock container starts with *no* `/dev/null`
+/// — enough to break `/bin/sh` itself, let alone a nested daemon.
+///
+/// The node and symlink lists are generated from [`crate::fs_util::default_device_nodes`]
+/// and [`crate::fs_util::default_dev_symlinks`], the same data the native
+/// adapter uses, so the two paths cannot drift apart.
+///
+/// A tmpfs backs `/dev` (as Docker does) because the read-only rootfs cannot
+/// hold newly created device nodes. `mknod` succeeds here: the container is not
+/// in a user namespace, so the kernel permits device creation. Each node is
+/// created best-effort — a kernel without one of them still yields a usable
+/// container — but a tmpfs failure is fatal to the whole setup and is reported.
+///
+/// `/dev/null` is created first and *without* a `2>/dev/null` guard. Redirecting
+/// the very node being bootstrapped makes the shell create `/dev/null` as an
+/// empty regular file for the redirect itself, after which `mknod` fails with
+/// "File exists" and the container is left with a 0-byte stand-in. That failure
+/// is invisible to a casual `echo hi > /dev/null`, which happily writes to a
+/// regular file, so it is asserted by
+/// `first_dev_node_is_null_and_unguarded` and probed live by
+/// `cargo xtask capabilities verify`.
+fn dev_setup_fragment() -> String {
+    let mut lines = vec![
+        "mkdir -p /dev/shm".to_string(),
+        "mount -t tmpfs tmpfs /dev".to_string(),
+    ];
+    for (index, node) in crate::fs_util::default_device_nodes()
+        .into_iter()
+        .enumerate()
+    {
+        let cmd = format!(
+            "mknod -m {mode:o} /dev/{name} c {major} {minor}",
+            mode = node.mode,
+            name = node.name,
+            major = node.major,
+            minor = node.minor
+        );
+        // The first node is the bootstrap dependency and must not be guarded.
+        if index == 0 {
+            lines.push(cmd);
+        } else {
+            lines.push(format!("{cmd} 2>/dev/null || true"));
+        }
+    }
+    for link in crate::fs_util::default_dev_symlinks() {
+        lines.push(format!(
+            "ln -sf {target} /dev/{name} 2>/dev/null || true",
+            target = link.target,
+            name = link.name
+        ));
+    }
+    lines.join("; \\\n      ")
+}
+
+/// Build the `unshare ... chroot` invocation that runs the container command.
+///
+/// procfs, sysfs, and cgroup2 are mounted *inside* the new mount namespace,
+/// i.e. after `unshare` has created it. Two consequences that matter:
+///
+/// - `/proc` reflects the container's own PID namespace rather than the VM's.
+/// - The mounts never leak into the Lima VM's mount namespace, so concurrent
+///   containers cannot observe each other's `/proc`.
+///
+/// cgroup2 needs its own `mount -t`: it is a separate filesystem, so a fresh
+/// `sysfs` does not carry `/sys/fs/cgroup` along, and a container that cannot
+/// see its cgroup tree cannot manage resource limits or nest further.
+///
+/// The image rootfs is mounted read-only — the overlay's lowerdir is
+/// VM-local while its upperdir is on the virtiofs-shared home directory, and
+/// the kernel does not allow an overlay to straddle two filesystems. tmpfs on
+/// `/tmp` and `/run` is therefore the container's writable surface, which is
+/// where the daemon's socket, run, and data state are expected to live. This
+/// matches what the native adapter's runtime-directory setup provides.
+///
+/// `/dev` is built from [`dev_setup_fragment`] for the same reason: the
+/// read-only rootfs has no usable device set, and without `/dev/null` even
+/// `/bin/sh` misbehaves.
+///
+/// The inner `sh -c` receives the real command as its first argument after
+/// `$0`, so `"$@"` re-expands to the command and its arguments. Mounting is
+/// best-effort: a minimal image without a usable `mount` still gets a working
+/// container instead of a failed spawn, and each failure is reported on stderr
+/// rather than swallowed silently.
+fn namespace_exec_fragment(privileged: bool) -> String {
+    let privileged_flag = if privileged { " --keep-caps" } else { "" };
+    let dev_setup = dev_setup_fragment();
+    format!(
+        r#"sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
+    --fork --kill-child \
+    chroot "$ROOTFS" /bin/sh -c 'mount -t proc proc /proc \
+        || echo "colima: warning: could not mount /proc in container" >&2; \
+      mount -t sysfs sys /sys \
+        || echo "colima: warning: could not mount /sys in container" >&2; \
+      mkdir -p /sys/fs/cgroup 2>/dev/null; \
+      mount -t cgroup2 none /sys/fs/cgroup \
+        || echo "colima: warning: could not mount cgroup2 at /sys/fs/cgroup" >&2; \
+      mkdir -p /tmp /run 2>/dev/null; \
+      mount -t tmpfs tmpfs /tmp \
+        || echo "colima: warning: could not mount tmpfs at /tmp" >&2; \
+      mount -t tmpfs tmpfs /run \
+        || echo "colima: warning: could not mount tmpfs at /run" >&2; \
+      {dev_setup}; \
+      exec "$@"' \
+    sh "$COMMAND" "${{ARGS[@]}}""#
+    )
 }
 
 #[async_trait]
@@ -948,25 +1153,19 @@ impl ContainerRuntime for ColimaRuntime {
             .collect::<anyhow::Result<Vec<_>>>()?
             .join("\n");
 
-        let privileged_flag = if config.privileged {
-            " --keep-caps"
-        } else {
-            ""
-        };
+        let namespace_exec = namespace_exec_fragment(config.privileged);
 
         if self.spawner.is_some() && config.capture_output {
             // Streaming path: foreground exec with piped stdout.
             // Uses `exec unshare` so the spawned process replaces the shell,
             // making child.id() the container init PID directly.
             let spawn_script = format!(
-                r#"ROOTFS={rootfs}
+                r"ROOTFS={rootfs}
 COMMAND={command}
 ARGS=({args})
 {bind_mount_cmds}
-exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
-    --fork --kill-child \
-    chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}"
-"#
+exec {namespace_exec}
+"
             );
 
             let mut child = self.lima_spawn(&["bash", "-lc", &spawn_script])?;
@@ -1011,19 +1210,17 @@ exec sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
         // Uses `jq` to extract fields from the JSON config, then runs
         // `unshare` with Linux namespace flags to isolate the container.
         let spawn_script = format!(
-            r#"
+            r"
             ROOTFS={rootfs}
             COMMAND={command}
             ARGS=({args})
 
             {bind_mount_cmds}
 
-            sudo unshare --pid --mount --uts --ipc --net{privileged_flag} \
-                --fork --kill-child \
-                chroot "$ROOTFS" "$COMMAND" "${{ARGS[@]}}" &
+            {namespace_exec} &
 
             echo $!
-            "#
+            "
         );
 
         let output = self.ctx.lima_exec(&["bash", "-lc", &spawn_script])?;
@@ -1265,6 +1462,240 @@ mod tests {
             script.contains("world"),
             "spawn script missing arg 'world': {script}"
         );
+    }
+
+    /// The spawn script must mount procfs and sysfs inside the new mount
+    /// namespace. Without them the container gets an *empty* `/proc` and
+    /// `/sys`, which silently breaks capability inspection
+    /// (`/proc/self/status`), filesystem probing (`/proc/filesystems`), and
+    /// every cgroup path — the three things nested-container and DinD use.
+    #[test]
+    fn namespace_exec_mounts_proc_and_sysfs() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains("mount -t proc proc /proc"),
+            "procfs mount missing from spawn fragment: {frag}"
+        );
+        assert!(
+            frag.contains("mount -t sysfs sys /sys"),
+            "sysfs mount missing from spawn fragment: {frag}"
+        );
+        // cgroup2 is a separate filesystem; a fresh sysfs does not carry
+        // /sys/fs/cgroup, so it needs its own mount.
+        assert!(
+            frag.contains("mount -t cgroup2 none /sys/fs/cgroup"),
+            "cgroup2 mount missing from spawn fragment: {frag}"
+        );
+        // The rootfs is read-only, so tmpfs is the only writable surface.
+        assert!(
+            frag.contains("mount -t tmpfs tmpfs /tmp"),
+            "writable /tmp missing from spawn fragment: {frag}"
+        );
+    }
+
+    /// The mounts must run *after* `unshare --mount`, otherwise they land in
+    /// the Lima VM's mount namespace and leak across containers.
+    #[test]
+    fn namespace_exec_mounts_after_unshare() {
+        let frag = namespace_exec_fragment(false);
+        let unshare_at = frag.find("unshare").expect("unshare present");
+        let mount_at = frag.find("mount -t proc").expect("proc mount present");
+        assert!(
+            unshare_at < mount_at,
+            "procfs must be mounted after unshare, else it leaks to the VM: {frag}"
+        );
+    }
+
+    /// A failed mount must not abort the spawn: a minimal image without a
+    /// usable `mount` should still get a working container, and the failure
+    /// must be reported rather than silently swallowed.
+    #[test]
+    fn namespace_exec_tolerates_mount_failure() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains("could not mount /proc"),
+            "proc mount failure must be reported: {frag}"
+        );
+        assert!(
+            frag.contains("could not mount /sys"),
+            "sys mount failure must be reported: {frag}"
+        );
+        assert!(
+            frag.contains("could not mount cgroup2"),
+            "cgroup2 mount failure must be reported: {frag}"
+        );
+        assert!(
+            frag.contains("could not mount tmpfs at /tmp"),
+            "tmpfs mount failure must be reported: {frag}"
+        );
+    }
+
+    /// Privileged containers still pass `--keep-caps`.
+    #[test]
+    fn namespace_exec_keeps_caps_when_privileged() {
+        assert!(namespace_exec_fragment(true).contains("--keep-caps"));
+        assert!(!namespace_exec_fragment(false).contains("--keep-caps"));
+    }
+
+    /// The container command must be re-expanded by the inner shell, not
+    /// swallowed. The `sh -c '...' sh "$COMMAND" ...` tail is what makes
+    /// `"$@"` resolve to the real command and its arguments.
+    #[test]
+    fn namespace_exec_reforwards_command_and_args() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains(r#"exec "$@""#),
+            "inner shell must exec its positional args: {frag}"
+        );
+        assert!(
+            frag.contains(r#"sh "$COMMAND" "${ARGS[@]}""#),
+            "command and args must be forwarded to the inner shell: {frag}"
+        );
+    }
+
+    /// The container needs a real device set. Without it `/dev/null` is
+    /// missing, which is enough to break `/bin/sh` itself and therefore any
+    /// nested daemon.
+    #[test]
+    fn namespace_exec_populates_dev() {
+        let frag = namespace_exec_fragment(false);
+        assert!(
+            frag.contains("mount -t tmpfs tmpfs /dev"),
+            "/dev must be a tmpfs (the rootfs is read-only): {frag}"
+        );
+        assert!(
+            frag.contains("mknod -m 666 /dev/null c 1 3"),
+            "/dev/null missing from spawn fragment: {frag}"
+        );
+        assert!(
+            frag.contains("mknod -m 666 /dev/urandom c 1 9")
+                || frag.contains("mknod -m 444 /dev/urandom c 1 9"),
+            "/dev/urandom missing from spawn fragment: {frag}"
+        );
+    }
+
+    /// The device set is generated from the same tables the native adapter
+    /// uses, so the two adapters cannot drift apart. Assert against the tables
+    /// rather than a hardcoded list.
+    #[test]
+    fn dev_setup_covers_every_shared_device_node() {
+        let setup = dev_setup_fragment();
+        for node in crate::fs_util::default_device_nodes() {
+            let expected = format!(
+                "mknod -m {mode:o} /dev/{name} c {major} {minor}",
+                mode = node.mode,
+                name = node.name,
+                major = node.major,
+                minor = node.minor
+            );
+            assert!(
+                setup.contains(&expected),
+                "device node {name} missing from dev setup: {setup}",
+                name = node.name
+            );
+        }
+    }
+
+    #[test]
+    fn dev_setup_covers_every_shared_dev_symlink() {
+        let setup = dev_setup_fragment();
+        for link in crate::fs_util::default_dev_symlinks() {
+            let expected = format!(
+                "ln -sf {target} /dev/{name}",
+                target = link.target,
+                name = link.name
+            );
+            assert!(
+                setup.contains(&expected),
+                "dev symlink {name} missing from dev setup: {setup}",
+                name = link.name
+            );
+        }
+    }
+
+    /// Regression: the `/dev` block is spliced in just before `exec "$@"`, so
+    /// its last command must be terminated. Without the separator the tail
+    /// becomes `... || true exec "$@"`, which runs `true` with the payload as
+    /// arguments and the container command never executes — every run exits 0
+    /// with no output.
+    #[test]
+    fn dev_setup_is_separated_from_the_container_command() {
+        let frag = namespace_exec_fragment(false);
+        let exec_at = frag.rfind(r#"exec "$@""#).expect("exec present");
+        // Collapse shell line continuations, which is what the shell does, so
+        // the assertion looks at the effective command line.
+        let effective = frag[..exec_at].replace("\\\n", " ");
+        assert!(
+            effective.trim_end().ends_with(';'),
+            "dev setup must end with ';' before exec: ...{}",
+            &effective[effective.len().saturating_sub(40)..]
+        );
+    }
+
+    /// The first device node is `/dev/null` and must be unguarded.
+    ///
+    /// A `2>/dev/null` guard on the node being bootstrapped makes the shell
+    /// materialise `/dev/null` as an empty regular file to serve as the
+    /// redirect target, so `mknod` then fails and the container keeps a 0-byte
+    /// stand-in that silently swallows writes instead of discarding them.
+    #[test]
+    fn first_dev_node_is_null_and_unguarded() {
+        let setup = dev_setup_fragment();
+        let nodes: Vec<&str> = setup
+            .split("; \\\n")
+            .filter(|line| line.trim_start().starts_with("mknod"))
+            .collect();
+        let first = nodes.first().expect("at least one mknod");
+        assert!(
+            first.contains("/dev/null"),
+            "the first device node must be /dev/null, got: {first}"
+        );
+        assert!(
+            !first.contains("2>/dev/null"),
+            "/dev/null must not be redirect-guarded while it is the redirect \
+             target itself: {first}"
+        );
+        // Every *later* node should still be best-effort.
+        for later in &nodes[1..] {
+            assert!(
+                later.contains("|| true"),
+                "non-bootstrap device nodes should be best-effort: {later}"
+            );
+        }
+    }
+
+    /// The overlay must be addressed VM-local, keyed by container id.
+    ///
+    /// virtiofs cannot host an overlay upper layer: the kernel accepts the
+    /// mount and silently presents it read-only, which is what made every
+    /// colima rootfs immutable and every bind target uncreatable.
+    #[test]
+    fn overlay_base_dir_is_vm_local_and_id_keyed() {
+        let base = overlay_base_dir(Path::new(
+            "/Users/joe/Library/Application Support/minibox/containers/abc123",
+        ));
+        assert_eq!(base, PathBuf::from(VM_OVERLAY_ROOT).join("abc123"));
+        assert!(
+            !base.starts_with("/Users"),
+            "the overlay must not live on the virtiofs-shared home: {base:?}"
+        );
+    }
+
+    /// Distinct containers must not collide, or one container's mount would
+    /// overwrite another's.
+    #[test]
+    fn overlay_base_dir_differs_per_container() {
+        let a = overlay_base_dir(Path::new("/host/containers/aaaaaaaa"));
+        let b = overlay_base_dir(Path::new("/host/containers/bbbbbbbb"));
+        assert_ne!(a, b);
+    }
+
+    /// A container directory with no final component still yields a usable
+    /// path rather than panicking or collapsing onto the shared root.
+    #[test]
+    fn overlay_base_dir_tolerates_missing_basename() {
+        let base = overlay_base_dir(Path::new("/"));
+        assert_eq!(base, PathBuf::from(VM_OVERLAY_ROOT).join("container"));
     }
 
     #[test]
@@ -1527,20 +1958,123 @@ mod bind_mount_tests {
     use minibox_core::domain::BindMount;
     use std::path::PathBuf;
 
-    fn home_dir() -> PathBuf {
-        PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string()))
+    /// Run `f` with `$HOME` set to `value`, restoring the previous value after.
+    ///
+    /// Tests must not depend on the ambient `$HOME`: on a developer machine it
+    /// is a real directory, but in a container or VM it is often `/`, which
+    /// changes what the allowlist accepts. That is exactly the bug
+    /// `validate_lima_paths` had, so pin the value instead of inheriting it.
+    fn with_home<R>(value: Option<&str>, f: impl FnOnce() -> R) -> R {
+        // Recover from poisoning rather than propagating it. A test that
+        // panics *while holding* the lock would otherwise poison ENV_MUTEX and
+        // every later test in this module would die with PoisonError, hiding
+        // which assertions actually failed.
+        let _guard = ENV_MUTEX
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let prev = std::env::var("HOME").ok();
+        // SAFETY: ENV_MUTEX is held for the whole mutation window, serialising
+        // every environment change in this module. Rust 2024 requires unsafe for
+        // set_var/remove_var, and no other thread can observe a partial state.
+        unsafe {
+            match value {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        let out = f();
+        // SAFETY: Same guard, still held; the previous value is restored before
+        // the lock is released.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+        out
+    }
+
+    /// A mount of `host`, which every test below asserts about.
+    fn mount_of(host: &str) -> Vec<BindMount> {
+        vec![BindMount {
+            host_path: PathBuf::from(host),
+            container_path: PathBuf::from("/data"),
+            read_only: false,
+        }]
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_when_home_is_root() {
+        // `Path::new("/").starts_with(anything)` is true for every absolute
+        // path, so a root HOME used to turn the allowlist into a no-op.
+        with_home(Some("/"), || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("not accessible"),
+                "root HOME must not widen the allowlist, got: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_when_home_is_empty() {
+        // `Path::new("").starts_with(anything)` is likewise true for everything.
+        with_home(Some(""), || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("not accessible"),
+                "empty HOME must not widen the allowlist, got: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_rejects_when_home_is_unset() {
+        with_home(None, || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("not accessible"),
+                "unset HOME must not widen the allowlist, got: {err}"
+            );
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_still_accepts_real_home_subdir() {
+        // The normal case must keep working: a real HOME still permits its own
+        // subdirectories, and /tmp stays permitted regardless of HOME.
+        with_home(Some("/home/tester"), || {
+            validate_lima_paths(&mount_of("/home/tester/project/bin"))
+                .expect("a real HOME subdir should be accepted");
+            validate_lima_paths(&mount_of("/tmp/minibox-test"))
+                .expect("/tmp should be accepted regardless of HOME");
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin"))
+                .expect_err("outside a real HOME and /tmp must be rejected");
+            assert!(err.to_string().contains("not accessible"), "got: {err}");
+        });
+    }
+
+    #[test]
+    fn validate_lima_paths_error_names_the_unusable_home() {
+        with_home(Some("/"), || {
+            let err = validate_lima_paths(&mount_of("/opt/homebrew/bin")).unwrap_err();
+            assert!(
+                err.to_string().contains("<unset or unusable>"),
+                "error should report the unusable HOME rather than pretending it is /, got: {err}"
+            );
+        });
     }
 
     #[test]
     fn validate_lima_paths_accepts_home_subdir() {
-        let _guard = super::ENV_MUTEX.lock().expect("env lock poisoned");
-        let home = home_dir();
-        let mounts = vec![BindMount {
-            host_path: home.join("some/project/bin"),
-            container_path: PathBuf::from("/bin"),
-            read_only: false,
-        }];
-        validate_lima_paths(&mounts).expect("home subdir should be accepted");
+        with_home(Some("/home/tester"), || {
+            let mounts = vec![BindMount {
+                host_path: PathBuf::from("/home/tester/some/project/bin"),
+                container_path: PathBuf::from("/bin"),
+                read_only: false,
+            }];
+            validate_lima_paths(&mounts).expect("home subdir should be accepted");
+        });
     }
 
     #[test]
@@ -1555,17 +2089,20 @@ mod bind_mount_tests {
 
     #[test]
     fn validate_lima_paths_rejects_opt() {
-        let mounts = vec![BindMount {
-            host_path: PathBuf::from("/opt/homebrew/bin"),
-            container_path: PathBuf::from("/bin"),
-            read_only: false,
-        }];
-        let err = validate_lima_paths(&mounts).unwrap_err();
-        let msg = err.to_string();
-        assert!(
-            msg.contains("Lima") || msg.contains("accessible"),
-            "expected Lima path error, got: {msg}"
-        );
+        // Pin a real HOME: this only holds if /opt is genuinely outside it.
+        with_home(Some("/home/tester"), || {
+            let mounts = vec![BindMount {
+                host_path: PathBuf::from("/opt/homebrew/bin"),
+                container_path: PathBuf::from("/bin"),
+                read_only: false,
+            }];
+            let err = validate_lima_paths(&mounts).unwrap_err();
+            let msg = err.to_string();
+            assert!(
+                msg.contains("Lima") || msg.contains("accessible"),
+                "expected Lima path error, got: {msg}"
+            );
+        });
     }
 
     #[test]
@@ -1585,7 +2122,45 @@ mod bind_mount_tests {
         assert!(snippet.contains("mount --bind"), "snippet: {snippet}");
         assert!(snippet.contains("/tmp/host"), "snippet: {snippet}");
         assert!(snippet.contains("/rootfs/guest"), "snippet: {snippet}");
-        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
+    }
+
+    /// Docker parity: a target that is absent from the image is created rather
+    /// than aborting the mount. The snippet must branch on the *source* type so
+    /// a file source does not become a directory mountpoint (or vice versa).
+    #[test]
+    fn bind_mount_shell_snippet_creates_missing_target() {
+        let m = BindMount {
+            host_path: PathBuf::from("/tmp/host"),
+            container_path: PathBuf::from("/guest/deep/tool"),
+            read_only: false,
+        };
+        let snippet = bind_mount_shell_snippet(&m, &PathBuf::from("/rootfs")).expect("snippet");
+        assert!(
+            snippet.contains("if [ -d"),
+            "snippet must branch on source type: {snippet}"
+        );
+        assert!(
+            snippet.contains("sudo mkdir -p"),
+            "snippet must create the target: {snippet}"
+        );
+        assert!(
+            snippet.contains("sudo touch"),
+            "file sources must create a file target: {snippet}"
+        );
+        // The old failure mode reported only on stderr and produced a silent
+        // no-op; the source is now checked loudly.
+        assert!(
+            snippet.contains("does not exist on the host"),
+            "a missing source must fail loudly: {snippet}"
+        );
+        assert!(
+            snippet.contains("could not be created"),
+            "a target that cannot be created must fail loudly, not silently: {snippet}"
+        );
+        assert!(
+            !snippet.contains("does not exist in image rootfs"),
+            "an absent target must no longer be fatal: {snippet}"
+        );
     }
 
     #[test]
@@ -1602,7 +2177,17 @@ mod bind_mount_tests {
             snippet.contains("remount,ro,bind") || snippet.contains("remount,bind,ro"),
             "snippet: {snippet}"
         );
-        assert!(!snippet.contains("mkdir -p"), "snippet: {snippet}");
+        // The read-only remount must stay the last step, after the target is
+        // created and the bind is in place.
+        let mount_at = snippet.find("mount --bind").expect("bind mount");
+        let ro_at = snippet
+            .find("remount,ro,bind")
+            .or_else(|| snippet.find("remount,bind,ro"))
+            .expect("ro remount");
+        assert!(
+            mount_at < ro_at,
+            "read-only remount must follow the bind: {snippet}"
+        );
     }
 
     #[test]

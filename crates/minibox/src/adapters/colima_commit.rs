@@ -438,7 +438,7 @@ mod tests {
         let committer =
             ColimaContainerCommitter::new(Arc::clone(&image_store), export_dir, executor);
 
-        let container_id = ContainerId::new("abc123".to_string()).expect("valid container id");
+        let container_id = ContainerId::try_new("abc123".to_string()).expect("valid container id");
         let metadata = committer
             .commit(&container_id, "example/app:latest", &sample_config())
             .await

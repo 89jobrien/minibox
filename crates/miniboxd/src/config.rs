@@ -1,11 +1,34 @@
 //! Daemon configuration — layered TOML + env var overrides.
 //!
-//! Load order: system `/etc/minibox/config.toml` -> user
-//! `~/.config/minibox/config.toml` -> env vars (`MINIBOX_*`).
+//! Load order: project `./minibox.toml` (lowest) -> system
+//! `/etc/minibox/config.toml` -> user `~/.config/minibox/config.toml` ->
+//! env vars (`MINIBOX_*`, highest).
 //! Later layers override earlier ones field-by-field.
+//!
+//! The project layer exists so a checkout can record its own dev settings
+//! (notably the privileged + bind-mount opt-in that `DinD` testing needs)
+//! without touching the host's system or user config. It is deliberately
+//! the *weakest* layer: a checked-in file can never weaken a system-level
+//! lockdown, and env vars can always override it back to deny. It is
+//! opt-in — nothing is read unless a `minibox.toml` is actually present.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+/// Filename of the project-level config, discovered by walking up from CWD.
+pub const PROJECT_CONFIG_FILENAME: &str = "minibox.toml";
+
+/// Locate a project-level [`PROJECT_CONFIG_FILENAME`] by walking up from
+/// `start` to the filesystem root, returning the first match.
+///
+/// Returns `None` when no such file exists in any ancestor directory.
+#[must_use]
+pub fn find_project_config(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .map(|dir| dir.join(PROJECT_CONFIG_FILENAME))
+        .find(|candidate| candidate.is_file())
+}
 
 /// Top-level daemon configuration.
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -47,24 +70,39 @@ pub struct PolicyConfig {
 impl DaemonConfig {
     /// Load config from the standard layered sources.
     ///
-    /// 1. `/etc/minibox/config.toml` (system)
-    /// 2. `$HOME/.config/minibox/config.toml` (user)
-    /// 3. `MINIBOX_*` env vars (highest priority)
+    /// 1. `./minibox.toml` (project — lowest precedence, opt-in)
+    /// 2. `/etc/minibox/config.toml` (system)
+    /// 3. `$HOME/.config/minibox/config.toml` (user)
+    /// 4. `MINIBOX_*` env vars (highest priority)
+    ///
+    /// The project layer is applied first so system and user config always
+    /// win; it exists so a checkout can carry its own dev settings without
+    /// mutating host config. Every layer after the first is optional, and a
+    /// missing file contributes nothing.
     // qual:allow(iosp) reason: "config loading inherently mixes file I/O with merge logic"
     #[must_use]
     pub fn load() -> Self {
         let mut cfg = Self::default();
 
-        // Layer 1: system config
+        // Layer 1: project config (lowest precedence). Opt-in: skipped
+        // entirely when no minibox.toml is found walking up from CWD.
+        if let Ok(cwd) = std::env::current_dir()
+            && let Some(project_path) = find_project_config(&cwd)
+        {
+            tracing::debug!(path = %project_path.display(), "config: project layer");
+            cfg = cfg.merge(Self::load_from_path(&project_path));
+        }
+
+        // Layer 2: system config
         cfg = cfg.merge(Self::load_from_path(Path::new("/etc/minibox/config.toml")));
 
-        // Layer 2: user config
+        // Layer 3: user config
         if let Ok(home) = std::env::var("HOME") {
             let user_path = PathBuf::from(home).join(".config/minibox/config.toml");
             cfg = cfg.merge(Self::load_from_path(&user_path));
         }
 
-        // Layer 3: env var overrides
+        // Layer 4: env var overrides
         cfg.with_env_overrides()
     }
 
@@ -422,6 +460,112 @@ log_level = "trace"
         let cfg = DaemonConfig::load_from_path(&path);
         assert_eq!(cfg.adapter.as_deref(), Some("native"));
         assert_eq!(cfg.log_level.as_deref(), Some("trace"));
+    }
+
+    // ── project-level minibox.toml discovery ─────────────────────────────
+
+    #[test]
+    fn find_project_config_returns_none_when_absent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(find_project_config(dir.path()).is_none());
+    }
+
+    #[test]
+    fn find_project_config_finds_file_in_ancestor() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::write(
+            root.join(PROJECT_CONFIG_FILENAME),
+            "log_level = \"debug\"\n",
+        )
+        .expect("write project config");
+        // Discovery starts from a nested subdirectory and walks up.
+        let nested = root.join("crates").join("miniboxd");
+        std::fs::create_dir_all(&nested).expect("create nested dir");
+
+        let found = find_project_config(&nested).expect("project config should be found");
+        assert_eq!(found, root.join(PROJECT_CONFIG_FILENAME));
+    }
+
+    #[test]
+    fn find_project_config_prefers_nearest_ancestor() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        std::fs::write(root.join(PROJECT_CONFIG_FILENAME), "log_level = \"info\"\n")
+            .expect("write outer");
+        let inner = root.join("inner");
+        std::fs::create_dir_all(&inner).expect("create inner");
+        std::fs::write(
+            inner.join(PROJECT_CONFIG_FILENAME),
+            "log_level = \"trace\"\n",
+        )
+        .expect("write inner");
+
+        // Walking up from the inner dir must stop at the inner file, not
+        // fall through to the outer one.
+        let found = find_project_config(&inner).expect("nearest config should win");
+        assert_eq!(found, inner.join(PROJECT_CONFIG_FILENAME));
+    }
+
+    #[test]
+    fn find_project_config_ignores_directories_named_like_the_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // A *directory* named minibox.toml must not be treated as a config.
+        std::fs::create_dir_all(dir.path().join(PROJECT_CONFIG_FILENAME))
+            .expect("create decoy dir");
+        assert!(find_project_config(dir.path()).is_none());
+    }
+
+    #[test]
+    fn project_layer_is_overridden_by_user_layer() {
+        // Security invariant: a checked-in project file must not be able to
+        // loosen policy that a later layer tightened. The project layer
+        // enables privileged; the user layer denies it, and the user wins.
+        let project = DaemonConfig {
+            policy: PolicyConfig {
+                allow_privileged: Some(true),
+                allow_bind_mounts: Some(true),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let user = DaemonConfig {
+            policy: PolicyConfig {
+                allow_privileged: Some(false),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let merged = project.merge(user);
+        assert_eq!(
+            merged.policy.allow_privileged,
+            Some(false),
+            "user config must override the project layer"
+        );
+        assert_eq!(
+            merged.policy.allow_bind_mounts,
+            Some(true),
+            "unset user fields leave project values intact"
+        );
+    }
+
+    #[test]
+    fn project_layer_parses_privileged_opt_in() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join(PROJECT_CONFIG_FILENAME);
+        std::fs::write(
+            &path,
+            r"[policy]
+allow_privileged = true
+allow_bind_mounts = true
+",
+        )
+        .expect("write");
+
+        let cfg = DaemonConfig::load_from_path(&path);
+        assert_eq!(cfg.policy.allow_privileged, Some(true));
+        assert_eq!(cfg.policy.allow_bind_mounts, Some(true));
     }
 }
 

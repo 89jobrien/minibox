@@ -124,7 +124,7 @@ mod tests {
         let error = adapter.attach(&request()).expect_err("attach must refuse");
         let payload = error_payload(&error);
         assert_eq!(payload.code, ERR_INTERNAL);
-        assert!(!payload.msg.is_empty());
+        assert_ne!(payload.msg, "");
         assert!(payload.details.expect("details").contains("netlink"));
     }
 }

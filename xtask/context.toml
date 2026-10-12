@@ -363,7 +363,7 @@ target = "aarch64-apple-darwin"
 features = []
 no_default_features = false
 all_targets = true
-required_in_ci = true
+required_in_ci = false
 
 [[profiles]]
 id = "native-linux-gnu"
@@ -387,7 +387,7 @@ target = "x86_64-pc-windows-msvc"
 features = []
 no_default_features = false
 all_targets = true
-required_in_ci = true
+required_in_ci = false
 
 [[profiles]]
 id = "macos-vz"

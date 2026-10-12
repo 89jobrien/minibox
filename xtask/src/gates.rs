@@ -2,7 +2,10 @@
 
 use anyhow::{Context, Result};
 use minibox_testsuite::harness::ConformanceResult;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 use xshell::{Shell, cmd};
 
 use crate::checkpoint::{self, FileCheckpointStore, GateId, GitTreeProbe};
@@ -124,9 +127,6 @@ fn feature_matrix(sh: &Shell, root: &Path) -> Result<()> {
     Ok(())
 }
 
-// TODO(feature-idea-02): extend agentlint with semantic checks for local paths, Cargo package
-// names, and documented xtask commands so stale agent guidance fails validation.
-
 /// Lint gate: fmt --check + clippy + cargo check (matches CI lint jobs).
 ///
 /// Includes all workspace crates. On macOS, macbox is included in clippy;
@@ -234,7 +234,8 @@ pub fn fix(sh: &Shell) -> Result<()> {
 
 /// Pre-commit gate: staged formatting, clippy, and repository checks (macOS-safe, fast).
 ///
-/// Formats and re-stages staged Rust files, but does not apply clippy fixes.
+/// Formatting and re-staging are scoped to the staged set; clippy and the
+/// architecture check always run. clippy fixes are not applied here.
 /// Release build and conformance suite run at pre-push time, not here.
 pub fn pre_commit(sh: &Shell) -> Result<()> {
     let rust_staged = staged_rust_files(sh)?;
@@ -246,14 +247,18 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
         // output lands in this commit without pulling in unrelated dirty files.
         // See `restage_staged_rust` for why the `*.rs` glob is not equivalent.
         restage_staged_rust(sh, &staged_before)?;
-        cmd!(
-            sh,
-            "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
-        )
-        .run()
-        .context("clippy failed")?;
-        crate::architecture::run(&sh.current_dir()).context("architecture check failed")?;
     }
+
+    // Unconditional: neither depends on the staged set. Gating them on
+    // `rust_staged` let this hook print "pre-commit checks passed" for a
+    // docs- or config-only commit without compiling a single line.
+    cmd!(
+        sh,
+        "cargo clippy -p minibox -p minibox-domain -p minibox-macros -p minibox-cli -p minibox-core -p macbox -p miniboxd -p ail -- -D warnings"
+    )
+    .run()
+    .context("clippy failed")?;
+    crate::architecture::run(&sh.current_dir()).context("architecture check failed")?;
 
     // Agent config lint: validate .claude/, .codex/, .agents/, .cursor/ files.
     if staged_agent_files(sh)? {
@@ -282,12 +287,56 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // Docs frontmatter lint (fast, no external tools).
     let root = sh.current_dir();
     docs_lint::lint_docs(&root, None).context("docs-lint failed")?;
-    // Keep the FEATURE_MATRIX Last-updated stamp current (idempotent).
-    crate::feature_matrix_date::update_feature_matrix_date(&root)
-        .context("update-feature-matrix-date failed")?;
+    // Keep the `Last updated:` stamps current, but only for the docs this
+    // commit actually changes. A blanket sweep restamped every doc in
+    // `docs/` on every commit, so any commit produced a wall of date-only
+    // diffs across docs/core/*.mbx.md. A doc whose only staged change is the
+    // stamp itself is skipped, so the date can never drift forward on its own.
+    restamp_staged_docs(sh)?;
     // Warn (non-fatal) if generated artifacts are tracked by git.
     check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
+    Ok(())
+}
+
+/// Advance the `Last updated:` stamp of each staged doc that has a real
+/// content change, then re-stage exactly those files.
+///
+/// The stamp is bumped in the working tree and re-staged only for docs that
+/// were *already* staged, mirroring `restage_staged_rust`'s discipline: a
+/// broad pathspec would sweep in another agent's or a parallel worktree's
+/// uncommitted doc edits.
+fn restamp_staged_docs(sh: &Shell) -> Result<()> {
+    let candidates = staged_doc_paths(sh)?;
+    if candidates.is_empty() {
+        return Ok(());
+    }
+
+    let mut to_restage: Vec<PathBuf> = Vec::new();
+    for path in &candidates {
+        if staged_change_beyond_stamp(sh, path)? {
+            to_restage.push(path.clone());
+        }
+    }
+
+    if to_restage.is_empty() {
+        eprintln!("doc-dates: no staged doc content changes — stamps left alone");
+        return Ok(());
+    }
+
+    let outcome = crate::feature_matrix_date::update_staged_docs(&to_restage);
+    if outcome.updated == 0 {
+        return Ok(());
+    }
+
+    let owned: Vec<String> = to_restage
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    let paths: Vec<&str> = owned.iter().map(String::as_str).collect();
+    cmd!(sh, "git add -u -- {paths...}")
+        .run()
+        .context("git add after doc-date update failed")?;
     Ok(())
 }
 
@@ -681,6 +730,8 @@ pub fn test_quickcheck(sh: &Shell) -> Result<()> {
 /// so the tests have the kernel privileges they need (cgroups v2, namespaces).
 /// `MINIBOX_TEST_BIN_DIR` is forwarded so helpers can locate `miniboxd`/`mbx`.
 pub fn test_integration(sh: &Shell) -> Result<()> {
+    require_linux_host("integration")?;
+
     cmd!(sh, "cargo build --release -p miniboxd -p minibox-cli")
         .run()
         .context("release build failed")?;
@@ -756,12 +807,35 @@ pub fn test_e2e(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
+/// Guard for suites whose test binary is `#![cfg(target_os = "linux")]`.
+///
+/// `crates/miniboxd/tests/system_tests.rs` carries that attribute at the crate
+/// root, so on a non-Linux host the test binary compiles to zero tests. Reaching
+/// `sudo` anyway spends a full release build to execute nothing — and once
+/// `sudo` *does* authenticate (via a TTY or an askpass helper) the empty run
+/// would report success, turning "did not run" into a false pass. Fail fast
+/// with the requirement and the supported alternative instead.
+fn require_linux_host(suite: &str) -> Result<()> {
+    if cfg!(not(target_os = "linux")) {
+        anyhow::bail!(
+            "{suite} is Linux-only and requires root, but this host is {}. \
+             The test binary is gated to Linux and compiles to zero tests here, so \
+             there is nothing to run. Use `cargo xtask test-linux` to execute the \
+             suite inside a minibox container, or invoke the suite on Linux.",
+            std::env::consts::OS,
+        );
+    }
+    Ok(())
+}
+
 /// System tests: full-stack daemon+CLI tests (Linux, root, cgroups v2 required).
 ///
 /// Renamed from `test_e2e_suite` — these tests exercise real kernel facilities
 /// (namespaces, overlay FS, cgroups v2) and live above integration tests in
 /// the tier hierarchy.
 pub fn test_system_suite(sh: &Shell) -> Result<()> {
+    require_linux_host("system-suite")?;
+
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
@@ -792,6 +866,8 @@ pub fn test_system_suite(sh: &Shell) -> Result<()> {
 
 /// Sandbox contract tests (Linux, root, Docker Hub required)
 pub fn test_sandbox(sh: &Shell) -> Result<()> {
+    require_linux_host("sandbox")?;
+
     cmd!(sh, "cargo build --release")
         .run()
         .context("build failed")?;
@@ -893,14 +969,17 @@ pub fn coverage_check(sh: &Shell) -> Result<()> {
         sh,
         "cargo llvm-cov nextest --package minibox --features test-utils --json --summary-only"
     )
+    .ignore_status()
     .output()
     .context("failed to spawn cargo llvm-cov nextest")?;
 
     if !output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         anyhow::bail!(
-            "cargo llvm-cov nextest exited with {}: {}",
+            "cargo llvm-cov nextest exited with {}\nstdout:\n{}\nstderr:\n{}",
             output.status,
+            stdout.trim(),
             stderr.trim()
         );
     }
@@ -1095,13 +1174,25 @@ fn extract_test_unit_body(source: &str) -> Option<&str> {
     Some(&after_start[..next_fn_offset])
 }
 
+/// Extracts the body of `pub fn pre_commit` from `gates.rs` source text.
+///
+/// Returns the substring from the `pub fn pre_commit(` signature up to (but not
+/// including) the next top-level `pub fn` declaration.
+#[cfg(test)]
+fn extract_pre_commit_body(source: &str) -> Option<&str> {
+    let start = source.find("pub fn pre_commit(")?;
+    let after_start = &source[start..];
+    let next_fn_offset = after_start[1..].find("\npub fn ")? + 1;
+    Some(&after_start[..next_fn_offset])
+}
+
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::{
-        GATES_SOURCE, cfg_predicate_has_test, extract_test_unit_body, musl_check_required,
-        nextest_output_is_zero_tests, parse_conformance_result, parse_handler_fn_coverage,
-        phase_2_skipped,
+        GATES_SOURCE, cfg_predicate_has_test, extract_pre_commit_body, extract_test_unit_body,
+        musl_check_required, nextest_output_is_zero_tests, parse_conformance_result,
+        parse_handler_fn_coverage, phase_2_skipped,
     };
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
@@ -1426,6 +1517,54 @@ mod tests {
         );
     }
 
+    /// `pre_commit` must compile on every commit, not only when Rust is staged.
+    ///
+    /// The gate once wrapped clippy and the architecture check in
+    /// `if rust_staged`, so a docs- or config-only commit printed
+    /// "pre-commit checks passed" without compiling a single line. Formatting
+    /// and re-staging legitimately stay staged-scoped; these two must not.
+    ///
+    /// If this test fails: a compile step was re-gated behind
+    /// `staged_rust_files()`, so the hook can report success while verifying
+    /// nothing.
+    #[test]
+    fn pre_commit_compiles_unconditionally() {
+        let body = extract_pre_commit_body(GATES_SOURCE)
+            .expect("could not locate `pub fn pre_commit` in gates.rs source");
+
+        // Anchor on the end of the staged-scoped block. `restage_staged_rust` is
+        // its last statement, and the block closes at a 4-space `}`. Anything
+        // past that brace is unconditional; anything before it is still gated.
+        const RESTAGE: &str = "restage_staged_rust(sh, &staged_before)?;";
+        let restage_end = body
+            .find(RESTAGE)
+            .map(|i| i + RESTAGE.len())
+            .expect("pre-commit must still re-stage formatted Rust");
+        let block_end = body[restage_end..]
+            .find("\n    }")
+            .map(|i| restage_end + i)
+            .expect("the `if rust_staged` block must close after re-staging");
+
+        let clippy = body
+            .find("cargo clippy")
+            .expect("pre-commit must run clippy");
+        let architecture = body
+            .find("crate::architecture::run")
+            .expect("pre-commit must run the architecture guard");
+
+        assert!(
+            clippy > block_end,
+            "cargo clippy must appear after the `if rust_staged` block closes in \
+             `pre_commit` — inside it, a docs- or config-only commit reports \
+             success without compiling anything"
+        );
+        assert!(
+            architecture > block_end,
+            "the architecture guard must appear after the `if rust_staged` block \
+             closes in `pre_commit` — see the clippy assertion above"
+        );
+    }
+
     #[test]
     fn conformance_report_output_returns_typed_result() {
         use minibox_testsuite::harness::{
@@ -1554,6 +1693,59 @@ fn collect_files_recursive(dir: &Path, out: &mut Vec<String>) {
     }
 }
 
+/// Load the set of top-level `cargo xtask <command>` names this workspace
+/// recognizes, from `xtask/schema/cli.schema.json`'s `$defs.commands` keys.
+///
+/// Returns `None` (never an error) if the schema is missing or unparsable —
+/// this check is best-effort agent-doc hygiene, not a hard dependency on the
+/// schema file always being present at a particular relative path.
+fn known_xtask_commands() -> Option<std::collections::BTreeSet<String>> {
+    // The real `xtask` binary runs with cwd = workspace root, so the schema
+    // lives at `xtask/schema/cli.schema.json` relative to cwd. `cargo test`
+    // instead sets cwd to this crate's own manifest directory (`xtask/`), so
+    // fall back to a path relative to `CARGO_MANIFEST_DIR` (baked in at
+    // compile time) for that case.
+    let candidates = [
+        PathBuf::from("xtask/schema/cli.schema.json"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("schema/cli.schema.json"),
+    ];
+    let content = candidates
+        .iter()
+        .find_map(|path| fs::read_to_string(path).ok())?;
+    let schema: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let commands = schema.get("$defs")?.get("commands")?.as_object()?;
+    Some(commands.keys().cloned().collect())
+}
+
+/// Find every `cargo xtask <word>` reference in `content` whose `<word>` is
+/// not in `known`.
+///
+/// Deliberately requires the literal `cargo xtask ` prefix, not a bare
+/// `xtask ` — prose like "the xtask crate" or "xtask's gates" is common in
+/// agent docs and is not a command invocation. Requiring `cargo xtask`
+/// trades a few missed references (e.g. a doc that only says `xtask verify`)
+/// for not flagging ordinary prose as stale.
+fn stale_xtask_command_references(
+    content: &str,
+    known: &std::collections::BTreeSet<String>,
+) -> Vec<String> {
+    const PREFIX: &str = "cargo xtask ";
+    let mut stale = Vec::new();
+    let mut rest = content;
+    while let Some(idx) = rest.find(PREFIX) {
+        rest = &rest[idx + PREFIX.len()..];
+        let token = rest
+            .split(|c: char| c.is_whitespace() || c == '`' || c == ',' || c == ')')
+            .next()
+            .unwrap_or("")
+            .trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-');
+        if !token.is_empty() && !known.contains(token) {
+            stale.push(token.to_string());
+        }
+    }
+    stale
+}
+
 fn agentlint_check(agent_files: &[String]) -> Result<()> {
     let mut errors: Vec<String> = Vec::new();
     let mut linted: usize = 0;
@@ -1595,6 +1787,23 @@ fn agentlint_check(agent_files: &[String]) -> Result<()> {
                             missing.join(", ")
                         ));
                     }
+                }
+                // Semantic check: every `cargo xtask <command>` reference must
+                // name a command this workspace's xtask actually understands,
+                // so a renamed/removed subcommand fails agent guidance validation
+                // instead of silently rotting (see xtask/schema/cli.schema.json).
+                if let Some(known) = known_xtask_commands() {
+                    for stale in stale_xtask_command_references(&content, &known) {
+                        errors.push(format!(
+                            "{file}: references unknown xtask command `cargo xtask {stale}` \
+                             (not in xtask/schema/cli.schema.json)"
+                        ));
+                    }
+                } else {
+                    eprintln!(
+                        "agentlint: xtask command schema unreadable/unparsable, skipping \
+                         semantic check"
+                    );
                 }
             }
             "yaml" | "yml" => {
@@ -1683,6 +1892,80 @@ fn lint_script(file: &str, content: &str, errors: &mut Vec<String>) {
     }
 }
 
+#[cfg(test)]
+mod agentlint_semantic_tests {
+    use super::*;
+
+    fn known() -> std::collections::BTreeSet<String> {
+        ["verify", "test", "demo", "fuzz"]
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn recognized_command_is_not_flagged() {
+        let stale = stale_xtask_command_references(
+            "Run `cargo xtask verify` before every commit.",
+            &known(),
+        );
+        assert!(
+            stale.is_empty(),
+            "expected no stale references, got {stale:?}"
+        );
+    }
+
+    #[test]
+    fn renamed_command_is_flagged() {
+        // Mirrors a real regression this workspace hit: docs referenced the
+        // deprecated `cargo xtask test-unit` alias after it was renamed to
+        // `cargo xtask test unit`.
+        let stale =
+            stale_xtask_command_references("See `cargo xtask test-unit` for details.", &known());
+        assert_eq!(stale, vec!["test-unit".to_string()]);
+    }
+
+    #[test]
+    fn bare_xtask_prose_is_not_flagged() {
+        // "the xtask crate" is ordinary prose, not a command invocation —
+        // only the `cargo xtask <word>` form should ever be checked.
+        let stale = stale_xtask_command_references(
+            "The xtask crate owns every workspace quality gate.",
+            &known(),
+        );
+        assert!(
+            stale.is_empty(),
+            "expected no stale references, got {stale:?}"
+        );
+    }
+
+    #[test]
+    fn multiple_references_are_all_checked() {
+        let stale = stale_xtask_command_references(
+            "Run `cargo xtask verify` then `cargo xtask sync-adapters`.",
+            &known(),
+        );
+        assert_eq!(stale, vec!["sync-adapters".to_string()]);
+    }
+
+    #[test]
+    fn trailing_punctuation_is_stripped_before_comparison() {
+        let stale = stale_xtask_command_references("Finish with cargo xtask verify.", &known());
+        assert!(
+            stale.is_empty(),
+            "trailing period must not break the match: {stale:?}"
+        );
+    }
+
+    #[test]
+    fn known_xtask_commands_includes_verify_and_test() {
+        let known = known_xtask_commands().expect("schema should parse from the workspace root");
+        assert!(known.contains("verify"));
+        assert!(known.contains("test"));
+        assert!(known.contains("agentlint"));
+    }
+}
+
 /// Returns `["--fail-fast"]` when `MINIBOX_FAIL_FAST=true`, otherwise empty.
 fn fail_fast_flag() -> Vec<&'static str> {
     if std::env::var("MINIBOX_FAIL_FAST").as_deref() == Ok("true") {
@@ -1719,6 +2002,52 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
     Ok(staged
         .lines()
         .any(|l| l.starts_with(".github/workflows/") || l == ".github/actionlint.yaml"))
+}
+
+/// Staged markdown paths under `docs/`.
+///
+/// Used to scope the `Last updated:` stamp pass to the docs a commit actually
+/// touches, instead of restamping the entire docs tree on every commit.
+#[allow(clippy::case_sensitive_file_extension_comparisons)]
+fn staged_doc_paths(sh: &Shell) -> Result<Vec<PathBuf>> {
+    let staged = cmd!(sh, "git diff --cached --name-only")
+        .output()
+        .context("git diff --cached failed")?;
+    let staged = String::from_utf8_lossy(&staged.stdout);
+    Ok(staged
+        .lines()
+        .filter(|l| l.starts_with("docs/") && l.ends_with(".md"))
+        .map(PathBuf::from)
+        .collect())
+}
+
+/// Returns true when the staged diff for `path` changes something other than a
+/// `Last updated:` stamp line.
+///
+/// A doc whose only staged change is the stamp itself is not meaningfully
+/// updated, so its stamp must not be advanced — otherwise committing an
+/// unrelated file walks every doc's date forward.
+fn staged_change_beyond_stamp(sh: &Shell, path: &Path) -> Result<bool> {
+    let path_str = path.to_string_lossy().into_owned();
+    let diff = cmd!(sh, "git diff --cached -U0 -- {path}")
+        .output()
+        .with_context(|| format!("git diff --cached failed for {path_str}"))?;
+    let diff = String::from_utf8_lossy(&diff.stdout);
+
+    for line in diff.lines() {
+        // Skip diff metadata and hunk headers; only +/- content lines matter.
+        let Some(body) = line.strip_prefix('+').or_else(|| line.strip_prefix('-')) else {
+            continue;
+        };
+        // A leading "++"/"--" would be a file header, not content.
+        if body.starts_with('+') || body.starts_with('-') {
+            continue;
+        }
+        if !crate::feature_matrix_date::is_stamp_line(body) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Returns true if any `.rs` or `.toml` files (excluding `Cargo.lock`) are staged.

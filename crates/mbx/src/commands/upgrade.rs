@@ -329,7 +329,7 @@ mod tests {
         let t = target_triple();
         assert!(t.is_ok(), "target_triple failed: {:?}", t.err());
         let triple = t.unwrap();
-        assert!(!triple.is_empty());
+        assert_ne!(triple, "");
         // Must contain a known OS substring
         assert!(
             triple.contains("linux") || triple.contains("darwin"),

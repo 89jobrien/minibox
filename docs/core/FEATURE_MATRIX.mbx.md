@@ -37,7 +37,7 @@ generated: 2026-09-16
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-09-29
+Last updated: 2026-10-10
 
 ---
 
@@ -126,6 +126,26 @@ Last updated: 2026-09-29
 | `tar_path_validation` | Yes | Yes | Yes | Yes | Yes | Blocked | Yes |
 | `uts_namespace` | Yes | No | Yes | Yes | Yes | Blocked | No |
 <!-- END GENERATED: adapter-capabilities -->
+
+## Production Prerequisites
+
+Per adapter: the host platform required to run it, and the capabilities
+declared unsupported (`No` in the matrix above) — i.e. the concrete use
+cases an operator cannot rely on in production with that adapter. Derived
+from `xtask/context.toml`, the same manifest reconciled against the live
+adapter registry.
+
+<!-- BEGIN GENERATED: production-prerequisites -->
+| Adapter | Platforms (prerequisite) | Unsupported capabilities |
+| --- | --- | --- |
+| `colima` | `linux`, `macos` | `bind_mounts`, `bridge_network`, `dns`, `events`, `pause_resume`, `peer_credential_auth`, `pid_reconciliation`, `port_forwarding`, `privileged_mode`, `prune_rmi` |
+| `gke` | `linux` | `bind_mounts`, `bridge_network`, `build`, `cgroups_v2`, `commit`, `dns`, `exec`, `ipc_namespace`, `logs`, `mount_namespace`, `network_namespace`, `pause_resume`, `peer_credential_auth`, `pid_namespace`, `pid_reconciliation`, `port_forwarding`, `privileged_mode`, `prune_rmi`, `uts_namespace` |
+| `krun` | `linux`, `macos` | `bind_mounts`, `bridge_network`, `build`, `cgroups_v2`, `commit`, `dns`, `events`, `exec`, `logs`, `overlay_filesystem`, `pause_resume`, `peer_credential_auth`, `pid_reconciliation`, `port_forwarding`, `privileged_mode`, `prune_rmi`, `push` |
+| `native` | `linux` | -- |
+| `smolvm` | `linux`, `macos` | `bind_mounts`, `bridge_network`, `commit`, `dns`, `events`, `exec`, `logs`, `overlay_filesystem`, `pause_resume`, `peer_credential_auth`, `pid_reconciliation`, `port_forwarding`, `privileged_mode`, `prune_rmi`, `push` |
+| `vz` | `macos` | `bind_mounts`, `bridge_network`, `build`, `commit`, `events`, `exec`, `logs`, `pause_resume`, `peer_credential_auth`, `pid_reconciliation`, `privileged_mode`, `prune_rmi`, `push` |
+| `winbox` | `windows` | `admission_policy_gate`, `bind_mounts`, `bridge_network`, `build`, `cgroups_v2`, `commit`, `dns`, `docker_hub_v2`, `environment_redaction`, `events`, `exec`, `execution_manifest`, `ghcr_io`, `ipc_namespace`, `layer_digest_verification`, `logs`, `manifest_get_verify`, `mount_namespace`, `network_namespace`, `otlp_export`, `overlay_filesystem`, `parallel_layer_pull`, `pause_resume`, `peer_credential_auth`, `pid_namespace`, `pid_reconciliation`, `port_forwarding`, `privileged_mode`, `prune_rmi`, `ps`, `pull`, `push`, `request_frame_limits`, `restart`, `rm`, `run`, `state_persistence`, `stop`, `structured_tracing`, `uts_namespace` |
+<!-- END GENERATED: production-prerequisites -->
 
 ---
 

@@ -160,7 +160,7 @@ mod tests {
         let report = gc.prune(true, &[]).await.unwrap();
 
         assert!(report.dry_run);
-        assert!(!report.removed.is_empty());
+        assert_ne!(report.removed, Vec::<String>::new());
         // Directory must still exist
         assert!(
             img_dir.exists(),

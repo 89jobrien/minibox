@@ -78,7 +78,7 @@ pub async fn handle_exec(
         return;
     };
 
-    let cid = match minibox_core::domain::ContainerId::new(container_id.clone()) {
+    let cid = match minibox_core::domain::ContainerId::try_new(container_id.clone()) {
         Ok(id) => id,
         Err(e) => {
             send_error(&tx, "handle_exec", format!("invalid container id: {e}")).await;

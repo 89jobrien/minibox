@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "file": "crates/macbox/src/krun/runtime.rs",
+      "text": "TODO(feature-idea-34): spike msb_krun behind an opt-in feature and qualify firmware,",
+      "issue_number": 530
+    },
+    {
+      "file": "crates/macbox/src/lib.rs",
+      "text": "TODO(feature-idea-13): provide VM-backed exec and historical log retrieval for",
+      "issue_number": 531
+    },
+    {
+      "file": "crates/minibox-core/src/protocol.rs",
+      "text": "TODO(#83): add PTY/stdio protocol variants for interactive containers",
+      "issue_number": 532
+    },
+    {
+      "file": "crates/minibox-core/src/protocol.rs",
+      "text": "TODO(#183): DaemonRequest::Build variant + handler exist; still missing",
+      "issue_number": 533
+    },
+    {
+      "file": "crates/minibox-core/src/protocol.rs",
+      "text": "TODO(#229): add container networking protocol variants",
+      "issue_number": 534
+    },
+    {
+      "file": "crates/minibox-core/src/protocol.rs",
+      "text": "TODO(feature-idea-32): add an additive protocol generation and capability discovery handshake",
+      "issue_number": 535
+    },
+    {
+      "file": "crates/minibox-core/tests/protocol_evolution.rs",
+      "text": "TODO(feature-idea-30): pin historical request/response fixtures and exercise both",
+      "issue_number": 536
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-19): expand adapter conformance to cover concrete security,",
+      "issue_number": 537
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-20): unify compiled, configured, operational, and",
+      "issue_number": 538
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-21): complete the MCP control surface for the supported",
+      "issue_number": 539
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-22): enforce one policy model across MCP, Crux, CLI, and",
+      "issue_number": 540
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-23): persist structured audit records for agent mutations,",
+      "issue_number": 541
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-24): graduate bridge and CNI networking through concrete",
+      "issue_number": 542
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-25): stabilize OCI push, commit, and build by completing",
+      "issue_number": 543
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-26): provide VM-backed exec-into-running and historical log",
+      "issue_number": 544
+    },
+    {
+      "file": "crates/minibox-domain/src/capability.rs",
+      "text": "TODO(feature-idea-27): consolidate the WSL2 implementations and wire a",
+      "issue_number": 545
+    },
+    {
+      "file": "crates/minibox-domain/src/checkpoint.rs",
+      "text": "TODO(feature-idea-31): define versioned immutable snapshot IDs, parent lineage, payload",
+      "issue_number": 546
+    },
+    {
+      "file": "crates/minibox-domain/src/networking.rs",
+      "text": "TODO(feature-idea-33): make NetworkMode authoritative for every adapter, then add",
+      "issue_number": 547
+    },
+    {
+      "file": "crates/minibox/src/adapters/network/bridge.rs",
+      "text": "TODO(#229): container networking — expand bridge adapter for full CNI support",
+      "issue_number": 548
+    },
+    {
+      "file": "crates/minibox/src/container/process.rs",
+      "text": "TODO(feature-idea-14): add and verify a default capability drop policy plus",
+      "issue_number": 549
+    },
+    {
+      "file": "crates/minibox/src/container/process.rs",
+      "text": "TODO(feature-idea-16): the user namespace and its uid_map/gid_map are now",
+      "issue_number": 550
+    },
+    {
+      "file": "crates/minibox/src/container/process.rs",
+      "text": "TODO(feature-idea-17): extend the mount-only seccomp filter into a documented,",
+      "issue_number": 551
+    },
+    {
+      "file": "crates/minibox/src/container/process.rs",
+      "text": "TODO(feature-idea-18): add end-to-end security regressions for capability drops,",
+      "issue_number": 552
+    },
+    {
+      "file": "crates/minibox/src/daemon/handler/mod.rs",
+      "text": "TODO(#116): raise coverage on handler and lifecycle/error paths",
+      "issue_number": 553
+    },
+    {
+      "file": "crates/minibox/src/daemon/handler/run.rs",
+      "text": "TODO(#326): persist execution manifest before container spawn",
+      "issue_number": 554
+    },
+    {
+      "file": "crates/minibox/src/daemon/handler/run.rs",
+      "text": "TODO(#366): extract shared run preparation path from handle_run",
+      "issue_number": 555
+    },
+    {
+      "file": "crates/minibox/src/daemon/handler/snapshot.rs",
+      "text": "TODO(feature-idea-29): resolve snapshot paths relative to a trusted directory handle with",
+      "issue_number": 556
+    },
+    {
+      "file": "crates/minibox/src/daemon/handler/update.rs",
+      "text": "TODO(#178): add regression test for handle_update restart ContainerRecord gap",
+      "issue_number": 557
+    },
+    {
+      "file": "crates/minibox/src/daemon/state.rs",
+      "text": "TODO(feature-idea-28): fail closed on corrupt or unreadable state, serialize durable",
+      "issue_number": 558
+    },
+    {
+      "file": "crates/winbox/src/lib.rs",
+      "text": "TODO(feature-idea-15): complete the Windows daemon with a Named Pipe listener, authenticated",
+      "issue_number": 562
+    }
+  ]
+}

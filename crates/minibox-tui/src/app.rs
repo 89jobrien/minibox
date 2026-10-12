@@ -49,14 +49,14 @@ impl App {
     }
 
     /// Selects the next container row, wrapping at the end.
-    pub fn select_next(&mut self) {
+    pub const fn select_next(&mut self) {
         if !self.containers.is_empty() {
             self.selected = (self.selected + 1) % self.containers.len();
         }
     }
 
     /// Selects the previous container row, wrapping at the beginning.
-    pub fn select_prev(&mut self) {
+    pub const fn select_prev(&mut self) {
         if !self.containers.is_empty() {
             self.selected = (self.selected + self.containers.len() - 1) % self.containers.len();
         }

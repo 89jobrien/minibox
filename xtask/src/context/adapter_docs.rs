@@ -110,6 +110,24 @@ required_in_ci = true
         check_drift(temp.path()).expect("synchronized matrix should have no drift");
     }
 
+    const DOCUMENT_WITH_PREREQUISITES: &str = "before\n<!-- BEGIN GENERATED: adapter-suites -->\nold\n<!-- END GENERATED: adapter-suites -->\nmiddle\n<!-- BEGIN GENERATED: adapter-capabilities -->\nold\n<!-- END GENERATED: adapter-capabilities -->\nmiddle2\n<!-- BEGIN GENERATED: production-prerequisites -->\nold\n<!-- END GENERATED: production-prerequisites -->\nafter\n";
+
+    #[test]
+    fn sync_populates_production_prerequisites_when_marker_present() {
+        let temp = tempfile::tempdir().expect("temporary docs root should be created");
+        std::fs::create_dir_all(temp.path().join("xtask")).expect("xtask dir");
+        std::fs::create_dir_all(temp.path().join("docs/core")).expect("docs dir");
+        std::fs::write(temp.path().join("xtask/context.toml"), MANIFEST).expect("manifest");
+        std::fs::write(temp.path().join(MATRIX_PATH), DOCUMENT_WITH_PREREQUISITES)
+            .expect("document");
+
+        sync(temp.path()).expect("sync should succeed");
+        let updated = std::fs::read_to_string(temp.path().join(MATRIX_PATH)).expect("read");
+        assert!(updated.contains("| `native` |"));
+        assert!(!updated.contains("production-prerequisites -->\nold"));
+        check_drift(temp.path()).expect("synchronized matrix should have no drift");
+    }
+
     #[test]
     fn invalid_manifest_does_not_write_document() {
         let temp = fixture(&MANIFEST.replace("schema_version = 1", "schema_version = 2"));

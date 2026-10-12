@@ -134,10 +134,10 @@ proptest! {
 
     // ── Domain type validation ────────────────────────────────────────────────
 
-    /// `ContainerId::new("")` must always fail — empty IDs are never valid.
+    /// `ContainerId::try_new("")` must always fail — empty IDs are never valid.
     #[test]
     fn container_id_rejects_empty_string(_dummy in Just(())) {
-        prop_assert!(ContainerId::new(String::new()).is_err());
+        prop_assert!(ContainerId::try_new(String::new()).is_err());
     }
 
     /// Any string longer than 64 characters must be rejected by `ContainerId`.
@@ -147,7 +147,7 @@ proptest! {
         s in "[a-zA-Z0-9]{65,200}",
     ) {
         prop_assert!(
-            ContainerId::new(s.clone()).is_err(),
+            ContainerId::try_new(s.clone()).is_err(),
             "expected Err for len={}, got Ok",
             s.len()
         );
@@ -171,7 +171,7 @@ proptest! {
         // Verify the bad char survived truncation; if not, just skip the case.
         prop_assume!(s.chars().any(|c| !c.is_ascii_alphanumeric()));
         prop_assert!(
-            ContainerId::new(s.clone()).is_err(),
+            ContainerId::try_new(s.clone()).is_err(),
             "expected Err for {:?}, got Ok",
             s
         );
@@ -183,7 +183,7 @@ proptest! {
         s in "[a-zA-Z0-9]{1,64}",
     ) {
         prop_assert!(
-            ContainerId::new(s.clone()).is_ok(),
+            ContainerId::try_new(s.clone()).is_ok(),
             "expected Ok for {:?}, got Err",
             s
         );

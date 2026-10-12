@@ -30,8 +30,10 @@ use std::sync::Arc;
 // connectivity, teardown, DNS, NAT, and port-forward conformance tests.
 // TODO(feature-idea-25): stabilize OCI push, commit, and build by completing
 // control-surface exposure, policy coverage, and concrete adapter tests.
-// TODO(feature-idea-26): provide VM-backed exec-into-running and historical log
-// retrieval for supported macOS adapters.
+// TODO(feature-idea-26): krun now provides VM-backed exec-into-running (via
+// `smolvm machine exec` against a persistent named machine) and historical log
+// retrieval (via the adapter-agnostic stdout.log/stderr.log tee); colima and vz
+// still have no exec/log-retrieval path.
 // TODO(feature-idea-27): consolidate the WSL2 implementations and wire a
 // conformant Windows daemon transport, helper, and lifecycle adapter.
 
@@ -158,65 +160,65 @@ mod tests {
 
     #[test]
     fn container_id_valid() {
-        let id = ContainerId::new("abc123".to_string()).expect("valid alphanumeric id");
+        let id = ContainerId::try_new("abc123".to_string()).expect("valid alphanumeric id");
         assert_eq!(id.as_str(), "abc123");
     }
 
     #[test]
     fn container_id_empty() {
-        let result = ContainerId::new(String::new());
+        let result = ContainerId::try_new(String::new());
         assert!(result.is_err(), "empty id should fail");
     }
 
     #[test]
     fn container_id_too_long() {
         let long = "a".repeat(65);
-        let result = ContainerId::new(long);
+        let result = ContainerId::try_new(long);
         assert!(result.is_err(), "65-char id should fail");
     }
 
     #[test]
     fn container_id_max_length() {
         let id_str = "a".repeat(64);
-        let id = ContainerId::new(id_str.clone()).expect("64-char id should succeed");
+        let id = ContainerId::try_new(id_str.clone()).expect("64-char id should succeed");
         assert_eq!(id.as_str(), id_str);
     }
 
     #[test]
     fn container_id_special_chars() {
-        let result = ContainerId::new("abc-123".to_string());
+        let result = ContainerId::try_new("abc-123".to_string());
         assert!(result.is_err(), "hyphen should fail alphanumeric check");
     }
 
     #[test]
     fn container_id_spaces() {
-        let result = ContainerId::new("abc 123".to_string());
+        let result = ContainerId::try_new("abc 123".to_string());
         assert!(result.is_err(), "space should fail alphanumeric check");
     }
 
     #[test]
     fn container_id_as_str() {
-        let id = ContainerId::new("deadbeef".to_string()).expect("valid id");
+        let id = ContainerId::try_new("deadbeef".to_string()).expect("valid id");
         assert_eq!(id.as_str(), "deadbeef");
     }
 
     #[test]
     fn container_id_display() {
-        let id = ContainerId::new("abc123".to_string()).expect("valid id");
+        let id = ContainerId::try_new("abc123".to_string()).expect("valid id");
         assert_eq!(format!("{id}"), "abc123");
     }
 
     #[test]
     fn container_id_equality() {
-        let a = ContainerId::new("abc123".to_string()).expect("valid id");
-        let b = ContainerId::new("abc123".to_string()).expect("valid id");
+        let a = ContainerId::try_new("abc123".to_string()).expect("valid id");
+        let b = ContainerId::try_new("abc123".to_string()).expect("valid id");
         assert_eq!(a, b);
     }
 
     #[test]
     fn container_id_hash() {
-        let a = ContainerId::new("abc123".to_string()).expect("valid id");
-        let b = ContainerId::new("def456".to_string()).expect("valid id");
+        let a = ContainerId::try_new("abc123".to_string()).expect("valid id");
+        let b = ContainerId::try_new("def456".to_string()).expect("valid id");
         let mut set: HashSet<ContainerId> = HashSet::new();
         set.insert(a.clone());
         set.insert(b.clone());
@@ -230,7 +232,8 @@ mod tests {
     #[test]
     fn container_id_valid_16_char_hex() {
         // A standard 16-character lowercase hex ID (common Docker short-ID format) is valid.
-        let id = ContainerId::new("deadbeef01234567".to_string()).expect("valid 16-char hex id");
+        let id =
+            ContainerId::try_new("deadbeef01234567".to_string()).expect("valid 16-char hex id");
         assert_eq!(id.as_str(), "deadbeef01234567");
     }
 
@@ -238,7 +241,7 @@ mod tests {
     fn container_id_15_chars_is_valid() {
         // The validator requires 1–64 alphanumeric chars; 15 chars is within that range.
         // There is no minimum length beyond non-empty, so a 15-char hex string is accepted.
-        let id = ContainerId::new("deadbeef0123456".to_string())
+        let id = ContainerId::try_new("deadbeef0123456".to_string())
             .expect("15-char hex id is within the 1-64 range and must be accepted");
         assert_eq!(id.as_str().len(), 15);
     }
@@ -246,7 +249,7 @@ mod tests {
     #[test]
     fn container_id_17_chars_is_valid() {
         // Similarly, 17-char hex strings are within the 64-char maximum and accepted.
-        let id = ContainerId::new("deadbeef012345678".to_string())
+        let id = ContainerId::try_new("deadbeef012345678".to_string())
             .expect("17-char hex id is within the 1-64 range and must be accepted");
         assert_eq!(id.as_str().len(), 17);
     }
@@ -255,7 +258,7 @@ mod tests {
     fn container_id_non_hex_chars_rejected() {
         // Characters outside [0-9a-fA-F] that are also non-alphanumeric are rejected.
         // Hyphens and underscores are not alphanumeric, so they fail validation.
-        let result = ContainerId::new("deadbeef-0123456".to_string());
+        let result = ContainerId::try_new("deadbeef-0123456".to_string());
         assert!(
             result.is_err(),
             "hyphen is not alphanumeric and must be rejected"
@@ -264,7 +267,7 @@ mod tests {
 
     #[test]
     fn container_id_empty_rejected() {
-        let result = ContainerId::new(String::new());
+        let result = ContainerId::try_new(String::new());
         assert!(result.is_err(), "empty string must be rejected");
     }
 
@@ -274,7 +277,7 @@ mod tests {
     /// container IDs must normalise case if canonical form matters.
     #[test]
     fn container_id_mixed_case_hex_accepted() {
-        let id = ContainerId::new("DeadBeef01234567".to_string())
+        let id = ContainerId::try_new("DeadBeef01234567".to_string())
             .expect("mixed-case hex is alphanumeric and must be accepted");
         assert_eq!(id.as_str(), "DeadBeef01234567");
     }
@@ -375,7 +378,7 @@ mod tests {
     fn hook_spec_default() {
         let hook = HookSpec::default();
         assert_eq!(hook.command, "");
-        assert!(hook.args.is_empty());
+        assert_eq!(hook.args, Vec::<String>::new());
         assert!(hook.timeout_secs.is_none());
     }
 
