@@ -8,6 +8,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# TODO(ci-p2): `issues: write` is declared both here and again at the job
+# level below -- redundant, narrow to one place.
 permissions:
   contents: read
   issues: write

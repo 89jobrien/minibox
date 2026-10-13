@@ -9,6 +9,11 @@
 
 name: rust-clippy analyze
 
+# TODO(ci-p1): redundant with ci.yml's `cargo xtask verify`, merge.yml's `lint`
+# job (`cargo xtask lint`), and stability-gates.yml's `stability-compile` job.
+# Also pins `actions-rs/toolchain` (line below), an archived/unmaintained
+# action -- every other workflow uses `dtolnay/rust-toolchain`. Consolidate
+# into one of the other clippy runs or drop this workflow.
 on:
   push:
     branches: ["develop", "main", "staging", "release"]
