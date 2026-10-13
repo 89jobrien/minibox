@@ -370,10 +370,12 @@ jobs:
           done
           echo "All jobs passed or were skipped"
 
-  # TODO(ci-p1): three competing promotion mechanisms exist for this pipeline —
-  # these promote-* jobs (PR + gh pr merge --auto), the standalone promote.yml
-  # workflow_dispatch (crux-agentic), and `cargo xtask promote` (used manually
-  # this session). Pick one canonical mechanism and remove the others.
+  # Canonical CI-automated promotion path: these promote-* jobs open (or
+  # fast-forward) a PR and auto-merge once `ci-ok` passes. The standalone
+  # promote.yml workflow (crux-agentic) was removed as a redundant second
+  # mechanism. `cargo xtask promote` remains available as the manual/local
+  # override for cases these jobs can't handle (e.g. skipping a stuck CI
+  # check) -- it is a developer tool, not a competing CI automation path.
   promote-staging:
     name: promote develop -> staging
     runs-on: ubuntu-latest
