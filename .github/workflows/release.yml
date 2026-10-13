@@ -109,10 +109,6 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
-    # TODO(ci-p2): Linux-musl only -- no macOS artifact ships in GitHub Releases
-    # even though macOS is a first-class adapter target (smolvm/krun/colima).
-    # Confirm this is deliberate (daemon is Linux-only; mbx CLI could run on
-    # macOS against a remote daemon) rather than an oversight.
     strategy:
       matrix:
         target:
@@ -157,10 +153,59 @@ jobs:
           path: "*.tar.gz"
           retention-days: 1
 
+  build-macos:
+    name: Build ${{ matrix.target }}
+    runs-on: macos-latest
+    # miniboxd platform-dispatches on macOS (smolvm/krun/colima adapters) --
+    # already built and tested natively on macos-latest in merge.yml's
+    # test-cli-e2e/test-protocol-e2e jobs. `cross` can't target macOS from a
+    # Linux runner, so this builds natively instead of joining the `build`
+    # matrix above.
+    strategy:
+      matrix:
+        target:
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-release-
+
+      - name: Build binaries
+        run: cargo build --release --target ${{ matrix.target }} -p miniboxd -p minibox-cli
+
+      - name: Package
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          TARGET=${{ matrix.target }}
+          ARCHIVE="minibox-${VERSION//\//-}-${TARGET}.tar.gz"
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/miniboxd dist/
+          cp target/${{ matrix.target }}/release/mbx dist/
+          tar -czf "${ARCHIVE}" -C dist miniboxd mbx
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: minibox-${{ matrix.target }}
+          path: "*.tar.gz"
+          retention-days: 1
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build, generate-changelog]
+    needs: [build, build-macos, generate-changelog]
     permissions:
       contents: write
 
