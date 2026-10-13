@@ -94,7 +94,19 @@ pub(super) fn redact_diagnostic(root: &Path, diagnostic: &str) -> String {
             }
         })
         .collect::<String>();
-    redacted.chars().take(4096).collect()
+
+    const MAX_DIAGNOSTIC_CHARS: usize = 4096;
+    let char_count = redacted.chars().count();
+    if char_count <= MAX_DIAGNOSTIC_CHARS {
+        return redacted;
+    }
+    // Cargo/rustc emit build progress ("Compiling ...") before the actual
+    // error, so truncating the head (as this used to do) hid every real
+    // failure reason behind pages of dependency-compile noise. Keep the
+    // tail instead, where the actionable error actually lives.
+    let skip = char_count - MAX_DIAGNOSTIC_CHARS;
+    let tail: String = redacted.chars().skip(skip).collect();
+    format!("...<truncated {skip} earlier characters>...\n{tail}")
 }
 
 #[derive(Clone, Copy, Debug, Default)]
