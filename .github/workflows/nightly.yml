@@ -14,11 +14,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-# TODO(ci-p2): workflow-level `contents: write` is only needed by tag-nightly
-# (which re-declares it at job level anyway, see below) -- narrow this to the
-# job that actually needs it.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   geiger:

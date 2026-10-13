@@ -74,12 +74,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - name: Validate public crates publishability
-        # TODO(ci-p2): this dry-run list omits minibox-domain, which the real
-        # publish step below (publish_crate minibox-domain) does publish --
-        # a publishability regression there wouldn't be caught until the live
-        # publish fails. Add it here.
         run: |
           cargo publish --dry-run --locked -p minibox-macros
+          cargo publish --dry-run --locked -p minibox-domain
           cargo publish --dry-run --locked -p minibox-core
           cargo publish --dry-run --locked -p minibox-mcp
 
