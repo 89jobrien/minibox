@@ -135,6 +135,16 @@
 - `cargo xtask promote` — branch cascade (develop->staging->release->main)
 
 ## Recently completed
+- **Release: develop -> staging -> release -> main** (PR #592, merge commit `30e60ec2`,
+  2026-10-12T16:26:57Z) — promoted the 3 overlay rstest-fixture-ordering fixes plus 5
+  accumulated CI/protocol-drift-lock fixes to `main`. `staging -> release` needed
+  `--skip-ci-check` because the self-hosted runner had 0 instances registered against the
+  repo, stalling the `Merge` workflow's Linux-root jobs indefinitely on both `staging` and
+  `release` (all other checks were green). `release -> main` went through PR #592 rather
+  than a direct push per branch protection, and merged while non-required checks were
+  still running (`mergeStateStatus: UNSTABLE`, not `BLOCKED`) — required checks (`CI
+  passed`, `Stability Gates`, `actionlint`) were all green. Runner location is unresolved;
+  it is confirmed not on jobrien-vm despite prior documentation assuming it was.
 - **Mock system duplication resolved (t23)** — `crates/minibox/src/adapters/mocks.rs` is now an
   11-line `pub use minibox_core::adapters::mocks::*;` re-export; the ~1000-line duplicate
   reimplementation this entry used to describe is gone. Verified by direct read 2026-10-08.
@@ -276,6 +286,24 @@
 
 ## Known issues
 
+- **Self-hosted GHA runner is gone, not just offline** — the `Merge` workflow's
+  self-hosted Linux-root jobs (`integration tests`, `e2e tests`, `cargo
+  audit/deny/machete`, `cleanup (Linux)`, `protocol e2e (Linux)`) sit `pending`
+  indefinitely because `gh api repos/89jobrien/minibox/actions/runners` returns
+  `{"total_count":0,"runners":[]}`. Confirmed 2026-10-12: this runner lived on a
+  separate VPS (not jobrien-vm) that has since been shut down — there is no host
+  to restart it on. `.claude.local.md`'s GHA-runner section (`systemctl --user
+  restart 'actions.runner.*'` on jobrien-vm) describes a *different* runner setup
+  and is stale for this purpose; do not chase it as a fix. A replacement runner
+  needs to be built from scratch, not restarted. Workaround until one exists:
+  `cargo xtask promote --skip-ci-check` for any staging/release hop.
+  Direction under discussion: host it as an ephemeral minibox container
+  (`--ephemeral` GHA runner registration, one job per container, supervisor loop
+  mints a fresh registration token per start) rather than a persistent VM
+  process. Split by privilege: light jobs (clippy/fmt/unit/docs) can self-host on
+  minibox; the Linux-root integration/e2e suite needs `--privileged` + cgroup
+  delegation, which is circular (using minibox to test minibox's own privileged
+  path) — likely keep that one on real hardware/VM instead. Not yet built.
 - **GitHub Actions is fully non-functional** — every recent run on `develop` and `main`
   fails in 3-10s with "The job was not started because your account is locked due to a
   billing issue." No workflow can validate a push until that clears (observed 2026-10-03).
