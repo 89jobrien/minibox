@@ -1,10 +1,8 @@
 reviews:
   auto_review:
-    # Skip auto-review for PRs whose base is one of the three stability
-    # pipeline *promotion targets* (staging -> release -> main). Those PRs
-    # are mechanical re-merges of commits already reviewed on develop (see
-    # cargo xtask promote / AGENTS.md "Git Workflow"); a full AI review is
-    # noise, not signal. `develop` is deliberately NOT excluded here -- it's
-    # where ordinary feature/fix PRs land and still need review.
+    # Only auto-review PRs whose base is `staging`. develop/release/main are
+    # excluded: develop PRs are reviewed by other means, release/main are
+    # mechanical promotion re-merges of commits already reviewed earlier in
+    # the pipeline (see cargo xtask promote / AGENTS.md "Git Workflow").
     base_branches:
-      - "^(?!(main|staging|release)$).*$"
+      - "^staging$"
