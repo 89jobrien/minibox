@@ -48,6 +48,39 @@ pub struct DaemonConfig {
     /// Optional image storage directory override.
     #[serde(default)]
     pub images_dir: Option<PathBuf>,
+    /// Optional persistent data directory override (images, containers).
+    #[serde(default)]
+    pub data_dir: Option<PathBuf>,
+    /// Optional runtime directory override (sockets, per-container run state).
+    #[serde(default)]
+    pub run_dir: Option<PathBuf>,
+    /// Optional cgroup v2 parent path override.
+    #[serde(default)]
+    pub cgroup_root: Option<PathBuf>,
+    /// Optional metrics listener address (e.g. `127.0.0.1:9090`).
+    #[serde(default)]
+    pub metrics_addr: Option<String>,
+    /// Optional OTLP/gRPC trace exporter endpoint.
+    #[serde(default)]
+    pub otlp_endpoint: Option<String>,
+    /// Optional network mode (e.g. `bridge`).
+    #[serde(default)]
+    pub network_mode: Option<String>,
+    /// Optional CNI plugin binary search path.
+    #[serde(default)]
+    pub cni_path: Option<PathBuf>,
+    /// Optional CNI network config directory.
+    #[serde(default)]
+    pub cni_config_dir: Option<PathBuf>,
+    /// Optional `proot` binary path override (GKE adapter).
+    #[serde(default)]
+    pub proot_path: Option<PathBuf>,
+    /// Optional Unix socket group ownership override.
+    #[serde(default)]
+    pub socket_group: Option<String>,
+    /// Optional Unix socket permission mode override (e.g. `"0660"`).
+    #[serde(default)]
+    pub socket_mode: Option<String>,
     /// Security and resource policy settings.
     #[serde(default)]
     pub policy: PolicyConfig,
@@ -65,6 +98,9 @@ pub struct PolicyConfig {
     /// Optional maximum image size in mebibytes.
     #[serde(default)]
     pub max_image_size_mb: Option<u64>,
+    /// Optional maximum container-in-container nesting depth.
+    #[serde(default)]
+    pub max_nest_depth: Option<u32>,
 }
 
 impl DaemonConfig {
@@ -143,6 +179,7 @@ impl DaemonConfig {
                         allow_privileged: Some(false),
                         allow_bind_mounts: Some(false),
                         max_image_size_mb: Some(PRODUCTION_MAX_IMAGE_SIZE_MB),
+                        ..Default::default()
                     },
                     ..Default::default()
                 }
@@ -171,6 +208,50 @@ impl DaemonConfig {
         }
         if let Ok(v) = std::env::var("MINIBOX_IMAGES_DIR") {
             self.images_dir = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_DATA_DIR") {
+            self.data_dir = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_RUN_DIR") {
+            self.run_dir = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_CGROUP_ROOT") {
+            self.cgroup_root = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_METRICS_ADDR") {
+            self.metrics_addr = Some(v);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_OTLP_ENDPOINT") {
+            self.otlp_endpoint = Some(v);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_NETWORK_MODE") {
+            self.network_mode = Some(v);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_CNI_PATH") {
+            self.cni_path = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_CNI_CONFIG_DIR") {
+            self.cni_config_dir = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_PROOT_PATH") {
+            self.proot_path = Some(PathBuf::from(v));
+        }
+        if let Ok(v) = std::env::var("MINIBOX_SOCKET_GROUP") {
+            self.socket_group = Some(v);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_SOCKET_MODE") {
+            self.socket_mode = Some(v);
+        }
+        if let Ok(v) = std::env::var("MINIBOX_MAX_NEST_DEPTH") {
+            if let Ok(n) = v.parse::<u32>() {
+                self.policy.max_nest_depth = Some(n);
+            } else {
+                tracing::warn!(
+                    var = "MINIBOX_MAX_NEST_DEPTH",
+                    value = %v,
+                    "config: unrecognised integer value ignored"
+                );
+            }
         }
         if let Ok(v) = std::env::var("MINIBOX_ALLOW_PRIVILEGED")
             && let Some(b) = parse_policy_bool("MINIBOX_ALLOW_PRIVILEGED", &v)
@@ -204,6 +285,17 @@ impl DaemonConfig {
             socket_path: other.socket_path.or(self.socket_path),
             state_dir: other.state_dir.or(self.state_dir),
             images_dir: other.images_dir.or(self.images_dir),
+            data_dir: other.data_dir.or(self.data_dir),
+            run_dir: other.run_dir.or(self.run_dir),
+            cgroup_root: other.cgroup_root.or(self.cgroup_root),
+            metrics_addr: other.metrics_addr.or(self.metrics_addr),
+            otlp_endpoint: other.otlp_endpoint.or(self.otlp_endpoint),
+            network_mode: other.network_mode.or(self.network_mode),
+            cni_path: other.cni_path.or(self.cni_path),
+            cni_config_dir: other.cni_config_dir.or(self.cni_config_dir),
+            proot_path: other.proot_path.or(self.proot_path),
+            socket_group: other.socket_group.or(self.socket_group),
+            socket_mode: other.socket_mode.or(self.socket_mode),
             policy: PolicyConfig {
                 allow_privileged: other
                     .policy
@@ -217,6 +309,7 @@ impl DaemonConfig {
                     .policy
                     .max_image_size_mb
                     .or(self.policy.max_image_size_mb),
+                max_nest_depth: other.policy.max_nest_depth.or(self.policy.max_nest_depth),
             },
         }
     }
@@ -450,6 +543,93 @@ mod tests {
         unsafe_remove_var!("MINIBOX_SOCKET_PATH");
 
         assert_eq!(cfg.socket_path, Some(PathBuf::from("/tmp/custom.sock")));
+    }
+
+    #[test]
+    fn env_overrides_new_runtime_fields() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_DATA_DIR", "/data");
+        unsafe_set_var!("MINIBOX_RUN_DIR", "/run/minibox");
+        unsafe_set_var!("MINIBOX_CGROUP_ROOT", "/sys/fs/cgroup/minibox");
+        unsafe_set_var!("MINIBOX_METRICS_ADDR", "127.0.0.1:9090");
+        unsafe_set_var!("MINIBOX_OTLP_ENDPOINT", "http://localhost:4317");
+        unsafe_set_var!("MINIBOX_NETWORK_MODE", "bridge");
+        unsafe_set_var!("MINIBOX_CNI_PATH", "/opt/cni/bin");
+        unsafe_set_var!("MINIBOX_CNI_CONFIG_DIR", "/etc/cni/net.d");
+        unsafe_set_var!("MINIBOX_PROOT_PATH", "/usr/bin/proot");
+        unsafe_set_var!("MINIBOX_SOCKET_GROUP", "minibox");
+        unsafe_set_var!("MINIBOX_SOCKET_MODE", "0660");
+        unsafe_set_var!("MINIBOX_MAX_NEST_DEPTH", "4");
+
+        let cfg = DaemonConfig::default().with_env_overrides();
+
+        unsafe_remove_var!("MINIBOX_DATA_DIR");
+        unsafe_remove_var!("MINIBOX_RUN_DIR");
+        unsafe_remove_var!("MINIBOX_CGROUP_ROOT");
+        unsafe_remove_var!("MINIBOX_METRICS_ADDR");
+        unsafe_remove_var!("MINIBOX_OTLP_ENDPOINT");
+        unsafe_remove_var!("MINIBOX_NETWORK_MODE");
+        unsafe_remove_var!("MINIBOX_CNI_PATH");
+        unsafe_remove_var!("MINIBOX_CNI_CONFIG_DIR");
+        unsafe_remove_var!("MINIBOX_PROOT_PATH");
+        unsafe_remove_var!("MINIBOX_SOCKET_GROUP");
+        unsafe_remove_var!("MINIBOX_SOCKET_MODE");
+        unsafe_remove_var!("MINIBOX_MAX_NEST_DEPTH");
+
+        assert_eq!(cfg.data_dir, Some(PathBuf::from("/data")));
+        assert_eq!(cfg.run_dir, Some(PathBuf::from("/run/minibox")));
+        assert_eq!(
+            cfg.cgroup_root,
+            Some(PathBuf::from("/sys/fs/cgroup/minibox"))
+        );
+        assert_eq!(cfg.metrics_addr.as_deref(), Some("127.0.0.1:9090"));
+        assert_eq!(cfg.otlp_endpoint.as_deref(), Some("http://localhost:4317"));
+        assert_eq!(cfg.network_mode.as_deref(), Some("bridge"));
+        assert_eq!(cfg.cni_path, Some(PathBuf::from("/opt/cni/bin")));
+        assert_eq!(cfg.cni_config_dir, Some(PathBuf::from("/etc/cni/net.d")));
+        assert_eq!(cfg.proot_path, Some(PathBuf::from("/usr/bin/proot")));
+        assert_eq!(cfg.socket_group.as_deref(), Some("minibox"));
+        assert_eq!(cfg.socket_mode.as_deref(), Some("0660"));
+        assert_eq!(cfg.policy.max_nest_depth, Some(4));
+    }
+
+    #[test]
+    fn env_override_invalid_max_nest_depth_leaves_it_unset() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        unsafe_set_var!("MINIBOX_MAX_NEST_DEPTH", "lots");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_MAX_NEST_DEPTH");
+
+        assert_eq!(cfg.policy.max_nest_depth, None);
+    }
+
+    #[test]
+    fn merge_prefers_other_for_new_fields() {
+        let base = DaemonConfig {
+            data_dir: Some(PathBuf::from("/base-data")),
+            policy: PolicyConfig {
+                max_nest_depth: Some(2),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let overlay = DaemonConfig {
+            data_dir: Some(PathBuf::from("/overlay-data")),
+            ..Default::default()
+        };
+        let merged = base.merge(overlay);
+        assert_eq!(merged.data_dir, Some(PathBuf::from("/overlay-data")));
+        assert_eq!(
+            merged.policy.max_nest_depth,
+            Some(2),
+            "unset overlay field leaves base value intact"
+        );
     }
 
     #[test]
