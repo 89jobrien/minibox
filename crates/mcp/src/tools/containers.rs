@@ -4,9 +4,9 @@ use crate::client::MiniboxDaemonClient;
 use crate::error::{McpServerError, Result};
 use crate::policy::{AgentPolicy, Authorized};
 use crate::types::{
-    ContainerIdInput, ContainerInfoOutput, ImagesOutput, LogEntry, LogsInput, LogsOutput,
-    ManifestOutput, MountInput, PsOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
-    parse_network_mode, require_non_empty,
+    ContainerIdInput, ContainerInfoOutput, ExecContainerInput, ExecContainerOutput, ImagesOutput,
+    LogEntry, LogsInput, LogsOutput, ManifestOutput, MountInput, PsOutput, RunContainerInput,
+    RunContainerOutput, SimpleOutput, parse_network_mode, require_non_empty,
 };
 use base64::Engine as _;
 use minibox_core::domain::BindMount;
@@ -203,6 +203,17 @@ fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonR
     })
 }
 
+fn exec_request(input: ExecContainerInput) -> DaemonRequest {
+    DaemonRequest::Exec {
+        container_id: input.id,
+        cmd: input.cmd,
+        env: input.env,
+        working_dir: input.working_dir,
+        tty: false,
+        user: input.user,
+    }
+}
+
 fn parse_mount(input: MountInput) -> Result<BindMount> {
     let host_path = PathBuf::from(input.host_path);
     validate_absolute_clean_path(&host_path, "host_path")?;
@@ -374,6 +385,38 @@ mod tests {
         assert_eq!(network, Some(NetworkMode::None));
         assert_eq!(memory_limit_bytes, policy.default_memory_limit_bytes);
         assert_eq!(cpu_weight, policy.default_cpu_weight);
+    }
+
+    #[test]
+    fn exec_request_hardcodes_tty_false_and_passes_fields_through() {
+        let input = ExecContainerInput {
+            id: "abc123".to_string(),
+            cmd: vec!["echo".to_string(), "hi".to_string()],
+            env: vec!["FOO=bar".to_string()],
+            working_dir: Some("/tmp".to_string()),
+            user: Some("1000:1000".to_string()),
+        };
+
+        let request = exec_request(input);
+
+        let DaemonRequest::Exec {
+            container_id,
+            cmd,
+            env,
+            working_dir,
+            tty,
+            user,
+        } = request
+        else {
+            panic!("expected Exec request");
+        };
+
+        assert_eq!(container_id, "abc123");
+        assert_eq!(cmd, vec!["echo".to_string(), "hi".to_string()]);
+        assert_eq!(env, vec!["FOO=bar".to_string()]);
+        assert_eq!(working_dir, Some("/tmp".to_string()));
+        assert!(!tty);
+        assert_eq!(user, Some("1000:1000".to_string()));
     }
 
     #[test]

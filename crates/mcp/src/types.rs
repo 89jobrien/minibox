@@ -123,6 +123,38 @@ pub struct RunContainerOutput {
     pub truncated: bool,
 }
 
+/// Input for `minibox_exec`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ExecContainerInput {
+    /// Container ID or name. Must be in the Running state.
+    pub id: String,
+    /// Command and arguments to execute.
+    #[serde(default)]
+    pub cmd: Vec<String>,
+    /// Additional environment variables in `KEY=VALUE` form.
+    #[serde(default)]
+    pub env: Vec<String>,
+    /// Working directory inside the container. Defaults to `/`.
+    #[serde(default)]
+    pub working_dir: Option<String>,
+    /// Run the exec process as a specific user (e.g. `"nobody"`, `"1000:1000"`).
+    #[serde(default)]
+    pub user: Option<String>,
+}
+
+/// Output for `minibox_exec`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExecContainerOutput {
+    /// Decoded stdout.
+    pub stdout: String,
+    /// Decoded stderr.
+    pub stderr: String,
+    /// Exit code from the exec process.
+    pub exit_code: Option<i32>,
+    /// Whether decoded output was truncated.
+    pub truncated: bool,
+}
+
 /// Local schema-facing mirror of `ContainerInfo`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct ContainerInfoOutput {
