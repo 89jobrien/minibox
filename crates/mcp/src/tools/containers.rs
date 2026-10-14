@@ -160,6 +160,24 @@ pub async fn rm(
     simple_id_request(client, policy, request, "minibox_rm").await
 }
 
+/// Execute a command inside a running container.
+///
+/// # Errors
+///
+/// Returns an error if policy denies the operation, input is invalid, or the daemon call fails.
+pub async fn exec(
+    client: &MiniboxDaemonClient,
+    policy: &AgentPolicy,
+    input: ExecContainerInput,
+) -> Result<ExecContainerOutput> {
+    require_non_empty(&input.id, "id")?;
+    let request = policy.authorize_mutation("minibox_exec", exec_request(input))?;
+    let (result, output_truncated) = client
+        .call_authorized(request, policy.max_output_bytes)
+        .await?;
+    normalize_exec_output(result.responses, policy.max_output_bytes, output_truncated)
+}
+
 /// Re-export image list output for docs/tests that group container and image tools together.
 #[must_use]
 pub const fn empty_images_output() -> ImagesOutput {
@@ -438,6 +456,27 @@ mod tests {
         assert_eq!(network, Some(NetworkMode::None));
         assert_eq!(memory_limit_bytes, policy.default_memory_limit_bytes);
         assert_eq!(cpu_weight, policy.default_cpu_weight);
+    }
+
+    #[tokio::test]
+    async fn exec_denied_without_mutation_permission() {
+        let client = MiniboxDaemonClient::new("/nonexistent/minibox.sock".into());
+        let policy = AgentPolicy::safe_default();
+        let input = ExecContainerInput {
+            id: "abc123".to_string(),
+            cmd: vec!["echo".to_string()],
+            ..ExecContainerInput::default()
+        };
+
+        let result = exec(&client, &policy, input).await;
+
+        assert!(matches!(
+            result,
+            Err(McpServerError::PolicyDenied {
+                tool: "minibox_exec",
+                ..
+            })
+        ));
     }
 
     #[test]
