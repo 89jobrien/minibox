@@ -163,7 +163,7 @@ impl DaemonConfig {
         if let Ok(v) = std::env::var("MINIBOX_LOG_LEVEL") {
             self.log_level = Some(v);
         }
-        if let Ok(v) = std::env::var("MINIBOX_SOCKET") {
+        if let Ok(v) = std::env::var("MINIBOX_SOCKET_PATH") {
             self.socket_path = Some(PathBuf::from(v));
         }
         if let Ok(v) = std::env::var("MINIBOX_STATE_DIR") {
@@ -434,6 +434,22 @@ mod tests {
         unsafe_remove_var!("MINIBOX_MAX_IMAGE_SIZE_MB");
 
         assert_eq!(cfg.policy.max_image_size_mb, None);
+    }
+
+    #[test]
+    fn env_override_socket_path_uses_minibox_socket_path() {
+        use minibox_macros::{unsafe_remove_var, unsafe_set_var};
+
+        let _guard = ENV_MUTEX.lock().expect("ENV_MUTEX poisoned");
+
+        // The daemon bind path and client connect path both read
+        // MINIBOX_SOCKET_PATH, not MINIBOX_SOCKET — the config override
+        // must target the name that's actually consumed elsewhere.
+        unsafe_set_var!("MINIBOX_SOCKET_PATH", "/tmp/custom.sock");
+        let cfg = DaemonConfig::default().with_env_overrides();
+        unsafe_remove_var!("MINIBOX_SOCKET_PATH");
+
+        assert_eq!(cfg.socket_path, Some(PathBuf::from("/tmp/custom.sock")));
     }
 
     #[test]

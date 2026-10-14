@@ -135,6 +135,21 @@
 - `cargo xtask promote` — branch cascade (develop->staging->release->main)
 
 ## Recently completed
+- **GitHub Actions workflow audit series closed out** (commit `87ce6ef8`, 2026-10-13) —
+  full audit of all 14 `.github/workflows/*.yml` files, across several passes this
+  session. Final fixes: dropped the duplicate `handler-coverage` job from
+  `stability-gates.yml` (nightly.yml already runs the same `coverage-check` on
+  schedule), moved `macos.yml`'s `fmt-check` job off `macos-latest` to
+  `ubuntu-latest` (rustfmt is platform-independent), aligned `protocol-drift.yml`'s
+  branch wildcards with the rest of the repo, and consolidated every
+  `taiki-e/install-action` pin repo-wide onto one verified SHA (v2.85.10) — 4 stray
+  SHAs plus an unpinned `@v2` in `merge.yml`. Earlier in the same series: deleted
+  `rust-clippy.yml` and `promote.yml` (redundant clippy run + competing promotion
+  mechanism), deleted `context-snapshot.yml` (structural 100%-failure validator,
+  see Known Issues), disabled 4 dead self-hosted-runner jobs in `merge.yml`,
+  rescoped `.coderabbit.yaml` to staging-only, added a native `build-macos` release
+  job. All CI green on `develop` post-push (macOS, Stability Gates, Conformance,
+  Merge, CI).
 - **Release: develop -> staging -> release -> main** (PR #592, merge commit `30e60ec2`,
   2026-10-12T16:26:57Z) — promoted the 3 overlay rstest-fixture-ordering fixes plus 5
   accumulated CI/protocol-drift-lock fixes to `main`. `staging -> release` needed
