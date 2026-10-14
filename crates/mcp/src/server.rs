@@ -3,11 +3,11 @@
 use crate::client::MiniboxDaemonClient;
 use crate::error::McpServerError;
 use crate::policy::AgentPolicy;
-use crate::tools::{containers, doctor, images};
+use crate::tools::{containers, doctor, events, images};
 use crate::types::{
-    ContainerIdInput, DoctorInput, DoctorOutput, EmptyInput, ImagesOutput, LogsInput, LogsOutput,
-    ManifestOutput, PsOutput, PullImageInput, PullImageOutput, RunContainerInput,
-    RunContainerOutput, SimpleOutput,
+    ContainerIdInput, DoctorInput, DoctorOutput, EmptyInput, EventsInput, EventsOutput,
+    ExecContainerInput, ExecContainerOutput, ImagesOutput, LogsInput, LogsOutput, ManifestOutput,
+    PsOutput, PullImageInput, PullImageOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
 };
 use rmcp::handler::server::{router::tool::ToolRouter, wrapper::Parameters};
 use rmcp::model::{ServerCapabilities, ServerInfo};
@@ -221,6 +221,38 @@ impl MiniboxMcpServer {
             .map(Json)
             .map_err(|error| tool_error("minibox_rm", error))
     }
+
+    /// Execute a command inside a running container.
+    #[tool(
+        name = "minibox_exec",
+        description = "Execute a command inside a running container"
+    )]
+    pub async fn minibox_exec(
+        &self,
+        input: Parameters<ExecContainerInput>,
+    ) -> Result<Json<ExecContainerOutput>, McpError> {
+        tracing::debug!(tool = "minibox_exec", id = %input.0.id, "mcp: tool invoked");
+        containers::exec(&self.client, &self.policy, input.0)
+            .await
+            .map(Json)
+            .map_err(|error| tool_error("minibox_exec", error))
+    }
+
+    /// Collect recent container lifecycle events.
+    #[tool(
+        name = "minibox_events",
+        description = "Collect recent container lifecycle events"
+    )]
+    pub async fn minibox_events(
+        &self,
+        input: Parameters<EventsInput>,
+    ) -> Result<Json<EventsOutput>, McpError> {
+        tracing::debug!(tool = "minibox_events", "mcp: tool invoked");
+        events::events(&self.client, &self.policy, input.0)
+            .await
+            .map(Json)
+            .map_err(|error| tool_error("minibox_events", error))
+    }
 }
 
 #[tool_handler(router = self.tool_router)]
@@ -249,5 +281,7 @@ mod tests {
         assert!(names.contains(&"minibox_ps"));
         assert!(names.contains(&"minibox_run"));
         assert!(names.contains(&"minibox_rm"));
+        assert!(names.contains(&"minibox_exec"));
+        assert!(names.contains(&"minibox_events"));
     }
 }
