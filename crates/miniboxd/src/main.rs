@@ -76,6 +76,28 @@ fn main() {
         unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
     }
 
+    // Bridge remaining config fields into their env vars before anything
+    // downstream reads them. SAFETY: single-threaded — no tokio workers exist yet.
+    bridge_str_env(config.log_level.as_deref(), "MINIBOX_TRACE_LEVEL");
+    bridge_path_env(config.socket_path.as_deref(), "MINIBOX_SOCKET_PATH");
+    bridge_path_env(config.data_dir.as_deref(), "MINIBOX_DATA_DIR");
+    bridge_path_env(config.run_dir.as_deref(), "MINIBOX_RUN_DIR");
+    bridge_path_env(config.cgroup_root.as_deref(), "MINIBOX_CGROUP_ROOT");
+    bridge_str_env(config.metrics_addr.as_deref(), "MINIBOX_METRICS_ADDR");
+    bridge_str_env(config.otlp_endpoint.as_deref(), "MINIBOX_OTLP_ENDPOINT");
+    bridge_str_env(config.network_mode.as_deref(), "MINIBOX_NETWORK_MODE");
+    bridge_path_env(config.cni_path.as_deref(), "MINIBOX_CNI_PATH");
+    bridge_path_env(config.cni_config_dir.as_deref(), "MINIBOX_CNI_CONFIG_DIR");
+    bridge_path_env(config.proot_path.as_deref(), "MINIBOX_PROOT_PATH");
+    bridge_str_env(config.socket_group.as_deref(), "MINIBOX_SOCKET_GROUP");
+    bridge_str_env(config.socket_mode.as_deref(), "MINIBOX_SOCKET_MODE");
+    if let Some(max_nest_depth) = config.policy.max_nest_depth {
+        bridge_str_env(
+            Some(max_nest_depth.to_string().as_str()),
+            "MINIBOX_MAX_NEST_DEPTH",
+        );
+    }
+
     // VZ needs GCD dispatch_main on the real main thread — peek at the fully
     // resolved adapter name (CLI flag > env > config, all settled above) and
     // divert before #[tokio::main]-style runtime setup would park this thread
@@ -101,6 +123,23 @@ fn main() {
         eprintln!("miniboxd: fatal: {e:#}");
         std::process::exit(1);
     }
+}
+
+/// Sets `env_name` to `value` if it isn't already set in the environment.
+///
+/// SAFETY: callers must only invoke this before the tokio runtime starts
+/// (single-threaded context) — see call sites in `main()`.
+fn bridge_str_env(value: Option<&str>, env_name: &str) {
+    if let Some(value) = value
+        && std::env::var(env_name).is_err()
+    {
+        unsafe { std::env::set_var(env_name, value) };
+    }
+}
+
+/// `bridge_str_env`, converting a `Path` to its string form first.
+fn bridge_path_env(value: Option<&std::path::Path>, env_name: &str) {
+    bridge_str_env(value.and_then(|p| p.to_str()), env_name);
 }
 
 /// Send SIGTERM to any running miniboxd process(es) and wait briefly.
@@ -1280,6 +1319,64 @@ mod tests {
 
     #[cfg(unix)]
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_str_env_sets_unset_var() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        bridge_str_env(Some("value"), "MINIBOX_TEST_BRIDGE_STR");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_STR");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        assert_eq!(result, Ok("value".to_string()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_str_env_does_not_override_already_set_var() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::set_var("MINIBOX_TEST_BRIDGE_STR", "existing");
+        }
+        bridge_str_env(Some("value"), "MINIBOX_TEST_BRIDGE_STR");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_STR");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        assert_eq!(result, Ok("existing".to_string()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_str_env_noop_when_value_none() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        bridge_str_env(None, "MINIBOX_TEST_BRIDGE_STR");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_STR");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_path_env_sets_unset_var_from_path() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_PATH");
+        }
+        let path = PathBuf::from("/tmp/bridge-test");
+        bridge_path_env(Some(path.as_path()), "MINIBOX_TEST_BRIDGE_PATH");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_PATH");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_PATH");
+        }
+        assert_eq!(result, Ok("/tmp/bridge-test".to_string()));
+    }
 
     #[test]
     #[cfg(unix)]
