@@ -301,6 +301,59 @@ fn normalize_run_output(
     })
 }
 
+fn normalize_exec_output(
+    responses: Vec<DaemonResponse>,
+    max_output_bytes: usize,
+    output_truncated: bool,
+) -> Result<ExecContainerOutput> {
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    let mut exit_code = None;
+    let mut truncated = output_truncated;
+    let mut remaining_output_bytes = max_output_bytes;
+
+    for response in responses {
+        match response {
+            DaemonResponse::ContainerOutput { stream, data } => {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|e| McpServerError::InvalidInput(e.to_string()))?;
+                append_output(
+                    match stream {
+                        OutputStreamKind::Stdout => &mut stdout,
+                        OutputStreamKind::Stderr => &mut stderr,
+                    },
+                    &decoded,
+                    &mut remaining_output_bytes,
+                    &mut truncated,
+                );
+            }
+            DaemonResponse::ContainerStopped { exit_code: code } => {
+                exit_code = Some(code);
+            }
+            other if other.is_terminal() => {
+                tracing::warn!(
+                    response = ?other,
+                    "exec: ignoring unexpected terminal response; output may be incomplete"
+                );
+            }
+            other => {
+                return Err(McpServerError::UnexpectedResponse {
+                    tool: "minibox_exec",
+                    response: format!("{other:?}"),
+                });
+            }
+        }
+    }
+
+    Ok(ExecContainerOutput {
+        stdout,
+        stderr,
+        exit_code,
+        truncated,
+    })
+}
+
 fn append_output(target: &mut String, bytes: &[u8], remaining: &mut usize, truncated: &mut bool) {
     let decoded = String::from_utf8_lossy(bytes);
     let mut take = decoded.len().min(*remaining);
@@ -385,6 +438,33 @@ mod tests {
         assert_eq!(network, Some(NetworkMode::None));
         assert_eq!(memory_limit_bytes, policy.default_memory_limit_bytes);
         assert_eq!(cpu_weight, policy.default_cpu_weight);
+    }
+
+    #[test]
+    fn normalize_exec_output_decodes_stdout_and_stderr() {
+        let stdout = base64::engine::general_purpose::STANDARD.encode(b"hello\n");
+        let stderr = base64::engine::general_purpose::STANDARD.encode(b"warn\n");
+        let output = normalize_exec_output(
+            vec![
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stdout,
+                    data: stdout,
+                },
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stderr,
+                    data: stderr,
+                },
+                DaemonResponse::ContainerStopped { exit_code: 0 },
+            ],
+            1024,
+            false,
+        )
+        .expect("normalize exec output");
+
+        assert_eq!(output.stdout, "hello\n");
+        assert_eq!(output.stderr, "warn\n");
+        assert_eq!(output.exit_code, Some(0));
+        assert!(!output.truncated);
     }
 
     #[test]
