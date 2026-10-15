@@ -34,11 +34,15 @@ def wait-for-daemon [tries: int = 20] {
         if $n >= $tries {
             return false
         }
+        sleep 500ms
     }
 }
 
 def kill-daemon [] {
-    ps | where name == "miniboxd" | each { |p| kill $p.pid } | ignore
+    # Kill all miniboxd processes and wait for cleanup
+    ps | where name == "miniboxd" | each { |p| kill -9 $p.pid } | ignore
+    # Give OS time to release socket/resources
+    sleep 2sec
 }
 
 def main [] {
