@@ -122,6 +122,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "apple-log"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d10b5d08be7a82b6a8b5b5cac917366cb83bfebbad6d07fdf52d538fb696941"
+
+[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1929,6 +1935,7 @@ dependencies = [
  "minibox",
  "minibox-core",
  "minibox-macros",
+ "minibox-signpost",
  "nix 0.29.0",
  "objc2",
  "objc2-foundation",
@@ -2030,6 +2037,7 @@ dependencies = [
  "minibox-cni",
  "minibox-core",
  "minibox-macros",
+ "minibox-signpost",
  "nix 0.29.0",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -2211,6 +2219,13 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "minibox-signpost"
+version = "0.34.1"
+dependencies = [
+ "apple-log",
 ]
 
 [[package]]

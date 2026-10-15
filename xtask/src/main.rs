@@ -51,6 +51,7 @@ mod fuzz;
 mod gates;
 mod lint_paths;
 mod preflight;
+mod profile;
 mod promote;
 mod protocol_drift;
 mod protocol_sites;
@@ -232,6 +233,7 @@ fn main() -> Result<()> {
 
         // ── Misc standalone ──────────────────────────────────────────
         Some("bench") => bench::bench(&sh, root, &bench::parse_bench_args(&argv[2..])),
+        Some("profile") => profile::run(&sh, root, &argv[2..]),
         Some("fuzz") => fuzz::fuzz(&sh, root),
         Some("demo") => {
             let args: Vec<String> = env::args().collect();
@@ -724,6 +726,7 @@ fn print_help() -> Result<()> {
     eprintln!();
     eprintln!("Misc:");
     eprintln!("  bench              criterion benchmarks");
+    eprintln!("  profile <mode>     Instruments/xctrace capture (cpu, mem, latency, native)");
     eprintln!("  fuzz               libFuzzer protocol targets");
     eprintln!("  demo [--adapter <name>] [--filter <name>] [--strict]");
     eprintln!("  borrow-fixtures    borrow-reasoning must-pass/must-fail fixtures");

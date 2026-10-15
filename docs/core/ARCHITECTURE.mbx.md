@@ -45,7 +45,7 @@ generated: 2026-09-16
 
 17 workspace members (16 crates + xtask), Rust 2024 edition, workspace version 0.34.1.
 
-<!-- fact:crate_count=16 -->
+<!-- fact:crate_count=17 -->
 <!-- fact:workspace_version=0.34.1 -->
 
 ```text

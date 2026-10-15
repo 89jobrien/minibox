@@ -17,6 +17,7 @@ members = [
     "crates/mcp",
     "crates/minibox-cni",
     "crates/minibox-tui",
+    "crates/minibox-signpost",
     "xtask",
 ]
 
@@ -94,6 +95,7 @@ macbox = { path = "crates/macbox" }
 smolbox = { path = "crates/smolbox" }
 winbox = { path = "crates/winbox" }
 minibox-tui = { path = "crates/minibox-tui", version = "0.34.1" }
+minibox-signpost = { path = "crates/minibox-signpost", features = ["macos-signposts"] }
 slashcrux = "0.1"
 dirs = "6"
 secrecy = "0.10"

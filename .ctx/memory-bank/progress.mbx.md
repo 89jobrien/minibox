@@ -135,6 +135,59 @@
 - `cargo xtask promote` — branch cascade (develop->staging->release->main)
 
 ## Recently completed
+- **`mbx build` COPY/VM-bridging gap fixed on the smolvm adapter**
+  (2026-10-15, uncommitted) — `COPY`/`ADD` wrote to minibox's host-side
+  layer-snapshot mechanism, but RUN steps on smolvm execute inside a
+  persistent build VM with its own separate disk that never saw that
+  host-side content, so a `RUN` depending on a file just `COPY`'d (e.g. `RUN
+  chmod +x entrypoint.sh` after `COPY entrypoint.sh`) failed with `chmod:
+  cannot access '...': No such file or directory`. Fixed by adding
+  `ContainerRuntime::sync_persistent_machine_path` (default no-op,
+  `crates/minibox-domain/src/runtime.rs`), implemented on `SmolVmRuntime`:
+  ensures the persistent machine exists (via a new shared
+  `ensure_persistent_machine` helper factored out of `spawn_process`),
+  `mkdir -p`s the destination's parent inside the VM (COPY/ADD destinations
+  get no automatic mkdir the way WORKDIR+RUN does), then copies the file in
+  via `smolvm machine cp`. `builder.rs`'s `Instruction::Copy`/
+  `Instruction::Add` arms call this through a new
+  `sync_copy_to_build_machine` helper, resolving the destination with the
+  same `copy::resolve_container_path` (made `pub(super)`) that `copy_sources`
+  uses internally. One deployment mistake caught during verification (not a
+  code bug): this workspace's `.cargo/config.toml` sets `target-dir` to
+  `~/.minibox/cache/target`, so `cargo build --release` does not write to
+  `target/release/` at the repo root — copying from that path redeployed a
+  stale pre-fix binary that looked like a successful rebuild (exit 0, correct
+  compile output) until binary mtimes were checked against source mtimes.
+  After redeploying from the correct path, a full rebuild+redeploy+rerun
+  against the real `ops/ci-runner/Dockerfile` completed all 11 steps
+  (`Successfully built`/`Successfully tagged`), and `smolvm machine ls`
+  showed no lingering `minibox-build-*` entry afterward.
+- **`mbx build` RUN-step chaining fixed on the smolvm adapter** (2026-10-14,
+  uncommitted) — every RUN step after the first used to boot a fresh,
+  unrelated VM from the hardcoded `DEFAULT_IMAGE = "ubuntu:24.04"` instead of
+  continuing from the previous step's modified rootfs, because
+  `execute_run_step` passed `image_ref: None` and `SmolVmRuntime` had no way
+  to reuse a VM across steps at all. Fixed by giving `SmolVmRuntime` a
+  persistent-named-machine path (`smolvm machine create/start/exec`,
+  mirroring the existing krun `KrunExecRuntime` pattern) keyed by the
+  hostname `builder.rs` already sets identically per build stage, booted from
+  the stage's actual FROM image via a new `StageState.source_image_ref`
+  field. A new `ContainerRuntime::cleanup_persistent_machine` trait method
+  (default no-op, overridden by `SmolVmRuntime`) tears the VM down
+  unconditionally after `build_image`'s instruction loop. Two bugs found and
+  fixed during live verification: `smolvm machine create` needs `--net` at
+  create time (not start time), and `smolvm machine delete` silently no-ops
+  with exit 0 when run non-interactively without `--force` — the second one
+  required a full rebuild+redeploy+rerun cycle to actually confirm fixed
+  (grepping the binary's strings for `--force`, not just reading the source
+  diff, is what caught that the first "fixed" redeploy hadn't actually picked
+  up the edit). Verified end-to-end against the real `ops/ci-runner/Dockerfile`:
+  steps 2-9 all succeed (apt-get install, rustup via curl|sh against the
+  *correct* base with step 2's packages present, `cargo install
+  cargo-nextest` compiling, ARG/WORKDIR, GH-runner tarball download), and the
+  persistent build machine is confirmed absent from `smolvm machine ls`
+  immediately after the build request completes (success or failure). See
+  the COPY/VM-bridging gap below for the next, separate blocker.
 - **GitHub Actions workflow audit series closed out** (commit `87ce6ef8`, 2026-10-13) —
   full audit of all 14 `.github/workflows/*.yml` files, across several passes this
   session. Final fixes: dropped the duplicate `handler-coverage` job from
@@ -300,7 +353,6 @@
     - documented in SECURITY_INVARIANTS.md as a consideration
 
 ## Known issues
-
 - **Self-hosted GHA runner is gone, not just offline** — the `Merge` workflow's
   self-hosted Linux-root jobs (`integration tests`, `e2e tests`, `cargo
   audit/deny/machete`, `cleanup (Linux)`, `protocol e2e (Linux)`) sit `pending`
@@ -318,7 +370,23 @@
   process. Split by privilege: light jobs (clippy/fmt/unit/docs) can self-host on
   minibox; the Linux-root integration/e2e suite needs `--privileged` + cgroup
   delegation, which is circular (using minibox to test minibox's own privileged
-  path) — likely keep that one on real hardware/VM instead. Not yet built.
+  path) — likely keep that one on real hardware/VM instead.
+
+  Design sketch lives at `ops/ci-runner/` (Dockerfile, entrypoint.sh,
+  supervisor.sh, systemd unit) — not yet exercised end-to-end against a live
+  GitHub repo. Corrected 2026-10-14: an earlier session wrongly assumed this
+  needed Docker/Colima to build the image locally on macOS (neither is
+  installed, and repo convention forbids Colima for Linux container work).
+  `mbx` itself has `build`/`push`/`commit` subcommands — confirmed present and
+  functional this session, no Docker required. `mbx build` builds via
+  whatever adapter the daemon selected (krun/smolvm), so it needs the same
+  adapter capability as `mbx run`, not a separate container engine.
+  `mbx push` supports `--token`/`--username`+`--password` credentialed
+  pushes; `mbx pull` (confirmed via `--help`) has no such flags and is
+  anonymous-only, so the ghcr.io image repo still must be public once
+  consumed via `mbx pull`/`mbx run`. See `ops/ci-runner/README.md` for the
+  corrected build/push/run instructions, including a local-macOS-via-krun
+  path to use while no Linux host exists.
 - **GitHub Actions is fully non-functional** — every recent run on `develop` and `main`
   fails in 3-10s with "The job was not started because your account is locked due to a
   billing issue." No workflow can validate a push until that clears (observed 2026-10-03).

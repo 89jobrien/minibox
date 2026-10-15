@@ -1,0 +1,19 @@
+[Unit]
+Description=Minibox self-hosted GHA runner supervisor (ephemeral, privileged)
+After=network.target minibox.slice
+Requires=minibox.slice
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/minibox-ci-runner-supervisor.sh
+Restart=on-failure
+RestartSec=5
+User=root
+Group=root
+Environment=RUNNER_REPO=89jobrien/minibox
+Environment=RUNNER_IMAGE=ghcr.io/89jobrien/minibox-ci-runner
+Environment=RUNNER_IMAGE_TAG=latest
+Environment=RUNNER_LABELS=self-hosted,minibox
+
+[Install]
+WantedBy=multi-user.target
