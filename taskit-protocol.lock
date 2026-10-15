@@ -15,7 +15,7 @@
     {
       "name": "minibox-core-trace",
       "path": "crates/minibox-core/src/trace.rs",
-      "hash": "5f8fe3f6e3f2004058ab9798c79952e09e1a6ce209bdb1a006f03cea1d49b168"
+      "hash": "f5b4bf3f43b4dabd2812ddeac6a2be3c519b0e9d088a1ed6cd2e0a0053b53858"
     },
     {
       "name": "minibox-core-typestate",
@@ -25,7 +25,7 @@
     {
       "name": "minibox-container_state",
       "path": "crates/minibox/src/container_state.rs",
-      "hash": "09515269861c245525ef77adedca3eb866df151213c4f06c7c0f162def4a0d4a"
+      "hash": "dd62e1a2c7e96d8b1732e229bea67766ff2eeb285c636870c3fb36953ddcc0bf"
     },
     {
       "name": "xtask-test_linux",
@@ -45,7 +45,7 @@
     {
       "name": "xtask-preflight",
       "path": "xtask/src/preflight.rs",
-      "hash": "c00b47d96b6c21106220036b2379f8ed5569fa5261d10a3a43174f2d6b21ea32"
+      "hash": "40210ba8b6ab747443db069d34f1b135047f62631f3d13c8a1d8c45fe392396b"
     }
   ]
 }
