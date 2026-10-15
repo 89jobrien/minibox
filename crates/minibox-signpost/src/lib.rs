@@ -79,6 +79,7 @@ impl Drop for Span {
 ///
 /// Returns a no-op guard when no profiler is attached or the feature is off, so
 /// call sites never need to branch.
+#[allow(clippy::missing_const_for_fn)]
 pub fn span(name: &'static std::ffi::CStr) -> Span {
     #[cfg(all(target_os = "macos", feature = "macos-signposts"))]
     {
@@ -99,6 +100,7 @@ pub fn span(name: &'static std::ffi::CStr) -> Span {
 /// Emits a single-point signpost event, for occurrences rather than durations.
 ///
 /// Prefer [`span`] when the operation has a meaningful duration.
+#[allow(clippy::missing_const_for_fn)]
 pub fn event(name: &'static std::ffi::CStr) {
     #[cfg(all(target_os = "macos", feature = "macos-signposts"))]
     {
