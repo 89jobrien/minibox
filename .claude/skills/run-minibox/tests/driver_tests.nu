@@ -65,6 +65,12 @@ while :; do sleep 1; done
     check ($invocation | str contains $"socket=($run_dir)/miniboxd.sock") "socket env was not forwarded"
     check ($invocation | str contains "args=run alpine:latest -- printf hello world") "arguments were not forwarded"
 
+    let exec = (invoke $driver $vars "exec" "run-skill-smoke" "echo" "hello-from-exec")
+    check ($exec.exit_code == 0) $"exec failed: ($exec.stderr)"
+    let exec_invocation = (open --raw $record)
+    check ($exec_invocation | str contains $"socket=($run_dir)/miniboxd.sock") "exec socket env was not forwarded"
+    check ($exec_invocation | str contains "args=exec run-skill-smoke -- echo hello-from-exec") "exec arguments were not forwarded"
+
     let missing_env = ($vars | upsert MINIBOX_RUN_DAEMON_BIN ($temp | path join "missing"))
     let missing = (invoke $driver $missing_env "start")
     check ($missing.exit_code != 0) "missing daemon binary did not fail"

@@ -73,6 +73,7 @@ impl SmolvmProcess {
             .status()
             .await
             .with_context(|| format!("failed to run `smolvm machine create` for {name}"))?;
+        minibox_signpost::event(c"smolvm.machine.create");
         if !status.success() {
             bail!("smolvm machine create failed for {name}");
         }
@@ -84,6 +85,7 @@ impl SmolvmProcess {
             .status()
             .await
             .with_context(|| format!("failed to run `smolvm machine start` for {name}"))?;
+        minibox_signpost::event(c"smolvm.machine.start");
         if !status.success() {
             bail!("smolvm machine start failed for {name}");
         }

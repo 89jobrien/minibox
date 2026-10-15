@@ -217,6 +217,41 @@ pub trait ContainerRuntime: AsAny + Send + Sync {
              adapter must override with platform-specific wait logic"
         )
     }
+
+    /// Tear down any persistent out-of-process resource associated with
+    /// `hostname`, if one exists.
+    ///
+    /// Most adapters spawn a fresh, self-contained process per
+    /// `spawn_process` call and have nothing to clean up here. An adapter
+    /// that instead reuses one persistent resource (e.g. a VM) across
+    /// several `spawn_process` calls sharing the same `hostname` — smolvm's
+    /// build RUN-step chaining is the only current example — must override
+    /// this so the caller can release it once done. No-op by default.
+    async fn cleanup_persistent_machine(&self, _hostname: &str) -> Result<()> {
+        Ok(())
+    }
+
+    /// Push a file or directory already written into the host-side build
+    /// snapshot (`host_path`, as produced by `COPY`/`ADD`) to `dest_path`
+    /// inside the persistent resource associated with `hostname`.
+    ///
+    /// Adapters whose RUN steps execute directly against the host-side
+    /// rootfs (native, and VM adapters that boot a fresh machine from that
+    /// rootfs every step) have nothing to do here — `COPY`/`ADD` output is
+    /// already visible wherever the next RUN step looks. An adapter that
+    /// instead reuses one persistent out-of-process resource across RUN
+    /// steps in a stage (smolvm's persistent build machine) must override
+    /// this, or that resource's own filesystem never learns about files
+    /// `COPY`/`ADD` wrote to the host snapshot. No-op by default.
+    async fn sync_persistent_machine_path(
+        &self,
+        _hostname: &str,
+        _image_ref: Option<&str>,
+        _host_path: &std::path::Path,
+        _dest_path: &std::path::Path,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Result returned by [`ContainerRuntime::spawn_process`].

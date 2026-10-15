@@ -40,6 +40,7 @@
     { "$ref": "#/$defs/commands/council" },
 
     { "$ref": "#/$defs/commands/bench" },
+    { "$ref": "#/$defs/commands/profile" },
     { "$ref": "#/$defs/commands/fuzz" },
     { "$ref": "#/$defs/commands/demo" },
     { "$ref": "#/$defs/commands/borrow-fixtures" },
@@ -401,6 +402,30 @@
         },
         "required": ["command"],
         "notes": "Unrecognized flags produce a warning and are ignored, not a hard error."
+      },
+      "profile": {
+        "type": "object",
+        "description": "Capture an Apple Instruments (xctrace) recording of the daemon into bench/profiles/.",
+        "properties": {
+          "command": { "const": "profile" },
+          "args": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["cpu", "mem", "latency", "native", "list"],
+                "default": "cpu",
+                "description": "cpu = Time Profiler; mem = Allocations+Leaks; latency/native = System Trace; list = print available templates. macOS only."
+              },
+              "duration": { "type": "string", "default": "30s", "description": "Recording length, e.g. 30s or 5m." },
+              "attach": { "type": "string", "description": "Record a single pid or process name instead of all processes." },
+              "adapter": { "type": "string", "description": "Launch miniboxd under the profiler with MINIBOX_ADAPTER set (implies --launch). Mutually exclusive with --attach." },
+              "output": { "type": "string", "default": "bench/profiles", "description": "Output directory for the .trace bundle." }
+            }
+          }
+        },
+        "required": ["command"],
+        "notes": "macOS only; fails with an actionable message elsewhere. Defaults to --all-processes because the smolvm backend shells out to a child process. Unrecognized flags produce a warning and are ignored."
       },
       "fuzz": {
         "type": "object",

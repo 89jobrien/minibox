@@ -15,7 +15,7 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-10-04
+Last updated: 2026-10-15
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -197,6 +197,7 @@ The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `
 | Command | Flags | Description |
 |---|---|---|
 | `bench` | `--skip-bench` `--check` `--save-baseline` `--threshold <pct>` (default `15.0`) `--env <label>` (default `local`) | Run Criterion benchmarks, save results to `bench/results/`. `--check` compares against a saved baseline instead of running+saving. Unrecognized flags print a warning and are ignored (not a hard error). |
+| `profile <mode>` | `--duration <t>` (default `30s`) `--attach <pid\|name>` `--adapter <name>` `--output <dir>` (default `bench/profiles`) | Capture an Apple Instruments (`xctrace`) recording of the daemon into `bench/profiles/`. See [Profiling](#profiling) below. macOS only. |
 | `fuzz` | — | Run libFuzzer protocol targets. |
 | `demo` | `--adapter <name>` (default `smolvm`) `--filter <name>` `--strict` | Run showcase scenarios, optionally filtered; strict mode propagates failures. |
 | `borrow-fixtures` | — | Run borrow-reasoning must-pass/must-fail fixtures. |
@@ -209,6 +210,82 @@ The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `
 | `run` | `<script> [args...]` | Run `scripts/<script>.nu`, forwarding remaining args. Errors with the available script list if not found. |
 | `lint-paths` *(undocumented)* | — | Lint path-handling code. Not listed in `print_help()`. |
 | `available` *(undocumented)* | — | Check whether the xtask binary itself is available/buildable. Not listed in `print_help()`. |
+
+---
+
+## Profiling
+
+`cargo xtask profile` wraps `xcrun xctrace record` so Instruments captures are a
+repeatable, documented step rather than a manual GUI dance. Recordings land in
+`bench/profiles/` (already gitignored) and open with:
+
+```bash
+open bench/profiles/<recording>.trace
+```
+
+**macOS only.** The command compiles on every platform (cross-platform CI is
+unaffected) and fails with an actionable message elsewhere, pointing at
+`cargo xtask bench` and `just trace`.
+
+| Mode | Template + instruments | Answers |
+|---|---|---|
+| `cpu` | Time Profiler + Thread State Trace | Where is CPU time going? |
+| `mem` | Allocations + Leaks + VM Tracker | Is memory growing, and what is leaking? |
+| `latency` | System Trace + System Call Trace, Disk I/O Latency, Filesystem Activity | Where does wall-clock time go during container operations? |
+| `native` | System Trace + Virtual Memory Trace, Data Faults, `os_signpost` | What is the host doing underneath? |
+| `list` | — | Print every template this machine's Xcode offers |
+
+### Why the target defaults to all processes
+
+On macOS the default adapter suite is `smolvm`, and the `krun`/`smolvm`
+backends shell out to an external `smolvm` binary
+(`crates/macbox/src/krun/process.rs`). The expensive work happens in a **child
+process**, not in `miniboxd` — so attaching to `miniboxd` alone would record an
+idle tokio loop. `--all-processes` is therefore the default; pass `--attach
+<pid|name>` to narrow it deliberately.
+
+`--adapter <name>` takes the other approach: it *launches* a fresh `miniboxd`
+under the profiler with `MINIBOX_ADAPTER` set, because `xctrace` only accepts
+`--env` alongside `--launch`. That resolves the release `miniboxd` binary, so run
+`cargo xtask prepush` (or a release build) first. It is mutually exclusive with
+`--attach`.
+
+Note that the `vz` adapter — the genuinely native Virtualization.framework path,
+and the most interesting target for System Trace — sits behind the **non-default
+`vz` cargo feature**.
+
+### Signpost markers
+
+`crates/minibox-signpost` emits named intervals onto the Points of Interest
+track, so a trace attributes time to operations (`dispatch.run`,
+`smolvm.machine.start`) rather than to sampled stacks. Markers currently sit at
+the daemon request router and the smolvm machine lifecycle.
+
+Real emission is behind the `macos-signposts` cargo feature, enabled by
+default for the workspace crates that use it. It pulls in `apple-log`, which
+builds a small Swift bridge, so enabling it adds a Swift toolchain requirement —
+hence the opt-in. With the feature off, or on a non-macOS platform, the marker
+type is zero-sized and compiles away.
+
+```rust
+let _span = minibox_signpost::span(c"container.create");
+```
+
+Names must be `c"..."` literals (Apple requires static storage duration) and a
+guard should not be held across an `.await` unless it is ended explicitly —
+signpost ids are process-unique, so a correctly ended interval is safe to move
+between threads, but an abandoned guard is not.
+
+To see markers, record with `native` (which enables the `os_signpost`
+instrument), then filter the Points of Interest track on subsystem `io.minibox`.
+
+### Relationship to the other perf tools
+
+| Tool | Use it for |
+|---|---|
+| `cargo xtask bench` | Criterion microbenchmarks with baselines and regression thresholds |
+| `just trace` | `uftrace` function tracing, Linux (cross-compiled, run under Colima) |
+| `cargo xtask profile` | Whole-process native behaviour on macOS: VM faults, syscalls, allocations, signposts |
 
 ---
 

@@ -1,0 +1,8 @@
+reviews:
+  auto_review:
+    # Only auto-review PRs whose base is `staging`. develop/release/main are
+    # excluded: develop PRs are reviewed by other means, release/main are
+    # mechanical promotion re-merges of commits already reviewed earlier in
+    # the pipeline (see cargo xtask promote / AGENTS.md "Git Workflow").
+    base_branches:
+      - "^staging$"

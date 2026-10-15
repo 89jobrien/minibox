@@ -23,7 +23,7 @@
 </nav>
 
 <main id="main" class="page">
-  <header class="page-head"><span class="eyebrow">Verification system</span><h1>Test Infrastructure</h1><p class="lead">Current test dimensions, CI coverage, and canonical commands.</p><div class="meta-row"><span class="meta">2,252-test snapshot</span><span class="meta">7 test dimensions</span><span class="meta">15 workflows</span><span class="meta">Updated 2026-09-15</span></div></header>
+  <header class="page-head"><span class="eyebrow">Verification system</span><h1>Test Infrastructure</h1><p class="lead">Current test dimensions, CI coverage, and canonical commands.</p><div class="meta-row"><span class="meta">2,252-test snapshot</span><span class="meta">7 test dimensions</span><span class="meta">11 workflows</span><span class="meta">Updated 2026-09-15</span></div></header>
 
   <section><h2>Fresh Run and Source Counts</h2><table tabindex="0"><thead><tr><th>Measure</th><th>Count</th><th>Meaning</th></tr></thead><tbody>
     <tr><td>Workspace nextest run (2026-09-06)</td><td><strong>2,252</strong></td><td>Executed across 118 test binaries; 6 skipped</td></tr>
@@ -52,22 +52,18 @@
     <tr><td>CLI subprocess (30)</td><td>Any / no root</td><td>Not in CI</td></tr>
   </tbody></table></section>
 
-  <section><h2>CI Workflows</h2><p>Fifteen workflow files currently live in <code>.github/workflows/</code>.</p><table tabindex="0"><thead><tr><th>Workflow</th><th>Primary purpose</th></tr></thead><tbody>
+  <section><h2>CI Workflows</h2><p>Eleven workflow files currently live in <code>.github/workflows/</code>.</p><table tabindex="0"><thead><tr><th>Workflow</th><th>Primary purpose</th></tr></thead><tbody>
     <tr><td><code>ci.yml</code></td><td>Core checks on main/staging/release and pull requests to main</td></tr>
-    <tr><td><code>pr.yml</code></td><td>Pull-request lint, unit, audit, and documentation jobs</td></tr>
     <tr><td><code>merge.yml</code></td><td>Push and merge-group matrix across active workflow branches</td></tr>
     <tr><td><code>macos.yml</code></td><td>macOS formatting validation</td></tr>
     <tr><td><code>conformance.yml</code></td><td>Conformance, property, krun, CLI, borrow, and quickcheck suites</td></tr>
-    <tr><td><code>stability-gates.yml</code></td><td>Docs, adapter coverage, no-unwrap, compile, and handler coverage</td></tr>
+    <tr><td><code>stability-gates.yml</code></td><td>Docs, adapter coverage, no-unwrap, and compile checks</td></tr>
     <tr><td><code>protocol-drift.yml</code></td><td>Protocol hash and variant drift</td></tr>
-    <tr><td><code>protocol-sites.yml</code></td><td>Handler dependency construction-site drift</td></tr>
-    <tr><td><code>rust-clippy.yml</code></td><td>Clippy review workflow</td></tr>
     <tr><td><code>nightly.yml</code></td><td>Scheduled audits and coverage check</td></tr>
-    <tr><td><code>promote.yml</code></td><td>Stability-branch promotion</td></tr>
     <tr><td><code>release.yml</code></td><td>Crate and binary release</td></tr>
     <tr><td><code>publish-mbx.yml</code></td><td>CLI package publishing</td></tr>
     <tr><td><code>summary.yml</code></td><td>Issue-summary automation</td></tr>
-    <tr><td><code>context-snapshot.yml</code></td><td>Generate and verify repository context snapshots</td></tr>
+    <tr><td><code>pages.yml</code></td><td>Build and publish this documentation site</td></tr>
   </tbody></table><p>Current CI gaps are the Linux-root sandbox suite and the feature-gated CLI subprocess suite.</p></section>
 
   <section><h2>Canonical Commands</h2><pre><code>cargo xtask verify

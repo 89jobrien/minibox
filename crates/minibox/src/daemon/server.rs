@@ -455,6 +455,28 @@ async fn dispatch(
     deps: Arc<HandlerDependencies>,
     tx: tokio::sync::mpsc::Sender<DaemonResponse>,
 ) {
+    // Name the interval after the request variant so a trace attributes time to
+    // the operation, not just to "dispatch". Signpost ids are process-unique, so
+    // this remains correct across `.await` thread migration. The wildcard arm
+    // keeps this exhaustive-proof as variants are added.
+    let _span = match &request {
+        DaemonRequest::Run { .. } => minibox_signpost::span(c"dispatch.run"),
+        DaemonRequest::Stop { .. } => minibox_signpost::span(c"dispatch.stop"),
+        DaemonRequest::PauseContainer { .. } => minibox_signpost::span(c"dispatch.pause"),
+        DaemonRequest::ResumeContainer { .. } => minibox_signpost::span(c"dispatch.resume"),
+        DaemonRequest::Remove { .. } => minibox_signpost::span(c"dispatch.remove"),
+        DaemonRequest::Pull { .. } => minibox_signpost::span(c"dispatch.pull"),
+        DaemonRequest::Exec { .. } => minibox_signpost::span(c"dispatch.exec"),
+        DaemonRequest::Build { .. } => minibox_signpost::span(c"dispatch.build"),
+        DaemonRequest::Push { .. } => minibox_signpost::span(c"dispatch.push"),
+        DaemonRequest::Commit { .. } => minibox_signpost::span(c"dispatch.commit"),
+        DaemonRequest::RunPipeline { .. } => minibox_signpost::span(c"dispatch.pipeline"),
+        DaemonRequest::List => minibox_signpost::span(c"dispatch.list"),
+        DaemonRequest::ListImages => minibox_signpost::span(c"dispatch.list_images"),
+        DaemonRequest::Prune { .. } => minibox_signpost::span(c"dispatch.prune"),
+        _ => minibox_signpost::span(c"dispatch.other"),
+    };
+
     match request {
         DaemonRequest::Run {
             image,
