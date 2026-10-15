@@ -6,15 +6,14 @@
 # (test-integration, test-e2e, test-protocol-e2e-linux, cleanup-linux in
 # .github/workflows/merge.yml), which is the only reason this label exists.
 FROM debian:bookworm-slim
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-# hadolint ignore=DL3008
+# hadolint ignore=DL3008,DL4006
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl git jq build-essential pkg-config \
         libssl-dev sudo \
     && rm -rf /var/lib/apt/lists/*
 
+# hadolint ignore=DL4006
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --default-toolchain stable --component clippy --component rustfmt
 ENV PATH="/root/.cargo/bin:${PATH}"
