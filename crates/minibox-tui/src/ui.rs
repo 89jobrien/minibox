@@ -87,7 +87,41 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
             Style::default().fg(Color::Red),
         ))
     } else {
-        Line::from(" q: quit  |  j/k, ↑/↓: select  |  live-updating ps + events ")
+        Line::from(" q: quit  |  j/k, ↑/↓: select  |  read-only — live ps + events ")
     };
     frame.render_widget(Paragraph::new(text), area);
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+
+    #[test]
+    fn status_bar_reports_read_only_when_no_error() {
+        let app = App::new();
+        let backend = TestBackend::new(60, 1);
+        let mut terminal = Terminal::new(backend).expect("create terminal");
+        terminal
+            .draw(|frame| draw_status_bar(frame, &app, frame.area()))
+            .expect("draw status bar");
+        let buffer = terminal.backend().buffer().clone();
+        let rendered: String = buffer
+            .content()
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
+        assert!(
+            rendered.contains("read-only"),
+            "expected status bar to mention read-only, got: {rendered}"
+        );
+    }
 }

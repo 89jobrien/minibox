@@ -111,7 +111,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
           tool: cargo-nextest
       - name: cargo xtask test-unit
@@ -164,7 +164,7 @@ jobs:
     if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
           tool: cargo-audit@0.22.2
       - run: cargo audit
@@ -183,7 +183,7 @@ jobs:
     if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
     steps:
       - uses: actions/checkout@v5
-      - uses: taiki-e/install-action@v2
+      - uses: taiki-e/install-action@6c6fd71fe4fb72c3697d269963d0e15df8adedad # v2.85.10
         with:
           tool: cargo-machete
       - run: cargo machete
@@ -203,7 +203,13 @@ jobs:
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    # TODO(ci-p0): self-hosted "minibox" runner was decommissioned (0 registered
+    # runners confirmed via `gh api repos/89jobrien/minibox/actions/runners`).
+    # This job queued forever with no runner to pick it up, which permanently
+    # blocked `ci-ok` ("CI passed") and therefore the promote-* auto-merge path
+    # on staging/release. Disabled until a replacement runner exists. Original:
+    # if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -225,7 +231,9 @@ jobs:
   test-integration:
     name: integration tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    # TODO(ci-p0): see test-e2e above -- same decommissioned self-hosted runner.
+    # if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -247,7 +255,9 @@ jobs:
   test-protocol-e2e-linux:
     name: protocol e2e (Linux)
     runs-on: [self-hosted, minibox]
-    if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    # TODO(ci-p0): see test-e2e above -- same decommissioned self-hosted runner.
+    # if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -360,6 +370,12 @@ jobs:
           done
           echo "All jobs passed or were skipped"
 
+  # Canonical CI-automated promotion path: these promote-* jobs open (or
+  # fast-forward) a PR and auto-merge once `ci-ok` passes. The standalone
+  # promote.yml workflow (crux-agentic) was removed as a redundant second
+  # mechanism. `cargo xtask promote` remains available as the manual/local
+  # override for cases these jobs can't handle (e.g. skipping a stuck CI
+  # check) -- it is a developer tool, not a competing CI automation path.
   promote-staging:
     name: promote develop -> staging
     runs-on: ubuntu-latest
@@ -471,7 +487,9 @@ jobs:
   cleanup-linux:
     name: cleanup (Linux)
     runs-on: [self-hosted, minibox]
-    if: always() && contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    # TODO(ci-p0): see test-e2e above -- same decommissioned self-hosted runner.
+    # if: always() && contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
+    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
     needs: [test-e2e, test-integration, test-protocol-e2e-linux]
     steps:
       - uses: actions/checkout@v5

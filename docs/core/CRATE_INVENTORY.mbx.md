@@ -47,10 +47,10 @@ generated: 2026-09-16
 | xtask               | bin        | ~5k    | 35           | 0                       | --                        |
 
 **Estimated total:** run `cargo xtask info metrics` for the current workspace
-member count and Rust source-line total. All crates are at version 0.34.0
+member count and Rust source-line total. All crates are at version 0.34.1
 (xtask 0.1.0).
 
-<!-- fact:workspace_version=0.34.0 -->
+<!-- fact:workspace_version=0.34.1 -->
 
 ---
 
@@ -260,7 +260,7 @@ Development tool. All CI gate commands.
 **Key commands:** pre-commit, prepush, verify, lint, fix, architecture, musl-check, coverage,
 coverage-check, agentlint, build-test-image, setup-test-vm, test-in-vm,
 test-linux, bump, promote, preflight, doctor, ci-watch, daily-orchestration,
-council, bench, fuzz, borrow-fixtures, nuke-test-state, clean-artifacts,
+council, bench, profile, fuzz, borrow-fixtures, nuke-test-state, clean-artifacts,
 cas-add, cas-check.
 
 **Subcommand groups:** `test <suite>` (unit, conformance, krun-conformance,
