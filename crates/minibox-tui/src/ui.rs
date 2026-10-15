@@ -93,6 +93,12 @@ fn draw_status_bar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::default_constructed_unit_structs
+)]
 mod tests {
     use super::*;
     use crate::app::App;
@@ -108,7 +114,11 @@ mod tests {
             .draw(|frame| draw_status_bar(frame, &app, frame.area()))
             .expect("draw status bar");
         let buffer = terminal.backend().buffer().clone();
-        let rendered: String = buffer.content().iter().map(|cell| cell.symbol()).collect();
+        let rendered: String = buffer
+            .content()
+            .iter()
+            .map(ratatui::buffer::Cell::symbol)
+            .collect();
         assert!(
             rendered.contains("read-only"),
             "expected status bar to mention read-only, got: {rendered}"
