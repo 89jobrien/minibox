@@ -468,6 +468,14 @@ enum Commands {
         id: String,
     },
 
+    /// Live status dashboard for daemon and containers.
+    ///
+    /// Displays daemon status (running/offline, adapter, config flags),
+    /// container list (ID, state, image, command, PID, uptime, resource usage),
+    /// and active processes. Real-time refresh at 2-second intervals with
+    /// graceful Ctrl+C shutdown.
+    Monitor,
+
     /// Verify a container's execution manifest against a policy file.
     Verify {
         /// Container ID or name.
@@ -829,6 +837,8 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
         Commands::Tui => into_cli(commands::tui::execute().await),
 
         Commands::Manifest { id } => into_cli(commands::manifest::execute(id, socket_path).await),
+
+        Commands::Monitor => into_cli(commands::monitor::execute(socket_path).await),
 
         Commands::Verify { id, policy } => {
             into_cli(commands::manifest::verify(id, policy, socket_path).await)
