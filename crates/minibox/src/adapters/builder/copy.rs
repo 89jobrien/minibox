@@ -212,7 +212,7 @@ fn validate_source_path(path: &Path) -> Result<PathBuf> {
     Ok(result)
 }
 
-fn resolve_container_path(workdir: &Path, path: &Path) -> Result<PathBuf> {
+pub(super) fn resolve_container_path(workdir: &Path, path: &Path) -> Result<PathBuf> {
     let mut parts = Vec::new();
     let combined = if path.is_absolute() {
         path.to_path_buf()

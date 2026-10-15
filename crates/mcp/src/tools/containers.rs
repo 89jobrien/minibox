@@ -4,9 +4,9 @@ use crate::client::MiniboxDaemonClient;
 use crate::error::{McpServerError, Result};
 use crate::policy::{AgentPolicy, Authorized};
 use crate::types::{
-    ContainerIdInput, ContainerInfoOutput, ImagesOutput, LogEntry, LogsInput, LogsOutput,
-    ManifestOutput, MountInput, PsOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
-    parse_network_mode, require_non_empty,
+    ContainerIdInput, ContainerInfoOutput, ExecContainerInput, ExecContainerOutput, ImagesOutput,
+    LogEntry, LogsInput, LogsOutput, ManifestOutput, MountInput, PsOutput, RunContainerInput,
+    RunContainerOutput, SimpleOutput, parse_network_mode, require_non_empty,
 };
 use base64::Engine as _;
 use minibox_core::domain::BindMount;
@@ -160,6 +160,24 @@ pub async fn rm(
     simple_id_request(client, policy, request, "minibox_rm").await
 }
 
+/// Execute a command inside a running container.
+///
+/// # Errors
+///
+/// Returns an error if policy denies the operation, input is invalid, or the daemon call fails.
+pub async fn exec(
+    client: &MiniboxDaemonClient,
+    policy: &AgentPolicy,
+    input: ExecContainerInput,
+) -> Result<ExecContainerOutput> {
+    require_non_empty(&input.id, "id")?;
+    let request = policy.authorize_mutation("minibox_exec", exec_request(input))?;
+    let (result, output_truncated) = client
+        .call_authorized(request, policy.max_output_bytes)
+        .await?;
+    normalize_exec_output(result.responses, policy.max_output_bytes, output_truncated)
+}
+
 /// Re-export image list output for docs/tests that group container and image tools together.
 #[must_use]
 pub const fn empty_images_output() -> ImagesOutput {
@@ -201,6 +219,17 @@ fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonR
         platform: input.platform,
         cgroup_parent: None,
     })
+}
+
+fn exec_request(input: ExecContainerInput) -> DaemonRequest {
+    DaemonRequest::Exec {
+        container_id: input.id,
+        cmd: input.cmd,
+        env: input.env,
+        working_dir: input.working_dir,
+        tty: false,
+        user: input.user,
+    }
 }
 
 fn parse_mount(input: MountInput) -> Result<BindMount> {
@@ -283,6 +312,59 @@ fn normalize_run_output(
 
     Ok(RunContainerOutput {
         container_id,
+        stdout,
+        stderr,
+        exit_code,
+        truncated,
+    })
+}
+
+fn normalize_exec_output(
+    responses: Vec<DaemonResponse>,
+    max_output_bytes: usize,
+    output_truncated: bool,
+) -> Result<ExecContainerOutput> {
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    let mut exit_code = None;
+    let mut truncated = output_truncated;
+    let mut remaining_output_bytes = max_output_bytes;
+
+    for response in responses {
+        match response {
+            DaemonResponse::ContainerOutput { stream, data } => {
+                let decoded = base64::engine::general_purpose::STANDARD
+                    .decode(data)
+                    .map_err(|e| McpServerError::InvalidInput(e.to_string()))?;
+                append_output(
+                    match stream {
+                        OutputStreamKind::Stdout => &mut stdout,
+                        OutputStreamKind::Stderr => &mut stderr,
+                    },
+                    &decoded,
+                    &mut remaining_output_bytes,
+                    &mut truncated,
+                );
+            }
+            DaemonResponse::ContainerStopped { exit_code: code } => {
+                exit_code = Some(code);
+            }
+            other if other.is_terminal() => {
+                tracing::warn!(
+                    response = ?other,
+                    "exec: ignoring unexpected terminal response; output may be incomplete"
+                );
+            }
+            other => {
+                return Err(McpServerError::UnexpectedResponse {
+                    tool: "minibox_exec",
+                    response: format!("{other:?}"),
+                });
+            }
+        }
+    }
+
+    Ok(ExecContainerOutput {
         stdout,
         stderr,
         exit_code,
@@ -374,6 +456,86 @@ mod tests {
         assert_eq!(network, Some(NetworkMode::None));
         assert_eq!(memory_limit_bytes, policy.default_memory_limit_bytes);
         assert_eq!(cpu_weight, policy.default_cpu_weight);
+    }
+
+    #[tokio::test]
+    async fn exec_denied_without_mutation_permission() {
+        let client = MiniboxDaemonClient::new("/nonexistent/minibox.sock".into());
+        let policy = AgentPolicy::safe_default();
+        let input = ExecContainerInput {
+            id: "abc123".to_string(),
+            cmd: vec!["echo".to_string()],
+            ..ExecContainerInput::default()
+        };
+
+        let result = exec(&client, &policy, input).await;
+
+        assert!(matches!(
+            result,
+            Err(McpServerError::PolicyDenied {
+                tool: "minibox_exec",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn normalize_exec_output_decodes_stdout_and_stderr() {
+        let stdout = base64::engine::general_purpose::STANDARD.encode(b"hello\n");
+        let stderr = base64::engine::general_purpose::STANDARD.encode(b"warn\n");
+        let output = normalize_exec_output(
+            vec![
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stdout,
+                    data: stdout,
+                },
+                DaemonResponse::ContainerOutput {
+                    stream: OutputStreamKind::Stderr,
+                    data: stderr,
+                },
+                DaemonResponse::ContainerStopped { exit_code: 0 },
+            ],
+            1024,
+            false,
+        )
+        .expect("normalize exec output");
+
+        assert_eq!(output.stdout, "hello\n");
+        assert_eq!(output.stderr, "warn\n");
+        assert_eq!(output.exit_code, Some(0));
+        assert!(!output.truncated);
+    }
+
+    #[test]
+    fn exec_request_hardcodes_tty_false_and_passes_fields_through() {
+        let input = ExecContainerInput {
+            id: "abc123".to_string(),
+            cmd: vec!["echo".to_string(), "hi".to_string()],
+            env: vec!["FOO=bar".to_string()],
+            working_dir: Some("/tmp".to_string()),
+            user: Some("1000:1000".to_string()),
+        };
+
+        let request = exec_request(input);
+
+        let DaemonRequest::Exec {
+            container_id,
+            cmd,
+            env,
+            working_dir,
+            tty,
+            user,
+        } = request
+        else {
+            panic!("expected Exec request");
+        };
+
+        assert_eq!(container_id, "abc123");
+        assert_eq!(cmd, vec!["echo".to_string(), "hi".to_string()]);
+        assert_eq!(env, vec!["FOO=bar".to_string()]);
+        assert_eq!(working_dir, Some("/tmp".to_string()));
+        assert!(!tty);
+        assert_eq!(user, Some("1000:1000".to_string()));
     }
 
     #[test]

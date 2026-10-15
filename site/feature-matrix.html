@@ -23,14 +23,26 @@
     </nav>
 
     <main id="main" class="page">
-      <header class="page-head"><span class="eyebrow">Adapter capabilities</span><h1>Feature Matrix</h1><p class="lead">A capability is only marked present where the selected suite actually wires it.</p><div class="meta-row"><span class="meta">2 production</span><span class="meta">3 experimental</span><span class="meta">1 blocked / 1 stub</span><span class="meta">Updated 2026-09-15</span></div></header>
+      <header class="page-head"><span class="eyebrow">Adapter capabilities</span><h1>Feature Matrix</h1><p class="lead">A capability is only marked present where the selected suite actually wires it.</p><div class="meta-row"><span class="meta">2 production</span><span class="meta">3 partial support</span><span class="meta">1 blocked / 1 stub</span><span class="meta">Updated 2026-10-14</span></div></header>
+
+      <h2>Which Adapter Do I Actually Get?</h2>
+      <p class="section-intro">You never need to pick an adapter by name to get started &mdash; minibox detects your platform and picks a working default. The table below says what that default is, in terms of your operating system rather than internal adapter names.</p>
+      <table tabindex="0"><thead><tr><th>Your OS</th><th>What minibox uses by default</th><th>Why</th></tr></thead><tbody>
+        <tr><td>Linux</td><td><code>native</code></td><td>Direct namespaces/cgroups &mdash; the full-featured reference path. No VM, no extra install.</td></tr>
+        <tr><td>macOS</td><td><code>smolvm</code>, falling back to <code>krun</code></td><td>macOS has no native Linux container primitives, so minibox boots a lightweight Linux VM automatically. Core lifecycle (pull/run/stop/rm/ps) works; <code>exec</code> into a running container and log retrieval don't yet.</td></tr>
+        <tr><td>macOS, already using Colima for other tools</td><td><code>colima</code> (opt-in: <code>MINIBOX_ADAPTER=colima</code>)</td><td>Reuses your existing Lima/nerdctl setup instead of a second VM. Same lifecycle coverage as smolvm/krun, plus limited log support.</td></tr>
+        <tr><td>Linux, inside a GKE pod</td><td><code>gke</code> (opt-in: <code>MINIBOX_ADAPTER=gke</code>)</td><td>Unprivileged pod execution via <code>proot</code> and a copy filesystem &mdash; no namespace/cgroup isolation, but works where you can't get privileged access.</td></tr>
+        <tr><td>Windows</td><td><em>nothing yet</em></td><td><code>winbox</code> is a stub and returns an error unconditionally. Not usable today.</td></tr>
+      </tbody></table>
+      <p class="note">The adapter names in the table below (<code>native</code>, <code>colima</code>, <code>smolvm</code>, <code>krun</code>, <code>vz</code>, <code>winbox</code>) are internal identifiers you'll see in error messages, <code>mbx doctor</code> output, and the <code>MINIBOX_ADAPTER</code> env var &mdash; useful once you need to override the default, not something you need to know up front.</p>
+
       <h2>Adapter Suites</h2>
       <table tabindex="0"><thead><tr><th>Adapter</th><th>Platform</th><th>Status</th><th>Default behavior</th></tr></thead><tbody>
         <tr><th scope="row"><code>native</code></th><td>Linux</td><td><span class="pill pill-shipped">Production</span></td><td>Fallback on Linux</td></tr>
         <tr><th scope="row"><code>gke</code></th><td>Linux GKE pods</td><td><span class="pill pill-shipped">Production</span></td><td>Explicit selection</td></tr>
-        <tr><th scope="row"><code>colima</code></th><td>Unix with Colima</td><td><span class="pill pill-partial">Experimental</span></td><td>Explicit selection</td></tr>
-        <tr><th scope="row"><code>smolvm</code></th><td>Unix with smolvm</td><td><span class="pill pill-partial">Experimental</span></td><td>Default when binary is available</td></tr>
-        <tr><th scope="row"><code>krun</code></th><td>Unix with libkrun</td><td><span class="pill pill-partial">Experimental</span></td><td>Fallback on macOS</td></tr>
+        <tr><th scope="row"><code>colima</code></th><td>Unix with Colima</td><td><span class="pill pill-partial">Partial support</span></td><td>Explicit selection</td></tr>
+        <tr><th scope="row"><code>smolvm</code></th><td>Unix with smolvm</td><td><span class="pill pill-partial">Partial support</span></td><td>Default when binary is available</td></tr>
+        <tr><th scope="row"><code>krun</code></th><td>Unix with libkrun</td><td><span class="pill pill-partial">Partial support</span></td><td>Fallback on macOS</td></tr>
         <tr><th scope="row"><code>vz</code></th><td>macOS, <code>vz</code> feature</td><td><span class="pill pill-notwired">Non-functional</span></td><td>Opt-in; VM boot currently fails</td></tr>
         <tr><th scope="row"><code>winbox</code></th><td>Windows</td><td><span class="pill pill-neutral">Stub</span></td><td>No working runtime</td></tr>
       </tbody></table>
@@ -82,7 +94,7 @@
       </ul></div>
       <h2>Adapter Notes</h2>
       <div class="card"><p><strong>Native and GKE</strong> are production adapters. GKE uses proot and a copy filesystem without native namespace/cgroup isolation.</p></div>
-      <div class="card"><p><strong>Colima, smolvm, and krun</strong> are experimental, but their basic container lifecycle paths work. Colima delegates to Lima/nerdctl; smolvm and krun use lightweight VMs.</p></div>
+      <div class="card"><p><strong>Colima, smolvm, and krun</strong> have partial support: core lifecycle (pull/run/stop/rm/ps/restart) works today and is actively used, but <code>exec</code> into a running container and full log retrieval are not yet implemented on any of them. Colima delegates to Lima/nerdctl; smolvm and krun use lightweight VMs.</p></div>
       <div class="card"><p><strong>VZ</strong> source was restored behind the macOS feature. It remains non-functional because <code>VZLinuxBootLoader</code> fails on current macOS before the adapter can serve requests.</p></div>
       <div class="card"><p><strong>Winbox</strong> is a stub and returns an error unconditionally.</p></div>
     </main>

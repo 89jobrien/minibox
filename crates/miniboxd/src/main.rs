@@ -76,6 +76,28 @@ fn main() {
         unsafe { std::env::set_var("MINIBOX_ADAPTER", adapter) };
     }
 
+    // Bridge remaining config fields into their env vars before anything
+    // downstream reads them. SAFETY: single-threaded — no tokio workers exist yet.
+    bridge_str_env(config.log_level.as_deref(), "MINIBOX_TRACE_LEVEL");
+    bridge_path_env(config.socket_path.as_deref(), "MINIBOX_SOCKET_PATH");
+    bridge_path_env(config.data_dir.as_deref(), "MINIBOX_DATA_DIR");
+    bridge_path_env(config.run_dir.as_deref(), "MINIBOX_RUN_DIR");
+    bridge_path_env(config.cgroup_root.as_deref(), "MINIBOX_CGROUP_ROOT");
+    bridge_str_env(config.metrics_addr.as_deref(), "MINIBOX_METRICS_ADDR");
+    bridge_str_env(config.otlp_endpoint.as_deref(), "MINIBOX_OTLP_ENDPOINT");
+    bridge_str_env(config.network_mode.as_deref(), "MINIBOX_NETWORK_MODE");
+    bridge_path_env(config.cni_path.as_deref(), "MINIBOX_CNI_PATH");
+    bridge_path_env(config.cni_config_dir.as_deref(), "MINIBOX_CNI_CONFIG_DIR");
+    bridge_path_env(config.proot_path.as_deref(), "MINIBOX_PROOT_PATH");
+    bridge_str_env(config.socket_group.as_deref(), "MINIBOX_SOCKET_GROUP");
+    bridge_str_env(config.socket_mode.as_deref(), "MINIBOX_SOCKET_MODE");
+    if let Some(max_nest_depth) = config.policy.max_nest_depth {
+        bridge_str_env(
+            Some(max_nest_depth.to_string().as_str()),
+            "MINIBOX_MAX_NEST_DEPTH",
+        );
+    }
+
     // VZ needs GCD dispatch_main on the real main thread — peek at the fully
     // resolved adapter name (CLI flag > env > config, all settled above) and
     // divert before #[tokio::main]-style runtime setup would park this thread
@@ -103,36 +125,93 @@ fn main() {
     }
 }
 
-/// Send SIGTERM to any running miniboxd process(es) and wait briefly.
+/// Sets `env_name` to `value` if it isn't already set in the environment.
+///
+/// SAFETY: callers must only invoke this before the tokio runtime starts
+/// (single-threaded context) — see call sites in `main()`.
+fn bridge_str_env(value: Option<&str>, env_name: &str) {
+    if let Some(value) = value
+        && std::env::var(env_name).is_err()
+    {
+        unsafe { std::env::set_var(env_name, value) };
+    }
+}
+
+/// `bridge_str_env`, converting a `Path` to its string form first.
+fn bridge_path_env(value: Option<&std::path::Path>, env_name: &str) {
+    bridge_str_env(value.and_then(|p| p.to_str()), env_name);
+}
+
+/// Send SIGTERM to any other running miniboxd process(es) and wait briefly.
 ///
 /// Used when `miniboxd --restart` is invoked to replace a running daemon
 /// without requiring a separate stop script. The current process then proceeds
 /// to start normally.
 ///
 /// If no existing miniboxd is found, this is a no-op.
+///
+/// Deliberately does not shell out to `pkill -x miniboxd`: `pkill` matches by
+/// process name only, with no PID/PGID/session scoping and no self-exclusion
+/// beyond pkill's own argv0 — it would also match (and could kill) *this*
+/// process, since the new instance is already running under the same name
+/// before this function returns. Instead, enumerate candidate PIDs via
+/// `pgrep` (discovery only, scoped to the current user) and signal each one
+/// individually via `kill(2)`, explicitly skipping our own PID.
 #[cfg(unix)]
 fn graceful_restart() {
     use std::process::Command;
 
-    // pkill sends SIGTERM to processes named "miniboxd" (excluding self).
-    let status = Command::new("pkill")
-        .args(["-TERM", "-x", "miniboxd"])
-        .status();
+    let own_pid = std::process::id();
 
-    match status {
-        Ok(s) if s.success() => {
-            eprintln!("miniboxd: --restart: sent SIGTERM to existing instance(s)");
-            // Brief wait for the existing daemon to release the socket.
-            const RESTART_WAIT_MS: u64 = 800;
-            std::thread::sleep(std::time::Duration::from_millis(RESTART_WAIT_MS));
-        }
-        Ok(_) => {
-            // pkill exit 1 means no process found — not an error.
-        }
-        Err(e) => {
-            eprintln!("miniboxd: --restart: pkill failed: {e} (continuing)");
+    let pgrep_output = Command::new("pgrep")
+        .args([
+            "-u",
+            &std::env::var("USER").unwrap_or_else(|_| "$(id -u)".into()),
+            "-x",
+            "miniboxd",
+        ])
+        .output();
+
+    let Ok(output) = pgrep_output else {
+        eprintln!("miniboxd: --restart: pgrep failed (continuing)");
+        return;
+    };
+
+    let pids = other_miniboxd_pids(&String::from_utf8_lossy(&output.stdout), own_pid);
+
+    if pids.is_empty() {
+        // No other miniboxd instance found — not an error.
+        return;
+    }
+
+    for pid in &pids {
+        let target = nix::unistd::Pid::from_raw(*pid);
+        if let Err(e) = nix::sys::signal::kill(target, nix::sys::signal::Signal::SIGTERM) {
+            eprintln!("miniboxd: --restart: SIGTERM to pid {pid} failed: {e}");
         }
     }
+
+    eprintln!(
+        "miniboxd: --restart: sent SIGTERM to {} existing instance(s)",
+        pids.len()
+    );
+    // Brief wait for the existing daemon to release the socket.
+    const RESTART_WAIT_MS: u64 = 800;
+    std::thread::sleep(std::time::Duration::from_millis(RESTART_WAIT_MS));
+}
+
+/// Parse `pgrep -x miniboxd` output into the set of PIDs to signal, excluding
+/// `own_pid` and any malformed line.
+///
+/// Pure and side-effect-free so the exclusion logic (the actual fix for the
+/// unscoped-`pkill` bug) is directly testable without spawning real processes.
+#[cfg(unix)]
+fn other_miniboxd_pids(pgrep_stdout: &str, own_pid: u32) -> Vec<i32> {
+    pgrep_stdout
+        .lines()
+        .filter_map(|line| line.trim().parse::<i32>().ok())
+        .filter(|&pid| pid as u32 != own_pid)
+        .collect()
 }
 
 /// VZ adapter entry point — keeps the main thread for GCD `dispatch_main`.
@@ -1280,6 +1359,94 @@ mod tests {
 
     #[cfg(unix)]
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    #[cfg(unix)]
+    fn other_miniboxd_pids_excludes_own_pid() {
+        let pids = other_miniboxd_pids("111\n222\n333\n", 222);
+        assert_eq!(pids, vec![111, 333]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn other_miniboxd_pids_empty_when_only_self_found() {
+        // Regression: `pkill -x miniboxd` previously matched this process's
+        // own PID too (same name, no self-exclusion), which would have sent
+        // SIGTERM to the very instance calling graceful_restart.
+        let pids = other_miniboxd_pids("42\n", 42);
+        assert_eq!(pids, Vec::<i32>::new());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn other_miniboxd_pids_ignores_malformed_lines() {
+        let pids = other_miniboxd_pids("111\n\nnot-a-pid\n222\n", 999);
+        assert_eq!(pids, vec![111, 222]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn other_miniboxd_pids_empty_on_empty_input() {
+        assert_eq!(other_miniboxd_pids("", 1), Vec::<i32>::new());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_str_env_sets_unset_var() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        bridge_str_env(Some("value"), "MINIBOX_TEST_BRIDGE_STR");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_STR");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        assert_eq!(result, Ok("value".to_string()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_str_env_does_not_override_already_set_var() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::set_var("MINIBOX_TEST_BRIDGE_STR", "existing");
+        }
+        bridge_str_env(Some("value"), "MINIBOX_TEST_BRIDGE_STR");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_STR");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        assert_eq!(result, Ok("existing".to_string()));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_str_env_noop_when_value_none() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_STR");
+        }
+        bridge_str_env(None, "MINIBOX_TEST_BRIDGE_STR");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_STR");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn bridge_path_env_sets_unset_var_from_path() {
+        let _guard = ENV_LOCK.lock().expect("acquire ENV_LOCK");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_PATH");
+        }
+        let path = PathBuf::from("/tmp/bridge-test");
+        bridge_path_env(Some(path.as_path()), "MINIBOX_TEST_BRIDGE_PATH");
+        let result = std::env::var("MINIBOX_TEST_BRIDGE_PATH");
+        unsafe {
+            std::env::remove_var("MINIBOX_TEST_BRIDGE_PATH");
+        }
+        assert_eq!(result, Ok("/tmp/bridge-test".to_string()));
+    }
 
     #[test]
     #[cfg(unix)]

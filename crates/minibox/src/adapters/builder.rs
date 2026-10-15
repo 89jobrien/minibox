@@ -31,7 +31,7 @@ use crate::image::dockerfile::{Instruction, ShellOrExec, parse};
 mod copy;
 mod dockerignore;
 
-use copy::{CopyRequest, copy_sources};
+use copy::{CopyRequest, copy_sources, resolve_container_path};
 use dockerignore::DockerIgnore;
 
 /// Native image builder that executes supported Dockerfile instructions.
@@ -72,6 +72,12 @@ struct StageState {
     env: Vec<String>,
     variables: BTreeMap<String, String>,
     workdir: PathBuf,
+    /// `"image:tag"` this stage's FROM resolved to, when it came from a real
+    /// registry pull (`None` for `scratch` and for stages inherited from an
+    /// earlier build stage). VM-backed adapters (smolvm) that cannot derive
+    /// a bootable image from a host-side layer stack need this to boot the
+    /// persistent machine RUN steps chain into — see `execute_run_step`.
+    source_image_ref: Option<String>,
 }
 
 impl StageState {
@@ -91,6 +97,7 @@ impl StageState {
             env: Vec::new(),
             variables: BTreeMap::new(),
             workdir: PathBuf::from("/"),
+            source_image_ref: None,
         }
     }
 
@@ -376,6 +383,7 @@ async fn load_external_stage(
         env,
         variables,
         workdir,
+        source_image_ref: Some(base_image),
     })
 }
 
@@ -517,11 +525,55 @@ struct RunStepContext<'a> {
     run_step: u32,
     builds_dir: &'a std::path::Path,
     build_id: &'a str,
+    /// Index of the current build stage (number of FROM instructions
+    /// already closed). Combined with `build_id` to name a persistent
+    /// build machine per stage — see `execute_run_step`.
+    stage_index: u32,
     env_state: &'a [String],
     workdir: &'a Path,
     layer_stack: &'a [PathBuf],
+    /// The stage's FROM image ref (`"image:tag"`), when available. Passed
+    /// through to `ContainerSpawnConfig::image_ref` for VM-backed adapters
+    /// that boot the RUN step's machine from it directly.
+    image_ref: Option<&'a str>,
     instr_label: String,
     shell_or_exec: &'a ShellOrExec,
+}
+
+/// Hostname shared by every RUN step within one build stage — doubles as a
+/// persistent-machine name for VM-backed adapters. See `RunStepContext`.
+fn build_stage_hostname(build_id: &str, stage_index: u32) -> String {
+    format!("minibox-build-{build_id}-s{stage_index}")
+}
+
+/// Push a just-written `COPY`/`ADD` destination into the stage's persistent
+/// build machine, if the adapter needs one (closes the COPY/VM-bridging gap
+/// for smolvm; a no-op for adapters whose RUN steps already see the host-side
+/// snapshot directly).
+///
+/// `working_root` is the host-side layer dir `execute_filesystem_step` just
+/// wrote `dest` into (same root used as both `destination_rootfs` and
+/// `layer_dir` for that step). Resolves `dest` with the exact same
+/// `resolve_container_path` logic `copy_sources` uses internally, so the
+/// VM-side destination always matches where the file actually landed.
+async fn sync_copy_to_build_machine(
+    builder: &MiniboxImageBuilder,
+    build_id: &str,
+    stage_index: u32,
+    image_ref: Option<&str>,
+    workdir: &Path,
+    dest: &Path,
+    working_root: &Path,
+) -> Result<()> {
+    let relative_dest = resolve_container_path(workdir, dest)?;
+    let host_path = working_root.join(&relative_dest);
+    let container_dest = Path::new("/").join(&relative_dest);
+    let hostname = build_stage_hostname(build_id, stage_index);
+    builder
+        .runtime
+        .sync_persistent_machine_path(&hostname, image_ref, &host_path, &container_dest)
+        .await
+        .context("sync COPY/ADD output to persistent build machine")
 }
 
 /// Execute a single `RUN` instruction: set up rootfs, spawn the process,
@@ -590,7 +642,11 @@ async fn execute_run_step(
         command,
         args,
         env: ctx.env_state.to_vec(),
-        hostname: format!("minibox-build-{}", ctx.build_id),
+        // Identical for every RUN step in this build stage — VM-backed
+        // adapters (smolvm) use it as the name of a persistent machine
+        // reused across those steps instead of booting a fresh, unrelated
+        // VM per step. See `SmolVmRuntime::spawn_process`.
+        hostname: build_stage_hostname(ctx.build_id, ctx.stage_index),
         cgroup_path: cgroup_path.into(),
         capture_output: true,
         hooks: ContainerHooks::default(),
@@ -598,7 +654,7 @@ async fn execute_run_step(
         mounts: vec![],
         privileged: false,
         uid_range_mode: minibox_core::domain::UidRangeMode::Exclusive,
-        image_ref: None,
+        image_ref: ctx.image_ref.map(str::to_string),
     };
 
     let spawn_result = builder
@@ -752,7 +808,13 @@ impl ImageBuilder for MiniboxImageBuilder {
         let mut current = None::<StageState>;
         let mut run_step = 0u32;
         let mut copy_step = 0u32;
+        // Every RUN-step hostname seen, so persistent build machines booted
+        // for VM-backed adapters (smolvm) get torn down once this build is
+        // done — success or failure — rather than lingering. Populated
+        // before the loop below runs, so cleanup sees every stage attempted.
+        let mut build_machine_hostnames = std::collections::HashSet::<String>::new();
 
+        let build_result: Result<()> = async {
         for (step_idx, instr) in steps.iter().enumerate() {
             let step_num = step_idx as u32 + 1;
             let msg = format!("Step {step_num}/{total}: {}", instr_display(instr));
@@ -844,14 +906,18 @@ impl ImageBuilder for MiniboxImageBuilder {
                         .map(|(key, value)| format!("{key}={value}"))
                         .collect();
                     let layer_stack = stage.layer_paths();
+                    let stage_index = stages.len() as u32;
+                    build_machine_hostnames.insert(build_stage_hostname(&build_id, stage_index));
                     let ctx = RunStepContext {
                         step_num,
                         run_step,
                         builds_dir: &builds_dir,
                         build_id: &build_id,
+                        stage_index,
                         env_state: &run_env,
                         workdir: &stage.workdir,
                         layer_stack: &layer_stack,
+                        image_ref: stage.source_image_ref.as_deref(),
                         instr_label: instr_display(instr),
                         shell_or_exec,
                     };
@@ -1028,12 +1094,28 @@ impl ImageBuilder for MiniboxImageBuilder {
                         snapshot_name: format!("_minibox_build/{build_id}"),
                         snapshot_tag: format!("copy-{copy_step}"),
                     };
+                    let working_root = filesystem_step.working_root.clone();
+                    let workdir = filesystem_step.workdir.clone();
+                    let dest_for_sync = dest.clone();
+                    let image_ref = stage.source_image_ref.clone();
+                    let stage_index = stages.len() as u32;
                     let layer = tokio::task::spawn_blocking(move || {
                         execute_filesystem_step(filesystem_step)
                     })
                     .await
                     .context("spawn_blocking execute COPY")??;
                     current.as_mut().context("COPY stage disappeared")?.layers = vec![layer];
+                    build_machine_hostnames.insert(build_stage_hostname(&build_id, stage_index));
+                    sync_copy_to_build_machine(
+                        self,
+                        &build_id,
+                        stage_index,
+                        image_ref.as_deref(),
+                        &workdir,
+                        &dest_for_sync,
+                        &working_root,
+                    )
+                    .await?;
                 }
                 Instruction::Add {
                     srcs,
@@ -1077,16 +1159,43 @@ impl ImageBuilder for MiniboxImageBuilder {
                         snapshot_name: format!("_minibox_build/{build_id}"),
                         snapshot_tag: format!("add-{copy_step}"),
                     };
+                    let working_root = filesystem_step.working_root.clone();
+                    let workdir = filesystem_step.workdir.clone();
+                    let dest_for_sync = dest.clone();
+                    let image_ref = stage.source_image_ref.clone();
+                    let stage_index = stages.len() as u32;
                     let layer = tokio::task::spawn_blocking(move || {
                         execute_filesystem_step(filesystem_step)
                     })
                     .await
                     .context("spawn_blocking execute ADD")??;
                     current.as_mut().context("ADD stage disappeared")?.layers = vec![layer];
+                    build_machine_hostnames.insert(build_stage_hostname(&build_id, stage_index));
+                    sync_copy_to_build_machine(
+                        self,
+                        &build_id,
+                        stage_index,
+                        image_ref.as_deref(),
+                        &workdir,
+                        &dest_for_sync,
+                        &working_root,
+                    )
+                    .await?;
                 }
                 Instruction::Comment(_) => {}
             }
         }
+        Ok(())
+        }.await;
+
+        // Always release any persistent build machine, success or failure —
+        // the build that needed it is over either way.
+        for hostname in &build_machine_hostnames {
+            if let Err(e) = self.runtime.cleanup_persistent_machine(hostname).await {
+                warn!(hostname, error = ?e, "build: failed to clean up persistent build machine");
+            }
+        }
+        build_result?;
 
         if let Some(stage) = current.take() {
             stages.push(stage);

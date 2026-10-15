@@ -1,0 +1,23 @@
+[package]
+name = "minibox-signpost"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "macOS os_signpost instrumentation for the minibox container runtime"
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = []
+# Enables real os_signpost emission on macOS. Off by default because Apple
+# exposes signposting only through a Swift bridge, so enabling it adds a Swift
+# toolchain build to every macOS build of any crate that depends on this one.
+macos-signposts = ["dep:apple-log"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-log = { version = "0.7", optional = true }
+
+[lints]
+workspace = true

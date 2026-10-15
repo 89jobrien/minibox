@@ -165,6 +165,139 @@ fn smolvm_exec_full(
     })
 }
 
+/// Hostname prefix `builder.rs` sets on every RUN-step `ContainerSpawnConfig`
+/// (`minibox-build-<build_id>-s<stage_index>`), used here to recognize a
+/// build RUN step and route it through a persistent named machine instead of
+/// a one-shot ephemeral `machine run`. See `SmolVmRuntime::spawn_process`.
+const BUILD_MACHINE_PREFIX: &str = "minibox-build-";
+
+/// Create a persistent, named smolvm machine booted from `image` and start it.
+///
+/// Unlike `machine run`, a named machine's filesystem changes persist across
+/// `machine exec` calls — this is what lets `mbx build`'s RUN steps chain:
+/// each step execs into the same machine instead of booting a fresh one.
+fn smolvm_machine_create(name: &str, image: &str) -> Result<()> {
+    // `--net` must be set at `create` time, not `start` — it's part of the
+    // machine's persisted config. Without it the guest has no route to the
+    // registry and `start` fails pulling `image` ("network is unreachable"),
+    // matching `machine run`'s own hardcoded `--net` for the same reason.
+    let create = Command::new("smolvm")
+        .args([
+            "machine", "create", "--name", name, "--image", image, "--net",
+        ])
+        .output()
+        .map_err(|e| anyhow!("failed to execute smolvm machine create: {e}"))?;
+    if !create.status.success() {
+        return Err(anyhow!(
+            "smolvm machine create failed: {}",
+            String::from_utf8_lossy(&create.stderr)
+        ));
+    }
+    let start = Command::new("smolvm")
+        .args(["machine", "start", "--name", name])
+        .output()
+        .map_err(|e| anyhow!("failed to execute smolvm machine start: {e}"))?;
+    if !start.status.success() {
+        return Err(anyhow!(
+            "smolvm machine start failed: {}",
+            String::from_utf8_lossy(&start.stderr)
+        ));
+    }
+    Ok(())
+}
+
+/// Run a command inside an already-running named machine via `machine exec`.
+///
+/// Mirrors [`smolvm_exec_full`]'s stdout/stderr separation: `smolvm`'s own
+/// diagnostics stay on stderr and are logged server-side, never surfaced to
+/// the build client.
+fn smolvm_machine_exec(
+    name: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+    timeout_secs: u32,
+) -> Result<SmolVmOutput> {
+    let mut cmd = Command::new("smolvm");
+    cmd.args(["machine", "exec", "--name", name]);
+    cmd.args(["--timeout", &format!("{timeout_secs}s")]);
+    for (key, val) in env {
+        cmd.args(["-e", &format!("{key}={val}")]);
+    }
+    cmd.arg("--");
+    cmd.args(args);
+
+    let output = cmd
+        .output()
+        .map_err(|e| anyhow!("failed to execute smolvm machine exec: {e}"))?;
+
+    if !output.stderr.is_empty() {
+        tracing::debug!(
+            name,
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "smolvm: machine exec diagnostics (not surfaced to client)"
+        );
+    }
+
+    Ok(SmolVmOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        exit_code: output.status.code().unwrap_or(1),
+    })
+}
+
+/// Copy a file or directory from the host into a named machine's filesystem.
+///
+/// Closes the "COPY/VM-bridging gap": `COPY`/`ADD` write into minibox's
+/// host-side layer-snapshot mechanism, but a persistent build machine's own
+/// disk never sees that content on its own — this is the bridge.
+fn smolvm_machine_cp(name: &str, host_path: &Path, dest_path: &Path) -> Result<()> {
+    let dest = format!("{name}:{}", dest_path.display());
+    let output = Command::new("smolvm")
+        .args(["machine", "cp", &host_path.to_string_lossy(), &dest])
+        .output()
+        .map_err(|e| anyhow!("failed to execute smolvm machine cp: {e}"))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "smolvm machine cp failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    Ok(())
+}
+
+/// Stop and delete a named machine. Best-effort: logs on failure rather than
+/// propagating, since this runs during cleanup where the build's own result
+/// has already been determined.
+fn smolvm_machine_stop_and_delete(name: &str) {
+    match Command::new("smolvm")
+        .args(["machine", "stop", "--name", name])
+        .output()
+    {
+        Ok(output) if !output.status.success() => {
+            tracing::warn!(
+                name,
+                stderr = %String::from_utf8_lossy(&output.stderr),
+                "smolvm: machine stop reported failure"
+            );
+        }
+        Err(e) => tracing::warn!(name, error = %e, "smolvm: machine stop failed to execute"),
+        _ => {}
+    }
+    match Command::new("smolvm")
+        .args(["machine", "delete", "--name", name, "--force"])
+        .output()
+    {
+        Ok(output) if !output.status.success() => {
+            tracing::warn!(
+                name,
+                stderr = %String::from_utf8_lossy(&output.stderr),
+                "smolvm: machine delete reported failure"
+            );
+        }
+        Err(e) => tracing::warn!(name, error = %e, "smolvm: machine delete failed to execute"),
+        _ => {}
+    }
+}
+
 /// Run a command inside the smolvm VM and return its stdout.
 ///
 /// The real `smolvm` invocation blocks on a synchronous `Command::output()`
@@ -406,6 +539,11 @@ pub struct SmolVmRuntime {
     /// smolvm runs commands synchronously in `spawn_process`, so
     /// the exit code is available immediately rather than via waitpid.
     last_exit_code: std::sync::Mutex<i32>,
+    /// Names of persistent machines created for build RUN-step chaining
+    /// (see `BUILD_MACHINE_PREFIX`), tracked so later RUN steps in the same
+    /// build stage reuse the already-booted machine. Removed and torn down
+    /// by `cleanup_persistent_machine`.
+    persistent_machines: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl SmolVmRuntime {
@@ -416,6 +554,7 @@ impl SmolVmRuntime {
             image: DEFAULT_IMAGE.to_string(),
             executor: None,
             last_exit_code: std::sync::Mutex::new(0),
+            persistent_machines: std::sync::Mutex::new(std::collections::HashSet::new()),
         }
     }
 
@@ -430,6 +569,28 @@ impl SmolVmRuntime {
     /// See [`SmolVmRegistry::vm_exec`] — same rationale for `spawn_blocking`.
     async fn vm_exec(&self, args: &[&str]) -> Result<String> {
         run_vm_exec(&self.image, self.executor.as_ref(), args).await
+    }
+
+    /// Ensure a persistent build machine named `name` exists and is running,
+    /// booted from `image_ref` (falling back to the adapter's default image).
+    ///
+    /// Shared by `spawn_process`'s RUN-step path and `sync_persistent_machine_path`'s
+    /// COPY/ADD path — either instruction can be the first to touch a given
+    /// build stage's machine, so both must be able to create it.
+    async fn ensure_persistent_machine(&self, name: &str, image_ref: Option<&str>) -> Result<()> {
+        let image = image_ref.map_or_else(|| self.image.clone(), str::to_owned);
+        let is_new = {
+            #[allow(clippy::expect_used)]
+            let mut machines = self.persistent_machines.lock().expect("lock poisoned");
+            machines.insert(name.to_owned())
+        };
+        if is_new {
+            let name_for_create = name.to_owned();
+            tokio::task::spawn_blocking(move || smolvm_machine_create(&name_for_create, &image))
+                .await
+                .map_err(|e| anyhow!("smolvm machine create/start: join error: {e}"))??;
+        }
+        Ok(())
     }
 }
 
@@ -486,6 +647,33 @@ impl ContainerRuntime for SmolVmRuntime {
         let (stdout, exit_code) = if self.executor.is_some() {
             // Use the test executor — flatten command into a single arg list.
             (self.vm_exec(&command).await?, 0)
+        } else if config.hostname.starts_with(BUILD_MACHINE_PREFIX) {
+            // `mbx build` RUN-step chaining: `builder.rs` sets this hostname
+            // identically for every RUN step in one build stage, so it
+            // doubles as the persistent machine's name. The first step for a
+            // given hostname boots a named machine from the stage's FROM
+            // image; every later step execs into that same machine, so
+            // packages/files installed by step N are still there for step
+            // N+1 — the bug this whole adapter path exists to fix (every RUN
+            // step previously booted an unrelated fresh VM from a hardcoded
+            // default image).
+            let name = config.hostname.clone();
+            self.ensure_persistent_machine(&name, config.image_ref.as_deref())
+                .await?;
+            const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
+            let command_owned: Vec<String> = command.iter().map(|s| (*s).to_owned()).collect();
+            let env_pairs_owned = env_pairs.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let command_refs: Vec<&str> = command_owned.iter().map(String::as_str).collect();
+                let env_refs: Vec<(&str, &str)> = env_pairs_owned
+                    .iter()
+                    .map(|(k, v)| (k.as_str(), v.as_str()))
+                    .collect();
+                smolvm_machine_exec(&name, &command_refs, &env_refs, DEFAULT_EXEC_TIMEOUT_SECS)
+            })
+            .await
+            .map_err(|e| anyhow!("smolvm_machine_exec: join error: {e}"))??;
+            (result.stdout, result.exit_code)
         } else {
             const DEFAULT_EXEC_TIMEOUT_SECS: u32 = 600;
             // Boot the actual requested container image (e.g. "alpine",
@@ -559,6 +747,71 @@ impl ContainerRuntime for SmolVmRuntime {
         #[allow(clippy::expect_used)]
         let code = *self.last_exit_code.lock().expect("lock poisoned");
         Ok(code)
+    }
+
+    /// Tear down the persistent build machine created for `hostname`, if any.
+    ///
+    /// Called by `builder.rs` once a build finishes (success or failure) so
+    /// the VM booted for its RUN steps doesn't linger after the build that
+    /// needed it is done.
+    async fn cleanup_persistent_machine(&self, hostname: &str) -> Result<()> {
+        let present = {
+            #[allow(clippy::expect_used)]
+            let mut machines = self.persistent_machines.lock().expect("lock poisoned");
+            machines.remove(hostname)
+        };
+        if present {
+            let name = hostname.to_owned();
+            tokio::task::spawn_blocking(move || smolvm_machine_stop_and_delete(&name))
+                .await
+                .map_err(|e| anyhow!("smolvm machine cleanup: join error: {e}"))?;
+        }
+        Ok(())
+    }
+
+    /// Push a host-side `COPY`/`ADD` output into the persistent build
+    /// machine's own disk.
+    ///
+    /// Closes the COPY/VM-bridging gap: `COPY`/`ADD` write into minibox's
+    /// host-side layer-snapshot mechanism, but a persistent build machine's
+    /// filesystem never sees that content on its own. Creates the machine if
+    /// a COPY/ADD is the first instruction to touch this stage (RUN steps
+    /// aren't guaranteed to run first), `mkdir -p`s the destination's parent
+    /// inside the VM (the host-side snapshot has no equivalent of the
+    /// automatic WORKDIR mkdir RUN steps get), then copies the file/dir in.
+    async fn sync_persistent_machine_path(
+        &self,
+        hostname: &str,
+        image_ref: Option<&str>,
+        host_path: &Path,
+        dest_path: &Path,
+    ) -> Result<()> {
+        if self.executor.is_some() {
+            return Ok(());
+        }
+        self.ensure_persistent_machine(hostname, image_ref).await?;
+
+        let parent = dest_path.parent().unwrap_or_else(|| Path::new("/"));
+        let mkdir_args_owned: Vec<String> = vec![
+            "mkdir".to_owned(),
+            "-p".to_owned(),
+            parent.to_string_lossy().into_owned(),
+        ];
+        let name_for_mkdir = hostname.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let args_refs: Vec<&str> = mkdir_args_owned.iter().map(String::as_str).collect();
+            smolvm_machine_exec(&name_for_mkdir, &args_refs, &[], 60)
+        })
+        .await
+        .map_err(|e| anyhow!("smolvm machine mkdir: join error: {e}"))??;
+
+        let name = hostname.to_owned();
+        let host_path = host_path.to_path_buf();
+        let dest_path = dest_path.to_path_buf();
+        tokio::task::spawn_blocking(move || smolvm_machine_cp(&name, &host_path, &dest_path))
+            .await
+            .map_err(|e| anyhow!("smolvm machine cp: join error: {e}"))??;
+        Ok(())
     }
 }
 
