@@ -11,6 +11,7 @@ vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualizati
 [dependencies]
 minibox = { workspace = true }
 minibox-core = { workspace = true }
+minibox-signpost = { workspace = true }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }

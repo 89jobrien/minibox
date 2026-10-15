@@ -83,6 +83,67 @@ impl MiniboxDaemonClient {
         Ok((collected.result, collected.output_truncated))
     }
 
+    /// Send a request and collect daemon responses for a bounded time window.
+    ///
+    /// Unlike [`Self::call_limited`], this closes the subscription when `duration`
+    /// elapses rather than waiting for a terminal response — required for
+    /// [`DaemonRequest::SubscribeEvents`], which never sends one.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the socket call, response decoding, daemon handling,
+    /// or output accounting fails.
+    pub async fn call_for_duration(
+        &self,
+        request: DaemonRequest,
+        max_output_bytes: usize,
+        duration: std::time::Duration,
+    ) -> Result<DaemonCallResult> {
+        ensure_read_only(&request)?;
+        let client = DaemonClient::with_socket(&self.socket_path);
+        let mut stream = client.call(request).await.map_err(map_client_error)?;
+
+        let mut responses = Vec::new();
+        let mut raw_responses = Vec::new();
+        let mut total_bytes = 0usize;
+        let mut terminal_type = None;
+        let deadline = tokio::time::sleep(duration);
+        tokio::pin!(deadline);
+
+        loop {
+            tokio::select! {
+                next = stream.next() => {
+                    let Some(response) = next.map_err(map_client_error)? else {
+                        break;
+                    };
+                    let is_terminal = response.is_terminal();
+                    let response_type = response_type(&response);
+                    let raw = serde_json::to_value(&response)?;
+                    total_bytes = total_bytes.saturating_add(raw.to_string().len());
+                    if total_bytes > max_output_bytes {
+                        return Err(McpServerError::OutputLimitExceeded);
+                    }
+                    if let DaemonResponse::Error { message } = &response {
+                        return Err(McpServerError::Daemon(message.clone()));
+                    }
+                    responses.push(response);
+                    raw_responses.push(raw);
+                    if is_terminal {
+                        terminal_type = Some(response_type);
+                        break;
+                    }
+                }
+                () = &mut deadline => break,
+            }
+        }
+
+        Ok(DaemonCallResult {
+            responses,
+            raw_responses,
+            terminal_type,
+        })
+    }
+
     async fn call_raw(
         &self,
         request: DaemonRequest,
@@ -268,6 +329,29 @@ mod authorization_tests {
                     id: "abc123".to_string(),
                 },
                 DEFAULT_MAX_OUTPUT_BYTES,
+            )
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(McpServerError::PolicyDenied {
+                tool: "daemon_call",
+                ..
+            })
+        ));
+    }
+
+    #[tokio::test]
+    async fn call_for_duration_rejects_mutating_requests() {
+        let client = MiniboxDaemonClient::new("/nonexistent/minibox.sock".into());
+
+        let result = client
+            .call_for_duration(
+                DaemonRequest::Stop {
+                    id: "abc123".to_string(),
+                },
+                DEFAULT_MAX_OUTPUT_BYTES,
+                std::time::Duration::from_millis(10),
             )
             .await;
 

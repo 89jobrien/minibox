@@ -10,6 +10,7 @@
 #   nu driver.nu smoke                 # pull alpine, run one command, show output
 #   nu driver.nu ps                    # mbx ps
 #   nu driver.nu logs <name-or-id>
+#   nu driver.nu exec <name-or-id> -- <cmd...>
 #   nu driver.nu stop <name-or-id>
 #   nu driver.nu rm <name-or-id>
 #   nu driver.nu teardown              # kill the isolated daemon, remove run dir
@@ -173,6 +174,13 @@ export def stop [target: string] {
     cd (repo)
     $env.MINIBOX_SOCKET_PATH = (sock)
     ^(mbx-bin) stop $target
+}
+
+export def exec [target: string, ...cmd: string] {
+    ensure-binary (mbx-bin) "mbx"
+    cd (repo)
+    $env.MINIBOX_SOCKET_PATH = (sock)
+    ^(mbx-bin) exec $target -- ...$cmd
 }
 
 export def rm-container [target: string] {

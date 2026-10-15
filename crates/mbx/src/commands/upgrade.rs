@@ -243,7 +243,7 @@ impl ReleaseProvider for GitHubReleaseProvider {
             .context("missing tag_name in GitHub response")?
             .to_string();
 
-        let expected_name = format!("minibox-{target_triple}.tar.gz");
+        let expected_name = format!("minibox-{tag}-{target_triple}.tar.gz");
         let asset_url = body["assets"]
             .as_array()
             .context("missing assets array")?

@@ -46,11 +46,13 @@ mod detect_changes;
 mod docs_audit;
 mod docs_lint;
 mod dotenv;
+mod e2e_local;
 mod feature_matrix_date;
 mod fuzz;
 mod gates;
 mod lint_paths;
 mod preflight;
+mod profile;
 mod promote;
 mod protocol_drift;
 mod protocol_sites;
@@ -131,6 +133,7 @@ fn main() -> Result<()> {
             let opts = test_in_vm::Options::from_args(&args);
             test_in_vm::run(root, &opts)
         }
+        Some("e2e-local") => e2e_local::run(&sh),
         Some("test-linux") => {
             let cfg = xconfig::XConfig::load(root)?;
             let target_base = utils::cargo_target_dir();
@@ -232,6 +235,7 @@ fn main() -> Result<()> {
 
         // ── Misc standalone ──────────────────────────────────────────
         Some("bench") => bench::bench(&sh, root, &bench::parse_bench_args(&argv[2..])),
+        Some("profile") => profile::run(&sh, root, &argv[2..]),
         Some("fuzz") => fuzz::fuzz(&sh, root),
         Some("demo") => {
             let args: Vec<String> = env::args().collect();
@@ -710,6 +714,7 @@ fn print_help() -> Result<()> {
     eprintln!("  build-test-image [--force]     cross-compile + OCI tarball");
     eprintln!("  setup-test-vm [--force]        persistent smolvm VM with Rust");
     eprintln!("  test-in-vm [--skip-build] [--keep] [--smolfile <path>]");
+    eprintln!("  e2e-local                      macOS smoke test: mbx build + run + exec");
     eprintln!("  test-linux                     build + load + run tests in container");
     eprintln!();
     eprintln!("CI / promotion:");
@@ -724,6 +729,7 @@ fn print_help() -> Result<()> {
     eprintln!();
     eprintln!("Misc:");
     eprintln!("  bench              criterion benchmarks");
+    eprintln!("  profile <mode>     Instruments/xctrace capture (cpu, mem, latency, native)");
     eprintln!("  fuzz               libFuzzer protocol targets");
     eprintln!("  demo [--adapter <name>] [--filter <name>] [--strict]");
     eprintln!("  borrow-fixtures    borrow-reasoning must-pass/must-fail fixtures");

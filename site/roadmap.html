@@ -27,7 +27,7 @@
         <span class="eyebrow">Direction of travel</span>
         <h1>Roadmap</h1>
         <p class="lead">Evidence-backed priorities for making the runtime safer, more portable, and easier to operate without obscuring its systems-programming core.</p>
-        <div class="meta-row"><span class="meta">Baseline 0.33.0</span><span class="meta">Active development</span><span class="meta">Updated 2026-09-15</span></div>
+        <div class="meta-row"><span class="meta">Baseline 0.34.0</span><span class="meta">Active development</span><span class="meta">Updated 2026-09-15</span></div>
       </header>
 
       <section>
@@ -35,7 +35,7 @@
         <div class="roadmap-grid">
           <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Native Linux runtime</h3><p>OCI pull, lifecycle, interactive exec, logs, events, cgroups v2, overlay filesystems, bridge networking, mounts, image operations, and execution-policy checks form the production reference path.</p></article>
           <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Typed control plane</h3><p>The <code>mbx</code> CLI, policy-gated MCP server, Crux JSON-RPC plugin, and read-only TUI converge on the daemon protocol.</p></article>
-          <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Platform suites</h3><p>GKE is production-ready for unprivileged pod execution. Colima, smolvm, and krun provide experimental lifecycle paths with explicit capability limits.</p></article>
+          <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Platform suites</h3><p>GKE is production-ready for unprivileged pod execution. Colima, smolvm, and krun have partial support: their core lifecycle paths work today, with explicit capability limits (no exec-into-running, limited logs).</p></article>
           <article class="card roadmap-card"><span class="pill pill-shipped">Shipped</span><h3>Standing quality gates</h3><p>Protocol ownership, handler coverage, adapter evidence, macOS validation, unit tests, and dependency audits remain the promotion bar after the feature freeze was lifted.</p></article>
         </div>
       </section>

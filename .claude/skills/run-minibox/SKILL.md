@@ -61,6 +61,7 @@ nu -c 'source .claude/skills/run-minibox/driver.nu; smoke'
 nu -c 'source .claude/skills/run-minibox/driver.nu; run-cmd alpine:latest echo hi'
 nu -c 'source .claude/skills/run-minibox/driver.nu; ps-list'
 nu -c 'source .claude/skills/run-minibox/driver.nu; logs <name-or-id>'
+nu -c 'source .claude/skills/run-minibox/driver.nu; exec <name-or-id> echo hello-from-exec'
 nu -c 'source .claude/skills/run-minibox/driver.nu; stop <name-or-id>'
 nu -c 'source .claude/skills/run-minibox/driver.nu; rm-container <name-or-id>'
 
@@ -86,6 +87,19 @@ CONTAINER ID    NAME              IMAGE                 COMMAND               ST
 `mbx run` has no `-d`/detach flag — every run is foreground and ephemeral
 unless you separately `--name` it and it's still running when you `ps`
 (long-lived commands, not `echo`). That's expected, not a driver bug.
+
+## Exec into a running container
+
+`smoke`'s container is ephemeral and auto-removed, so there's nothing left
+running to exec into afterward. To exercise `mbx exec`, run a detached,
+named, non-ephemeral container first:
+
+```text
+nu -c 'source .claude/skills/run-minibox/driver.nu; run-cmd alpine:latest sleep 30'
+nu -c 'source .claude/skills/run-minibox/driver.nu; exec run-skill-smoke echo hello-from-exec'
+nu -c 'source .claude/skills/run-minibox/driver.nu; stop run-skill-smoke'
+nu -c 'source .claude/skills/run-minibox/driver.nu; rm-container run-skill-smoke'
+```
 
 ## Direct invocation (no daemon)
 
