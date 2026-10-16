@@ -41,12 +41,13 @@ def main [] {
         ^miniboxd &
         sleep 1sec
         let build_result = (do { mbx build -t minibox-ci-runner:e2e $dockerfile_dir } | complete)
-        kill-miniboxd
         if $build_result.exit_code != 0 {
+            kill-miniboxd
             print "FAIL: mbx build"
             print $build_result.stderr
             exit 1
         }
+        kill-miniboxd
     }
     print "PASS: mbx build (11 steps, RUN-chaining + COPY bridging)"
 
