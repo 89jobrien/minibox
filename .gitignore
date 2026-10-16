@@ -186,6 +186,7 @@ dupehound-card.*
 .looprs/observability/runtime.jsonl
 .cc-audit.yaml
 .evidra/
+ops/ci-runner/.minibox-build-*
 
 # Local project-level daemon config. May enable privileged mode and bind
 # mounts, so it stays out of version control.
