@@ -51,6 +51,9 @@ pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
 }
 
 /// Options for the `run` subcommand, bundled to avoid a long parameter list.
+// Each bool is an independent CLI flag (--privileged, --tty, --rm, --dind);
+// they don't form combinable state and a state machine would just be this struct again.
+#[allow(clippy::struct_excessive_bools)]
 pub struct RunOpts {
     pub image: String,
     pub tag: String,
@@ -70,6 +73,47 @@ pub struct RunOpts {
     pub auto_remove: bool,
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
+    pub dind: bool,
+}
+
+/// Nested daemons need full container-creation privileges, so `--dind`
+/// implies `--privileged` regardless of whether the flag was passed directly.
+const fn effective_privileged(privileged: bool, dind: bool) -> bool {
+    privileged || dind
+}
+
+/// Path to the host's daemon Unix socket, bind-mounted 1:1 into the
+/// container so a nested `mbx` CLI inside can reach the host daemon.
+const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+
+/// Shell script run as the container entrypoint when `--dind` is set: starts
+/// a nested `miniboxd`, waits for its socket to appear, then hands off to the
+/// container's original command so it sees a working inner daemon.
+// qual:allow(dead_code) reason: "not yet wired into execute(); injection into the
+// container (writing + mounting this script) lands in a follow-up task (t6/t7)"
+#[allow(dead_code)]
+fn dind_entrypoint_script() -> String {
+    let sock = DAEMON_SOCKET_PATH;
+    format!(
+        "#!/bin/sh\n\
+         set -e\n\
+         miniboxd &\n\
+         while [ ! -S {sock} ]; do sleep 0.1; done\n\
+         exec \"$@\"\n"
+    )
+}
+
+/// Extra bind mounts to inject when `--dind` is set: the host daemon socket,
+/// mounted at the same path inside the container.
+fn dind_mounts(dind: bool) -> Vec<BindMount> {
+    if !dind {
+        return Vec::new();
+    }
+    vec![BindMount {
+        host_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+        container_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+        read_only: false,
+    }]
 }
 
 /// Execute the `run` subcommand.
@@ -97,7 +141,9 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         auto_remove,
         platform,
         cgroup_parent,
+        dind,
     } = opts;
+    let privileged = effective_privileged(privileged, dind);
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
         "bridge" => NetworkMode::Bridge,
@@ -117,6 +163,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
     for m in &mount_specs {
         mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {m:?}"))?);
     }
+    mounts.extend(dind_mounts(dind));
 
     let tty = tty && std::io::stdout().is_terminal();
 
@@ -258,6 +305,7 @@ mod tests {
                 auto_remove: false,
                 platform: None,
                 cgroup_parent: None,
+                dind: false,
             },
             &socket_path,
         )
@@ -266,6 +314,73 @@ mod tests {
             result.is_ok(),
             "execute should return Ok on ContainerCreated: {result:?}"
         );
+    }
+
+    #[test]
+    fn test_dind_enables_privileged() {
+        assert!(effective_privileged(false, true));
+    }
+
+    #[test]
+    fn test_dind_false_does_not_force_privileged() {
+        assert!(!effective_privileged(false, false));
+    }
+
+    #[test]
+    fn test_privileged_flag_alone_still_works() {
+        assert!(effective_privileged(true, false));
+    }
+
+    #[test]
+    fn test_dind_mounts_socket() {
+        let mounts = dind_mounts(true);
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].host_path, PathBuf::from(DAEMON_SOCKET_PATH));
+        assert_eq!(mounts[0].container_path, PathBuf::from(DAEMON_SOCKET_PATH));
+        assert!(!mounts[0].read_only);
+    }
+
+    #[test]
+    fn test_dind_false_adds_no_mounts() {
+        assert_eq!(dind_mounts(false).len(), 0);
+    }
+
+    #[test]
+    fn test_dind_entrypoint() {
+        let script = dind_entrypoint_script();
+        assert!(script.starts_with("#!/bin/sh"));
+        assert!(script.contains("miniboxd"));
+        assert!(script.contains(DAEMON_SOCKET_PATH));
+        assert!(
+            script.trim_end().ends_with("exec \"$@\""),
+            "entrypoint must hand off to the original command: {script}"
+        );
+    }
+
+    #[test]
+    fn test_dind_opts() {
+        let opts = RunOpts {
+            image: "alpine".to_string(),
+            tag: "latest".to_string(),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            network: "none".to_string(),
+            privileged: false,
+            uid_range_mode: UidRangeMode::Exclusive,
+            volumes: vec![],
+            mount_specs: vec![],
+            name: None,
+            tty: false,
+            env: vec![],
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
+            platform: None,
+            cgroup_parent: None,
+            dind: true,
+        };
+        assert!(opts.dind);
     }
 
     fn network_mode_from_str(s: &str) -> Result<NetworkMode> {

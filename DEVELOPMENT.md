@@ -183,6 +183,7 @@ just test-integration        # cgroup tests + native adapter isolation
 just test-e2e                # protocol e2e tests (any platform)
 just test-system             # full daemon+CLI suite (Linux + root)
 just test-e2e-vps            # run full-stack suite on VPS via SSH
+just e2e-local               # macOS smoke test: mbx build + run + exec (ops/ci-runner/)
 ```
 
 ### Property-based tests (any platform)

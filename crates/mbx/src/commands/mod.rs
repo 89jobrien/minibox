@@ -131,6 +131,7 @@ pub mod images;
 pub mod load;
 pub mod logs;
 pub mod manifest;
+pub mod monitor;
 pub mod pause;
 pub mod pipeline;
 pub mod prune;
