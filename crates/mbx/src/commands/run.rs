@@ -86,6 +86,23 @@ const fn effective_privileged(privileged: bool, dind: bool) -> bool {
 /// container so a nested `mbx` CLI inside can reach the host daemon.
 const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 
+/// Shell script run as the container entrypoint when `--dind` is set: starts
+/// a nested `miniboxd`, waits for its socket to appear, then hands off to the
+/// container's original command so it sees a working inner daemon.
+// qual:allow(dead_code) reason: "not yet wired into execute(); injection into the
+// container (writing + mounting this script) lands in a follow-up task (t6/t7)"
+#[allow(dead_code)]
+fn dind_entrypoint_script() -> String {
+    let sock = DAEMON_SOCKET_PATH;
+    format!(
+        "#!/bin/sh\n\
+         set -e\n\
+         miniboxd &\n\
+         while [ ! -S {sock} ]; do sleep 0.1; done\n\
+         exec \"$@\"\n"
+    )
+}
+
 /// Extra bind mounts to inject when `--dind` is set: the host daemon socket,
 /// mounted at the same path inside the container.
 fn dind_mounts(dind: bool) -> Vec<BindMount> {
@@ -326,6 +343,18 @@ mod tests {
     #[test]
     fn test_dind_false_adds_no_mounts() {
         assert_eq!(dind_mounts(false).len(), 0);
+    }
+
+    #[test]
+    fn test_dind_entrypoint() {
+        let script = dind_entrypoint_script();
+        assert!(script.starts_with("#!/bin/sh"));
+        assert!(script.contains("miniboxd"));
+        assert!(script.contains(DAEMON_SOCKET_PATH));
+        assert!(
+            script.trim_end().ends_with("exec \"$@\""),
+            "entrypoint must hand off to the original command: {script}"
+        );
     }
 
     #[test]
