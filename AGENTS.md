@@ -181,7 +181,31 @@ Another agent using the same checkout can also:
 
 Before any multi-step git operation, re-read the branch and
 `git status --porcelain`. Do not reformat, stage, or commit a file you did not
-author — flag it instead. **Isolated worktrees are the fix.**
+author — either review & commit it or flag it instead. **Isolated worktrees are the fix.**
+
+### When a commit sweeps in someone else's work
+
+`cargo xtask pre-commit`'s `cargo fmt --all` + `git add -u` step stages by
+pathspec, but a concurrent writer can stage and commit between your `git add`
+and your `git commit` landing, so the commit that actually runs can capture
+whatever is in the index at that instant — their staged files under your
+message — instead of what you staged. Check for this after every commit:
+`git show --stat <sha>` should list only the paths you intended.
+
+This is not a reason to stop and wait. Resolve it without blocking:
+
+1. **If the content is real work and HEAD has not moved past it**: the
+   message is wrong but nothing is lost. Leave it — don't `reset`/`amend` a
+   commit once anything else may be built on top of it, including a
+   concurrent writer's next commit.
+2. **If your own change never landed**: it's still sitting unstaged in your
+   working tree (the hook only reformats; it doesn't discard anything you
+   staged under a path it didn't touch). Just stage and commit it again,
+   under its own correct message, as a new commit. Do not retroactively fix
+   the mislabeled one.
+3. Only reach for `reset`/`amend` when you are certain nothing — not even a
+   concurrent writer — has committed on top yet. Once something has, treat
+   the history as shared and append, never rewrite.
 
 ## Architecture Guardrails
 
