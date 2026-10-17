@@ -277,7 +277,7 @@ impl<T: RootfsSetup + ChildInit> FilesystemProvider for T {}
 
 /// Backend-specific writable-layer metadata produced by [`RootfsSetup::setup_rootfs`].
 ///
-/// Persisted into [`ContainerRecord`] so that commit/build logic can locate
+/// Persisted in container state so that commit/build logic can locate
 /// the writable layer without re-querying the container runtime.
 ///
 /// The `metadata` map carries backend-specific key/value pairs so that new
@@ -319,7 +319,7 @@ impl BackendRootfsMetadata {
     }
 }
 
-/// Filesystem layout returned by [`FilesystemProvider::setup_rootfs`].
+/// Filesystem layout returned by [`RootfsSetup::setup_rootfs`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RootfsLayout {
     /// Path to the merged/mounted rootfs that the runtime will use.
