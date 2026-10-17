@@ -618,7 +618,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             rm,
             platform,
             cgroup_parent,
-            dind: _dind,
+            dind,
         } => {
             let (image, tag) = split_image_tag(image, tag);
             into_cli(
@@ -646,6 +646,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
                         auto_remove: rm,
                         platform,
                         cgroup_parent,
+                        dind,
                     },
                     socket_path,
                 )

@@ -51,6 +51,9 @@ pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
 }
 
 /// Options for the `run` subcommand, bundled to avoid a long parameter list.
+// Each bool is an independent CLI flag (--privileged, --tty, --rm, --dind);
+// they don't form combinable state and a state machine would just be this struct again.
+#[allow(clippy::struct_excessive_bools)]
 pub struct RunOpts {
     pub image: String,
     pub tag: String,
@@ -70,6 +73,7 @@ pub struct RunOpts {
     pub auto_remove: bool,
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
+    pub dind: bool,
 }
 
 /// Execute the `run` subcommand.
@@ -97,6 +101,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         auto_remove,
         platform,
         cgroup_parent,
+        dind: _dind,
     } = opts;
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
@@ -258,6 +263,7 @@ mod tests {
                 auto_remove: false,
                 platform: None,
                 cgroup_parent: None,
+                dind: false,
             },
             &socket_path,
         )
@@ -266,6 +272,32 @@ mod tests {
             result.is_ok(),
             "execute should return Ok on ContainerCreated: {result:?}"
         );
+    }
+
+    #[test]
+    fn test_dind_opts() {
+        let opts = RunOpts {
+            image: "alpine".to_string(),
+            tag: "latest".to_string(),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            network: "none".to_string(),
+            privileged: false,
+            uid_range_mode: UidRangeMode::Exclusive,
+            volumes: vec![],
+            mount_specs: vec![],
+            name: None,
+            tty: false,
+            env: vec![],
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
+            platform: None,
+            cgroup_parent: None,
+            dind: true,
+        };
+        assert!(opts.dind);
     }
 
     fn network_mode_from_str(s: &str) -> Result<NetworkMode> {
