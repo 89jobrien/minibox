@@ -76,6 +76,12 @@ pub struct RunOpts {
     pub dind: bool,
 }
 
+/// Nested daemons need full container-creation privileges, so `--dind`
+/// implies `--privileged` regardless of whether the flag was passed directly.
+const fn effective_privileged(privileged: bool, dind: bool) -> bool {
+    privileged || dind
+}
+
 /// Execute the `run` subcommand.
 ///
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
@@ -101,8 +107,9 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         auto_remove,
         platform,
         cgroup_parent,
-        dind: _dind,
+        dind,
     } = opts;
+    let privileged = effective_privileged(privileged, dind);
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
         "bridge" => NetworkMode::Bridge,
@@ -272,6 +279,21 @@ mod tests {
             result.is_ok(),
             "execute should return Ok on ContainerCreated: {result:?}"
         );
+    }
+
+    #[test]
+    fn test_dind_enables_privileged() {
+        assert!(effective_privileged(false, true));
+    }
+
+    #[test]
+    fn test_dind_false_does_not_force_privileged() {
+        assert!(!effective_privileged(false, false));
+    }
+
+    #[test]
+    fn test_privileged_flag_alone_still_works() {
+        assert!(effective_privileged(true, false));
     }
 
     #[test]
