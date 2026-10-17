@@ -82,6 +82,23 @@ const fn effective_privileged(privileged: bool, dind: bool) -> bool {
     privileged || dind
 }
 
+/// Path to the host's daemon Unix socket, bind-mounted 1:1 into the
+/// container so a nested `mbx` CLI inside can reach the host daemon.
+const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+
+/// Extra bind mounts to inject when `--dind` is set: the host daemon socket,
+/// mounted at the same path inside the container.
+fn dind_mounts(dind: bool) -> Vec<BindMount> {
+    if !dind {
+        return Vec::new();
+    }
+    vec![BindMount {
+        host_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+        container_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+        read_only: false,
+    }]
+}
+
 /// Execute the `run` subcommand.
 ///
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
@@ -129,6 +146,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
     for m in &mount_specs {
         mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {m:?}"))?);
     }
+    mounts.extend(dind_mounts(dind));
 
     let tty = tty && std::io::stdout().is_terminal();
 
@@ -294,6 +312,20 @@ mod tests {
     #[test]
     fn test_privileged_flag_alone_still_works() {
         assert!(effective_privileged(true, false));
+    }
+
+    #[test]
+    fn test_dind_mounts_socket() {
+        let mounts = dind_mounts(true);
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].host_path, PathBuf::from(DAEMON_SOCKET_PATH));
+        assert_eq!(mounts[0].container_path, PathBuf::from(DAEMON_SOCKET_PATH));
+        assert!(!mounts[0].read_only);
+    }
+
+    #[test]
+    fn test_dind_false_adds_no_mounts() {
+        assert_eq!(dind_mounts(false).len(), 0);
     }
 
     #[test]
