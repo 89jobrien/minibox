@@ -409,6 +409,61 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 ---
 
+## Nushell Development Patterns
+
+### Background Processes and with-env Scoping
+
+**Problem**: Background daemons spawned with `&` inside a `with-env` block are automatically terminated when the block exits. Nushell scopes background child processes to the with-env block and kills them on scope exit.
+
+**Example (incorrect)**:
+
+```nu
+with-env { MY_VAR: "value" } {
+    miniboxd &  # Backgrounded, but will be SIGKILL'd when block exits
+    some-command
+}
+# miniboxd is dead before some-command finishes
+```
+
+**Fix**: Explicitly kill or cleanup background processes **before** exiting the with-env block:
+
+```nu
+with-env { MY_VAR: "value" } {
+    miniboxd &
+    let daemon_pid = (jobs | last).pid
+    some-command
+    # Explicit cleanup before block exit
+    kill $daemon_pid
+}
+```
+
+**Pattern for persistent daemons**:
+
+```nu
+def spawn-daemon-with-cleanup [daemon_fn: closure, work_fn: closure, cleanup_fn: closure] {
+    # Spawn daemon and keep it alive through closure scope
+    with-env { ... } {
+        (do $daemon_fn) &
+        let daemon_pid = (jobs | last).pid
+        try {
+            (do $work_fn)
+        } finally {
+            # Guaranteed cleanup before with-env scope exit
+            (do $cleanup_fn $daemon_pid)
+        }
+    }
+}
+```
+
+**Real example** (ops/ci-runner/e2e-local.nu):
+
+- Stage 1 (build): miniboxd runs, exits cleanly with explicit `kill-miniboxd` before with-env block closes
+- Stage 2 (run+exec): krun container, `kill-miniboxd` called before scope exit to prevent SIGKILL orphaning
+
+See `ops/ci-runner/e2e-local.nu` for working implementation.
+
+---
+
 ## scripts/ Directory
 
 The `scripts/` directory contains AI agent tooling and operational helpers.
