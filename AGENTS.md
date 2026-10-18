@@ -236,6 +236,51 @@ This is not a reason to stop and wait. Resolve it without blocking:
   before tarring an extracted layer/rootfs dir, or it fails with ENOENT on the
   host. See `docker_archive.rs`, `commit.rs`, `push.rs`, `colima_push.rs`.
 
+## Component Removal Audit Checklist
+
+When deleting a component (crate, module, file, feature, or dependency), verify all of the
+following before committing. **18 instances of incomplete grep/audit have been detected**
+post-deletion, leaving stale references and broken imports. See GitHub issue #601 for detailed
+guidance and examples.
+
+### Grep Verification
+
+- [ ] `grep -r "component_name" --include="*.rs" .` — all Rust imports/usages
+- [ ] `grep -r "component_name" --include="*.toml" .` — `Cargo.toml`, features, workspace
+- [ ] `grep -r "component_name" --include="*.md" .` — docs, README, CHANGELOG
+- [ ] `cargo tree -i <crate_name>` — verify no dependents remain
+
+### Ecosystem Impact
+
+- [ ] Check re-exports in public libs; remove if the component was re-exported
+- [ ] Verify no conditional compilation gates reference the deleted module
+- [ ] If a domain port was deleted, confirm no protocol messages reference it
+- [ ] Update `taskit.toml` `[[protocol.surfaces]]` if applicable; run `taskit protocol drift --update`
+- [ ] Check `crates/miniboxd/src/main.rs` handler dependencies — adapter suite construction sites may need updates
+
+### Test & Documentation
+
+- [ ] Search for disabled/skipped tests depending on the removed component
+- [ ] Verify conformance suite tests do not reference the deleted adapter/runtime
+- [ ] Check `.github/workflows/*.yml` for references (test targets, release artifacts)
+- [ ] Update `CRATE_INVENTORY.mbx.md` (crate list and counts)
+- [ ] Update `ARCHITECTURE.mbx.md` (diagram and description)
+- [ ] Update `AGENTS.md` Quick Reference if applicable
+- [ ] Check `DEVELOPMENT.md` for build/test instructions
+- [ ] Update `CHANGELOG.md` if user-visible
+
+### Final Verification
+
+- [ ] `cargo xtask verify` passes (docs-audit, architecture rings, clippy)
+- [ ] `cargo xtask test unit` passes
+- [ ] `cargo build --all-features --release` succeeds
+- [ ] `cargo build --no-default-features` succeeds (test minimal builds)
+- [ ] No stale `.gitignore` entries remain
+
+**Reference commit example**: 833692a7 deleted a Dockerfile but left stale references in
+5 files (assets/index.html, CI docs, shell helpers, commented code). Always grep for file
+paths and regex patterns, not just direct component names.
+
 ## Rust and Test Conventions
 
 - Rust edition is 2024. `std::env::set_var` and `remove_var` are unsafe;
