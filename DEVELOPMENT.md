@@ -267,9 +267,12 @@ just test-all                # nuke state -> doctor -> unit + integration + e2e 
 ## Benchmarks
 
 All criterion benchmarks live in `crates/minibox-bench`. Results are written to
-`bench/results/` (gitignored); tracked per-env baselines live at
-`bench/baseline.{local,selfhosted,hosted}.json`. The nightly CI bench job produces the
-canonical numbers.
+`bench/results/` (gitignored). Per-env baselines are read from
+`bench/baseline.{local,selfhosted,hosted}.json` — **none of these files are
+currently tracked in git**, so `--check` has nothing to compare against until
+`just bench-baseline` is run and committed for the relevant `--env`. The nightly CI
+bench jobs are `continue-on-error: true`, which is why the missing baselines have not
+surfaced as a failure.
 
 ```bash
 just bench                       # run benches, save to bench/results/
@@ -353,18 +356,26 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 ### Codebase Integrity Checks
 
-| Task                                  | Command                                     | When to use                         |
-| ------------------------------------- | ------------------------------------------- | ----------------------------------- |
-| Detect stale crate/binary names       | `cargo xtask check stale-names`             | After renames; CI gate              |
-| Verify protocol contract hashes       | `cargo xtask check protocol-drift`          | After protocol.rs changes           |
-| Update protocol hash baseline         | `cargo xtask check protocol-drift --update` | After intentional protocol changes  |
-| Verify HandlerDependencies site count | `cargo xtask check protocol-sites`          | After adding/removing handler sites |
-| Scan for `.unwrap()` in production    | `cargo xtask check no-unwrap`               | Advisory; use `--strict` to fail    |
-| Verify adapter test coverage          | `cargo xtask check adapter-coverage`        | After adding a new adapter          |
-| Check for tracked generated artifacts | `cargo xtask check repo-clean`              | Before PRs                          |
-| Lint legacy plan/spec frontmatter     | `cargo xtask docs lint`                     | Only scans docs/superpowers/        |
-| Enforce dependency rings              | `cargo xtask architecture`                  | After changing crate dependencies   |
-| Cross-build release binaries for musl | `cargo xtask musl-check`                    | Before pushing Linux-gated changes  |
+| Task                                  | Command                                     | When to use                                                       |
+| ------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| Detect stale crate/binary names       | `cargo xtask check stale-names`             | After renames; CI gate                                            |
+| Verify protocol contract hashes       | `cargo xtask check protocol-drift`          | After protocol.rs changes                                         |
+| Update protocol hash baseline         | `cargo xtask check protocol-drift --update` | After intentional protocol changes                                |
+| Verify HandlerDependencies site count | `cargo xtask check protocol-sites`          | After adding/removing handler sites                               |
+| Scan for `.unwrap()` in production    | `cargo xtask check no-unwrap`               | Advisory; use `--strict` to fail                                  |
+| Verify adapter test coverage          | `cargo xtask check adapter-coverage`        | After adding a new adapter                                        |
+| Check for tracked generated artifacts | `cargo xtask check repo-clean`              | Before PRs                                                        |
+| Lint plan/spec frontmatter            | `cargo xtask docs lint`                     | Intended for `docs/{plans,specs}/`; currently a no-op — see below |
+| Enforce dependency rings              | `cargo xtask architecture`                  | After changing crate dependencies                                 |
+| Cross-build release binaries for musl | `cargo xtask musl-check`                    | Before pushing Linux-gated changes                                |
+
+**Known gap:** `cargo xtask docs lint` resolves its scan root to
+`docs/superpowers/{plans,specs}/`, a path that no longer exists. It reports
+`checked 0 files` and exits clean, so the gate is currently inert. The live
+plan and spec documents are in `docs/plans/` and `docs/specs/`. Fixing this is
+a change to `xtask/src/docs_lint.rs`, not a docs edit — the 35 documents it
+would newly cover have never been linted, so treat the first run as a baseline
+rather than expecting it to pass.
 
 ### Build
 
@@ -477,6 +488,9 @@ for recipes that wrap them.
 | `sync-check.nu`           | Fetch + rebase check before push                         |
 | `ai-review.nu`            | AI-assisted code review of staged diff                   |
 | `council.nu`              | Multi-model council analysis                             |
+| `agentbox-council.nu`     | agentbox council analysis (Go toolchain)                 |
+| `agentbox-meta-agent.nu`  | agentbox orchestration meta-agent                        |
+| `agentbox-commit-msg.nu`  | agentbox commit-message helper                           |
 | `standup.nu`              | Generate standup summary from recent commits             |
 | `diagnose.nu`             | Container/daemon diagnostics                             |
 | `start-daemon.nu`         | Start miniboxd with adapter selection                    |
@@ -492,3 +506,22 @@ for recipes that wrap them.
 | `check-protocol-sites.nu` | Protocol site audit (wraps xtask)                        |
 | `trace-lima.nu`           | Trace Lima VM activity                                   |
 | `parse-geiger.nu`         | Parse cargo-geiger unsafe usage output                   |
+
+## Documentation
+
+`docs/core/*.mbx.md` is the canonical reference set, ordered by
+`docs/core/SUMMARY.md` and mirrored in `docs/docs.yaml`. The root `book.toml` is the
+only mdBook config in the repo and renders that set:
+
+```bash
+mdbook build          # docs/core -> book/ (gitignored)
+mdbook serve          # live preview at http://localhost:3000
+```
+
+`book/` is local-only. The GitHub Pages surface is the separate hand-built `site/`
+directory, published by `.github/workflows/pages.yml`.
+
+There was previously a second, parallel mdBook at `docs/book.toml` over `docs/src/`,
+holding 22 short per-crate stubs that duplicated `docs/core` content and carried none
+of the provenance frontmatter. It was removed so there is exactly one book and one
+canonical home for reference content.

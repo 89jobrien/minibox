@@ -29,7 +29,7 @@ generated: 2026-09-16
 > Updated 2026-05-06: GKE adapter ImagePusher wired (OciPushAdapter via oci_push_adapter).
 > Updated 2026-05-07: colima wiring note corrected (minibox crate, not macbox);
 > vz wiring row corrected (selectable via macbox env-var branch, feature-gated,
-> macOS only — not in AdapterSuite enum). Colima push/commit/build are now wired
+> macOS only). Colima push/commit/build are now wired
 > via macbox::build_colima_handler_dependencies.
 > Updated 2026-05-08: vz adapter removed (code dropped); QEMU vm_image/vm_run xtask commands
 > removed.
@@ -43,14 +43,12 @@ generated: 2026-09-16
 
 ## Workspace Overview
 
-17 workspace members (16 crates + xtask), Rust 2024 edition, workspace version 0.34.1.
+18 workspace members (17 crates + xtask), Rust 2024 edition, workspace version 0.34.1.
 
 <!-- fact:crate_count=17 -->
 <!-- fact:workspace_version=0.34.1 -->
 
 ```text
-minibox-macros          (declarative macros, ~300 LOC)
-    ^
 minibox-domain          (lib) — pure values, policies, lifecycle events, and ports
     ^
 minibox-core            (lib) — protocol, clients, OCI/image services, shared adapters
@@ -68,8 +66,13 @@ minibox-testsuite       (lib+2 bins, internal) — conformance harness plus repo
 minibox-bench           (bench crate, ~1.2k LOC) — Criterion benchmarks over minibox/minibox-core
 minibox-cni             (lib) — CNI plugin exec protocol and chain orchestration
 minibox-tui             (lib) — read-only TUI dashboard (ratatui + crossterm), used by `mbx tui`
+minibox-signpost        (lib) — macOS `os_signpost` intervals for `cargo xtask profile native`
 ail                     (bin, stub) — placeholder crate, no dependencies, minimal implementation
 xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, VM image build
+
+minibox-macros          (declarative macros, ~300 LOC) — no workspace dependencies of its
+                        own; consumed by minibox-core, minibox, and minibox-bench, so it
+                        sits beside the ladder rather than above it
 ```
 
 ### Cross-Crate Dependency Graph
@@ -79,20 +82,29 @@ xtask                   (dev tool, ~5k LOC) — CI gates, test runners, bench, V
 | minibox-macros      | --                                                            |
 | minibox-domain      | --                                                            |
 | minibox-core        | minibox-domain, minibox-macros                                |
-| minibox             | minibox-core, minibox-macros                                  |
-| macbox              | minibox, minibox-core                                         |
+| minibox             | minibox-core, minibox-macros, minibox-signpost                |
+| macbox              | minibox, minibox-core, minibox-signpost                       |
 | smolbox             | minibox, macbox                                               |
 | winbox              | minibox, minibox-core                                         |
-| miniboxd            | minibox, minibox-core (unix), macbox/smolbox (unix), winbox (windows) |
-| mbx                 | minibox-core                                                  |
+| miniboxd            | minibox, minibox-core, macbox/smolbox (unix), winbox (windows); optional minibox-cni (unix) |
+| mbx                 | minibox-core; optional minibox-tui (feature `tui`)             |
 | minibox-crux-plugin | minibox-core                                                  |
 | minibox-mcp         | minibox-core                                                  |
 | minibox-testsuite   | minibox, minibox-core                                         |
-| minibox-bench       | minibox, minibox-core, minibox-macros                         |
+| minibox-bench       | minibox, minibox-core (minibox-macros as a dev-dependency)     |
 | minibox-cni         | minibox-core                                                  |
 | minibox-tui         | minibox-core                                                  |
+| minibox-signpost    | --                                                             |
 | ail                 | --                                                             |
 | xtask               | (standalone)                                                  |
+
+**What the architecture gate actually enforces.** `cargo xtask architecture`
+assigns a ring to only three crates — `minibox-domain` = 0, `minibox-core` = 1,
+`minibox` = 2 — and rejects any of those three depending outward on a
+higher-numbered ring (`xtask/src/architecture.rs:72`). Every other crate,
+including `macbox`, `winbox`, `smolbox`, and `miniboxd`, has no ring and is
+therefore skipped by the ring check. The tiering shown above is a convention the
+inner three honor, not a rule the gate enforces across the whole workspace.
 
 ---
 
@@ -130,6 +142,8 @@ Defined in `crates/minibox-domain/src/extensions.rs`.
 | -------------- | --------------------------- |
 | `TtyProvider`  | Defined, not wired          |
 | `ExecProvider` | Superseded by `ExecRuntime` |
+| `LogProvider`  | Defined, not wired          |
+| `StateStore`   | Defined, not wired          |
 
 ---
 
@@ -173,7 +187,7 @@ All `build_*_handler_dependencies` functions live in
 | colima                        | `build_colima_handler_dependencies` | `colima`                | Unix         |
 | smolvm                        | `build_smolvm_handler_dependencies` | `smolvm` (default)      | Unix         |
 | krun                          | `build_krun_handler_dependencies`   | `krun` (fallback)       | Unix         |
-| vz                            | separate `vz_main`/`start_vz` path  | `vz` (feature-gated)    | macOS only   |
+| vz                            | separate `vz_main` path (`crates/miniboxd/src/main.rs`); `start_vz` is `crates/macbox/src/lib.rs` | `vz` (feature-gated)    | macOS only   |
 | vf, hcs, wsl2, docker_desktop | **not wired**                       | --                      | library only |
 
 ---
@@ -216,7 +230,7 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-30 request variants, 29 response variants. Canonical source:
+31 request variants, 30 response variants. Canonical source:
 `crates/minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
@@ -225,18 +239,24 @@ Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, SearchImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
 RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest,
-ListPipelines, ShowPipeline, RunWorkflow
+ListPipelines, ShowPipeline, GetCapabilities, RunWorkflow
 
 ### DaemonResponse Variants
 
-**Terminal** (end a request): ContainerCreated, Success, ContainerPaused,
-ContainerResumed, ContainerList, ImageLoaded, ImageList, SearchResults, Error,
-ContainerStopped, BuildComplete, Pruned, PipelineComplete, PipelineList,
-PipelineDetail, SnapshotSaved, SnapshotRestored, SnapshotList,
-Manifest, VerifyResult, WorkflowComplete
+Mirrors `DaemonResponse::is_terminal()` in `protocol.rs`; keep this list in sync
+when variants are added.
 
-**Non-terminal** (streaming): ContainerCreated, ContainerOutput, ExecStarted, PushProgress,
-BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
+**Terminal** (end a request): Success, Error, ContainerStopped, ContainerList,
+ContainerPaused, ContainerResumed, ImageLoaded, ImageList, SearchResults,
+BuildComplete, Pruned, PipelineComplete, PipelineList, PipelineDetail,
+SnapshotSaved, SnapshotRestored, SnapshotList, Manifest, VerifyResult,
+WorkflowComplete, CapabilityMatrix
+
+**Non-terminal** (streaming): ContainerCreated, ContainerOutput, ExecStarted,
+PushProgress, BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
+
+`ContainerCreated` is deliberately non-terminal: an ephemeral run sends it, then
+`ContainerOutput` chunks, then a terminal `ContainerStopped`.
 
 ---
 

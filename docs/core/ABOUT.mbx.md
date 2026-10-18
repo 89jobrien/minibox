@@ -105,9 +105,9 @@ sudo ./target/release/mbx rm <id>
 
 ## Architecture
 
-16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
+17 crates plus `xtask` (18 workspace members), Rust 2024 edition:
 
-```
+```text
 minibox-macros          declarative macros (as_any!, adapt!)
     ^
 minibox-domain          pure domain values, policies, events, and ports
@@ -127,6 +127,7 @@ minibox-testsuite       conformance test harness for adapter trait contracts
 minibox-bench           benchmark crate
 minibox-cni             feature-gated CNI execution for native bridge networking
 minibox-tui             read-only terminal dashboard, used by feature-gated `mbx tui`
+minibox-signpost        macOS os_signpost intervals for `cargo xtask profile native`
 ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
