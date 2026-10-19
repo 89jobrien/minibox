@@ -86,9 +86,15 @@ const fn effective_privileged(privileged: bool, dind: bool) -> bool {
 /// container so a nested `mbx` CLI inside can reach the host daemon.
 const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 
+/// Directory path in the container where dind files are mounted.
+const DIND_DIR_PATH: &str = "/usr/local/lib/mbx-dind";
+
 /// Path the dind entrypoint wrapper script is installed to inside the
 /// container.
-const DIND_WRAPPER_PATH: &str = "/usr/local/bin/mbx-dind-entrypoint";
+const DIND_WRAPPER_PATH: &str = "/usr/local/lib/mbx-dind/mbx-dind-entrypoint";
+
+/// Path the miniboxd binary is installed to inside the container.
+const DIND_MINIBOXD_PATH: &str = "/usr/local/lib/mbx-dind/miniboxd";
 
 /// Entrypoint override to use when `--dind` is set: the wrapper script takes
 /// over as the container's entrypoint and `exec`s the original command once
@@ -98,36 +104,112 @@ fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
     dind.then_some(DIND_WRAPPER_PATH)
 }
 
-/// Shell script run as the container entrypoint when `--dind` is set: starts
-/// a nested `miniboxd`, waits for its socket to appear, then hands off to the
-/// container's original command so it sees a working inner daemon.
-// qual:allow(dead_code) reason: "not yet wired into execute(); injection into the
-// container (writing + mounting this script) lands in a follow-up task (t6/t7)"
-#[allow(dead_code)]
-fn dind_entrypoint_script() -> String {
+/// Find the miniboxd binary on the host system.
+/// Tries `which miniboxd`, then standard installation paths.
+fn find_miniboxd_binary() -> anyhow::Result<std::path::PathBuf> {
+    // Try `which miniboxd` first.
+    if let Ok(output) = std::process::Command::new("which").arg("miniboxd").output()
+        && output.status.success()
+    {
+        let path_str = String::from_utf8(output.stdout)
+            .context("failed to parse which output")?
+            .trim()
+            .to_string();
+        if !path_str.is_empty() {
+            return Ok(std::path::PathBuf::from(path_str));
+        }
+    }
+
+    // Try standard installation paths.
+    for path_str in &[
+        "/usr/local/bin/miniboxd",
+        "/usr/bin/miniboxd",
+        "/opt/minibox/bin/miniboxd",
+    ] {
+        let path = std::path::PathBuf::from(path_str);
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    anyhow::bail!("miniboxd binary not found. Install miniboxd or ensure it is on PATH.")
+}
+
+/// Entrypoint wrapper script for `DinD`, updated to use the container-side path.
+fn dind_entrypoint_script_for_container() -> String {
+    let miniboxd_path = DIND_MINIBOXD_PATH;
     let sock = DAEMON_SOCKET_PATH;
     format!(
         "#!/bin/sh\n\
          set -e\n\
-         miniboxd &\n\
+         {miniboxd_path} &\n\
          while [ ! -S {sock} ]; do sleep 0.1; done\n\
          exec \"$@\"\n"
     )
 }
 
-/// Extra bind mounts to inject when `--dind` is set: the host daemon socket,
-/// mounted at the same path inside the container.
-fn dind_mounts(dind: bool) -> Vec<BindMount> {
+/// Set up `DinD` files in a temporary directory and return mount list.
+/// Creates a temp directory containing the miniboxd binary and entrypoint wrapper script,
+/// then returns bind mounts for both.
+fn dind_setup_and_mounts(dind: bool) -> anyhow::Result<Vec<BindMount>> {
     if !dind {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    vec![BindMount {
-        host_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
-        container_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
-        read_only: false,
-    }]
+
+    // Find and copy miniboxd binary.
+    let miniboxd_host = find_miniboxd_binary()?;
+    let temp_dir = tempfile::TempDir::new().context("failed to create temp directory for dind")?;
+    let temp_path = temp_dir.path().to_path_buf();
+
+    // Copy miniboxd into temp directory.
+    let miniboxd_dest = temp_path.join("miniboxd");
+    std::fs::copy(&miniboxd_host, &miniboxd_dest)
+        .with_context(|| format!("failed to copy miniboxd from {}", miniboxd_host.display()))?;
+
+    // Make it executable.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&miniboxd_dest, std::fs::Permissions::from_mode(0o755))
+            .context("failed to set miniboxd permissions")?;
+    }
+
+    // Write entrypoint wrapper script.
+    let script_path = temp_path.join("mbx-dind-entrypoint");
+    std::fs::write(&script_path, dind_entrypoint_script_for_container())
+        .context("failed to write dind entrypoint script")?;
+
+    // Make it executable.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
+            .context("failed to set entrypoint script permissions")?;
+    }
+
+    // Prevent temp directory from being deleted when TempDir is dropped.
+    // The directory will be cleaned up by the OS eventually, but we need it
+    // to exist for the duration of the container's lifetime.
+    std::mem::forget(temp_dir);
+
+    // Return bind mounts for the temp directory and the daemon socket.
+    Ok(vec![
+        BindMount {
+            host_path: temp_path,
+            container_path: std::path::PathBuf::from(DIND_DIR_PATH),
+            read_only: false,
+        },
+        BindMount {
+            host_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+            container_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+            read_only: false,
+        },
+    ])
 }
 
+/// Shell script run as the container entrypoint when `--dind` is set: starts
+/// a nested `miniboxd`, waits for its socket to appear, then hands off to the
+/// container's original command so it sees a working inner daemon.
 /// Execute the `run` subcommand.
 ///
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
@@ -178,7 +260,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
     for m in &mount_specs {
         mounts.push(parse_mount(m).with_context(|| format!("invalid --mount flag {m:?}"))?);
     }
-    mounts.extend(dind_mounts(dind));
+    mounts.extend(dind_setup_and_mounts(dind).context("failed to set up dind files")?);
 
     let tty = tty && std::io::stdout().is_terminal();
 
@@ -347,25 +429,12 @@ mod tests {
     }
 
     #[test]
-    fn test_dind_mounts_socket() {
-        let mounts = dind_mounts(true);
-        assert_eq!(mounts.len(), 1);
-        assert_eq!(mounts[0].host_path, PathBuf::from(DAEMON_SOCKET_PATH));
-        assert_eq!(mounts[0].container_path, PathBuf::from(DAEMON_SOCKET_PATH));
-        assert!(!mounts[0].read_only);
-    }
-
-    #[test]
-    fn test_dind_false_adds_no_mounts() {
-        assert_eq!(dind_mounts(false).len(), 0);
-    }
-
-    #[test]
-    fn test_dind_entrypoint() {
-        let script = dind_entrypoint_script();
+    fn test_dind_entrypoint_container() {
+        let script = dind_entrypoint_script_for_container();
         assert!(script.starts_with("#!/bin/sh"));
         assert!(script.contains("miniboxd"));
         assert!(script.contains(DAEMON_SOCKET_PATH));
+        assert!(script.contains(DIND_MINIBOXD_PATH));
         assert!(
             script.trim_end().ends_with("exec \"$@\""),
             "entrypoint must hand off to the original command: {script}"
