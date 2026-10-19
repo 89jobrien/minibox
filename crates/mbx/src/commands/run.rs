@@ -86,6 +86,18 @@ const fn effective_privileged(privileged: bool, dind: bool) -> bool {
 /// container so a nested `mbx` CLI inside can reach the host daemon.
 const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
 
+/// Path the dind entrypoint wrapper script is installed to inside the
+/// container.
+const DIND_WRAPPER_PATH: &str = "/usr/local/bin/mbx-dind-entrypoint";
+
+/// Entrypoint override to use when `--dind` is set: the wrapper script takes
+/// over as the container's entrypoint and `exec`s the original command once
+/// the nested daemon is up, so the caller's own `--entrypoint`/command still
+/// run, just after the inner daemon has started.
+fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
+    dind.then_some(DIND_WRAPPER_PATH)
+}
+
 /// Shell script run as the container entrypoint when `--dind` is set: starts
 /// a nested `miniboxd`, waits for its socket to appear, then hands off to the
 /// container's original command so it sees a working inner daemon.
@@ -144,6 +156,9 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         dind,
     } = opts;
     let privileged = effective_privileged(privileged, dind);
+    let entrypoint = dind_entrypoint_override(dind)
+        .map(str::to_string)
+        .or(entrypoint);
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
         "bridge" => NetworkMode::Bridge,
@@ -355,6 +370,16 @@ mod tests {
             script.trim_end().ends_with("exec \"$@\""),
             "entrypoint must hand off to the original command: {script}"
         );
+    }
+
+    #[test]
+    fn test_dind_injects_wrapper() {
+        assert_eq!(dind_entrypoint_override(true), Some(DIND_WRAPPER_PATH));
+    }
+
+    #[test]
+    fn test_dind_false_does_not_override_entrypoint() {
+        assert_eq!(dind_entrypoint_override(false), None);
     }
 
     #[test]
