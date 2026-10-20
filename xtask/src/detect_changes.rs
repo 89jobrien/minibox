@@ -484,11 +484,19 @@ mod tests {
         let root = dir.path();
 
         let git = |args: &[&str]| {
-            Command::new("git")
+            let output = Command::new("git")
                 .args(args)
                 .current_dir(root)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
                 .output()
-                .expect("git")
+                .expect("git");
+            assert!(
+                output.status.success(),
+                "git fixture command should succeed: {args:?}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output
         };
 
         git(&["init", "-b", "main"]);

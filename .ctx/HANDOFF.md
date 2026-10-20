@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-10-14)
+# Handoff — minibox (2026-10-16)
 
 **Branch:** develop | **Build:** clean | **Tests:** passing
 Replaced the unstable environment-attested isolation draft with a focused proposed design. No runtime implementation landed. Do not sweep the 11 pre-existing tracked modifications into this docs commit.

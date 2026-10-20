@@ -64,7 +64,7 @@ The original boot assets are never touched. Scratch state lives under
 
 Requires: `qemu` (`brew install qemu`), `aarch64-linux-musl-gcc` (from
 `messense/macos-cross-toolchains`), `cpio`, `gzip`, and the VM assets from
-`cargo xtask build-vm-image`.
+`cargo xtask build-test-image`.
 
 ## Two traps this harness already hit
 

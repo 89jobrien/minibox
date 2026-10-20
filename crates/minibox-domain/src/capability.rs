@@ -63,32 +63,32 @@ use std::sync::Arc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BackendCapability {
     /// Backend can snapshot a running container's FS diff into a new image
-    /// via [`ContainerCommitter::commit`].
+    /// via the commit operation defined in [`crate::image`].
     Commit,
-    /// Backend can build an image from a `BuildContext` + `BuildConfig` via
-    /// [`ImageBuilder::build_image`].
+    /// Backend can build an image from a `BuildContext` + `BuildConfig`
+    /// via the build operation defined in [`crate::image`].
     BuildFromContext,
-    /// Backend can push an image to an OCI-compliant registry via
-    /// [`ImagePusher::push_image`].
+    /// Backend can push an image to an OCI-compliant registry
+    /// via the push operation defined in [`crate::image`].
     PushToRegistry,
-    /// Backend can save/restore VM state checkpoints via
-    /// [`VmCheckpoint::save_snapshot`] / [`VmCheckpoint::restore_snapshot`].
+    /// Backend can save/restore VM state checkpoints
+    /// via the checkpoint operations defined in [`crate::checkpoint`].
     Checkpoint,
-    /// Backend provides [`RootfsSetup`] + [`ChildInit`] (filesystem operations).
+    /// Backend provides filesystem operations for rootfs setup and child initialization.
     Filesystem,
-    /// Backend provides [`ExecRuntime`] (exec into running containers).
+    /// Backend provides exec-into-running-container functionality.
     Exec,
-    /// Backend provides [`NetworkProvider`] (bridge/host/tailnet networking).
+    /// Backend provides network isolation and configuration via [`crate::networking::NetworkProvider`].
     Network,
-    /// Backend provides [`TtyProvider`] (pseudo-terminal allocation).
+    /// Backend provides pseudo-terminal allocation and management.
     Tty,
-    /// Backend provides [`PtyAllocator`] (low-level PTY pair allocation).
+    /// Backend provides low-level PTY pair allocation via [`crate::pty::PtyAllocator`].
     Pty,
-    /// Backend provides [`MetricsRecorder`] (counter/histogram/gauge).
+    /// Backend provides metrics recording via [`crate::metrics::MetricsRecorder`].
     Metrics,
-    /// Backend provides [`RegistryRouter`] (multi-registry routing).
+    /// Backend provides image registry routing via [`crate::image::RegistryRouter`].
     RegistryRouter,
-    /// Backend provides [`ImageLoader`] (local OCI tarball loading).
+    /// Backend provides local OCI tarball loading via [`crate::image::ImageLoader`].
     ImageLoader,
 }
 

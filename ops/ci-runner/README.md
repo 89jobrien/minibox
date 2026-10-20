@@ -133,6 +133,28 @@ launchd-managed daemon for the same Unix socket
 starting the manual one, and restore it (`launchctl bootstrap gui/501
 <plist>`) when done. See `.claude.local.md` for the exact commands.
 
+## Local e2e smoke test
+
+macOS developers can validate that `mbx build`, `mbx run --privileged`, and
+`mbx exec` work end-to-end against the ci-runner Dockerfile:
+
+```bash
+just e2e-local          # runs ops/ci-runner/e2e-local.nu
+cargo xtask e2e-local   # same thing via xtask
+```
+
+The test (verified 2026-10-16):
+1. **Stage 1 (smolvm):** Builds all 11 steps of the ops/ci-runner/Dockerfile,
+   validating the RUN-step chaining and COPY/VM-bridging fixes that landed
+   2026-10-14/2026-10-15.
+2. **Stage 2 (krun):** Runs `mbx run --privileged` and `mbx exec` against
+   krun, validating privileged-mode boot and interactive exec into the
+   running container work on macOS.
+
+Both stages must complete with exit code 0. No actual GitHub job registration
+is attempted — it stops after proving the container can be built and
+interactively accessed.
+
 ## Not yet done / open questions
 
 - `mbx build` now completes all 11 steps of this Dockerfile successfully
@@ -140,10 +162,11 @@ starting the manual one, and restore it (`launchctl bootstrap gui/501
   verified as of 2026-10-15). Not yet checked whether the krun/native
   adapters ever had either bug — only smolvm was exercised.
 - Not yet exercised end-to-end against a live GitHub repo — `mbx run
---privileged` and `mbx exec` are confirmed working (2026-10-14 smoke tests),
-  and `mbx build` now completes the full image build, but no container has
-  yet actually registered as a runner, picked up a real job, and reported
-  results back to `.github/workflows/merge.yml`.
+--privileged` and `mbx exec` are confirmed working (2026-10-14 smoke tests,
+  now automated in `just e2e-local` and verified 2026-10-16), and `mbx build`
+  now completes the full image build, but no container has yet actually
+  registered as a runner, picked up a real job, and reported results back to
+  `.github/workflows/merge.yml`.
 - `gh` in this environment needs an interactive 1Password unlock that Claude
   cannot perform — the human needs to run `supervisor.sh`'s `gh api
 .../registration-token` step themselves, or pre-authenticate `gh` in a

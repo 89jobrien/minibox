@@ -10,6 +10,14 @@ export MINIBOX_PRE_COMMIT_RUNNING=1
 
 cargo xtask pre-commit || exit 1
 
+# Full Rust gate: xtask pre-commit above only runs fmt/clippy/architecture
+# when Rust is staged and does not run tests at all. This enforces
+# cargo test --workspace, cargo clippy -D warnings, and cargo test --doc,
+# blocking the commit if any fail.
+if command -v nu &>/dev/null; then
+  nu "$HOME/.claude/hooks/rust-gate-pre-commit.nu" || exit 1
+fi
+
 # Delegate to global pre-commit hook (obfsck, additional checks)
 GLOBAL_HOOK="$HOME/.config/git/hooks/pre-commit"
 if [ -x "$GLOBAL_HOOK" ]; then

@@ -129,6 +129,10 @@ test-system:
 test-sandbox:
     crux run crux/dev/test_sandbox.crux
 
+# macOS e2e smoke test: local build + run of ops/ci-runner Dockerfile
+e2e-local:
+    nu ops/ci-runner/e2e-local.nu
+
 # Linux dogfood: build test image + load + run all tests inside container
 test-linux:
     crux run crux/dev/test_linux.crux

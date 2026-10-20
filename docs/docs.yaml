@@ -4,6 +4,7 @@ files:
   - core/CODE_STYLE.mbx.md
   - core/CRATE_INVENTORY.mbx.md
   - core/CRATE_TIERS.mbx.md
+  - core/DOCS_AUDIT.mbx.md
   - core/FEATURE_MATRIX.mbx.md
   - core/GOTCHAS.mbx.md
   - core/MUTATION_AUDIT.mbx.md
@@ -15,3 +16,4 @@ files:
   - core/SUMMARY.md
   - core/SUPPORT_TIERS.mbx.md
   - core/TEST_INFRASTRUCTURE.mbx.md
+  - core/XTASK_CLI.mbx.md

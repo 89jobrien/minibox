@@ -15,16 +15,17 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-10-15
+Last updated: 2026-10-18
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
 schema when `xtask/src/main.rs`'s match arms change). Every entry below is verified
 directly against the current `main()` dispatcher in `xtask/src/main.rs`.
 
-Two entries — `available` and `lint-paths` — exist as top-level match arms but are
-**not** listed in `cargo xtask`'s own `print_help()` output. They're documented here
-for completeness but are effectively undiscoverable from `--help`.
+Four entries — `capabilities`, `available`, `lint-paths`, and `musl-check` — exist as
+top-level match arms but are **not** listed in `cargo xtask`'s own `print_help()`
+output. They're documented here for completeness but are effectively undiscoverable
+from `--help`.
 
 ---
 
@@ -86,6 +87,15 @@ Bare `cargo xtask docs` prints the action list.
 | `sync-adapters` | — | Idempotently regenerate only the marked adapter-suite and capability blocks from `xtask/context.toml`. |
 
 Deprecated aliases: `docs-audit`, `lint-docs`, `update-feature-matrix-date`.
+
+### `capabilities verify`
+
+Not a flag-taking group — `verify` is the only accepted action. Anything else prints
+the one-line usage plus the action list and exits 0.
+
+| Action | Notes |
+|---|---|
+| `verify` | Probe the running backend and fail on drift between observed adapter capabilities and the documented matrix. |
 
 ### `info <target> [flags...]`
 
@@ -164,7 +174,8 @@ The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `
 |---|---|---|
 | `build-test-image` | `--force` | Cross-compile the test binaries and package an OCI tarball for VM-based testing. `--force` rebuilds even if a cached image exists. |
 | `setup-test-vm` | `--force` | Build/refresh a persistent smolvm VM with a Rust toolchain (macOS-side testing). |
-| `test-in-vm` | `--skip-build` `--keep` `--smolfile <path>` | Dual-backend (native minibox + smolvm) test run inside a VM. `--keep` skips teardown. |
+| `test-in-vm` | `--skip-build` `--keep` `--smolfile <path>` | Dual-backend (native minibox + smolvm) test run inside a VM. `--keep` skips teardown. Not listed in `print_help()`. |
+| `e2e-local` | — | macOS smoke test: build `mbx`, then pull, run, and exec against the local daemon. |
 | `test-linux` | — | Cross-compile (zigbuild) + build a CPIO initramfs + run tests inside a smolvm QEMU VM. All configuration comes from `XConfig::load`, not flags. |
 
 ---
@@ -267,7 +278,9 @@ builds a small Swift bridge, so enabling it adds a Swift toolchain requirement �
 hence the opt-in. With the feature off, or on a non-macOS platform, the marker
 type is zero-sized and compiles away.
 
-```rust
+```rust,ignore
+// Illustrative only: minibox_signpost is a normal dependency of `minibox` and
+// `macbox`, not of the doctest context this block would be compiled in.
 let _span = minibox_signpost::span(c"container.create");
 ```
 

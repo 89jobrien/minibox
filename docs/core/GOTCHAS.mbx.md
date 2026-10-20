@@ -16,7 +16,7 @@ generated: 2026-09-16
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-09-29
+Last updated: 2026-10-18
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -130,12 +130,14 @@ file's module doc for the authoritative flow. Summary, grounded in the current c
 Several one-off design/plan documents were deleted or consolidated during doc cleanups
 (`8377af53` pruned `docs/superpowers/plans/*`, `1d3a3579` archived stale plan statuses,
 and `109a9683` removed the then-current `docs/notes/` content; new notes have since been
-added there). The flat `docs/*.md` files that used to hold canonical
-reference content (`docs/FEATURE_MATRIX.md`, `docs/ARCHITECTURE.md`, `docs/GOTCHAS.md`, etc.)
-were also renamed to `docs/core/*.mbx.md` — if a link or search result points at an old flat
-`docs/<NAME>.md` path or a `docs/superpowers/...` path that 404s, the canonical replacement is
-almost always the matching `docs/core/<NAME>.mbx.md` file. Start from the "Read First" list in
-`CLAUDE.md` for the current canonical doc set.
+added there, and plans/specs now live in `docs/plans/` and `docs/specs/`). The flat
+`docs/*.md` files that used to hold canonical reference content were moved to
+`docs/core/*.mbx.md`; a few flat stubs such as `docs/FEATURE_MATRIX.md` survive as
+one-line pointers to their `docs/core/` replacement. If a link or search result points at
+an old flat `docs/<NAME>.md` path or a `docs/superpowers/...` path that 404s, the canonical
+replacement is almost always the matching `docs/core/<NAME>.mbx.md` file. Start from the
+"Read First" list in `AGENTS.md` for the current canonical doc set — `CLAUDE.md` is only a
+pointer to `AGENTS.md`.
 
 ## macbox
 

@@ -11,18 +11,21 @@
 //! Domain Layer (Traits)     →     Infrastructure Adapters
 //! ─────────────────────────────────────────────────────────
 //! ImageRegistry             →     DockerHubRegistry
-//! FilesystemProvider        →     OverlayFilesystem
-//! ResourceLimiter           →     CgroupV2Limiter
-//! ContainerRuntime          →     LinuxNamespaceRuntime
+//! FilesystemProvider        →     OverlayFilesystem (Linux)
+//! ResourceLimiter           →     CgroupV2Limiter (Linux)
+//! ContainerRuntime          →     LinuxNamespaceRuntime (Linux)
 //! ```
 //!
 //! # Adapters
 //!
 //! **Platform-Native (Linux):**
-//! - [`DockerHubRegistry`]: Docker Hub implementation of [`crate::domain::ImageRegistry`]
-//! - [`OverlayFilesystem`]: Overlay filesystem implementation of [`crate::domain::FilesystemProvider`]
-//! - [`CgroupV2Limiter`]: cgroups v2 implementation of [`crate::domain::ResourceLimiter`]
-//! - [`LinuxNamespaceRuntime`]: Linux namespaces implementation of [`crate::domain::ContainerRuntime`]
+//! - `DockerHubRegistry`: Docker Hub implementation of [`crate::domain::ImageRegistry`]
+//! - `OverlayFilesystem`: Overlay filesystem implementation of [`crate::domain::FilesystemProvider`]
+//!   (Linux only; exported when `target_os = "linux"`)
+//! - `CgroupV2Limiter`: cgroups v2 implementation of [`crate::domain::ResourceLimiter`]
+//!   (Linux only; exported when `target_os = "linux"`)
+//! - `LinuxNamespaceRuntime`: Linux namespaces implementation of [`crate::domain::ContainerRuntime`]
+//!   (Linux only; exported when `target_os = "linux"`)
 //!
 //! **GKE Unprivileged (Linux, no `CAP_SYS_ADMIN)`:**
 //! - [`NoopLimiter`]: No-op resource limiter (cgroups unavailable)

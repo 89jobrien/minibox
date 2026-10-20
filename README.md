@@ -40,7 +40,8 @@ structured tracing, property testing.
 
 ### Experimental-ish
 
-- **Container exec** — `setns`-based exec with PTY support (`-it`); Linux (`native`) only
+- **Container exec** — `setns`-based exec with PTY support (`mbx exec -i`, or `--tty -i`);
+  Linux (`native`) only
 - **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`); Linux only
 - **macOS adapters** — run/stop/ps via smolvm or krun (VM-backed); exec/logs not supported;
   Colima available as an alternative via Lima VM
@@ -113,7 +114,7 @@ breakdown.
 
 ## Architecture
 
-16 crates plus `xtask` (17 workspace members), Rust 2024 edition:
+17 crates plus `xtask` (18 workspace members), Rust 2024 edition:
 
 ```text
 minibox-macros          declarative macros (as_any!, adapt!)
@@ -135,6 +136,7 @@ minibox-mcp             MCP stdio server for agent-controlled minibox tools
 minibox-testsuite       conformance test harness for adapter trait contracts
 minibox-bench           benchmark crate
 minibox-cni             CNI plugin exec protocol and chain orchestration
+minibox-signpost        macOS os_signpost intervals for `cargo xtask profile native`
 ail                     placeholder crate
 xtask                   CI gates, test runners, bench, VM image build
 ```
@@ -319,5 +321,3 @@ Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 ## License
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at your option.
-
-<sup>Previously named `mbx` during early development.</sup>

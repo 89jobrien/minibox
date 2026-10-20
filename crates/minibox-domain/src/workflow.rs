@@ -102,7 +102,7 @@ pub enum PhaseOutcome {
     Errored,
 }
 
-/// Per-step execution status reported in [`DaemonResponse::WorkflowStepComplete`].
+/// Per-step execution status for workflow step execution.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum StepStatus {
     /// Step has not started yet.
@@ -231,10 +231,9 @@ pub trait StepRunner: Send + Sync {
 
 /// Registry of [`StepRunner`] implementations, keyed by [`StepRunner::kind`].
 ///
-/// `StepRunnerRegistry::new()` creates an empty registry.  Call
-/// [`StepRunnerRegistry::register_builtin_runners`] explicitly to populate the
-/// four built-in runners; this keeps construction lightweight for tests that
-/// only need a subset.
+/// `StepRunnerRegistry::new()` creates an empty registry. Runners must be
+/// registered via the `register` method to make them available to the workflow
+/// engine. This allows tests to register only the subset of runners they need.
 pub struct StepRunnerRegistry {
     runners: std::collections::HashMap<String, Box<dyn StepRunner>>,
 }
@@ -383,7 +382,7 @@ impl StepRunner for OverlaySnapshotStepRunner {
 /// Outcome of evaluating a single step attempt against its retry policy.
 ///
 /// Callers drive the retry loop; this type is the decision produced by
-/// [`determine_step_completion`] for each attempt.
+/// evaluating each step attempt outcome.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StepCompletion {
     /// Step produced a successful [`StepOutput`].

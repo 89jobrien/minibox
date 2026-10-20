@@ -1,7 +1,7 @@
 //! Apple Virtualization.framework adapter stubs (Phase 2 — macOS).
 //!
-//! These stubs satisfy the [`ImageRegistry`], [`FilesystemProvider`],
-//! [`ResourceLimiter`], and [`ContainerRuntime`] trait bounds so the crate
+//! These stubs satisfy the [`crate::domain::ImageRegistry`], [`crate::domain::FilesystemProvider`],
+//! [`crate::domain::ResourceLimiter`], and [`crate::domain::ContainerRuntime`] trait bounds so the crate
 //! compiles on macOS today. Every method returns an error at runtime until
 //! a real implementation is provided.
 //!
@@ -69,7 +69,7 @@ impl ContainerRuntime for VfRuntime {
 
 // ── VfFilesystem ─────────────────────────────────────────────────────────────
 
-/// Apple Virtualization.framework implementation of [`FilesystemProvider`] (Phase 2 stub).
+/// Apple Virtualization.framework implementation of [`crate::domain::FilesystemProvider`] (Phase 2 stub).
 ///
 /// Will provide rootfs setup via `VirtioFS` or similar when implemented.
 pub struct VfFilesystem;
