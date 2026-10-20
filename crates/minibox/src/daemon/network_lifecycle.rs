@@ -1,10 +1,10 @@
-//! Lifecycle wrapper for [`NetworkProvider`] with consistent error handling.
+//! Lifecycle wrapper for [`crate::domain::NetworkProvider`] with consistent error handling.
 
 use anyhow::Result;
 use minibox_core::domain::{DynNetworkProvider, NetworkConfig};
 use tracing::warn;
 
-/// Thin lifecycle wrapper around a [`NetworkProvider`].
+/// Thin lifecycle wrapper around a [`crate::domain::NetworkProvider`].
 ///
 /// Provides consistent setup/attach/cleanup with best-effort cleanup
 /// semantics (cleanup logs warn on error, never propagates).

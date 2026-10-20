@@ -98,16 +98,20 @@ CI responsibilities are listed by workflow name rather than a hard-coded count:
 
 | Workflow              | Trigger                                          | Key jobs                                                                                                                                                   |
 | --------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`, `pr.yml`, `merge.yml` | Main CI, PR, and push/merge-group gates |
-| `macos.yml`, `rust-clippy.yml` | macOS formatting and clippy review |
+| `ci.yml`, `merge.yml` | Main CI, PR, and push/merge-group gates; clippy, unit, e2e, docs, audit, deny, machete, actionlint, and the `promote-staging`/`promote-release` promotions |
+| `macos.yml` | macOS formatting |
 | `conformance.yml` | conformance, property, krun, CLI, borrow, quickcheck |
-| `context-snapshot.yml` | cross-platform v3 context evidence collection and aggregate validation |
-| `stability-gates.yml` | docs, adapter/no-unwrap/compile, handler coverage |
-| `protocol-drift.yml`, `protocol-sites.yml` | protocol and construction-site drift |
-| `nightly.yml` | scheduled audits and coverage check |
-| `promote.yml` | branch promotion |
+| `stability-gates.yml` | doc-sync, adapter/no-unwrap/compile, stale names, construction-site count |
+| `protocol-drift.yml` | protocol hash and variant drift |
+| `nightly.yml` | scheduled audits, handler `coverage-check`, all-features, shuttle, turmoil, archive tests, bench baselines |
 | `release.yml`, `publish-mbx.yml` | release and CLI publishing |
+| `pages.yml` | publishes `site/` to GitHub Pages |
 | `summary.yml` | issue summary automation |
+
+`pr.yml`, `rust-clippy.yml`, `protocol-sites.yml`, `promote.yml`, and
+`context-snapshot.yml` no longer exist; their responsibilities now live in the
+workflows listed above. Handler function coverage is a `nightly.yml` job
+(`coverage-check`, `continue-on-error`), not a per-push gate.
 
 ---
 

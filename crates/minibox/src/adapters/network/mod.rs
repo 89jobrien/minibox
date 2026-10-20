@@ -1,6 +1,6 @@
-//! Network adapters implementing [`NetworkProvider`].
+//! Network adapters implementing [`crate::domain::NetworkProvider`].
 //!
-//! Each adapter corresponds to a [`NetworkMode`] variant:
+//! Each adapter corresponds to a [`crate::domain::NetworkMode`] variant:
 //!
 //! - [`NoopNetwork`] — `NetworkMode::None`; isolated namespace, no connectivity
 //! - [`HostNetwork`] — `NetworkMode::Host`; shares the host network namespace

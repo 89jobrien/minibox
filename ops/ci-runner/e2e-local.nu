@@ -41,12 +41,17 @@ def main [] {
         ^miniboxd &
         sleep 1sec
         let build_result = (do { mbx build -t minibox-ci-runner:e2e $dockerfile_dir } | complete)
-        kill-miniboxd
         if $build_result.exit_code != 0 {
+            kill-miniboxd
             print "FAIL: mbx build"
             print $build_result.stderr
             exit 1
         }
+        # IMPORTANT: Explicit kill BEFORE with-env block exits.
+        # Nushell auto-terminates background children on with-env scope exit;
+        # without this, miniboxd is SIGKILL'd, orphaning build machine state.
+        # See DEVELOPMENT.md § "Background Processes and with-env Scoping".
+        kill-miniboxd
     }
     print "PASS: mbx build (11 steps, RUN-chaining + COPY bridging)"
 
@@ -83,6 +88,8 @@ def main [] {
         let container_id = (mbx ps | lines | skip 2 | where { |l| ($l =~ "Running") and (not ($l =~ '\s-\s*$')) } | first | split row -r '\s+' | first)
         let exec_result = (do { ^mbx exec $container_id -- uname -a } | complete)
 
+        # IMPORTANT: Explicit kill BEFORE with-env block exits.
+        # See DEVELOPMENT.md § "Background Processes and with-env Scoping".
         kill-miniboxd
 
         if $exec_result.exit_code != 0 {

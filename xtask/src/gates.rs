@@ -292,7 +292,7 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
     // `docs/` on every commit, so any commit produced a wall of date-only
     // diffs across docs/core/*.mbx.md. A doc whose only staged change is the
     // stamp itself is skipped, so the date can never drift forward on its own.
-    restamp_staged_docs(sh)?;
+    restamp_staged_docs(sh, &root)?;
     // Warn (non-fatal) if generated artifacts are tracked by git.
     check_repo_cleanliness(sh);
     eprintln!("pre-commit checks passed");
@@ -306,8 +306,8 @@ pub fn pre_commit(sh: &Shell) -> Result<()> {
 /// were *already* staged, mirroring `restage_staged_rust`'s discipline: a
 /// broad pathspec would sweep in another agent's or a parallel worktree's
 /// uncommitted doc edits.
-fn restamp_staged_docs(sh: &Shell) -> Result<()> {
-    let candidates = staged_doc_paths(sh)?;
+fn restamp_staged_docs(sh: &Shell, root: &Path) -> Result<()> {
+    let candidates = staged_doc_paths(sh, root)?;
     if candidates.is_empty() {
         return Ok(());
     }
@@ -1194,6 +1194,7 @@ mod tests {
         musl_check_required, nextest_output_is_zero_tests, parse_conformance_result,
         parse_handler_fn_coverage, phase_2_skipped,
     };
+    use std::path::PathBuf;
 
     /// Serialize env-mutating tests (Rust 2024: `set_var`/`remove_var` are unsafe).
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1255,6 +1256,56 @@ mod tests {
         // SAFETY: serialized via ENV_LOCK
         unsafe { std::env::remove_var("SKIP_PHASE_2") };
         assert!(!phase_2_skipped());
+    }
+
+    /// Regression: `restamp_staged_docs` used to feed staged *deletions* to
+    /// `git add -u`, which aborts the whole commit with "pathspec did not match
+    /// any files". That made any commit removing a file under `docs/`
+    /// impossible to land through the pre-commit gate.
+    #[test]
+    fn staged_doc_paths_excludes_staged_deletions() {
+        use xshell::Shell;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path();
+        let sh = Shell::new().expect("shell");
+
+        let git = |args: &str| {
+            let out = std::process::Command::new("git")
+                .args(args.split_whitespace())
+                .current_dir(root)
+                .output()
+                .expect("git runs");
+            assert!(
+                out.status.success(),
+                "git {args} failed: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+
+        git("init -q");
+        git("config user.email test@example.com");
+        git("config user.name test");
+
+        std::fs::create_dir_all(root.join("docs/core")).expect("docs/core");
+        std::fs::write(root.join("docs/core/KEPT.md"), "kept\n").expect("write kept");
+        std::fs::write(root.join("docs/core/GONE.md"), "gone\n").expect("write gone");
+        std::fs::write(root.join("README.md"), "not a doc\n").expect("write readme");
+        git("add -A");
+        git("commit -q -m seed");
+
+        // Stage an edit to one doc and the deletion of the other.
+        std::fs::write(root.join("docs/core/KEPT.md"), "kept\nedited\n").expect("edit kept");
+        git("add docs/core/KEPT.md");
+        git("rm -q docs/core/GONE.md");
+
+        let staged = super::staged_doc_paths(&sh, root).expect("collect staged docs");
+
+        assert_eq!(
+            staged,
+            vec![PathBuf::from("docs/core/KEPT.md")],
+            "the deleted doc must be filtered out or `git add -u` fails the commit"
+        );
     }
 
     #[test]
@@ -2004,13 +2055,17 @@ fn staged_workflow_files(sh: &Shell) -> Result<bool> {
         .any(|l| l.starts_with(".github/workflows/") || l == ".github/actionlint.yaml"))
 }
 
-/// Staged markdown paths under `docs/`.
+/// Staged markdown paths under `docs/`, relative to `root`.
 ///
 /// Used to scope the `Last updated:` stamp pass to the docs a commit actually
 /// touches, instead of restamping the entire docs tree on every commit.
+///
+/// Staged deletions are excluded. A deleted doc has no stamp to advance, and
+/// handing its path to the `git add -u` in [`restamp_staged_docs`] would abort
+/// the whole commit with "pathspec did not match any files".
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
-fn staged_doc_paths(sh: &Shell) -> Result<Vec<PathBuf>> {
-    let staged = cmd!(sh, "git diff --cached --name-only")
+fn staged_doc_paths(sh: &Shell, root: &Path) -> Result<Vec<PathBuf>> {
+    let staged = cmd!(sh, "git -C {root} diff --cached --name-only")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);
@@ -2018,6 +2073,7 @@ fn staged_doc_paths(sh: &Shell) -> Result<Vec<PathBuf>> {
         .lines()
         .filter(|l| l.starts_with("docs/") && l.ends_with(".md"))
         .map(PathBuf::from)
+        .filter(|p| root.join(p).exists())
         .collect())
 }
 

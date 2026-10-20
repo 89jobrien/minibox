@@ -29,7 +29,7 @@ pub type DynContainerRuntime = Arc<dyn ContainerRuntime>;
 pub type DynNetworkProvider = Arc<dyn NetworkProvider>;
 /// Type alias for a shared, dynamic [`MetricsRecorder`] implementation.
 pub type DynMetricsRecorder = Arc<dyn MetricsRecorder>;
-/// Type alias for a shared, dynamic [`EventSink`] implementation.
+/// Type alias for a shared, dynamic [`crate::events::EventSink`] implementation.
 pub type DynEventSink = Arc<dyn crate::events::EventSink>;
 /// Type alias for a shared, dynamic [`RegistryRouter`] implementation.
 pub type DynRegistryRouter = Arc<dyn RegistryRouter>;

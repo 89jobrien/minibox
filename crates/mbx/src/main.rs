@@ -182,6 +182,10 @@ enum Commands {
         /// are enabled automatically. Must be under /sys/fs/cgroup/.
         #[arg(long, value_name = "PATH")]
         cgroup_parent: Option<String>,
+
+        /// Run a nested minibox daemon inside the container (Docker-in-Docker).
+        #[arg(long)]
+        dind: bool,
     },
 
     /// List all containers
@@ -614,6 +618,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             rm,
             platform,
             cgroup_parent,
+            dind,
         } => {
             let (image, tag) = split_image_tag(image, tag);
             into_cli(
@@ -641,6 +646,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
                         auto_remove: rm,
                         platform,
                         cgroup_parent,
+                        dind,
                     },
                     socket_path,
                 )
@@ -996,6 +1002,25 @@ mod tests {
         assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
         match cli.unwrap().command {
             Commands::Run { privileged, .. } => assert!(privileged),
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn test_dind_flag() {
+        let cli = Cli::try_parse_from(["mbx", "run", "--dind", "ubuntu", "--", "/bin/sh"]);
+        assert!(cli.is_ok(), "parse failed: {:?}", cli.err());
+        match cli.unwrap().command {
+            Commands::Run { dind, .. } => assert!(dind),
+            _ => panic!("wrong command"),
+        }
+    }
+
+    #[test]
+    fn test_dind_flag_defaults_false() {
+        let cli = Cli::try_parse_from(["mbx", "run", "ubuntu", "--", "/bin/sh"]).unwrap();
+        match cli.command {
+            Commands::Run { dind, .. } => assert!(!dind),
             _ => panic!("wrong command"),
         }
     }

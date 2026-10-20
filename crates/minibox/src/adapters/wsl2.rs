@@ -247,7 +247,7 @@ impl ContainerRuntime for Wsl2Runtime {
     }
 }
 
-/// WSL2-based implementation of [`FilesystemProvider`].
+/// WSL2-based implementation of [`crate::domain::FilesystemProvider`].
 ///
 /// Delegates overlay filesystem setup and teardown to `minibox-wsl-helper`
 /// running inside the named WSL2 distribution.

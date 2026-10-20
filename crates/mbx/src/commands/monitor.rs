@@ -89,8 +89,9 @@ fn format_container_header() -> String {
 
 /// Truncate a string to fit within a column width.
 fn truncate(s: &str, width: usize) -> String {
-    if s.len() > width {
-        format!("{}…", &s[..width.saturating_sub(1)])
+    if s.chars().count() > width {
+        let truncated: String = s.chars().take(width).collect();
+        format!("{truncated}…")
     } else {
         s.to_string()
     }
@@ -292,7 +293,7 @@ mod tests {
     fn truncate_respects_width() {
         let long = "this-is-a-very-long-container-name-that-exceeds-width";
         let truncated = truncate(long, 10);
-        assert!(truncated.len() <= 11); // width + ellipsis
+        assert!(truncated.chars().count() <= 11); // width + ellipsis
     }
 
     #[test]
