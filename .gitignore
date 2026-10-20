@@ -127,9 +127,9 @@ Thumbs.db
 
 
 # Documentation build
+# Root book.toml is the only mdBook config; it renders docs/core into /book/.
 /book/
 /target/doc/
-/docs/dist/
 
 # Backup files
 *.bak
@@ -186,7 +186,6 @@ dupehound-card.*
 .looprs/observability/runtime.jsonl
 .cc-audit.yaml
 .evidra/
-ops/ci-runner/.minibox-build-*
 
 # Local project-level daemon config. May enable privileged mode and bind
 # mounts, so it stays out of version control.

@@ -95,8 +95,14 @@ sudo /usr/local/bin/mbx rmi alpine:latest
 log retrieval returns stored output and exits.
 
 Other command groups include `update`, `sandbox`, `snapshot`, `pipeline`, `upgrade`,
+`images`, `search`, `build`, `push`, `commit`, `capabilities`, `monitor`,
 `diagnose`, `doctor`, `manifest`, and `verify`. Use `mbx help <command>` for flags;
 `mbx rm --all` removes every stopped container.
+
+`mbx capabilities --json` prints the daemon's typed backend capability matrix;
+`mbx monitor` is a live 2-second-refresh status dashboard (distinct from the
+feature-gated `mbx tui`). `mbx completions` emits nushell completions and is hidden
+from `mbx --help`.
 
 **Environment-Specific Usage**
 

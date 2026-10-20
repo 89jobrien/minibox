@@ -19,6 +19,7 @@ sources:
   - crates/minibox-testsuite
   - crates/minibox-cni
   - crates/minibox-tui
+  - crates/minibox-signpost
 generated: 2026-09-16
 ---
 
@@ -28,7 +29,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-09-29
+Last updated: 2026-10-18
 
 See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
 Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).
@@ -129,6 +130,7 @@ the ports from `minibox-domain` through the compatibility paths in `minibox-core
 | `macbox` | `crates/macbox` | Krun implementation, Colima dependency composition, and the feature-gated VZ implementation path.                                                         |
 | `smolbox` | `crates/smolbox` | Compatibility facade re-exporting smolvm implementations from `minibox` and krun implementations from `macbox`.                                           |
 | `winbox` | `crates/winbox` | Windows adapter suite. Currently a stub — `winbox::start()` returns an error unconditionally. Phase 2 (Named Pipe server, HCS/WSL2 wiring) has not started. |
+| `minibox-signpost` | `crates/minibox-signpost` | macOS `os_signpost` intervals. Not an adapter suite, but macOS-only and consumed by the platform layer; kept separate so `minibox-core` stays OS-free. |
 
 Note: `dockerbox` and `tailbox` were extracted to the separate `minibox-plugins`
 workspace and are no longer members of this workspace.
@@ -202,7 +204,7 @@ developing Minibox. It is not a Rust workspace member and follows its own Go mod
 
 ### No new Core or Platform crates until stabilization gates are met
 
-The workspace currently has 16 product/runtime crates under `crates/`, plus the
+The workspace currently has 17 crates under `crates/`, plus the
 `xtask` workspace dev-tool member. Adding more crates before the core runtime is
 hardened increases maintenance surface without shipping value.
 
