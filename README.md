@@ -45,6 +45,9 @@ structured tracing, property testing.
 - **Bridge networking** — veth pairs, NAT via iptables DNAT (`MINIBOX_NETWORK_MODE=bridge`); Linux only
 - **macOS adapters** — run/stop/ps via smolvm or krun (VM-backed); exec/logs not supported;
   Colima available as an alternative via Lima VM
+- **Docker-in-Docker** — `mbx run --dind` implies `--privileged`, bind-mounts the host
+  daemon socket and image cache into the container, and boots a nested `miniboxd` before
+  handing off to the container's own command; Linux only
 
 ---
 
