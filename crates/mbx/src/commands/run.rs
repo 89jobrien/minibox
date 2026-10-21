@@ -96,6 +96,12 @@ const DIND_WRAPPER_PATH: &str = "/usr/local/lib/mbx-dind/mbx-dind-entrypoint";
 /// Path the miniboxd binary is installed to inside the container.
 const DIND_MINIBOXD_PATH: &str = "/usr/local/lib/mbx-dind/miniboxd";
 
+/// Path to the shared image cache inside the container.
+/// The nested miniboxd resolves its own images dir as `resolve_data_dir().join("images")`,
+/// which is `/var/lib/minibox/images` for a root process — mount the host's images dir
+/// there, not at the data-dir root, or the nested daemon finds nothing shared.
+const DIND_IMAGE_CACHE_CONTAINER_PATH: &str = "/var/lib/minibox/images";
+
 /// Entrypoint override to use when `--dind` is set: the wrapper script takes
 /// over as the container's entrypoint and `exec`s the original command once
 /// the nested daemon is up, so the caller's own `--entrypoint`/command still
@@ -192,7 +198,11 @@ fn dind_setup_and_mounts(dind: bool) -> anyhow::Result<Vec<BindMount>> {
     // to exist for the duration of the container's lifetime.
     std::mem::forget(temp_dir);
 
-    // Return bind mounts for the temp directory and the daemon socket.
+    // Get the host's image cache directory.
+    let host_data_dir = minibox_core::doctor::resolve_data_dir();
+    let host_image_cache = host_data_dir.join("images");
+
+    // Return bind mounts: dind files, daemon socket, and image cache.
     Ok(vec![
         BindMount {
             host_path: temp_path,
@@ -202,6 +212,11 @@ fn dind_setup_and_mounts(dind: bool) -> anyhow::Result<Vec<BindMount>> {
         BindMount {
             host_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
             container_path: std::path::PathBuf::from(DAEMON_SOCKET_PATH),
+            read_only: false,
+        },
+        BindMount {
+            host_path: host_image_cache,
+            container_path: std::path::PathBuf::from(DIND_IMAGE_CACHE_CONTAINER_PATH),
             read_only: false,
         },
     ])
@@ -449,6 +464,17 @@ mod tests {
     #[test]
     fn test_dind_false_does_not_override_entrypoint() {
         assert_eq!(dind_entrypoint_override(false), None);
+    }
+
+    #[test]
+    fn test_dind_image_cache_path_is_set() {
+        // Must match where the nested miniboxd resolves its own images dir
+        // (resolve_data_dir().join("images")), or the shared cache mounts to
+        // an empty location the nested daemon never looks at.
+        assert_eq!(
+            DIND_IMAGE_CACHE_CONTAINER_PATH, "/var/lib/minibox/images",
+            "dind image cache should mount at /var/lib/minibox/images"
+        );
     }
 
     #[test]
