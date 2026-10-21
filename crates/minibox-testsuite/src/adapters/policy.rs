@@ -25,10 +25,11 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             ..Default::default()
         };
         let mounts = vec![a_bind_mount()];
-        let result = validate_policy(&mounts, false, None, &policy);
+        let result = validate_policy(&mounts, false, false, None, &policy);
         ctx.assert_err(result, "bind mount denied when allow_bind_mounts=false");
         ctx.result()
     }
@@ -42,9 +43,10 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             ..Default::default()
         };
-        let result = validate_policy(&[], true, None, &policy);
+        let result = validate_policy(&[], true, false, None, &policy);
         ctx.assert_err(result, "privileged denied when allow_privileged=false");
         ctx.result()
     }
@@ -58,10 +60,11 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: true,
             allow_privileged: false,
+            allow_dind: false,
             ..Default::default()
         };
         let mounts = vec![a_bind_mount()];
-        let result = validate_policy(&mounts, false, None, &policy);
+        let result = validate_policy(&mounts, false, false, None, &policy);
         ctx.assert_ok(result, "bind mount allowed when allow_bind_mounts=true");
         ctx.result()
     }
@@ -75,9 +78,10 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: true,
+            allow_dind: false,
             ..Default::default()
         };
-        let result = validate_policy(&[], true, None, &policy);
+        let result = validate_policy(&[], true, false, None, &policy);
         ctx.assert_ok(result, "privileged allowed when allow_privileged=true");
         ctx.result()
     }
@@ -93,11 +97,11 @@ crate::conformance_test! {
         ctx.assert_false(policy.allow_privileged, "default denies privileged mode");
         let mounts = vec![a_bind_mount()];
         ctx.assert_err(
-            validate_policy(&mounts, false, None, &policy),
+            validate_policy(&mounts, false, false, None, &policy),
             "validate_policy rejects bind mounts under default policy",
         );
         ctx.assert_err(
-            validate_policy(&[], true, None, &policy),
+            validate_policy(&[], true, false, None, &policy),
             "validate_policy rejects privileged under default policy",
         );
         ctx.result()
@@ -112,10 +116,11 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             min_priority: Some(slashcrux::Priority::High),
         };
         // Low priority is below the High minimum — must be rejected.
-        let result = validate_policy(&[], false, Some(slashcrux::Priority::Low), &policy);
+        let result = validate_policy(&[], false, false, Some(slashcrux::Priority::Low), &policy);
         ctx.assert_err(result, "priority Low below minimum High returns error");
         ctx.result()
     }
@@ -129,10 +134,11 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             min_priority: Some(slashcrux::Priority::Medium),
         };
         // No priority supplied when one is required — must be rejected.
-        let result = validate_policy(&[], false, None, &policy);
+        let result = validate_policy(&[], false, false, None, &policy);
         ctx.assert_err(
             result,
             "no priority when minimum Medium required returns error",
@@ -149,10 +155,11 @@ crate::conformance_test! {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             min_priority: Some(slashcrux::Priority::Medium),
         };
         // Critical > Medium — should be accepted.
-        let result = validate_policy(&[], false, Some(slashcrux::Priority::Critical), &policy);
+        let result = validate_policy(&[], false, false, Some(slashcrux::Priority::Critical), &policy);
         ctx.assert_ok(result, "priority Critical meets minimum Medium");
         ctx.result()
     }
@@ -174,7 +181,7 @@ crate::conformance_test! {
             "PolicyOverride(allow_bind_mounts=true) overrides default deny",
         );
         let mounts = vec![a_bind_mount()];
-        let result = validate_policy(&mounts, false, None, &effective);
+        let result = validate_policy(&mounts, false, false, None, &effective);
         ctx.assert_ok(
             result,
             "bind mount accepted after PolicyOverride loosens policy",
@@ -192,7 +199,7 @@ crate::conformance_test! {
         let mounts = vec![a_bind_mount()];
         // Both bind mount and privileged are requested — validate_policy returns
         // an error (bind mount is checked first in the implementation).
-        let result = validate_policy(&mounts, true, None, &policy);
+        let result = validate_policy(&mounts, true, false, None, &policy);
         ctx.assert_err(
             result,
             "bind-mount + privileged together under deny policy returns error",

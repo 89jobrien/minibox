@@ -12,6 +12,7 @@ use super::super::PolicyOverride;
 
 /// User-supplied container configuration shared by the run pipeline.
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct RunParams {
     /// Source image name or reference.
     pub image: String,
@@ -50,6 +51,8 @@ pub struct RunParams {
     pub priority: Option<slashcrux::Priority>,
     /// Scoped policy overrides for trusted internal callers.
     pub policy_override: Option<PolicyOverride>,
+    /// Whether Docker-in-Docker (nested miniboxd) is requested.
+    pub dind: bool,
 }
 
 /// Bundled parameters for `build_execution_manifest`.

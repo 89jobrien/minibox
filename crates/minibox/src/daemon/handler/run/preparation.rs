@@ -44,6 +44,7 @@ pub(super) async fn prepare_run(
         ephemeral: _,
         priority: _,
         policy_override: _,
+        dind: _,
     } = params;
 
     let ref_str = match &tag {

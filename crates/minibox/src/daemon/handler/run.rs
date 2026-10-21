@@ -350,6 +350,7 @@ pub(super) async fn run_from_params(
         cgroup_parent: creation_params.cgroup_parent.clone(),
         priority: None,
         policy_override: None,
+        dind: false,
     };
     run_inner(params, state, deps).await
 }

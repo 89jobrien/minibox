@@ -44,6 +44,7 @@ pub async fn handle_run(
     if let Err(message) = super::super::validate_policy(
         &params.mounts,
         params.privileged,
+        params.dind,
         params.priority,
         &effective_policy,
     ) {

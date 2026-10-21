@@ -495,6 +495,7 @@ async fn dispatch(
             platform,
             cgroup_parent,
             priority,
+            dind,
             ..
         } => {
             let params = handler::RunParams {
@@ -514,6 +515,7 @@ async fn dispatch(
                 cgroup_parent,
                 priority,
                 policy_override: None,
+                dind,
             };
             handler::handle_run(params, state, deps, tx).await;
         }

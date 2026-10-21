@@ -197,6 +197,9 @@ pub enum DaemonRequest {
         /// Must be an absolute path under `/sys/fs/cgroup/`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         cgroup_parent: Option<String>,
+        /// If `true`, enable Docker-in-Docker (`DinD`) — boot a nested miniboxd daemon.
+        #[serde(default)]
+        dind: bool,
     },
 
     /// Stop a running container by ID.
@@ -952,6 +955,7 @@ pub struct TestRunDefaults {
     pub urgency: Option<slashcrux::Urgency>,
     pub execution_context: Option<slashcrux::ExecutionContext>,
     pub cgroup_parent: Option<String>,
+    pub dind: bool,
 }
 
 impl Default for TestRunDefaults {
@@ -977,6 +981,7 @@ impl Default for TestRunDefaults {
             urgency: None,
             execution_context: None,
             cgroup_parent: None,
+            dind: false,
         }
     }
 }
@@ -1007,6 +1012,7 @@ impl TestRunDefaults {
             execution_context: self.execution_context,
             platform: None,
             cgroup_parent: self.cgroup_parent,
+            dind: self.dind,
         }
     }
 }
@@ -1577,6 +1583,7 @@ mod tests {
             execution_context: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1738,6 +1745,7 @@ mod tests {
             execution_context: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
         };
         assert_eq!(req.type_tag(), "Run");
         let json = serde_json::to_string(&req).expect("serialize");
@@ -1964,6 +1972,7 @@ mod tests {
                 urgency: None,
                 execution_context: None,
                 cgroup_parent: None,
+                dind: false,
             }
             .type_tag(),
             "Run"

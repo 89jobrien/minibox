@@ -134,6 +134,7 @@ pub fn build_request(params: SandboxBuildParams<'_>) -> Result<DaemonRequest> {
         execution_context: None,
         platform: None,
         cgroup_parent: None,
+        dind: false,
     })
 }
 
