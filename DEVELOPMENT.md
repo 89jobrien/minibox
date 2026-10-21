@@ -199,6 +199,21 @@ just test-adapters           # Colima + handler adapter swap tests
 just test-cli-subprocess     # CLI subprocess integration tests
 ```
 
+### Docker-in-Docker (`--dind`) test (Linux + root)
+
+`mbx run --dind` implies `--privileged`, bind-mounts the host daemon socket
+(`/run/minibox/miniboxd.sock`) and image cache into the container, and
+overrides the entrypoint with a wrapper that starts a nested `miniboxd`
+before handing off to the container's own command — so the nested daemon
+shares the outer daemon's pulled layers instead of re-pulling them. Ignored
+by default (needs a real adapter and network access to pull the base
+image); run explicitly with:
+
+```bash
+cargo build -p miniboxd -p minibox-cli
+cargo nextest run -p minibox-cli --test cli_dind --features subprocess-tests -- --include-ignored
+```
+
 ### VM tests
 
 ```bash
