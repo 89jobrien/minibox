@@ -5,11 +5,13 @@
 //! - `mocks`: Mock test doubles for all four domain traits (behind `test-utils` feature)
 //! - `test_fixtures`: Shared test setup helpers (behind `test-utils` feature)
 
+mod image_cache_locking;
 mod noop_exec;
 #[cfg(feature = "registry")]
 mod registry;
 mod registry_router;
 
+pub use image_cache_locking::LockedImageRegistry;
 pub use noop_exec::NoopExecRuntime;
 pub use registry_router::HostnameRegistryRouter;
 
