@@ -15,11 +15,13 @@
 //! - [`context`] — `ScenarioCtx`: binary discovery, real daemon spawn/
 //!   teardown, and `BackendDescriptor` capability gating.
 //! - One module per showcase scenario ([`lifecycle`], [`pause_resume`],
-//!   [`mounts_privileged`], [`networking`], [`build_commit_push`]), each
-//!   implementing [`Scenario`] for a single capability area.
+//!   [`mounts_privileged`], [`networking`], [`build_commit_push`],
+//!   [`dind_scenarios`]), each implementing [`Scenario`] for a single
+//!   capability area.
 
 pub mod build_commit_push;
 pub mod context;
+pub mod dind_scenarios;
 pub mod lifecycle;
 pub mod mounts_privileged;
 pub mod networking;
