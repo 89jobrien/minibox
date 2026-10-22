@@ -1593,6 +1593,8 @@ mod tests {
             platform: None,
             cgroup_parent: None,
             dind: false,
+            dind_debug: false,
+            client_version: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1755,6 +1757,8 @@ mod tests {
             platform: None,
             cgroup_parent: None,
             dind: false,
+            dind_debug: false,
+            client_version: None,
         };
         assert_eq!(req.type_tag(), "Run");
         let json = serde_json::to_string(&req).expect("serialize");
@@ -1982,6 +1986,8 @@ mod tests {
                 execution_context: None,
                 cgroup_parent: None,
                 dind: false,
+                dind_debug: false,
+                client_version: None,
             }
             .type_tag(),
             "Run"
