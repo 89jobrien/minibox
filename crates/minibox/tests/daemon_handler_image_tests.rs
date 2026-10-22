@@ -1493,7 +1493,6 @@ async fn test_handle_run_invalid_platform_returns_error() {
             dind: false,
             priority: None,
             policy_override: None,
-            dind: false,
         },
         state,
         deps,

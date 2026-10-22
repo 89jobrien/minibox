@@ -194,6 +194,7 @@ mod tests {
 
         // A custom registry that records concurrency and introduces a small
         // artificial delay to make races detectable.
+        #[allow(dead_code)]
         struct SlowRegistry {
             concurrent: Arc<AtomicUsize>,
             max: Arc<AtomicUsize>,

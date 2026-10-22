@@ -109,6 +109,9 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         execution_context: None,
                         platform: None,
                         cgroup_parent: None,
+                        dind: false,
+                        dind_debug: false,
+                        client_version: None,
                     }
                 }
             ),
@@ -420,6 +423,9 @@ proptest! {
             execution_context: None,
             platform,
             cgroup_parent: None,
+            dind: false,
+            dind_debug: false,
+            client_version: None,
         };
         let encoded = encode_request(&req).expect("encode must succeed");
         let decoded = decode_request(&encoded).expect("decode must succeed");

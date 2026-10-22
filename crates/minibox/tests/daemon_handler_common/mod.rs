@@ -117,6 +117,7 @@ pub async fn handle_run_once(
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,

@@ -1084,7 +1084,6 @@ async fn test_handle_get_manifest_success() {
         created_at: "2026-05-11T00:00:00Z".to_string(),
         manifest_path: None,
         workload_digest: None,
-        temp_dir_path: None,
         subject: ExecutionManifestSubject {
             image_ref: "alpine:3.18".to_string(),
             image: ExecutionManifestImage {
@@ -1188,7 +1187,6 @@ async fn test_handle_verify_manifest_allowed() {
         created_at: "2026-05-11T00:00:00Z".to_string(),
         manifest_path: None,
         workload_digest: None,
-        temp_dir_path: None,
         subject: ExecutionManifestSubject {
             image_ref: "alpine:3.18".to_string(),
             image: ExecutionManifestImage {
@@ -1297,7 +1295,6 @@ async fn test_handle_verify_manifest_denied() {
         created_at: "2026-05-11T00:00:00Z".to_string(),
         manifest_path: None,
         workload_digest: None,
-        temp_dir_path: None,
         subject: ExecutionManifestSubject {
             image_ref: "alpine:3.18".to_string(),
             image: ExecutionManifestImage {
@@ -1531,8 +1528,9 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
             name: None,
             platform: None,
             cgroup_parent: None,
-                dind: false, priority: None, policy_override: None,
                 dind: false,
+                priority: None,
+                policy_override: None,
         },
         Arc::clone(&state),
         deps,

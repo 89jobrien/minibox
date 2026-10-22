@@ -5,6 +5,7 @@
 
 pub mod container_committer;
 pub mod container_id;
+pub mod dind_e2e;
 pub mod exec_runtime;
 pub mod filesystem;
 pub mod image_builder;

@@ -127,7 +127,6 @@ fn arb_creation_params() -> impl Strategy<Value = RunCreationParams> {
                     user: None,
                     platform,
                     cgroup_parent: None,
-                    dind: false,
                 }
             },
         )

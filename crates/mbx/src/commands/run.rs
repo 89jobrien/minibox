@@ -413,6 +413,7 @@ mod tests {
     use super::super::test_helpers::setup;
     use super::*;
     use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
+    use std::path::PathBuf;
 
     /// ContainerCreated is the non-streaming legacy path — returns Ok(()) without
     /// calling process::exit, so it's the only execute() path testable in-process.
@@ -444,7 +445,7 @@ mod tests {
                 platform: None,
                 cgroup_parent: None,
                 dind: false,
-                dind: false,
+                dind_debug: false,
             },
             &socket_path,
         )
@@ -526,6 +527,7 @@ mod tests {
             platform: None,
             cgroup_parent: None,
             dind: true,
+            dind_debug: false,
         };
         assert!(opts.dind);
     }
