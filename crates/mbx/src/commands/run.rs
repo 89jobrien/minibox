@@ -109,6 +109,7 @@ fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
 
 /// Entrypoint wrapper script with health monitoring: starts a nested daemon,
 /// monitors its health, times out on socket poll, and fails fast on startup errors.
+/// Enhanced with pre-flight checks: validates miniboxd executable, /bin/sh presence, and logs progress.
 #[allow(dead_code)]
 fn dind_entrypoint_script_for_container() -> String {
     let miniboxd_path = DIND_MINIBOXD_PATH;
@@ -117,6 +118,26 @@ fn dind_entrypoint_script_for_container() -> String {
         "#!/bin/sh\n\
          set -e\n\
          \n\
+         echo \"[dind] pre-flight validation starting\" >&2\n\
+         \n\
+         # Validate /bin/sh exists (fail gracefully on scratch images)\n\
+         if [ ! -f /bin/sh ]; then\n\
+             echo \"ERROR: /bin/sh does not exist in container (scratch image?)\" >&2\n\
+             exit 124\n\
+         fi\n\
+         \n\
+         # Validate miniboxd executable exists and has execute permission\n\
+         if [ ! -x \"{miniboxd_path}\" ]; then\n\
+             if [ ! -f \"{miniboxd_path}\" ]; then\n\
+                 echo \"ERROR: miniboxd binary not found at {miniboxd_path}\" >&2\n\
+                 exit 125\n\
+             else\n\
+                 echo \"ERROR: miniboxd at {miniboxd_path} is not executable\" >&2\n\
+                 exit 125\n\
+             fi\n\
+         fi\n\
+         \n\
+         echo \"[dind] starting nested miniboxd from {miniboxd_path}\" >&2\n\
          {miniboxd_path} & DAEMON_PID=$!\n\
          \n\
          # Monitor daemon and exit if it dies\n\
@@ -124,6 +145,8 @@ fn dind_entrypoint_script_for_container() -> String {
              echo \"ERROR: nested miniboxd failed to start (PID $DAEMON_PID)\" >&2\n\
              exit 126\n\
          fi\n\
+         \n\
+         echo \"[dind] daemon started (PID $DAEMON_PID), waiting for socket\" >&2\n\
          \n\
          # Poll socket with timeout (10s max)\n\
          TIMEOUT=100\n\
@@ -135,11 +158,13 @@ fn dind_entrypoint_script_for_container() -> String {
          \n\
          if [ ! -S {sock} ]; then\n\
              echo \"ERROR: nested miniboxd socket never appeared after 10s\" >&2\n\
+             echo \"[dind] attempting to diagnose: killing daemon (PID $DAEMON_PID)\" >&2\n\
              kill $DAEMON_PID 2>/dev/null || true\n\
              wait $DAEMON_PID 2>/dev/null || true\n\
              exit 127\n\
          fi\n\
          \n\
+         echo \"[dind] socket ready at {sock}, executing original command\" >&2\n\
          exec \"$@\"\n"
     )
 }
