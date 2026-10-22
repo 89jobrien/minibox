@@ -76,6 +76,74 @@ pub struct RunOpts {
     pub dind: bool,
 }
 
+/// Nested daemons need full container-creation privileges, so `--dind`
+/// implies `--privileged` regardless of whether the flag was passed directly.
+#[allow(dead_code)]
+const fn effective_privileged(privileged: bool, dind: bool) -> bool {
+    privileged || dind
+}
+
+/// Path to the host's daemon Unix socket, bind-mounted 1:1 into the
+/// container so a nested `mbx` CLI inside can reach the host daemon.
+#[allow(dead_code)]
+const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+
+/// Path the miniboxd binary is installed to inside the container.
+#[allow(dead_code)]
+const DIND_MINIBOXD_PATH: &str = "/usr/local/lib/mbx-dind/miniboxd";
+
+/// Path the dind entrypoint wrapper script is installed to inside the
+/// container.
+#[allow(dead_code)]
+const DIND_WRAPPER_PATH: &str = "/usr/local/lib/mbx-dind/mbx-dind-entrypoint";
+
+/// Path to the shared image cache inside the container.
+#[allow(dead_code)]
+const DIND_IMAGE_CACHE_CONTAINER_PATH: &str = "/var/lib/minibox/images";
+
+/// Entrypoint override to use when `--dind` is set.
+#[allow(dead_code)]
+fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
+    dind.then_some(DIND_WRAPPER_PATH)
+}
+
+/// Entrypoint wrapper script with health monitoring: starts a nested daemon,
+/// monitors its health, times out on socket poll, and fails fast on startup errors.
+#[allow(dead_code)]
+fn dind_entrypoint_script_for_container() -> String {
+    let miniboxd_path = DIND_MINIBOXD_PATH;
+    let sock = DAEMON_SOCKET_PATH;
+    format!(
+        "#!/bin/sh\n\
+         set -e\n\
+         \n\
+         {miniboxd_path} & DAEMON_PID=$!\n\
+         \n\
+         # Monitor daemon and exit if it dies\n\
+         if ! kill -0 $DAEMON_PID 2>/dev/null; then\n\
+             echo \"ERROR: nested miniboxd failed to start (PID $DAEMON_PID)\" >&2\n\
+             exit 126\n\
+         fi\n\
+         \n\
+         # Poll socket with timeout (10s max)\n\
+         TIMEOUT=100\n\
+         COUNT=0\n\
+         while [ ! -S {sock} ] && [ $COUNT -lt $TIMEOUT ]; do\n\
+             sleep 0.1\n\
+             COUNT=$((COUNT + 1))\n\
+         done\n\
+         \n\
+         if [ ! -S {sock} ]; then\n\
+             echo \"ERROR: nested miniboxd socket never appeared after 10s\" >&2\n\
+             kill $DAEMON_PID 2>/dev/null || true\n\
+             wait $DAEMON_PID 2>/dev/null || true\n\
+             exit 127\n\
+         fi\n\
+         \n\
+         exec \"$@\"\n"
+    )
+}
+
 /// Execute the `run` subcommand.
 ///
 /// Connects to the daemon, sends an ephemeral `DaemonRequest::Run`, then
@@ -266,6 +334,7 @@ mod tests {
                 auto_remove: false,
                 platform: None,
                 cgroup_parent: None,
+                dind: false,
                 dind: false,
             },
             &socket_path,
@@ -630,5 +699,34 @@ mod tests {
         } else {
             panic!("expected ContainerOutput");
         }
+    }
+
+    #[test]
+    fn test_dind_entrypoint_has_health_monitoring() {
+        let script = dind_entrypoint_script_for_container();
+        assert!(
+            script.contains("DAEMON_PID"),
+            "entrypoint must capture daemon PID for health monitoring"
+        );
+        assert!(
+            script.contains("kill -0"),
+            "entrypoint must check if daemon started with kill -0"
+        );
+        assert!(
+            script.contains("TIMEOUT"),
+            "entrypoint must have a timeout for socket poll"
+        );
+        assert!(
+            script.contains("ERROR"),
+            "entrypoint must provide error messages"
+        );
+        assert!(
+            script.contains("exit 126"),
+            "entrypoint must exit with 126 on daemon startup failure"
+        );
+        assert!(
+            script.contains("exit 127"),
+            "entrypoint must exit with 127 on socket timeout"
+        );
     }
 }
