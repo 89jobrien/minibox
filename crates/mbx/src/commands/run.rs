@@ -37,9 +37,7 @@ use minibox_core::client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode, UidRangeMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};
-use std::path::PathBuf;
-#[cfg(test)]
-use std::path::PathBuf;
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 
 /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
@@ -167,7 +165,7 @@ fn validate_dind_binary_compatibility() -> Result<()> {
 /// Entrypoint wrapper script with health monitoring: starts a nested daemon,
 /// monitors its health, times out on socket poll, and fails fast on startup errors.
 /// Enhanced with pre-flight checks: validates miniboxd executable, /bin/sh presence, and logs progress.
-/// When dind_debug is true, captures miniboxd stderr for diagnostics.
+/// When `dind_debug` is true, captures miniboxd stderr for diagnostics.
 #[allow(dead_code)]
 fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
     let miniboxd_path = DIND_MINIBOXD_PATH;

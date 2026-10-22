@@ -187,7 +187,7 @@ enum Commands {
         #[arg(long)]
         dind: bool,
 
-        /// Enable verbose DinD diagnostics: capture miniboxd stderr and log to container.
+        /// Enable verbose `DinD` diagnostics: capture miniboxd stderr and log to container.
         #[arg(long)]
         dind_debug: bool,
     },

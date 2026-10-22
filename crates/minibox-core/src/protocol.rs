@@ -200,10 +200,10 @@ pub enum DaemonRequest {
         /// If `true`, enable Docker-in-Docker (`DinD`) — boot a nested miniboxd daemon.
         #[serde(default)]
         dind: bool,
-        /// If `true`, enable verbose DinD diagnostics: capture miniboxd stderr and log to container.
+        /// If `true`, enable verbose `DinD` diagnostics: capture miniboxd stderr and log to container.
         #[serde(default)]
         dind_debug: bool,
-        /// Version of the CLI client for protocol compatibility validation (SemVer format).
+        /// Version of the CLI client for protocol compatibility validation (`SemVer` format).
         /// Passed to nested miniboxd for version negotiation and compatibility checks.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client_version: Option<String>,
@@ -1020,6 +1020,8 @@ impl TestRunDefaults {
             platform: None,
             cgroup_parent: self.cgroup_parent,
             dind: self.dind,
+            dind_debug: false,
+            client_version: None,
         }
     }
 }
