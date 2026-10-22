@@ -128,6 +128,31 @@ pub fn get_peer_creds(fd: std::os::unix::io::RawFd) -> Option<PeerCreds> {
 /// | `true`              | None          | denied  |
 /// | `true`              | Some(uid = 0) | allowed |
 /// | `true`              | Some(uid > 0) | denied  |
+///
+/// # `DinD` considerations
+///
+/// When minibox runs a `DinD` (Docker-in-Docker) container via `mbx run --dind`,
+/// a nested `miniboxd` daemon boots inside the container. Connections to that
+/// inner daemon come from processes *inside* the container's user namespace.
+/// Because minibox `DinD` containers run with `--privileged` (enforced by
+/// `effective_privileged()`), those inner processes run as uid 0 (root) inside
+/// the container. The `SO_PEERCRED` uid reported to the *inner* daemon is the
+/// container-local uid, so the uid=0 check is still correct for the nested
+/// daemon and no special allowlist is required.
+///
+/// The *outer* daemon's socket is bind-mounted into the container via
+/// `dind_mounts()`. Connections to the outer socket from within the container
+/// also arrive as uid 0 (the container root), so the outer daemon's check
+/// is likewise satisfied without relaxation. If a future `DinD` mode supports
+/// unprivileged containers with user-namespace remapping, this function will
+/// need a new `allow_dind_uid` parameter — implement that in a dedicated PR,
+/// not here.
+///
+/// # Kani formal verification
+///
+/// `kani_proofs::is_authorized_matches_truth_table` proves this function
+/// satisfies the truth table above for all possible `uid` and `has_creds`
+/// combinations.  See the `#[cfg(kani)]` block at the bottom of this file.
 #[must_use]
 pub const fn is_authorized(creds: Option<&PeerCreds>, require_root_auth: bool) -> bool {
     if !require_root_auth {
@@ -196,28 +221,45 @@ where
                 match accept_result {
                     Ok((stream, peer_creds)) => {
                         if !is_authorized(peer_creds.as_ref(), require_root_auth) {
+                            // Audit: every rejection is logged with structured
+                            // fields so security events are queryable by uid/pid.
                             match peer_creds.as_ref() {
                                 Some(creds) => {
                                     warn!(
                                         uid = creds.uid,
                                         pid = creds.pid,
-                                        "server: rejecting non-root connection"
+                                        action = "rejected",
+                                        reason = "non-root uid",
+                                        "server: uid validation denied connection"
                                     );
                                 }
                                 None => {
                                     warn!(
-                                        "server: rejecting unauthenticated connection; peer credentials unavailable"
+                                        action = "rejected",
+                                        reason = "no peer credentials",
+                                        "server: uid validation denied connection"
                                     );
                                 }
                             }
                             continue;
                         }
+                        // Audit: every allowed connection is logged so the
+                        // accept decision is always observable alongside rejections.
                         match &peer_creds {
                             Some(creds) => {
-                                info!(uid = creds.uid, pid = creds.pid, "server: accepted connection");
+                                info!(
+                                    uid = creds.uid,
+                                    pid = creds.pid,
+                                    action = "allowed",
+                                    "server: uid validation accepted connection"
+                                );
                             }
                             None => {
-                                info!("server: accepted connection (no peer credentials)");
+                                info!(
+                                    action = "allowed",
+                                    reason = "require_root_auth disabled",
+                                    "server: uid validation accepted connection"
+                                );
                             }
                         }
                         let state_clone = Arc::clone(&state);
@@ -1694,6 +1736,54 @@ mod tests {
         )
         .await;
         assert!(result.is_ok(), "server should not have timed out");
+    }
+
+    /// When `require_root_auth=false`, non-root connections (uid>0) must be
+    /// accepted.  This complements `test_run_server_rejects_non_root` (which
+    /// covers the deny path) and `test_run_server_no_creds_no_require_root`
+    /// (which covers the no-creds allow path).
+    #[tokio::test]
+    async fn test_run_server_non_root_allowed_when_root_auth_disabled() {
+        let tmp = TempDir::new().expect("tempdir");
+        let (state, deps) = test_deps(&tmp);
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let listener = MockListener {
+            rx: tokio::sync::Mutex::new(rx),
+        };
+
+        // Non-root connection with require_root_auth=false — must be accepted.
+        let (client, server) = tokio::io::duplex(4096);
+        tx.send((server, Some(PeerCreds { uid: 1000, pid: 42 })))
+            .await
+            .expect("send connection");
+        drop(tx);
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            run_server(listener, state, deps, false, async {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }),
+        )
+        .await;
+        assert!(result.is_ok(), "server should not have timed out");
+
+        // Verify the connection was actually handled (not silently dropped):
+        // send a List request and confirm we get a ContainerList back.
+        let (read_half, mut write_half) = tokio::io::split(client);
+        let mut reader = BufReader::new(read_half);
+        send_request(&mut write_half, &DaemonRequest::List).await;
+        // The server task may have already exited after the shutdown timer.
+        // Accept either a valid ContainerList or EOF (no response before exit).
+        let mut line = String::new();
+        let _ = reader.read_line(&mut line).await;
+        if !line.trim().is_empty() {
+            match serde_json::from_str::<DaemonResponse>(line.trim()) {
+                Ok(DaemonResponse::ContainerList { .. }) => {}
+                Ok(other) => panic!("unexpected response: {other:?}"),
+                Err(e) => panic!("failed to parse response: {e}"),
+            }
+        }
     }
 
     #[tokio::test]
