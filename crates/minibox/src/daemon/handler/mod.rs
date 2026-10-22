@@ -1314,7 +1314,6 @@ mod pub_crate_handler_tests {
             created_at: "1970-01-01T00:00:00Z".to_string(),
             manifest_path: None,
             workload_digest: None,
-            temp_dir_path: None,
             subject: ExecutionManifestSubject {
                 image_ref: "alpine:latest".to_string(),
                 image: ExecutionManifestImage {
@@ -1414,7 +1413,6 @@ mod pub_crate_handler_tests {
             created_at: "1970-01-01T00:00:00Z".to_string(),
             manifest_path: None,
             workload_digest: None,
-            temp_dir_path: None,
             subject: ExecutionManifestSubject {
                 image_ref: "alpine:latest".to_string(),
                 image: ExecutionManifestImage {
@@ -1519,7 +1517,6 @@ mod pub_crate_handler_tests {
             created_at: "2026-01-01T00:00:00Z".to_string(),
             manifest_path: None,
             workload_digest: None,
-            temp_dir_path: None,
             subject: minibox_core::domain::ExecutionManifestSubject {
                 image_ref: "untrusted/evil:latest".to_string(),
                 image: minibox_core::domain::ExecutionManifestImage {
