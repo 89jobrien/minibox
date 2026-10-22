@@ -74,6 +74,7 @@ pub struct RunOpts {
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
     pub dind: bool,
+    pub dind_debug: bool,
 }
 
 /// Nested daemons need full container-creation privileges, so `--dind`
@@ -110,10 +111,16 @@ fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
 /// Entrypoint wrapper script with health monitoring: starts a nested daemon,
 /// monitors its health, times out on socket poll, and fails fast on startup errors.
 /// Enhanced with pre-flight checks: validates miniboxd executable, /bin/sh presence, and logs progress.
+/// When dind_debug is true, captures miniboxd stderr for diagnostics.
 #[allow(dead_code)]
-fn dind_entrypoint_script_for_container() -> String {
+fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
     let miniboxd_path = DIND_MINIBOXD_PATH;
     let sock = DAEMON_SOCKET_PATH;
+    let debug_stderr_redirect = if dind_debug {
+        " 2>/tmp/miniboxd-debug.log"
+    } else {
+        " 2>/dev/null"
+    };
     format!(
         "#!/bin/sh\n\
          set -e\n\
@@ -138,11 +145,15 @@ fn dind_entrypoint_script_for_container() -> String {
          fi\n\
          \n\
          echo \"[dind] starting nested miniboxd from {miniboxd_path}\" >&2\n\
-         {miniboxd_path} & DAEMON_PID=$!\n\
+         {miniboxd_path}{debug_stderr_redirect} & DAEMON_PID=$!\n\
          \n\
          # Monitor daemon and exit if it dies\n\
          if ! kill -0 $DAEMON_PID 2>/dev/null; then\n\
              echo \"ERROR: nested miniboxd failed to start (PID $DAEMON_PID)\" >&2\n\
+             if [ -f /tmp/miniboxd-debug.log ]; then\n\
+                 echo \"[dind] daemon stderr:\" >&2\n\
+                 cat /tmp/miniboxd-debug.log >&2\n\
+             fi\n\
              exit 126\n\
          fi\n\
          \n\
@@ -158,6 +169,10 @@ fn dind_entrypoint_script_for_container() -> String {
          \n\
          if [ ! -S {sock} ]; then\n\
              echo \"ERROR: nested miniboxd socket never appeared after 10s\" >&2\n\
+             if [ -f /tmp/miniboxd-debug.log ]; then\n\
+                 echo \"[dind] daemon stderr:\" >&2\n\
+                 cat /tmp/miniboxd-debug.log >&2\n\
+             fi\n\
              echo \"[dind] attempting to diagnose: killing daemon (PID $DAEMON_PID)\" >&2\n\
              kill $DAEMON_PID 2>/dev/null || true\n\
              wait $DAEMON_PID 2>/dev/null || true\n\
@@ -195,6 +210,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         platform,
         cgroup_parent,
         dind,
+        dind_debug,
     } = opts;
     let privileged = privileged || dind;
 
@@ -243,6 +259,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         platform,
         cgroup_parent,
         dind,
+        dind_debug,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -388,7 +405,7 @@ mod tests {
 
     #[test]
     fn test_dind_entrypoint_container() {
-        let script = dind_entrypoint_script_for_container();
+        let script = dind_entrypoint_script_for_container(false);
         assert!(script.starts_with("#!/bin/sh"));
         assert!(script.contains("miniboxd"));
         assert!(script.contains(DAEMON_SOCKET_PATH));
@@ -728,7 +745,7 @@ mod tests {
 
     #[test]
     fn test_dind_entrypoint_has_health_monitoring() {
-        let script = dind_entrypoint_script_for_container();
+        let script = dind_entrypoint_script_for_container(false);
         assert!(
             script.contains("DAEMON_PID"),
             "entrypoint must capture daemon PID for health monitoring"

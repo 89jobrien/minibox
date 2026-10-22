@@ -186,6 +186,10 @@ enum Commands {
         /// Run a nested minibox daemon inside the container (Docker-in-Docker).
         #[arg(long)]
         dind: bool,
+
+        /// Enable verbose DinD diagnostics: capture miniboxd stderr and log to container.
+        #[arg(long)]
+        dind_debug: bool,
     },
 
     /// List all containers
@@ -619,6 +623,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
             platform,
             cgroup_parent,
             dind,
+            dind_debug,
         } => {
             let (image, tag) = split_image_tag(image, tag);
             into_cli(
@@ -647,6 +652,7 @@ async fn run(cli: Cli, socket_path: &Path) -> Result<(), CliError> {
                         platform,
                         cgroup_parent,
                         dind,
+                        dind_debug,
                     },
                     socket_path,
                 )

@@ -200,6 +200,9 @@ pub enum DaemonRequest {
         /// If `true`, enable Docker-in-Docker (`DinD`) — boot a nested miniboxd daemon.
         #[serde(default)]
         dind: bool,
+        /// If `true`, enable verbose DinD diagnostics: capture miniboxd stderr and log to container.
+        #[serde(default)]
+        dind_debug: bool,
     },
 
     /// Stop a running container by ID.
