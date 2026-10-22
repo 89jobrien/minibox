@@ -203,6 +203,10 @@ pub enum DaemonRequest {
         /// If `true`, enable verbose DinD diagnostics: capture miniboxd stderr and log to container.
         #[serde(default)]
         dind_debug: bool,
+        /// Version of the CLI client for protocol compatibility validation (SemVer format).
+        /// Passed to nested miniboxd for version negotiation and compatibility checks.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        client_version: Option<String>,
     },
 
     /// Stop a running container by ID.

@@ -110,6 +110,11 @@ fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
     dind.then_some(DIND_WRAPPER_PATH)
 }
 
+/// Get the CLI version for protocol version negotiation.
+fn get_cli_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Validate miniboxd binary exists and is compatible with the target platform.
 /// Checks that the binary is executable and warns on known incompatibilities.
 #[allow(dead_code)]
@@ -176,6 +181,7 @@ fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
         "#!/bin/sh\n\
          set -e\n\
          \n\
+         echo \"[dind] version: host=$MINIBOX_CLIENT_VERSION, nested=$(miniboxd --version 2>/dev/null | cut -d' ' -f2 || echo unknown)\" >&2\n\
          echo \"[dind] pre-flight validation starting\" >&2\n\
          \n\
          # Validate /bin/sh exists (fail gracefully on scratch images)\n\
@@ -292,6 +298,12 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
 
     let tty = tty && std::io::stdout().is_terminal();
 
+    // Add version environment variable for nested daemon version negotiation
+    let mut env = env;
+    if dind {
+        env.push(format!("MINIBOX_CLIENT_VERSION={}", get_cli_version()));
+    }
+
     let request = DaemonRequest::Run {
         image,
         tag: Some(tag),
@@ -316,6 +328,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         cgroup_parent,
         dind,
         dind_debug,
+        client_version: dind.then(get_cli_version),
     };
 
     let client = DaemonClient::with_socket(socket_path);
