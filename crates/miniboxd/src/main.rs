@@ -1746,8 +1746,10 @@ mod tests {
             .expect("parse image ref");
         let routed = deps.image.registry_router.route(&image_ref);
         assert!(
-            routed.as_any().is::<minibox::adapters::SmolVmRegistry>(),
-            "smolvm suite must route run cache checks and pulls through SmolVmRegistry"
+            routed
+                .as_any()
+                .is::<minibox_core::adapters::LockedImageRegistry>(),
+            "smolvm suite must route run cache checks and pulls through LockedImageRegistry wrapping SmolVmRegistry"
         );
     }
 
