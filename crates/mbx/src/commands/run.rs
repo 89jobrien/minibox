@@ -37,8 +37,10 @@ use minibox_core::client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode, UidRangeMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};
+use std::path::PathBuf;
 #[cfg(test)]
 use std::path::PathBuf;
+use std::process::Command;
 
 /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
 pub fn parse_volume(s: &str) -> anyhow::Result<BindMount> {
@@ -106,6 +108,55 @@ const DIND_IMAGE_CACHE_CONTAINER_PATH: &str = "/var/lib/minibox/images";
 #[allow(dead_code)]
 fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
     dind.then_some(DIND_WRAPPER_PATH)
+}
+
+/// Validate miniboxd binary exists and is compatible with the target platform.
+/// Checks that the binary is executable and warns on known incompatibilities.
+#[allow(dead_code)]
+fn validate_dind_binary_compatibility() -> Result<()> {
+    let miniboxd = which::which("miniboxd")
+        .context("miniboxd binary not found in PATH; ensure miniboxd is installed and in $PATH")?;
+
+    // Check if binary is executable
+    let metadata = std::fs::metadata(&miniboxd)
+        .with_context(|| format!("failed to stat miniboxd at {}", miniboxd.display()))?;
+    if metadata.permissions().mode() & 0o111 == 0 {
+        anyhow::bail!(
+            "miniboxd at {} is not executable (mode: {:o})",
+            miniboxd.display(),
+            metadata.permissions().mode()
+        );
+    }
+
+    // Get binary info via `file` command
+    let output = Command::new("file")
+        .arg("-b")
+        .arg(&miniboxd)
+        .output()
+        .context("failed to run `file` command to check binary type")?;
+
+    let file_info = String::from_utf8_lossy(&output.stdout);
+
+    // Warn if not an ELF binary (macOS binaries are Mach-O and won't work in containers)
+    if !file_info.contains("ELF") {
+        anyhow::bail!(
+            "miniboxd at {} is not an ELF binary (type: {}) — cannot run in Linux containers; \
+            ensure miniboxd is built for the target Linux platform (e.g., x86_64-unknown-linux-musl)",
+            miniboxd.display(),
+            file_info.trim()
+        );
+    }
+
+    // Warn on known incompatibilities (e.g., glibc vs musl mismatch handled at runtime)
+    if file_info.contains("statically linked") {
+        tracing::debug!("miniboxd is statically linked — good for container compatibility");
+    } else if file_info.contains("dynamically linked") {
+        tracing::warn!(
+            "miniboxd is dynamically linked — ensure container libc (glibc/musl) matches binary"
+        );
+    }
+
+    Ok(())
 }
 
 /// Entrypoint wrapper script with health monitoring: starts a nested daemon,
@@ -213,6 +264,11 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         dind_debug,
     } = opts;
     let privileged = privileged || dind;
+
+    // Validate miniboxd binary compatibility if DinD is requested
+    if dind {
+        validate_dind_binary_compatibility().context("DinD binary validation failed")?;
+    }
 
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
