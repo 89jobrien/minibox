@@ -86,6 +86,7 @@ fn make_container_record(id: &str, name: Option<&str>, state: &str) -> Container
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 

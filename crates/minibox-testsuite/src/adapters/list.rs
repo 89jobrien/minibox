@@ -54,6 +54,7 @@ fn make_record(id: &str, image: &str, state_str: &str) -> ContainerRecord {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 

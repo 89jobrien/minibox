@@ -127,6 +127,7 @@ fn arb_creation_params() -> impl Strategy<Value = RunCreationParams> {
                     user: None,
                     platform,
                     cgroup_parent: None,
+                    dind: false,
                 }
             },
         )
@@ -178,6 +179,7 @@ fn arb_container_record() -> impl Strategy<Value = ContainerRecord> {
                     creation_params,
                     manifest_path: None,
                     workload_digest,
+                    temp_dir_path: None,
                 }
             },
         )
@@ -234,6 +236,7 @@ proptest! {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         let json = serde_json::to_string(&record).expect("serialize");
         let decoded: ContainerRecord = serde_json::from_str(&json).expect("deserialize");

@@ -166,6 +166,7 @@ fn make_record(id: &str) -> ContainerRecord {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 
@@ -198,8 +199,10 @@ async fn handle_run_once(
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,

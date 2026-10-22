@@ -250,6 +250,7 @@ pub(super) fn build_container_record(p: ContainerRecordBuildParams<'_>) -> Conta
         }),
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 

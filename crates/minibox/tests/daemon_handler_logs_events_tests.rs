@@ -146,6 +146,7 @@ async fn test_handle_logs_reads_log_files() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -260,6 +261,7 @@ async fn test_pause_stopped_container_returns_error() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -316,6 +318,7 @@ async fn test_resume_running_container_returns_error() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -376,6 +379,7 @@ async fn test_pause_missing_cgroup_returns_error() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -434,6 +438,7 @@ async fn test_resume_missing_cgroup_returns_error() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -495,6 +500,7 @@ async fn test_handle_pause_running_container_succeeds() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -562,6 +568,7 @@ async fn test_handle_resume_paused_container_succeeds() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 

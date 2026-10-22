@@ -1490,8 +1490,10 @@ async fn test_handle_run_invalid_platform_returns_error() {
             name: None,
             platform: Some("not/a/valid/platform/triple".to_string()),
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,
@@ -1778,6 +1780,7 @@ async fn test_handle_update_containers_collects_source_image_refs() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1867,6 +1870,7 @@ async fn test_handle_update_restart_stops_running_containers() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 

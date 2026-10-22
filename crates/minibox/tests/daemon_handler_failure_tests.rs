@@ -85,8 +85,10 @@ async fn test_policy_denies_bind_mount_by_default() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
+            dind: false,
             dind: false,
         },
         state,
@@ -739,6 +741,7 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state.clone(),
         deps.clone(),
@@ -897,6 +900,7 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
                 creation_params: None,
                 manifest_path: None,
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
     }

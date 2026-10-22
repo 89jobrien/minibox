@@ -94,8 +94,10 @@ async fn handle_run_once(
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,
@@ -1838,6 +1840,7 @@ mod krun_suite {
                 cgroup_parent: None,
                 priority: None,
                 policy_override: None,
+                dind: false,
             },
             state,
             deps,
@@ -2039,6 +2042,7 @@ mod pause_resume_conformance {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         }
     }
 
@@ -2712,6 +2716,7 @@ mod policy_conformance {
                 cgroup_parent: None,
                 priority: None,
                 policy_override: None,
+                dind: false,
             },
             state,
             deps,

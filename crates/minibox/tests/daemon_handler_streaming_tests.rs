@@ -252,7 +252,9 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+                dind: false, priority: None, policy_override: None,
+                dind: false,
         },
         state,
         deps,
@@ -771,6 +773,7 @@ async fn test_stop_dead_pid_exits_immediately() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -846,6 +849,7 @@ async fn test_stop_container_no_pid_returns_error() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 

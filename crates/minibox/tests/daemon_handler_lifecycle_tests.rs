@@ -779,8 +779,10 @@ async fn test_handle_run_explicit_network_none() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,
@@ -1327,6 +1329,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -1623,6 +1626,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -1697,6 +1701,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -1872,6 +1877,7 @@ async fn test_handle_remove_created_container_succeeds() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -2132,6 +2138,7 @@ async fn test_handle_remove_running_container_returns_error() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -2280,6 +2287,7 @@ async fn test_daemon_state_persistence_survives_restart() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
     }
@@ -2338,6 +2346,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
         state.remove_container(container_id).await;
@@ -2454,6 +2463,7 @@ async fn test_handle_remove_resolves_by_name() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -2582,6 +2592,7 @@ async fn test_handle_logs_client_disconnect_mid_stream() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 

@@ -691,6 +691,7 @@ mod pub_crate_handler_tests {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
 
@@ -778,6 +779,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: None,
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -1122,6 +1124,7 @@ mod pub_crate_handler_tests {
                 read_only: true,
             }],
             policy_override: None,
+            dind: false,
             ..Default::default()
         };
         handle_run(params, state, deps, tx).await;
@@ -1210,6 +1213,7 @@ mod pub_crate_handler_tests {
             creation_params: None,
             manifest_path: Some(std::path::PathBuf::from("/nonexistent/manifest.json")),
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
 
@@ -1267,6 +1271,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: None,
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -1309,6 +1314,7 @@ mod pub_crate_handler_tests {
             created_at: "1970-01-01T00:00:00Z".to_string(),
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
             subject: ExecutionManifestSubject {
                 image_ref: "alpine:latest".to_string(),
                 image: ExecutionManifestImage {
@@ -1364,6 +1370,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: Some(manifest_path),
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -1407,6 +1414,7 @@ mod pub_crate_handler_tests {
             created_at: "1970-01-01T00:00:00Z".to_string(),
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
             subject: ExecutionManifestSubject {
                 image_ref: "alpine:latest".to_string(),
                 image: ExecutionManifestImage {
@@ -1462,6 +1470,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: Some(manifest_path),
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -1510,6 +1519,7 @@ mod pub_crate_handler_tests {
             created_at: "2026-01-01T00:00:00Z".to_string(),
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
             subject: minibox_core::domain::ExecutionManifestSubject {
                 image_ref: "untrusted/evil:latest".to_string(),
                 image: minibox_core::domain::ExecutionManifestImage {

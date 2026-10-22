@@ -100,6 +100,7 @@ async fn json_file_repository_round_trips() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         },
     );
 

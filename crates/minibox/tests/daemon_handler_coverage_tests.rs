@@ -750,6 +750,7 @@ async fn test_handle_update_containers_true_collects_refs() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -823,6 +824,7 @@ async fn test_handle_update_restart_stop_fails_continues() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -917,6 +919,7 @@ async fn test_handle_update_restart_no_creation_params_warns() {
         creation_params: None, // No creation_params — cannot restart.
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1012,6 +1015,7 @@ async fn test_handle_list_multiple_containers() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
     }
@@ -1080,6 +1084,7 @@ async fn test_handle_get_manifest_success() {
         created_at: "2026-05-11T00:00:00Z".to_string(),
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
         subject: ExecutionManifestSubject {
             image_ref: "alpine:3.18".to_string(),
             image: ExecutionManifestImage {
@@ -1133,6 +1138,7 @@ async fn test_handle_get_manifest_success() {
         creation_params: None,
         manifest_path: Some(manifest_path),
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1182,6 +1188,7 @@ async fn test_handle_verify_manifest_allowed() {
         created_at: "2026-05-11T00:00:00Z".to_string(),
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
         subject: ExecutionManifestSubject {
             image_ref: "alpine:3.18".to_string(),
             image: ExecutionManifestImage {
@@ -1237,6 +1244,7 @@ async fn test_handle_verify_manifest_allowed() {
         creation_params: None,
         manifest_path: Some(manifest_path),
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1289,6 +1297,7 @@ async fn test_handle_verify_manifest_denied() {
         created_at: "2026-05-11T00:00:00Z".to_string(),
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
         subject: ExecutionManifestSubject {
             image_ref: "alpine:3.18".to_string(),
             image: ExecutionManifestImage {
@@ -1344,6 +1353,7 @@ async fn test_handle_verify_manifest_denied() {
         creation_params: None,
         manifest_path: Some(manifest_path),
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1520,7 +1530,9 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+                dind: false, priority: None, policy_override: None,
+                dind: false,
         },
         Arc::clone(&state),
         deps,

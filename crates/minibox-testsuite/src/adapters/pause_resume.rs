@@ -56,6 +56,7 @@ fn make_record(id: &str, state_str: &str, cgroup_path: PathBuf) -> ContainerReco
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 

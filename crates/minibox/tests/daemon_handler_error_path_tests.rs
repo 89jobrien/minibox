@@ -97,6 +97,7 @@ fn make_record_with_state(id: &str, state_str: &str) -> ContainerRecord {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 
@@ -249,7 +250,9 @@ async fn test_handle_run_invalid_image_ref_returns_error() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+                dind: false, priority: None, policy_override: None,
+                dind: false,
         },
         state,
         deps,

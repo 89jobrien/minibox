@@ -175,6 +175,7 @@ fn make_record_with_state(id: &str, state: &str, cgroup_path: PathBuf) -> Contai
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 
