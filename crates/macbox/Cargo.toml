@@ -7,6 +7,20 @@ publish = false
 
 [features]
 vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization", "dep:serde_json"]
+# Phase 0 boot probe (crates/macbox/examples/vz_boot_probe.rs). Kept separate from `vz` so
+# the shipped adapter's Virtualization.framework surface stays unchanged until the gate
+# in docs/designs/2026-10-22-vz-efi-boot-design.md has been decided.
+vz-probe = [
+    "vz",
+    "objc2-virtualization/VZEFIBootLoader",
+    "objc2-virtualization/VZEFIVariableStore",
+    "objc2-virtualization/VZPlatformConfiguration",
+    "objc2-virtualization/VZGenericPlatformConfiguration",
+    "objc2-virtualization/VZStorageDeviceConfiguration",
+    "objc2-virtualization/VZStorageDeviceAttachment",
+    "objc2-virtualization/VZDiskImageStorageDeviceAttachment",
+    "objc2-virtualization/VZVirtioBlockDeviceConfiguration",
+]
 
 [dependencies]
 minibox = { workspace = true }
@@ -59,6 +73,11 @@ name = "krun_conformance_tests"
 
 [[test]]
 name = "krun_adapter_conformance"
+
+# Phase 0 experiment for docs/designs/2026-10-22-vz-efi-boot-design.md.
+[[example]]
+name = "vz_boot_probe"
+required-features = ["vz-probe"]
 
 [lints]
 workspace = true
