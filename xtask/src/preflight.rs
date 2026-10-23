@@ -1,5 +1,6 @@
 //! Tool, environment, and host-capability checks for `cargo xtask doctor`.
 
+#[cfg(target_os = "macos")]
 use std::path::Path;
 
 /// Domain port: probe whether a named tool is functional.
