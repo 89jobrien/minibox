@@ -201,13 +201,17 @@ just test-cli-subprocess     # CLI subprocess integration tests
 
 ### Docker-in-Docker (`--dind`) test (Linux + root)
 
-`mbx run --dind` implies `--privileged`, bind-mounts the host daemon socket
-(`/run/minibox/miniboxd.sock`) and image cache into the container, and
-overrides the entrypoint with a wrapper that starts a nested `miniboxd`
-before handing off to the container's own command — so the nested daemon
-shares the outer daemon's pulled layers instead of re-pulling them. Ignored
-by default (needs a real adapter and network access to pull the base
-image); run explicitly with:
+`mbx run --dind` implies `--privileged`. It copies the host `miniboxd` and `mbx`
+binaries plus a wrapper script into a temp dir, bind-mounts that dir (read-only)
+together with host-backed inner data/run dirs and `/sys/fs/cgroup`, then
+overrides the entrypoint with a wrapper that starts a nested `miniboxd` on its
+own socket (`/minibox-run/miniboxd.sock`) and exports `MINIBOX_SOCKET_PATH`
+before handing off to the container's own command. The nested daemon gets a
+per-run delegated cgroup slice and pulls images into its own host-backed data
+dir; the outer daemon socket and image cache are deliberately not shared.
+Requires a Linux host with cgroup v2 at `/sys/fs/cgroup` and a Linux (ELF)
+`miniboxd` on `PATH`. Ignored by default (needs a real adapter and network
+access to pull the base image); run explicitly with:
 
 ```bash
 cargo build -p miniboxd -p minibox-cli

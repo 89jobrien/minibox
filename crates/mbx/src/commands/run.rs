@@ -79,33 +79,68 @@ pub struct RunOpts {
 
 /// Nested daemons need full container-creation privileges, so `--dind`
 /// implies `--privileged` regardless of whether the flag was passed directly.
-#[allow(dead_code)]
 const fn effective_privileged(privileged: bool, dind: bool) -> bool {
     privileged || dind
 }
 
-/// Path to the host's daemon Unix socket, bind-mounted 1:1 into the
-/// container so a nested `mbx` CLI inside can reach the host daemon.
-#[allow(dead_code)]
-const DAEMON_SOCKET_PATH: &str = "/run/minibox/miniboxd.sock";
+/// Directory the `DinD` helper files are mounted at inside the container.
+const DIND_DIR_PATH: &str = "/usr/local/lib/mbx-dind";
 
 /// Path the miniboxd binary is installed to inside the container.
-#[allow(dead_code)]
 const DIND_MINIBOXD_PATH: &str = "/usr/local/lib/mbx-dind/miniboxd";
 
 /// Path the dind entrypoint wrapper script is installed to inside the
 /// container.
-#[allow(dead_code)]
 const DIND_WRAPPER_PATH: &str = "/usr/local/lib/mbx-dind/mbx-dind-entrypoint";
 
-/// Path to the shared image cache inside the container.
-#[allow(dead_code)]
-const DIND_IMAGE_CACHE_CONTAINER_PATH: &str = "/var/lib/minibox/images";
+/// Path the nested `mbx` CLI is installed to inside the container.
+const DIND_MBX_PATH: &str = "/usr/local/bin/mbx";
 
-/// Entrypoint override to use when `--dind` is set.
-#[allow(dead_code)]
-fn dind_entrypoint_override(dind: bool) -> Option<&'static str> {
-    dind.then_some(DIND_WRAPPER_PATH)
+/// Directory the nested daemon keeps its state in.
+///
+/// This must be a bind mount from the host rather than a path on the outer
+/// container's overlay: the nested daemon creates its own overlay mounts, and
+/// the kernel does not permit overlay-on-overlay. Backing it with the host's
+/// (usually tmpfs-backed) temp directory is what makes nested runs work.
+const DIND_DATA_DIR_PATH: &str = "/minibox-data";
+
+/// Directory the nested daemon's socket lives in.
+const DIND_RUN_DIR_PATH: &str = "/minibox-run";
+
+/// Socket the nested daemon listens on, and the value injected as
+/// `MINIBOX_SOCKET_PATH` so a nested `mbx` connects to it instead of the outer
+/// daemon.
+const DIND_SOCKET_PATH: &str = "/minibox-run/miniboxd.sock";
+
+/// Parent cgroup filesystem, bind-mounted so the nested daemon can create its
+/// own delegated slice.
+const DIND_CGROUP_FS_PATH: &str = "/sys/fs/cgroup";
+
+/// Host-side staging plus the mounts/env a `--dind` run needs.
+///
+/// The temp directory must outlive the container: the bind mounts point into
+/// it, so dropping it early would leave the container reading deleted paths.
+struct DindProvisioning {
+    /// Keeps the host staging directory alive for the duration of the run.
+    _temp_dir: tempfile::TempDir,
+    /// Extra bind mounts for the run request.
+    mounts: Vec<BindMount>,
+    /// Environment the wrapper and any nested `mbx` rely on.
+    env: Vec<String>,
+}
+
+/// Locate the `miniboxd` binary that will run inside the container.
+fn find_miniboxd_binary() -> Result<std::path::PathBuf> {
+    if let Ok(path) = which::which("miniboxd") {
+        return Ok(path);
+    }
+    for candidate in ["/usr/local/bin/miniboxd", "/usr/bin/miniboxd"] {
+        let path = std::path::PathBuf::from(candidate);
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    anyhow::bail!("miniboxd binary not found on PATH; install miniboxd to use --dind")
 }
 
 /// Get the CLI version for protocol version negotiation.
@@ -113,15 +148,12 @@ fn get_cli_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// Validate miniboxd binary exists and is compatible with the target platform.
-/// Checks that the binary is executable and warns on known incompatibilities.
-#[allow(dead_code)]
-fn validate_dind_binary_compatibility() -> Result<()> {
-    let miniboxd = which::which("miniboxd")
-        .context("miniboxd binary not found in PATH; ensure miniboxd is installed and in $PATH")?;
-
-    // Check if binary is executable
-    let metadata = std::fs::metadata(&miniboxd)
+/// Validate the staged miniboxd binary is executable and built for Linux.
+///
+/// A macOS host binary (Mach-O) or a non-executable file would fail opaquely
+/// inside the container, so reject it before the run starts.
+fn validate_dind_binary(miniboxd: &std::path::Path) -> Result<()> {
+    let metadata = std::fs::metadata(miniboxd)
         .with_context(|| format!("failed to stat miniboxd at {}", miniboxd.display()))?;
     if metadata.permissions().mode() & 0o111 == 0 {
         anyhow::bail!(
@@ -131,16 +163,13 @@ fn validate_dind_binary_compatibility() -> Result<()> {
         );
     }
 
-    // Get binary info via `file` command
     let output = Command::new("file")
         .arg("-b")
-        .arg(&miniboxd)
+        .arg(miniboxd)
         .output()
         .context("failed to run `file` command to check binary type")?;
-
     let file_info = String::from_utf8_lossy(&output.stdout);
 
-    // Warn if not an ELF binary (macOS binaries are Mach-O and won't work in containers)
     if !file_info.contains("ELF") {
         anyhow::bail!(
             "miniboxd at {} is not an ELF binary (type: {}) — cannot run in Linux containers; \
@@ -150,26 +179,145 @@ fn validate_dind_binary_compatibility() -> Result<()> {
         );
     }
 
-    // Warn on known incompatibilities (e.g., glibc vs musl mismatch handled at runtime)
-    if file_info.contains("statically linked") {
-        tracing::debug!("miniboxd is statically linked — good for container compatibility");
-    } else if file_info.contains("dynamically linked") {
+    if file_info.contains("dynamically linked") {
         tracing::warn!(
-            "miniboxd is dynamically linked — ensure container libc (glibc/musl) matches binary"
+            "miniboxd is dynamically linked — ensure the container libc (glibc/musl) matches"
         );
+    } else if file_info.contains("statically linked") {
+        tracing::debug!("miniboxd is statically linked — good for container compatibility");
     }
 
     Ok(())
+}
+
+/// Stage the `DinD` helper files on the host and describe the mounts/env a
+/// `--dind` run needs.
+///
+/// Layout of the staging directory (all mounted into the container):
+///
+/// * `miniboxd` — nested daemon binary, mounted at [`DIND_MINIBOXD_PATH`]
+/// * `mbx-dind-entrypoint` — wrapper script, mounted at [`DIND_WRAPPER_PATH`]
+/// * `mbx` — nested CLI, mounted at [`DIND_MBX_PATH`]
+/// * `data/`, `run/` — nested daemon state, mounted at the container-side
+///   data/run dirs so it never touches the outer container's overlay
+fn dind_provision(
+    miniboxd_host: &std::path::Path,
+    mbx_host: &std::path::Path,
+    dind_debug: bool,
+) -> Result<DindProvisioning> {
+    let temp_dir = tempfile::TempDir::new().context("create DinD staging directory")?;
+    let root = temp_dir.path().to_path_buf();
+
+    let miniboxd_dest = root.join("miniboxd");
+    std::fs::copy(miniboxd_host, &miniboxd_dest)
+        .with_context(|| format!("copy miniboxd from {}", miniboxd_host.display()))?;
+    std::fs::set_permissions(&miniboxd_dest, std::fs::Permissions::from_mode(0o755))
+        .context("make staged miniboxd executable")?;
+
+    let wrapper_dest = root.join("mbx-dind-entrypoint");
+    std::fs::write(
+        &wrapper_dest,
+        dind_entrypoint_script_for_container(dind_debug),
+    )
+    .context("write DinD entrypoint wrapper")?;
+    std::fs::set_permissions(&wrapper_dest, std::fs::Permissions::from_mode(0o755))
+        .context("make DinD entrypoint wrapper executable")?;
+
+    let mbx_dest = root.join("mbx");
+    std::fs::copy(mbx_host, &mbx_dest)
+        .with_context(|| format!("copy mbx from {}", mbx_host.display()))?;
+    std::fs::set_permissions(&mbx_dest, std::fs::Permissions::from_mode(0o755))
+        .context("make staged mbx executable")?;
+
+    let data_dir = root.join("data");
+    let run_dir = root.join("run");
+    std::fs::create_dir_all(&data_dir).context("create nested daemon data directory")?;
+    std::fs::create_dir_all(&run_dir).context("create nested daemon run directory")?;
+
+    let mounts = vec![
+        BindMount {
+            host_path: root,
+            container_path: std::path::PathBuf::from(DIND_DIR_PATH),
+            read_only: true,
+        },
+        BindMount {
+            host_path: mbx_dest,
+            container_path: std::path::PathBuf::from(DIND_MBX_PATH),
+            read_only: true,
+        },
+        BindMount {
+            host_path: data_dir,
+            container_path: std::path::PathBuf::from(DIND_DATA_DIR_PATH),
+            read_only: false,
+        },
+        BindMount {
+            host_path: run_dir,
+            container_path: std::path::PathBuf::from(DIND_RUN_DIR_PATH),
+            read_only: false,
+        },
+        BindMount {
+            host_path: std::path::PathBuf::from(DIND_CGROUP_FS_PATH),
+            container_path: std::path::PathBuf::from(DIND_CGROUP_FS_PATH),
+            read_only: false,
+        },
+    ];
+
+    // NOTE: the outer image cache is deliberately *not* mounted into the
+    // nested daemon. Its images dir is `MINIBOX_DATA_DIR/images`, i.e. nested
+    // under the `/minibox-data` bind mount, and bind mounts are applied to the
+    // rootfs path-by-path before pivot_root — a second mount whose target lies
+    // inside an already-mounted bind resolves outside the rootfs and is
+    // rejected as a path-traversal escape. The nested daemon therefore pulls
+    // into its own (host-backed) data dir.
+
+    // Each run gets its own delegated cgroup slice, so parallel DinD
+    // containers never collide on the shared cgroup mount.
+    let cgroup_root = format!("{DIND_CGROUP_FS_PATH}/{}", dind_cgroup_slice_name());
+
+    Ok(DindProvisioning {
+        _temp_dir: temp_dir,
+        mounts,
+        env: vec![
+            format!("MINIBOX_DATA_DIR={DIND_DATA_DIR_PATH}"),
+            format!("MINIBOX_RUN_DIR={DIND_RUN_DIR_PATH}"),
+            format!("MINIBOX_SOCKET_PATH={DIND_SOCKET_PATH}"),
+            format!("MINIBOX_CGROUP_ROOT={cgroup_root}"),
+        ],
+    })
+}
+
+/// Unique nested cgroup slice name for this CLI process.
+fn dind_cgroup_slice_name() -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.subsec_nanos());
+    format!("minibox-dind-{}-{nanos}", std::process::id())
+}
+
+/// Resolve everything a `--dind` run needs before the request is sent.
+fn stage_dind(dind_debug: bool) -> Result<DindProvisioning> {
+    let miniboxd = find_miniboxd_binary()?;
+    validate_dind_binary(&miniboxd).context("DinD binary validation failed")?;
+    if !std::path::Path::new(DIND_CGROUP_FS_PATH).is_dir() {
+        anyhow::bail!(
+            "--dind requires a Linux host with a mounted cgroup v2 filesystem at {DIND_CGROUP_FS_PATH}"
+        );
+    }
+    let mbx = std::env::current_exe().context("resolve current mbx executable for DinD")?;
+    dind_provision(&miniboxd, &mbx, dind_debug)
 }
 
 /// Entrypoint wrapper script with health monitoring: starts a nested daemon,
 /// monitors its health, times out on socket poll, and fails fast on startup errors.
 /// Enhanced with pre-flight checks: validates miniboxd executable, /bin/sh presence, and logs progress.
 /// When `dind_debug` is true, captures miniboxd stderr for diagnostics.
-#[allow(dead_code)]
+///
+/// The nested daemon's data/run dirs, socket path, and cgroup root all come
+/// from environment variables staged by [`dind_provision`]; nothing here is
+/// derived from the outer daemon's own paths.
 fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
     let miniboxd_path = DIND_MINIBOXD_PATH;
-    let sock = DAEMON_SOCKET_PATH;
+    let sock = DIND_SOCKET_PATH;
     let debug_stderr_redirect = if dind_debug {
         " 2>/tmp/miniboxd-debug.log"
     } else {
@@ -179,7 +327,7 @@ fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
         "#!/bin/sh\n\
          set -e\n\
          \n\
-         echo \"[dind] version: host=$MINIBOX_CLIENT_VERSION, nested=$(miniboxd --version 2>/dev/null | cut -d' ' -f2 || echo unknown)\" >&2\n\
+         echo \"[dind] version: host=$MINIBOX_CLIENT_VERSION, nested=$({miniboxd_path} --version 2>/dev/null || echo unknown)\" >&2\n\
          echo \"[dind] pre-flight validation starting\" >&2\n\
          \n\
          # Validate /bin/sh exists (fail gracefully on scratch images)\n\
@@ -196,6 +344,16 @@ fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
              else\n\
                  echo \"ERROR: miniboxd at {miniboxd_path} is not executable\" >&2\n\
                  exit 125\n\
+             fi\n\
+         fi\n\
+         \n\
+         # Give the nested daemon its own delegated cgroup slice. The outer\n\
+         # cgroup filesystem is bind-mounted, so the slice name is unique per\n\
+         # run and parallel DinD containers do not collide.\n\
+         if [ -n \"$MINIBOX_CGROUP_ROOT\" ]; then\n\
+             mkdir -p \"$MINIBOX_CGROUP_ROOT\" 2>/dev/null || true\n\
+             if [ -f \"$MINIBOX_CGROUP_ROOT/cgroup.subtree_control\" ]; then\n\
+                 echo '+memory +cpu +pids' > \"$MINIBOX_CGROUP_ROOT/cgroup.subtree_control\" 2>/dev/null || true\n\
              fi\n\
          fi\n\
          \n\
@@ -234,6 +392,9 @@ fn dind_entrypoint_script_for_container(dind_debug: bool) -> String {
              exit 127\n\
          fi\n\
          \n\
+         # Point the container's own `mbx` at the nested daemon, then hand off\n\
+         # to the original command.\n\
+         export MINIBOX_SOCKET_PATH={sock}\n\
          echo \"[dind] socket ready at {sock}, executing original command\" >&2\n\
          exec \"$@\"\n"
     )
@@ -267,12 +428,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         dind,
         dind_debug,
     } = opts;
-    let privileged = privileged || dind;
-
-    // Validate miniboxd binary compatibility if DinD is requested
-    if dind {
-        validate_dind_binary_compatibility().context("DinD binary validation failed")?;
-    }
+    let privileged = effective_privileged(privileged, dind);
 
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
@@ -296,11 +452,21 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
 
     let tty = tty && std::io::stdout().is_terminal();
 
-    // Add version environment variable for nested daemon version negotiation
+    // DinD: stage the nested daemon binary, wrapper, and nested CLI on the
+    // host, then mount them in. The staging directory must outlive the
+    // (streaming) run, so it is bound to this scope rather than dropped here.
     let mut env = env;
-    if dind {
+    let mut entrypoint = entrypoint;
+    let _dind_provisioning = if dind {
+        let provisioning = stage_dind(dind_debug)?;
+        mounts.extend(provisioning.mounts.iter().cloned());
+        env.extend(provisioning.env.iter().cloned());
         env.push(format!("MINIBOX_CLIENT_VERSION={}", get_cli_version()));
-    }
+        entrypoint = Some(DIND_WRAPPER_PATH.to_string());
+        Some(provisioning)
+    } else {
+        None
+    };
 
     let request = DaemonRequest::Run {
         image,
@@ -476,33 +642,171 @@ mod tests {
         let script = dind_entrypoint_script_for_container(false);
         assert!(script.starts_with("#!/bin/sh"));
         assert!(script.contains("miniboxd"));
-        assert!(script.contains(DAEMON_SOCKET_PATH));
+        assert!(script.contains(DIND_SOCKET_PATH));
         assert!(script.contains(DIND_MINIBOXD_PATH));
+        assert!(
+            script.contains("MINIBOX_CGROUP_ROOT"),
+            "wrapper must initialise the nested cgroup slice"
+        );
+        assert!(
+            script.contains(&format!("export MINIBOX_SOCKET_PATH={DIND_SOCKET_PATH}")),
+            "nested mbx must resolve the nested socket"
+        );
         assert!(
             script.trim_end().ends_with("exec \"$@\""),
             "entrypoint must hand off to the original command: {script}"
         );
     }
 
+    /// Build a [`DindProvisioning`] from dummy host files so the mount and env
+    /// layout can be asserted without a real Linux miniboxd binary.
+    fn test_dind_provisioning() -> DindProvisioning {
+        let src = tempfile::tempdir().expect("temp source dir");
+        let miniboxd = src.path().join("miniboxd");
+        let mbx = src.path().join("mbx");
+        std::fs::write(&miniboxd, b"#!/bin/sh\nexit 0\n").expect("write dummy miniboxd");
+        std::fs::write(&mbx, b"#!/bin/sh\nexit 0\n").expect("write dummy mbx");
+        dind_provision(&miniboxd, &mbx, false).expect("stage dind provisioning")
+    }
+
+    fn mount_for<'a>(provisioning: &'a DindProvisioning, container_path: &str) -> &'a BindMount {
+        provisioning
+            .mounts
+            .iter()
+            .find(|mount| mount.container_path.as_path() == std::path::Path::new(container_path))
+            .unwrap_or_else(|| panic!("missing mount for {container_path}"))
+    }
+
+    fn env_value<'a>(provisioning: &'a DindProvisioning, key: &str) -> Option<&'a str> {
+        provisioning
+            .env
+            .iter()
+            .find_map(|entry| entry.strip_prefix(&format!("{key}=")))
+    }
+
     #[test]
     fn test_dind_injects_wrapper() {
-        assert_eq!(dind_entrypoint_override(true), Some(DIND_WRAPPER_PATH));
-    }
-
-    #[test]
-    fn test_dind_false_does_not_override_entrypoint() {
-        assert_eq!(dind_entrypoint_override(false), None);
-    }
-
-    #[test]
-    fn test_dind_image_cache_path_is_set() {
-        // Must match where the nested miniboxd resolves its own images dir
-        // (resolve_data_dir().join("images")), or the shared cache mounts to
-        // an empty location the nested daemon never looks at.
-        assert_eq!(
-            DIND_IMAGE_CACHE_CONTAINER_PATH, "/var/lib/minibox/images",
-            "dind image cache should mount at /var/lib/minibox/images"
+        let provisioning = test_dind_provisioning();
+        let helpers = mount_for(&provisioning, DIND_DIR_PATH);
+        let wrapper = helpers.host_path.join("mbx-dind-entrypoint");
+        assert!(
+            helpers.read_only,
+            "helper binaries are read-only in the container"
         );
+        assert!(wrapper.is_file(), "wrapper script must be staged");
+        assert_eq!(
+            DIND_WRAPPER_PATH,
+            format!("{DIND_DIR_PATH}/mbx-dind-entrypoint"),
+            "wrapper entrypoint must live in the mounted helper dir"
+        );
+        let mode = std::fs::metadata(&wrapper)
+            .expect("stat wrapper")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o111, 0o111, "wrapper must be executable");
+    }
+
+    #[test]
+    fn test_dind_stages_nested_daemon_and_cli() {
+        let provisioning = test_dind_provisioning();
+        let miniboxd = mount_for(&provisioning, DIND_DIR_PATH)
+            .host_path
+            .join("miniboxd");
+        assert!(
+            miniboxd.is_file(),
+            "miniboxd must be staged next to the wrapper"
+        );
+        let mode = std::fs::metadata(&miniboxd)
+            .expect("stat miniboxd")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o111, 0o111, "miniboxd must be executable");
+
+        let mbx = mount_for(&provisioning, DIND_MBX_PATH);
+        assert!(mbx.host_path.is_file(), "nested mbx CLI must be staged");
+        assert!(mbx.read_only);
+    }
+
+    #[test]
+    fn test_dind_mounts_socket() {
+        let provisioning = test_dind_provisioning();
+        assert_eq!(
+            env_value(&provisioning, "MINIBOX_SOCKET_PATH"),
+            Some(DIND_SOCKET_PATH)
+        );
+        let run_dir = mount_for(&provisioning, DIND_RUN_DIR_PATH);
+        assert!(
+            !run_dir.read_only,
+            "nested daemon must be able to create its socket"
+        );
+        assert!(
+            DIND_SOCKET_PATH.starts_with(&format!("{DIND_RUN_DIR_PATH}/")),
+            "nested socket must live in the mounted run dir"
+        );
+    }
+
+    #[test]
+    fn test_dind_state_dirs_are_host_backed() {
+        let provisioning = test_dind_provisioning();
+        for container_path in [DIND_DATA_DIR_PATH, DIND_RUN_DIR_PATH] {
+            let mount = mount_for(&provisioning, container_path);
+            assert!(
+                mount.host_path.is_dir(),
+                "{container_path} must be host-backed"
+            );
+            assert!(
+                !mount.read_only,
+                "{container_path} must be writable by the nested daemon"
+            );
+        }
+        assert_eq!(
+            env_value(&provisioning, "MINIBOX_DATA_DIR"),
+            Some(DIND_DATA_DIR_PATH)
+        );
+        assert_eq!(
+            env_value(&provisioning, "MINIBOX_RUN_DIR"),
+            Some(DIND_RUN_DIR_PATH)
+        );
+    }
+
+    #[test]
+    fn test_dind_mounts_cgroup_fs() {
+        let provisioning = test_dind_provisioning();
+        let cgroup = mount_for(&provisioning, DIND_CGROUP_FS_PATH);
+        assert!(
+            !cgroup.read_only,
+            "nested daemon must be able to create and enable its own slice"
+        );
+        let root = env_value(&provisioning, "MINIBOX_CGROUP_ROOT").expect("cgroup root env");
+        assert!(
+            root.starts_with(&format!("{DIND_CGROUP_FS_PATH}/minibox-dind-")),
+            "nested slice must live under the mounted cgroup fs: {root}"
+        );
+        assert!(dind_cgroup_slice_name().starts_with("minibox-dind-"));
+    }
+
+    #[test]
+    fn test_dind_state_dirs_not_nested_under_other_mounts() {
+        // Bind mounts are applied one path at a time against the rootfs before
+        // pivot_root. A target inside an already-applied bind resolves outside
+        // the rootfs and is rejected as a traversal escape, so no provisioned
+        // container path may be a descendant of another.
+        let provisioning = test_dind_provisioning();
+        let container_paths: Vec<&std::path::Path> = provisioning
+            .mounts
+            .iter()
+            .map(|mount| mount.container_path.as_path())
+            .collect();
+        for (i, outer) in container_paths.iter().enumerate() {
+            for (j, inner) in container_paths.iter().enumerate() {
+                assert!(
+                    i == j || !inner.starts_with(outer),
+                    "mount target {} nests inside {}; nested bind mounts are rejected",
+                    inner.display(),
+                    outer.display()
+                );
+            }
+        }
     }
 
     #[test]

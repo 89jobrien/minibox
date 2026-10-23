@@ -302,19 +302,26 @@
 
 ## In progress
 
-- **DinD (Docker-in-Docker) for `mbx run --dind`** — t1-t6 of a t1-t10 TDD
-  chain done and committed on `develop` (`9961d609`, `54f4bbf7`, `d0376af6`,
-  `c3bc0920`, `eb7da361`, plus an uncommitted t6): CLI flag, threaded into
-  `RunOpts`, auto-`--privileged`, auto bind-mount of the host daemon socket,
-  an entrypoint wrapper script that boots a nested `miniboxd` before
-  `exec`ing the original command, and overriding the container entrypoint to
-  that wrapper. t6 is blocked: `minibox-cli`'s own tests/clippy pass, but the
-  global pre-commit hook's workspace-wide `cargo test --workspace` gate fails
-  with no failing-test name surfaced — not yet root-caused as a real
-  regression vs. a flake vs. concurrent-writer fallout. t7-t10 (write
-  wrapper+miniboxd binary to a temp dir and mount them in, shared image cache
-  mount, ignored nested-container integration test, README/DEVELOPMENT.md
-  docs) not started.
+- **DinD (Docker-in-Docker) for `mbx run --dind`** — Tier 1/2 stabilization
+  landed, but commit `52abb8ee` (the `MINIBOX_ALLOW_DIND` policy gate)
+  deleted the CLI provisioning that actually made `--dind` work; later
+  commits re-added the wrapper script and path constants as
+  `#[allow(dead_code)]` test-only code, so `--dind` only forced `privileged`
+  and ran a binary-compat check. Restored in this session:
+  `crates/mbx/src/commands/run.rs` now stages `miniboxd` + `mbx` + wrapper
+  into a `TempDir` held for the run and bind-mounts the helper dir
+  (read-only), a host-backed inner data dir, a host-backed inner run dir, and
+  `/sys/fs/cgroup`; sets `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`,
+  `MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock`, a per-run
+  `MINIBOX_CGROUP_ROOT`; and overrides the entrypoint with the wrapper, which
+  enables the delegated cgroup slice and exports the nested socket before
+  `exec "$@"`. The outer daemon socket is NOT shared (Tier 3 isolation), and
+  the outer image cache is NOT mounted: the nested images dir
+  (`MINIBOX_DATA_DIR/images`) would nest inside the `/minibox-data` bind, and
+  the pre-pivot_root mount applier rejects a target that resolves outside the
+  rootfs. The nested daemon pulls into its own host-backed data dir. Covered
+  by unit tests in `run.rs` and the ignored Linux e2e test
+  `crates/mbx/tests/cli_dind.rs`.
 - macOS exec/logs via VM adapters — container run + stdout streaming works
   (smolvm/krun). `exec_runtime: None` on both means exec-into-running is
   unsupported. No historical log retrieval.

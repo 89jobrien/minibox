@@ -117,6 +117,7 @@ fn bench_handler_run_dispatch(c: &mut Criterion) {
                     name: None,
                     platform: None,
                     cgroup_parent: None,
+                    dind: false,
                     priority: None,
                     policy_override: None,
                 };
