@@ -105,6 +105,34 @@ test-vz-isolation:
     codesign --force --sign - --entitlements entitlements/vz-test.entitlements "$BIN"
     "$BIN"
 
+# Sign local miniboxd builds with the Virtualization.framework entitlement.
+# The `vz` adapter cannot start a VM without it: macOS rejects the configuration
+# (VZErrorDomain code=2, invalidVirtualMachineConfiguration) with a message naming
+# the missing com.apple.security.virtualization entitlement. Ad-hoc signing is
+# sufficient for local use (verified on macOS 26.4). Rebuilds invalidate the
+# signature, so run this after the last build and restart the daemon afterwards.
+# See docs/designs/2026-10-22-vz-efi-boot-design.md.
+sign-vz:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target}"
+    SIGNED=0
+    for PROFILE in debug release; do
+        BIN="$TARGET_DIR/$PROFILE/miniboxd"
+        if [ ! -x "$BIN" ]; then
+            continue
+        fi
+        codesign --force --sign - --entitlements entitlements/vz-daemon.entitlements "$BIN"
+        codesign --verify --strict "$BIN"
+        echo "sign-vz: signed $BIN"
+        SIGNED=1
+    done
+    if [ "$SIGNED" -eq 0 ]; then
+        echo "error: no miniboxd binary under $TARGET_DIR/{debug,release}" >&2
+        echo "       build one first: cargo build -p miniboxd --features vz" >&2
+        exit 1
+    fi
+
 # CLI subprocess integration tests (builds binary first, any platform)
 test-cli-subprocess:
     crux run crux/dev/test_cli_subprocess.crux

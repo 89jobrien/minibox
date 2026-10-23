@@ -119,9 +119,12 @@ The gate resolves to **B fails, D boots**: proceed with Phase 1. Three findings 
 of this design:
 
 1. The entitlement is mandatory and is checked up front: without it, `validateWithError` fails
-   with an explicit `code=2` message, not the generic `code=1`. So `code=1` from the shipped
-   adapter was never an entitlement problem, and the 2026-08-15 conclusion that the fault lies
-   above signing is confirmed rather than overturned.
+   with `code=2` and a message naming the entitlement, never reaching `start`. So `code=1` from
+   the shipped adapter was never an entitlement problem, and the 2026-08-15 conclusion that the
+   fault lies above signing is confirmed rather than overturned. Note that `code=2` is
+   `invalidVirtualMachineConfiguration` and covers any rejected configuration — the shipped
+   adapter reports it for an invalid boot loader too — so the accompanying message, not the
+   code, identifies the entitlement as the cause.
 2. `VZLinuxBootLoader` is what fails, deterministically, on macOS 26.4 / arm64. The same kernel
    boots through `VZEFIBootLoader` with the same memory, CPU count, and storage.
 3. Ad-hoc entitlements are honoured on macOS 26.4. Developer ID signing is not required to use
@@ -135,9 +138,10 @@ becomes a Phase 1 acceptance criterion rather than a Phase 0 one.
 ### Follow-ups this raises
 
 - T1 (daemon entitlement + `just sign-vz` + `cargo xtask doctor` check) is still required: cell
-  A/C show an unsigned daemon cannot even validate a configuration. The preflight check should
-  quote the `code=2` message, and the runtime error hint should distinguish `code=2`
-  (signing) from `code=1` (start failure).
+  A/C show an unsigned daemon cannot even validate a configuration. **Done** — see the T1 row.
+  Because `code=2` is generic (`invalidVirtualMachineConfiguration`, also raised for an invalid
+  boot loader), remediation text must quote the entitlement message rather than keying off the
+  code alone; T4's `code=1` trailer keeps that rule.
 - The ad-hoc-vs-Developer-ID scope question is answered for local use (ad-hoc works). Release
   signing is unchanged and out of scope here.
 
@@ -459,15 +463,15 @@ Virtualization.framework is signed with `com.apple.security.virtualization`.
 
 ## Implementation outline (ordered, one commit each)
 
-| Task | Scope                                                                                 | Files                                                                      |
-| ---- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| T0   | Phase 0 matrix experiment + record results; update this doc's status. **Done**        | `crates/macbox/examples/vz_boot_probe.rs` (new)                            |
-| T1   | Signing plumbing: daemon entitlement file, `just sign-vz`, doctor check               | `entitlements/`, `Justfile`, `xtask/src/preflight.rs`                      |
-| T2   | `cargo xtask build-vm-image`: ESP builder, grub rendering, sha256 manifest            | `xtask/src/vm_image.rs` (new), `xtask/src/main.rs`                         |
-| T3   | EFI boot loader branch, platform config, storage + entropy devices, cargo features    | `crates/macbox/Cargo.toml`, `crates/macbox/src/vz/vm.rs`, new `vz/boot.rs` |
-| T4   | Asset preflight, boot-mode resolution, code=1 remediation text                        | `crates/macbox/src/vz/vm.rs`, `crates/macbox/src/lib.rs`                   |
-| T5   | Tests: ESP builder units, boot-mode unit tests, real-image isolation + smoke          | `xtask/src/vm_image.rs`, `crates/macbox/src/vz/`, `crates/macbox/tests/`   |
-| T6   | Docs and maturity: feature matrix, gotchas triage table, `xtask/context.toml` profile | `docs/core/`, `xtask/context.toml`, `DEVELOPMENT.md`                       |
+| Task | Scope                                                                                                      | Files                                                                                                                                                  |
+| ---- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| T0   | Phase 0 matrix experiment + record results; update this doc's status. **Done**                             | `crates/macbox/examples/vz_boot_probe.rs` (new)                                                                                                        |
+| T1   | Signing plumbing: daemon entitlement file, `just sign-vz`, doctor check, startup entitlement log. **Done** | `entitlements/vz-daemon.entitlements` (new), `Justfile`, `xtask/src/preflight.rs`, `crates/macbox/src/vz/signing.rs` (new), `crates/macbox/src/lib.rs` |
+| T2   | `cargo xtask build-vm-image`: ESP builder, grub rendering, sha256 manifest                                 | `xtask/src/vm_image.rs` (new), `xtask/src/main.rs`                                                                                                     |
+| T3   | EFI boot loader branch, platform config, storage + entropy devices, cargo features                         | `crates/macbox/Cargo.toml`, `crates/macbox/src/vz/vm.rs`, new `vz/boot.rs`                                                                             |
+| T4   | Asset preflight, boot-mode resolution, code=1 remediation text                                             | `crates/macbox/src/vz/vm.rs`, `crates/macbox/src/lib.rs`                                                                                               |
+| T5   | Tests: ESP builder units, boot-mode unit tests, real-image isolation + smoke                               | `xtask/src/vm_image.rs`, `crates/macbox/src/vz/`, `crates/macbox/tests/`                                                                               |
+| T6   | Docs and maturity: feature matrix, gotchas triage table, `xtask/context.toml` profile                      | `docs/core/`, `xtask/context.toml`, `DEVELOPMENT.md`                                                                                                   |
 
 T1 is required regardless: cells A and C show an unsigned process cannot even validate a
 configuration, so the daemon must be signed before any `vz` boot can be attempted.

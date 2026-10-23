@@ -1,5 +1,7 @@
 //! Tool, environment, and host-capability checks for `cargo xtask doctor`.
 
+use std::path::Path;
+
 /// Domain port: probe whether a named tool is functional.
 ///
 /// Implementations call the real process; test doubles return canned results.
@@ -205,6 +207,93 @@ fn selected_adapter_report(
 }
 
 // ---------------------------------------------------------------------------
+// macOS: Virtualization.framework signing (`vz` adapter)
+// ---------------------------------------------------------------------------
+
+/// Entitlement key Virtualization.framework requires to create a virtual machine.
+#[cfg(target_os = "macos")]
+const VZ_ENTITLEMENT: &str = "com.apple.security.virtualization";
+
+/// Whether `codesign -d --entitlements :-` output grants the virtualization entitlement.
+///
+/// The value is read from the window between the key and the next key so a `<true/>`
+/// belonging to a later entitlement cannot be mistaken for this one.
+#[cfg(target_os = "macos")]
+fn codesign_output_grants_virtualization(stdout: &str) -> bool {
+    let Some(idx) = stdout.find(VZ_ENTITLEMENT) else {
+        return false;
+    };
+    let rest = &stdout[idx + VZ_ENTITLEMENT.len()..];
+    let window = rest.split("<key>").next().unwrap_or(rest);
+    window.contains("<true/>")
+}
+
+/// Report whether local `miniboxd` builds can start a VM under the `vz` adapter.
+///
+/// macOS validates the entitlement before any configuration is accepted and rejects an
+/// unsigned process with `VZErrorDomain code=2` (`invalidVirtualMachineConfiguration`),
+/// which no daemon-level setting can work around. Ad-hoc signing is enough (verified on
+/// macOS 26.4), so the remedy is always `just sign-vz` plus a restart. When `vz` is not the
+/// selected adapter the finding is advisory: a missing entitlement is not a failure for
+/// users running smolvm/krun.
+#[cfg(target_os = "macos")]
+fn check_vz_signing(failures: &mut Vec<String>, required: bool) {
+    let target_dir = std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
+    let mut checked = 0usize;
+
+    for profile in ["debug", "release"] {
+        let bin = Path::new(&target_dir).join(profile).join("miniboxd");
+        if !bin.is_file() {
+            continue;
+        }
+        checked += 1;
+        // A binary with no signature at all makes `codesign -d` exit non-zero, so an
+        // unreadable signature is reported as "not entitled" rather than a warning: it is
+        // the same runtime outcome, and `just sign-vz` fixes both cases.
+        let verdict: Result<(), String> = match std::process::Command::new("codesign")
+            .args(["-d", "--entitlements", ":-"])
+            .arg(&bin)
+            .output()
+        {
+            Ok(out) if out.status.success() => {
+                let plist = String::from_utf8_lossy(&out.stdout);
+                if codesign_output_grants_virtualization(&plist) {
+                    Ok(())
+                } else {
+                    Err(format!("is not signed with {VZ_ENTITLEMENT}"))
+                }
+            }
+            Ok(out) => {
+                let reason = String::from_utf8_lossy(&out.stderr);
+                Err(format!(
+                    "has no readable code signature ({})",
+                    reason.trim()
+                ))
+            }
+            Err(e) => Err(format!("could not be inspected: {e}")),
+        };
+
+        match verdict {
+            Ok(()) => println!("[ok]   {} carries {VZ_ENTITLEMENT}", bin.display()),
+            Err(reason) if required => {
+                println!("[fail] {} {reason} — run `just sign-vz`", bin.display());
+                failures.push(format!("{} {reason}", bin.display()));
+            }
+            Err(reason) => println!(
+                "[info] {} {reason} — `vz` would fail; run `just sign-vz` when needed",
+                bin.display()
+            ),
+        }
+    }
+
+    if checked == 0 {
+        println!(
+            "[info] no local miniboxd binary to check — build it, then run `just sign-vz` for `vz`"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Doctor: full preflight checks including env vars and system capabilities
 // ---------------------------------------------------------------------------
 
@@ -290,6 +379,8 @@ pub fn doctor<P: ToolProbe>(probe: &P) -> anyhow::Result<()> {
                 failures.push(line.trim_start_matches("[fail] ").to_string());
             }
         }
+        #[cfg(target_os = "macos")]
+        check_vz_signing(&mut failures, report.adapter == "vz");
     }
 
     // --- git working-tree state (info, mirrors preflight.nu) ---
@@ -637,5 +728,42 @@ mod tests {
             probe.probe_xtask().is_ok(),
             "cargo xtask must be runnable for this workspace"
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    mod vz_signing {
+        use super::super::codesign_output_grants_virtualization;
+
+        const ENTITLED: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>com.apple.security.virtualization</key><true/></dict></plist>"#;
+
+        #[test]
+        fn grants_when_key_is_true() {
+            assert!(codesign_output_grants_virtualization(ENTITLED));
+        }
+
+        #[test]
+        fn denies_when_key_is_false() {
+            let plist = r#"<plist version="1.0"><dict><key>com.apple.security.virtualization</key><false/></dict></plist>"#;
+            assert!(!codesign_output_grants_virtualization(plist));
+        }
+
+        #[test]
+        fn denies_when_key_absent() {
+            let plist = r#"<plist version="1.0"><dict><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>"#;
+            assert!(!codesign_output_grants_virtualization(plist));
+        }
+
+        #[test]
+        fn denies_empty_codesign_output() {
+            assert!(!codesign_output_grants_virtualization(""));
+        }
+
+        #[test]
+        fn ignores_true_belonging_to_a_later_key() {
+            let plist = r#"<plist version="1.0"><dict><key>com.apple.security.virtualization</key><false/><key>com.apple.security.cs.allow-jit</key><true/></dict></plist>"#;
+            assert!(!codesign_output_grants_virtualization(plist));
+        }
     }
 }

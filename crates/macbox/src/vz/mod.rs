@@ -4,6 +4,7 @@ pub mod adapter;
 pub mod agent_init;
 pub mod bindings;
 pub mod proxy;
+pub mod signing;
 pub mod vm;
 pub mod vsock;
 
