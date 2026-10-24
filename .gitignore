@@ -190,3 +190,10 @@ dupehound-card.*
 # Local project-level daemon config. May enable privileged mode and bind
 # mounts, so it stays out of version control.
 minibox.toml
+
+# mcpmem MCP server data (writes relative to cwd, not a fixed data dir)
+memory.mcpmem
+memory.mcpmem-shm
+memory.mcpmem-wal
+memory.mcpmem.code/
+memory.mcpmem.workspaces.sqlite
