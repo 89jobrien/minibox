@@ -322,18 +322,36 @@
   rootfs. The nested daemon pulls into its own host-backed data dir. Covered
   by unit tests in `run.rs` and the ignored Linux e2e test
   `crates/mbx/tests/cli_dind.rs`.
+
+  **Shipped 2026-10-23 as `4d6c4504`** (5 files, +402/-84) and pushed to
+  `develop`; `cargo xtask verify`, `cargo nextest run -p minibox-cli` (205
+  tests), and the conformance suite's 8 dind scenarios all pass. The push also
+  exposed and fixed two unrelated CI defects (`f8f67c51`: missing `tool:
+  cargo-nextest` input in `conformance.yml`, and a macOS-only `Path` import in
+  `xtask/src/preflight.rs`). `CI` and `Conformance` are green on `develop`.
+  **Still unproven:** `cli_dind.rs` has not been executed on a Linux/cgroup-v2
+  host, and the daemon side still ignores the `dind` flag
+  (`crates/minibox/src/daemon/handler/run/preparation.rs` matches `dind: _`), so
+  all provisioning is client-side.
 - macOS exec/logs via VM adapters — container run + stdout streaming works
   (smolvm/krun). `exec_runtime: None` on both means exec-into-running is
   unsupported. No historical log retrieval.
-- Promote develop -> staging (pending CI green on develop)
+- Promote develop -> staging (CI on `develop` is now green as of `f8f67c51`, so this
+  is unblocked; not yet run)
 
 ## Not started / backlog
 
 ### Partially done
 
 - **Container-in-container** (DinD):
-    - UX — works today via privileged mode + bind mounts (full e2e test in system_tests.rs). Missing: turnkey `--dind`
-      flag, auto-provisioned inner daemon, socket forwarding, shared image cache
+    - UX — turnkey `--dind` flag, auto-provisioned inner daemon, wrapper entrypoint,
+      host-backed data/run dirs and `/sys/fs/cgroup` all shipped in `4d6c4504`
+    - Remaining: Linux e2e verification on a cgroup-v2 host (`cli_dind.rs` is
+      `#[ignore]`), daemon-side ownership of provisioning, and the Tier 3 items
+      (persistent nested dir, rate limiting, audit trail) tracked in
+      `.ctx/godmode/plans/2026-10-22-dind-tier3-techdebt.md`
+    - Deliberately not implemented: outer socket forwarding and a shared image cache
+      (both would break isolation / require overlay-on-overlay)
 - **Capability dropping**:
     - Grant path implemented (`apply_full_capabilities` with curated whitelist minus SYS*MODULE/SYS_BOOT/MAC*\*)
     - Drop path for unprivileged containers missing (no default allowlist like Docker's ~14 caps)
