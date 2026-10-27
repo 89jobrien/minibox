@@ -15,6 +15,7 @@ use crate::daemon::state::{ContainerState, DaemonState, RunCreationParams};
 
 use super::HandlerDependencies;
 
+mod dind;
 mod entrypoint;
 mod model;
 mod preparation;

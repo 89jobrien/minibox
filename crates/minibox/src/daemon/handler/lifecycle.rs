@@ -260,6 +260,19 @@ async fn remove_inner(
         warn!("cleanup cgroup for {id}: {e}");
     }
 
+    // Remove the DinD staging directory, if one was provisioned for this
+    // container's run (see `dind::stage_dind_resources`).
+    if let Some(staging_dir) = &record.temp_dir_path
+        && let Err(e) = std::fs::remove_dir_all(staging_dir)
+    {
+        warn!(
+            container_id = %id,
+            staging_dir = %staging_dir.display(),
+            error = %e,
+            "remove: dind staging dir cleanup failed"
+        );
+    }
+
     // ── Network cleanup ────────────────────────────────────────────────
     NetworkLifecycle::new(deps.lifecycle.network_provider.clone())
         .cleanup(id)

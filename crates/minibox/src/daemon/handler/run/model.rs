@@ -179,6 +179,28 @@ pub(super) fn build_execution_manifest(
     }
 }
 
+/// Merge staged `DinD` resources into a run's spawn config and record.
+///
+/// Rewrites `spawn_config.command`/`args` so the staged wrapper script runs
+/// first (it `exec`s the original command once the nested daemon is up),
+/// merges the staged mounts/env, and records the staging directory on the
+/// `ContainerRecord` so `remove_inner` can clean it up on `rm`.
+pub(super) fn apply_dind_provisioning(
+    spawn_config: &mut ContainerSpawnConfig,
+    record: &mut ContainerRecord,
+    provisioning: &super::dind::DindProvisioning,
+) {
+    let mut original = vec![spawn_config.command.clone()];
+    original.append(&mut spawn_config.args);
+    spawn_config.command.clone_from(&provisioning.entrypoint);
+    spawn_config.args = original;
+    spawn_config
+        .mounts
+        .extend(provisioning.mounts.iter().cloned());
+    spawn_config.env.extend(provisioning.env.iter().cloned());
+    record.temp_dir_path = Some(provisioning.staging_dir.clone());
+}
+
 /// Build a `ContainerRecord` in `Created` state for a new container.
 #[cfg(unix)]
 pub(super) fn build_container_record(p: ContainerRecordBuildParams<'_>) -> ContainerRecord {
@@ -256,10 +278,80 @@ pub(super) fn build_container_record(p: ContainerRecordBuildParams<'_>) -> Conta
 
 #[cfg(all(test, unix))]
 mod tests {
+    use super::super::dind::DindProvisioning;
     use super::*;
-    use minibox_core::domain::{BackendRootfsMetadata, RootfsLayout};
+    use minibox_core::domain::{BackendRootfsMetadata, ContainerHooks, RootfsLayout, UidRangeMode};
     use minibox_core::path::InternalPath;
     use std::collections::HashMap;
+    use std::path::Path;
+
+    fn minimal_spawn_config() -> ContainerSpawnConfig {
+        ContainerSpawnConfig {
+            rootfs: PathBuf::from("/var/lib/minibox/containers/abc/merged").into(),
+            command: "/bin/sh".to_string(),
+            args: vec!["-c".to_string(), "echo hi".to_string()],
+            env: vec!["PATH=/usr/bin".to_string()],
+            cgroup_path: PathBuf::from("/sys/fs/cgroup/minibox/abc").into(),
+            hostname: "minibox-abc12345".to_string(),
+            capture_output: false,
+            hooks: ContainerHooks::default(),
+            skip_network_namespace: false,
+            mounts: vec![],
+            privileged: false,
+            uid_range_mode: UidRangeMode::Exclusive,
+            image_ref: Some("alpine:latest".to_string()),
+        }
+    }
+
+    #[test]
+    fn apply_dind_provisioning_rewrites_command_and_merges_mounts_env() {
+        let mut spawn_config = minimal_spawn_config();
+        let mut record = record_from(&layout_without_metadata());
+        let provisioning = DindProvisioning {
+            staging_dir: PathBuf::from("/var/lib/minibox/dind-abc123"),
+            mounts: vec![BindMount {
+                host_path: PathBuf::from("/var/lib/minibox/dind-abc123/mbx"),
+                container_path: PathBuf::from("/usr/local/bin/mbx"),
+                read_only: true,
+            }],
+            env: vec!["MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock".to_string()],
+            entrypoint: "/usr/local/lib/mbx-dind/mbx-dind-entrypoint".to_string(),
+        };
+
+        apply_dind_provisioning(&mut spawn_config, &mut record, &provisioning);
+
+        assert_eq!(
+            spawn_config.command, "/usr/local/lib/mbx-dind/mbx-dind-entrypoint",
+            "command must be rewritten to the staged wrapper"
+        );
+        assert_eq!(
+            spawn_config.args,
+            vec![
+                "/bin/sh".to_string(),
+                "-c".to_string(),
+                "echo hi".to_string()
+            ],
+            "original command/args must become the wrapper's arguments"
+        );
+        assert!(
+            spawn_config
+                .mounts
+                .iter()
+                .any(|m| m.container_path.as_path() == Path::new("/usr/local/bin/mbx")),
+            "dind mounts must be merged into the spawn config"
+        );
+        assert!(
+            spawn_config
+                .env
+                .contains(&"MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock".to_string()),
+            "dind env must be merged into the spawn config"
+        );
+        assert_eq!(
+            record.temp_dir_path,
+            Some(PathBuf::from("/var/lib/minibox/dind-abc123")),
+            "the staging dir must be recorded for cleanup on remove"
+        );
+    }
 
     fn layout_with_upper(upper: &str) -> RootfsLayout {
         RootfsLayout {
