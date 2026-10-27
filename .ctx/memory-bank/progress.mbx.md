@@ -302,26 +302,46 @@
 
 ## In progress
 
-- **DinD (Docker-in-Docker) for `mbx run --dind`** — Tier 1/2 stabilization
-  landed, but commit `52abb8ee` (the `MINIBOX_ALLOW_DIND` policy gate)
-  deleted the CLI provisioning that actually made `--dind` work; later
-  commits re-added the wrapper script and path constants as
-  `#[allow(dead_code)]` test-only code, so `--dind` only forced `privileged`
-  and ran a binary-compat check. Restored in this session:
-  `crates/mbx/src/commands/run.rs` now stages `miniboxd` + `mbx` + wrapper
-  into a `TempDir` held for the run and bind-mounts the helper dir
-  (read-only), a host-backed inner data dir, a host-backed inner run dir, and
-  `/sys/fs/cgroup`; sets `MINIBOX_DATA_DIR`, `MINIBOX_RUN_DIR`,
-  `MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock`, a per-run
-  `MINIBOX_CGROUP_ROOT`; and overrides the entrypoint with the wrapper, which
-  enables the delegated cgroup slice and exports the nested socket before
-  `exec "$@"`. The outer daemon socket is NOT shared (Tier 3 isolation), and
-  the outer image cache is NOT mounted: the nested images dir
-  (`MINIBOX_DATA_DIR/images`) would nest inside the `/minibox-data` bind, and
-  the pre-pivot_root mount applier rejects a target that resolves outside the
-  rootfs. The nested daemon pulls into its own host-backed data dir. Covered
-  by unit tests in `run.rs` and the ignored Linux e2e test
-  `crates/mbx/tests/cli_dind.rs`.
+- **DinD (Docker-in-Docker) for `mbx run --dind` — daemon-owned provisioning**
+  (2026-10-27, branch `dind-daemon-ownership`, worktree
+  `/Users/joe/dev/minibox-dind-daemon-ownership`) — provisioning moved from
+  the `mbx` CLI client into the daemon, per
+  `.ctx/godmode/plans/2026-10-27-dind-daemon-ownership.md` (t3-t6):
+  - **t3** (`bdf27e7c`) — daemon's `prepare_run` now stages the nested
+    daemon/CLI/wrapper and computes mounts/env itself
+    (`crates/minibox/src/daemon/handler/run/dind.rs`,
+    `model.rs::apply_dind_provisioning`, wired in `preparation.rs`), instead
+    of the client doing it before sending `DaemonRequest::Run`.
+  - **t4** (`bd16945d`) — `remove_inner` (`lifecycle.rs`) now removes the
+    DinD staging dir via the new `ContainerRecord.temp_dir_path` field when a
+    container is removed, closing the "detached run, client exits before
+    container stops" leak that `.ctx/godmode/plans/2026-10-22-dind-tier3-techdebt.md`
+    Item 2 was written against. TDD: new test
+    `test_remove_inner_cleans_up_dind_staging_dir` in
+    `daemon_handler_lifecycle_tests.rs`, confirmed red then green (956 tests
+    pass).
+  - **t5** (`d65580cf`) — deleted all client-side staging code from
+    `crates/mbx/src/commands/run.rs` (the `DIND_*_PATH` constants,
+    `DindProvisioning`, `find_miniboxd_binary`, `validate_dind_binary`,
+    `dind_provision`/`stage_dind`, `dind_entrypoint_script_for_container`,
+    and their unit tests). Kept `effective_privileged` and `get_cli_version`
+    — the client still computes `privileged` locally and still passes
+    `dind`/`dind_debug`/`client_version` through the protocol request; the
+    daemon does not itself force `privileged` for `dind` requests.
+  - **t6** (`b03daacf`) — fixed `crates/mbx/tests/cli_dind.rs`'s stale
+    "`mbx` looks up `miniboxd`" doc comment and moved the test's `PATH`
+    override from the `mbx` client's `Command` to the `miniboxd` daemon's
+    `Command`, since it's now the daemon process that calls
+    `find_miniboxd_binary`. Could not compile-verify on this host — the file
+    is gated `#![cfg(all(unix, feature = "subprocess-tests"))]` and `taskit
+    check lint`/`check fmt` have no `--features` flag; only `fmt` coverage
+    confirmed clean.
+  - Still unproven: `cli_dind.rs`'s `dind_run_starts_nested_daemon` remains
+    `#[ignore]` and has never run on a Linux/cgroup-v2 host, before or after
+    this change.
+  - The outer daemon socket is still NOT shared (Tier 3 isolation), and the
+    outer image cache is still NOT mounted (nested daemon pulls into its own
+    host-backed data dir) — unchanged by this move.
 - macOS exec/logs via VM adapters — container run + stdout streaming works
   (smolvm/krun). `exec_runtime: None` on both means exec-into-running is
   unsupported. No historical log retrieval.
