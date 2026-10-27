@@ -547,6 +547,84 @@ pub fn apply_bind_mounts(
     Ok(())
 }
 
+/// Resolve a `BindMount`'s target path inside `rootfs`, validating that
+/// `container_path` has no `..` traversal. Shared by the parent-side
+/// pre-creation pass and the child-side mount application so both agree on
+/// exactly the same path.
+fn resolve_bind_mount_target(
+    m: &minibox_core::domain::BindMount,
+    rootfs: &Path,
+) -> anyhow::Result<PathBuf> {
+    let container_rel = m
+        .container_path
+        .strip_prefix("/")
+        .unwrap_or(&m.container_path);
+
+    if has_parent_dir_component(container_rel) {
+        anyhow::bail!(
+            "path traversal attempt: bind mount container_path contains '..' component: {:?}",
+            m.container_path
+        );
+    }
+
+    Ok(rootfs.join(container_rel))
+}
+
+/// Create bind-mount target directories/files inside the rootfs that don't
+/// exist yet.
+///
+/// **Must be called in the parent, before `clone`**, for the same ownership
+/// reason as [`bind_rootfs_mount_point`]: the overlay `merged` tree this
+/// writes into is built by the daemon as real host UID 0, but a privileged
+/// container's child process runs under a non-identity user-namespace UID
+/// map (see `UidMapping`/`host_uid`), so it is not the owner of that tree and
+/// has no DAC write permission on it -- `fs::create_dir_all` from inside the
+/// child fails with `EACCES` regardless of the child's in-namespace
+/// capability set. Doing the creation here, while we are still real root,
+/// avoids the check entirely; the child's own (unchanged) creation call in
+/// `apply_one_bind_mount` then finds the path already present and is a
+/// no-op.
+///
+/// This only creates the target path. The actual mount (`apply_bind_mounts`)
+/// still happens in the child, inside its own new mount namespace, exactly
+/// as before.
+pub fn precreate_bind_mount_targets(
+    mounts: &[minibox_core::domain::BindMount],
+    rootfs: &Path,
+) -> anyhow::Result<()> {
+    use anyhow::Context as _;
+
+    for m in mounts {
+        let host_canonical = m.host_path.canonicalize().with_context(|| {
+            format!(
+                "bind mount source {:?} does not exist or is not accessible",
+                m.host_path
+            )
+        })?;
+        let target = resolve_bind_mount_target(m, rootfs)?;
+
+        if target.exists() {
+            continue;
+        }
+
+        if host_canonical.is_dir() {
+            fs::create_dir_all(&target).with_context(|| {
+                format!("failed to create bind mount target directory {target:?}")
+            })?;
+        } else {
+            if let Some(parent) = target.parent() {
+                fs::create_dir_all(parent).with_context(|| {
+                    format!("failed to create parent for bind mount target {target:?}")
+                })?;
+            }
+            fs::write(&target, b"")
+                .with_context(|| format!("failed to create bind mount target file {target:?}"))?;
+        }
+    }
+
+    Ok(())
+}
+
 fn apply_one_bind_mount(
     m: &minibox_core::domain::BindMount,
     rootfs: &Path,
@@ -562,23 +640,13 @@ fn apply_one_bind_mount(
         )
     })?;
 
-    // Strip leading "/" from container_path so it can be joined to rootfs.
-    let container_rel = m
-        .container_path
-        .strip_prefix("/")
-        .unwrap_or(&m.container_path);
+    let target = resolve_bind_mount_target(m, rootfs)?;
 
-    // Reject container_path with ".." components before any filesystem access.
-    if has_parent_dir_component(container_rel) {
-        anyhow::bail!(
-            "path traversal attempt: bind mount container_path contains '..' component: {:?}",
-            m.container_path
-        );
-    }
-
-    let target = rootfs.join(container_rel);
-
-    // Create the mount target if it does not exist.
+    // Create the mount target if it does not exist. Normally a no-op: the
+    // parent-side `precreate_bind_mount_targets` already created it while
+    // still real root (see that function's doc comment for why this must
+    // not be the child's first attempt). Kept here as a fallback for direct
+    // callers/tests that don't go through the parent phase.
     if !target.exists() {
         if host_canonical.is_dir() {
             fs::create_dir_all(&target).with_context(|| {
@@ -1345,6 +1413,69 @@ mod tests {
             assert!(rootfs.path().join("nested/dir/target").is_dir());
 
             cleanup_bind_mounts(&mounts, rootfs.path());
+        }
+
+        #[test]
+        fn resolve_bind_mount_target_rejects_dotdot_in_container_path() {
+            let rootfs = TempDir::new().unwrap();
+            let m = BindMount {
+                host_path: PathBuf::from("/tmp/host"),
+                container_path: PathBuf::from("/../../../etc"),
+                read_only: false,
+            };
+            let err = resolve_bind_mount_target(&m, rootfs.path())
+                .expect_err("container_path with '..' must be rejected");
+            assert!(
+                err.to_string().contains("path traversal"),
+                "expected 'path traversal' in error, got: {err}"
+            );
+        }
+
+        #[test]
+        fn precreate_bind_mount_targets_creates_missing_target_dir() {
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/nested/dir/target"),
+                read_only: false,
+            }];
+
+            let target = rootfs.path().join("nested/dir/target");
+            assert!(!target.exists(), "target must not exist before precreate");
+
+            precreate_bind_mount_targets(&mounts, rootfs.path()).unwrap();
+
+            assert!(
+                target.is_dir(),
+                "precreate must create the target directory"
+            );
+        }
+
+        #[test]
+        fn precreate_bind_mount_targets_is_noop_when_target_already_exists() {
+            let host_dir = TempDir::new().unwrap();
+            let rootfs = TempDir::new().unwrap();
+
+            let mounts = vec![BindMount {
+                host_path: host_dir.path().to_path_buf(),
+                container_path: PathBuf::from("/existing"),
+                read_only: false,
+            }];
+
+            let target = rootfs.path().join("existing");
+            std::fs::create_dir_all(&target).unwrap();
+            // Sentinel file to prove precreate doesn't touch an existing target.
+            std::fs::write(target.join("sentinel.txt"), b"keep").unwrap();
+
+            precreate_bind_mount_targets(&mounts, rootfs.path()).unwrap();
+
+            assert!(target.is_dir());
+            assert!(
+                target.join("sentinel.txt").exists(),
+                "precreate must not disturb an already-existing target"
+            );
         }
     }
 }
