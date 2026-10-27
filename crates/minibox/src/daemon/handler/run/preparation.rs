@@ -14,8 +14,8 @@ use crate::daemon::state::DaemonState;
 
 use super::super::HandlerDependencies;
 use super::model::{
-    ContainerRecordBuildParams, ManifestBuildParams, PreparedRun, build_container_record,
-    build_execution_manifest,
+    ContainerRecordBuildParams, ManifestBuildParams, PreparedRun, apply_dind_provisioning,
+    build_container_record, build_execution_manifest,
 };
 use super::{RunParams, generate_container_id};
 
@@ -44,7 +44,7 @@ pub(super) async fn prepare_run(
         ephemeral: _,
         priority: _,
         policy_override: _,
-        dind: _,
+        dind,
     } = params;
 
     let ref_str = match &tag {
@@ -94,6 +94,18 @@ pub(super) async fn prepare_run(
         ))
         .into());
     }
+
+    // RunParams has no dind_debug field yet (the retired client-side
+    // RunOpts did); verbose DinD entrypoint logging is not wired through the
+    // protocol from this call site. Follow-up, not part of this task.
+    let dind_provisioning = if dind {
+        Some(
+            super::dind::stage_dind_resources(&id, false)
+                .context("failed to stage DinD resources")?,
+        )
+    } else {
+        None
+    };
 
     let mut manifest = build_execution_manifest(ManifestBuildParams {
         id: &id,
@@ -290,6 +302,12 @@ pub(super) async fn prepare_run(
         },
         image_ref: Some(image_label.clone()),
     };
+
+    let mut spawn_config = spawn_config;
+    let mut record = record;
+    if let Some(provisioning) = &dind_provisioning {
+        apply_dind_provisioning(&mut spawn_config, &mut record, provisioning);
+    }
 
     let manifest_path = container_dir.join("execution-manifest.json");
     let manifest_json =
