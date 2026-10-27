@@ -1348,6 +1348,65 @@ async fn test_handle_stop_container_without_pid_returns_error() {
     }
 }
 
+/// `remove_inner` deletes the `DinD` staging directory recorded on
+/// `ContainerRecord.temp_dir_path` when a container is removed.
+#[tokio::test]
+async fn test_remove_inner_cleans_up_dind_staging_dir() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let staging_dir = temp_dir.path().join("dind-staging-abc123");
+    std::fs::create_dir_all(&staging_dir).expect("create staging dir");
+    assert!(staging_dir.exists(), "precondition: staging dir exists");
+
+    let container_id = "dindcontainer0001".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: None,
+            },
+            pid: None,
+            runtime_id: None,
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+            upper_dir: None,
+            merged_dir: None,
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
+            temp_dir_path: Some(staging_dir.clone()),
+        })
+        .await;
+
+    let response = handler::handle_remove(container_id, state, deps).await;
+
+    match response {
+        DaemonResponse::Success { .. } => {}
+        other => panic!("expected Success response, got: {other:?}"),
+    }
+    assert!(
+        !staging_dir.exists(),
+        "dind staging dir must be removed by remove_inner"
+    );
+}
+
 /// `remove_inner` cgroup cleanup failure is best-effort — `handle_remove` still
 /// returns `DaemonResponse::Success` even when `ResourceLimiter::cleanup` fails.
 #[tokio::test]
