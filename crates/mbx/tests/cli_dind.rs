@@ -46,10 +46,12 @@ fn find_binary(name: &str) -> std::path::PathBuf {
     );
 }
 
-/// `--dind` locates the host `miniboxd` via `which miniboxd` or a handful of
-/// standard install paths (see `crates/mbx/src/commands/run.rs`). Neither
+/// The daemon stages `--dind` resources by locating the host `miniboxd` via
+/// `which miniboxd` or a handful of standard install paths (see
+/// `crates/minibox/src/daemon/handler/run/dind.rs::find_miniboxd_binary`,
+/// which runs inside the daemon process, not the `mbx` client). Neither
 /// finds a freshly built `target/{debug,release}/miniboxd`, so prepend its
-/// directory to `PATH` for the `mbx` subprocess.
+/// directory to `PATH` for the `miniboxd` subprocess.
 fn path_with_miniboxd_dir(miniboxd: &std::path::Path) -> std::ffi::OsString {
     let dir = miniboxd
         .parent()
@@ -71,20 +73,23 @@ async fn dind_run_starts_nested_daemon() {
 
     let miniboxd_bin = find_binary("miniboxd");
     let mbx_bin = find_binary("mbx");
+    let path = path_with_miniboxd_dir(&miniboxd_bin);
 
+    // The daemon process is what calls `find_miniboxd_binary` to stage the
+    // nested `--dind` daemon, so it needs miniboxd's directory on its own
+    // PATH — not the `mbx` client's.
     let mut daemon = std::process::Command::new(&miniboxd_bin)
         .env("MINIBOX_SOCKET_PATH", &socket_path)
         .env("MINIBOX_DATA_DIR", &data_dir)
+        .env("PATH", &path)
         .spawn()
         .expect("failed to spawn miniboxd");
 
     wait_for_socket(&socket_path, 5000).await;
 
-    let path = path_with_miniboxd_dir(&miniboxd_bin);
     let assert_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         Command::from_std(std::process::Command::new(&mbx_bin))
             .env("MINIBOX_SOCKET_PATH", &socket_path)
-            .env("PATH", &path)
             .args(["run", "--dind", "--rm", "alpine", "true"])
             .timeout(Duration::from_secs(60))
             .assert()
