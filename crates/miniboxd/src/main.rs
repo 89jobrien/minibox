@@ -59,7 +59,6 @@ fn main() {
     // Load config and bridge adapter into env before the runtime starts.
     // SAFETY: single-threaded — no tokio workers exist yet.
     let config = miniboxd::config::DaemonConfig::load();
-
     // Priority: --adapter CLI flag > MINIBOX_ADAPTER env var > config.adapter > auto-detect.
     if let Some(ref adapter_name) = cli.adapter {
         // Validate early so we fail before spawning the runtime.
@@ -553,6 +552,7 @@ fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> Containe
             .policy
             .allow_privileged
             .unwrap_or(env_policy.allow_privileged),
+        allow_dind: config.policy.allow_dind.unwrap_or(env_policy.allow_dind),
         ..Default::default()
     }
 }
@@ -690,6 +690,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     tracing::info!(
         allow_bind_mounts = policy.allow_bind_mounts,
         allow_privileged = policy.allow_privileged,
+        allow_dind = policy.allow_dind,
         "container policy configured (config > env > default)"
     );
 
