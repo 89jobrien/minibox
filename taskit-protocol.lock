@@ -45,7 +45,7 @@
     {
       "name": "xtask-preflight",
       "path": "xtask/src/preflight.rs",
-      "hash": "40210ba8b6ab747443db069d34f1b135047f62631f3d13c8a1d8c45fe392396b"
+      "hash": "6133def0edf0d68db457ccac6bb3705438d647804f74b669fe56d1528827b5bc"
     }
   ]
 }
