@@ -112,7 +112,7 @@ pub fn validate_cgroup_parent(path: &str) -> anyhow::Result<()> {
             anyhow::bail!("cgroup parent must not contain '..': {path:?}");
         }
     }
-    if !path.starts_with("/sys/fs/cgroup/") && path != "/sys/fs/cgroup" {
+    if !path.starts_with("/sys/fs/cgroup/") && path != CGROUPFS_ROOT {
         anyhow::bail!("cgroup parent must be under /sys/fs/cgroup/, got {path:?}");
     }
     Ok(())
@@ -168,8 +168,8 @@ impl CgroupManager {
         let parent = self
             .cgroup_path
             .parent()
-            .unwrap_or_else(|| std::path::Path::new("/sys/fs/cgroup"));
-        enable_subtree_controllers(parent)?;
+            .unwrap_or_else(|| std::path::Path::new(CGROUPFS_ROOT));
+        enable_subtree_controllers_chain(parent)?;
 
         // Memory limit (bounds already validated by validate_resource_limits above)
         if let Some(mem) = self.config.memory_limit_bytes {
@@ -349,6 +349,93 @@ fn enable_subtree_controllers(dir: &std::path::Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Root of the cgroupfs mount. Shared by [`validate_cgroup_parent`],
+/// [`CgroupManager::create`]'s `parent()` fallback, and
+/// [`enable_subtree_controllers_chain`] so the `/sys/fs/cgroup` literal is
+/// defined once.
+const CGROUPFS_ROOT: &str = "/sys/fs/cgroup";
+
+/// Build the list of ancestor directories from `root` down to `dir`
+/// (inclusive), root-to-leaf, without touching the filesystem.
+///
+/// - `dir == root` yields `[root]`.
+/// - `dir` several levels under `root` yields the full chain in
+///   root-to-leaf order.
+/// - `dir` not under `root` yields `[dir]` only (the walk gives up
+///   immediately rather than guessing at an unrelated hierarchy).
+fn ancestor_chain(dir: &std::path::Path, root: &std::path::Path) -> Vec<PathBuf> {
+    let mut chain = vec![dir.to_path_buf()];
+    let mut current = dir;
+    while current != root {
+        match current.parent() {
+            Some(parent) if parent.starts_with(root) => {
+                chain.push(parent.to_path_buf());
+                current = parent;
+            }
+            _ => break,
+        }
+    }
+    chain.reverse();
+    chain
+}
+
+/// Returns true if every controller `enable_subtree_controllers` cares about
+/// (`pids`, `memory`, `cpu`, `io`) is already listed in `dir`'s
+/// `cgroup.subtree_control`.
+///
+/// A directory only reaches this state once a prior write to its own
+/// `cgroup.subtree_control` succeeded, which can only happen if the
+/// controllers were already delegated to it from its parent. That makes it
+/// a safe place to stop climbing: nothing above `dir` needs touching.
+fn subtree_controllers_enabled(dir: &std::path::Path) -> bool {
+    let current = fs::read_to_string(dir.join("cgroup.subtree_control")).unwrap_or_default();
+    ["pids", "memory", "cpu", "io"]
+        .iter()
+        .all(|controller| current.split_whitespace().any(|c| c == *controller))
+}
+
+/// Enable cgroup controllers on `dir` and on as many ancestors above it as
+/// are actually needed, top-down.
+///
+/// A single call to [`enable_subtree_controllers`] on `dir` alone assumes the
+/// whole ancestor chain above it was already delegated — true under a
+/// systemd deployment, which pre-delegates the full controller set to the
+/// slice/scope it hands the daemon. It is false when miniboxd's own cgroup
+/// root is not pre-delegated, e.g. the daemon itself running inside another
+/// privileged container whose freshly bind-mounted `/sys/fs/cgroup` arrives
+/// with nothing enabled: `dir`'s own `cgroup.controllers` is then empty, so
+/// writing `+<controller>` to `dir/cgroup.subtree_control` fails with ENOENT
+/// (the controller was never delegated to `dir` in the first place).
+///
+/// The walk climbs from `dir` toward the cgroupfs mount root but stops as
+/// soon as it reaches an ancestor that already has the needed controllers
+/// enabled (see [`subtree_controllers_enabled`]) — in the common
+/// systemd-delegated case that is `dir`'s immediate parent, so this performs
+/// exactly one write, matching the pre-chain behavior. Only an undelegated
+/// nested host climbs further, and even then only as far as the first
+/// already-delegated ancestor, never unconditionally to the real cgroupfs
+/// root.
+fn enable_subtree_controllers_chain(dir: &std::path::Path) -> anyhow::Result<()> {
+    let root = std::path::Path::new(CGROUPFS_ROOT);
+    let full_chain = ancestor_chain(dir, root); // root-to-leaf
+
+    let mut to_enable: Vec<PathBuf> = Vec::new();
+    for ancestor in full_chain.into_iter().rev() {
+        // leaf-to-root: dir first, then its parent, etc.
+        let already_enabled = subtree_controllers_enabled(&ancestor);
+        to_enable.push(ancestor);
+        if already_enabled {
+            break;
+        }
+    }
+
+    for ancestor in to_enable.into_iter().rev() {
+        // back to root-to-leaf so each level is delegated before its child.
+        enable_subtree_controllers(&ancestor)?;
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Cgroup delegation (nested container support)
 // ---------------------------------------------------------------------------
@@ -394,7 +481,7 @@ pub fn delegate_subtree(paths: &DelegationPaths) -> anyhow::Result<()> {
     })?;
 
     // Enable controllers on the subtree so child cgroups can use them.
-    enable_subtree_controllers(&paths.subtree)?;
+    enable_subtree_controllers_chain(&paths.subtree)?;
 
     // Create the init leaf where the container process will live.
     fs::create_dir_all(&paths.init_leaf).with_context(|| {
@@ -561,6 +648,35 @@ mod tests {
             result.init_leaf.as_path(),
             std::path::Path::new("/sys/fs/cgroup/user.slice/minibox/test-id/init")
         );
+    }
+
+    #[test]
+    fn ancestor_chain_dir_equals_root_yields_root_only() {
+        let root = std::path::Path::new("/sys/fs/cgroup");
+        assert_eq!(super::ancestor_chain(root, root), vec![root.to_path_buf()]);
+    }
+
+    #[test]
+    fn ancestor_chain_nested_dir_yields_root_to_leaf_order() {
+        let root = std::path::Path::new("/sys/fs/cgroup");
+        let dir = std::path::Path::new("/sys/fs/cgroup/minibox.slice/miniboxd.service/abc123");
+        let chain = super::ancestor_chain(dir, root);
+        assert_eq!(
+            chain,
+            vec![
+                root.to_path_buf(),
+                std::path::PathBuf::from("/sys/fs/cgroup/minibox.slice"),
+                std::path::PathBuf::from("/sys/fs/cgroup/minibox.slice/miniboxd.service"),
+                std::path::PathBuf::from("/sys/fs/cgroup/minibox.slice/miniboxd.service/abc123"),
+            ]
+        );
+    }
+
+    #[test]
+    fn ancestor_chain_dir_not_under_root_yields_dir_only() {
+        let root = std::path::Path::new("/sys/fs/cgroup");
+        let dir = std::path::Path::new("/tmp/not-cgroupfs/abc123");
+        assert_eq!(super::ancestor_chain(dir, root), vec![dir.to_path_buf()]);
     }
 
     #[cfg(target_os = "linux")]
