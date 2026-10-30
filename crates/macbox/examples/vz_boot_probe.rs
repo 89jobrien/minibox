@@ -12,12 +12,15 @@
 //! Usage:
 //!
 //! ```text
-//! vz_boot_probe --loader linux|efi [--work-dir DIR] [--wait-secs N] [--hold-secs N] [--disk PATH]
+//! vz_boot_probe --loader linux|efi [--work-dir DIR] [--wait-secs N] [--hold-secs N]
+//!               [--disk PATH] [--share TAG=PATH]...
 //! ```
 //!
 //! `--hold-secs` keeps the probe alive after a successful start so the VM's continued
 //! state (and guest/firmware serial output) can be observed. `--disk` attaches a
 //! read-only virtio block device to either loader; EFI defaults it to `<work-dir>/esp.img`.
+//! `--share TAG=PATH` attaches a read-only virtiofs share, which is what the guest needs
+//! before `root=<tag> rootfstype=virtiofs` can resolve.
 //!
 //! `--work-dir` must contain `vmlinuz-virt` for `--loader linux` and a raw disk image
 //! `esp.img` for `--loader efi`. The probe creates `vars.fd` there on the first EFI run.
@@ -41,12 +44,13 @@ fn main() {
     use objc2::rc::Retained;
     use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
     use objc2_virtualization::{
-        VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
-        VZEFIVariableStoreInitializationOptions, VZFileHandleSerialPortAttachment,
-        VZGenericPlatformConfiguration, VZLinuxBootLoader, VZSerialPortConfiguration,
+        VZDirectorySharingDeviceConfiguration, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
+        VZEFIVariableStore, VZEFIVariableStoreInitializationOptions,
+        VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration, VZLinuxBootLoader,
+        VZSerialPortConfiguration, VZSharedDirectory, VZSingleDirectoryShare,
         VZStorageDeviceConfiguration, VZVirtioBlockDeviceConfiguration,
-        VZVirtioConsoleDeviceSerialPortConfiguration, VZVirtualMachine,
-        VZVirtualMachineConfiguration, VZVirtualMachineState,
+        VZVirtioConsoleDeviceSerialPortConfiguration, VZVirtioFileSystemDeviceConfiguration,
+        VZVirtualMachine, VZVirtualMachineConfiguration, VZVirtualMachineState,
     };
     use std::path::{Path, PathBuf};
     use std::sync::{Arc, Mutex};
@@ -75,6 +79,8 @@ fn main() {
         wait_secs: u64,
         hold_secs: u64,
         disk: Option<PathBuf>,
+        /// `(tag, host_path)` pairs attached as read-only virtiofs shares.
+        shares: Vec<(String, PathBuf)>,
     }
 
     impl Args {
@@ -84,6 +90,7 @@ fn main() {
             let mut wait_secs = 5u64;
             let mut hold_secs = 0u64;
             let mut disk = None;
+            let mut shares = Vec::new();
             let mut it = std::env::args().skip(1);
             while let Some(arg) = it.next() {
                 match arg.as_str() {
@@ -119,6 +126,16 @@ fn main() {
                             it.next().ok_or_else(|| anyhow!("--disk needs a value"))?,
                         ));
                     }
+                    "--share" => {
+                        let value = it.next().ok_or_else(|| anyhow!("--share needs TAG=PATH"))?;
+                        let (tag, path) = value
+                            .split_once('=')
+                            .ok_or_else(|| anyhow!("--share expects TAG=PATH, got {value:?}"))?;
+                        if tag.is_empty() {
+                            bail!("--share tag must not be empty");
+                        }
+                        shares.push((tag.to_string(), PathBuf::from(path)));
+                    }
                     other => bail!("unexpected argument {other:?}"),
                 }
             }
@@ -128,6 +145,7 @@ fn main() {
                 wait_secs,
                 hold_secs,
                 disk,
+                shares,
             })
         }
     }
@@ -288,6 +306,53 @@ fn main() {
         // SAFETY: standard setter.
         unsafe { vm_config.setSerialPorts(&serials) };
 
+        // Attach host directories as read-only virtiofs shares. The guest mounts them by tag,
+        // so this is what makes `root=minibox-rootfs rootfstype=virtiofs` resolvable.
+        let mut fs_devices = Vec::with_capacity(args.shares.len());
+        for (tag, host_path) in &args.shares {
+            if !host_path.is_dir() {
+                bail!(
+                    "share host path is not a directory: {}",
+                    host_path.display()
+                );
+            }
+            let host_url = unsafe { path_to_nsurl(host_path) }?;
+            let ns_tag = NSString::from_str(tag);
+            // SAFETY: standard initializers on the GCD main queue; read_only = true.
+            let fs_dev = unsafe {
+                let shared_dir = VZSharedDirectory::initWithURL_readOnly(
+                    VZSharedDirectory::alloc(),
+                    &host_url,
+                    true,
+                );
+                let share = VZSingleDirectoryShare::initWithDirectory(
+                    VZSingleDirectoryShare::alloc(),
+                    &shared_dir,
+                );
+                let fs_dev = VZVirtioFileSystemDeviceConfiguration::initWithTag(
+                    VZVirtioFileSystemDeviceConfiguration::alloc(),
+                    &ns_tag,
+                );
+                // SAFETY: standard setter; share is a valid VZSingleDirectoryShare.
+                fs_dev.setShare(Some(&*share));
+                fs_dev
+            };
+            fs_devices.push(fs_dev);
+        }
+        if !fs_devices.is_empty() {
+            // SAFETY: VZVirtioFileSystemDeviceConfiguration conforms to
+            // VZDirectorySharingDeviceConfiguration; into_super() is a safe upcast.
+            let devices: Retained<NSArray<VZDirectorySharingDeviceConfiguration>> =
+                NSArray::from_retained_slice(
+                    &fs_devices
+                        .into_iter()
+                        .map(|dev| dev.into_super())
+                        .collect::<Vec<_>>(),
+                );
+            // SAFETY: standard setter.
+            unsafe { vm_config.setDirectorySharingDevices(&devices) };
+        }
+
         // SAFETY: standard validation method.
         unsafe { vm_config.validateWithError() }
             .map_err(|e| anyhow!("configuration validation failed: {e:?}"))?;
@@ -330,6 +395,7 @@ fn main() {
             loader: Loader,
             work_dir: PathBuf,
             disk: Option<PathBuf>,
+            shares: Vec<(String, PathBuf)>,
             result: Option<Result<Prepared>>,
         }
         unsafe extern "C" fn trampoline(ctx: *mut std::ffi::c_void) {
@@ -342,6 +408,7 @@ fn main() {
                 wait_secs: 0,
                 hold_secs: 0,
                 disk: ctx.disk.clone(),
+                shares: ctx.shares.clone(),
             };
             // SAFETY: running on the GCD main queue, as VZ requires.
             ctx.result = Some(unsafe { prepare(&args) });
@@ -351,6 +418,7 @@ fn main() {
             loader: args.loader,
             work_dir: args.work_dir.clone(),
             disk: args.disk.clone(),
+            shares: args.shares.clone(),
             result: None,
         };
         // SAFETY: `_dispatch_main_q` is live because `main` calls `dispatch_main()`;
@@ -451,10 +519,15 @@ fn main() {
         Loader::Efi => "efi",
     };
     println!(
-        "PROBE loader={loader} work_dir={} wait_secs={} hold_secs={}",
+        "PROBE loader={loader} work_dir={} wait_secs={} hold_secs={} shares={}",
         args.work_dir.display(),
         args.wait_secs,
-        args.hold_secs
+        args.hold_secs,
+        args.shares
+            .iter()
+            .map(|(tag, path)| format!("{tag}={}", path.display()))
+            .collect::<Vec<_>>()
+            .join(",")
     );
 
     // The main thread must service the GCD main queue; all VZ work happens on a worker.

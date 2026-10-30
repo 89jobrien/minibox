@@ -37,14 +37,18 @@ impl VzVmConfig {
 #[cfg(all(target_os = "macos", feature = "vz"))]
 mod imp {
     use super::VzVmConfig;
+    use crate::vz::boot::EfiBootAssets;
     use anyhow::{Context, Result, bail};
+    use minibox_core::vm_boot;
     use objc2::AnyThread;
     use objc2::rc::Retained;
     use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
     use objc2_virtualization::{
-        VZDirectorySharingDeviceConfiguration, VZFileHandleSerialPortAttachment, VZLinuxBootLoader,
+        VZDirectorySharingDeviceConfiguration, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
+        VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
         VZSerialPortConfiguration, VZSharedDirectory, VZSingleDirectoryShare,
-        VZSocketDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
+        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
         VZVirtioFileSystemDeviceConfiguration, VZVirtioSocketDeviceConfiguration, VZVirtualMachine,
         VZVirtualMachineConfiguration, VZVirtualMachineState,
     };
@@ -70,35 +74,51 @@ mod imp {
         Ok(url)
     }
 
-    /// Build the `VZLinuxBootLoader` from config paths.
+    /// Build the EFI platform/boot-loader pair and the read-only ESP storage device.
     ///
     /// # Safety
     ///
     /// All VZ object constructors used here are standard Objective-C init methods.
-    /// Thread safety is handled by the caller (`spawn_blocking` ensures we're not in async context).
-    unsafe fn build_boot_loader(config: &VzVmConfig) -> Result<Retained<VZLinuxBootLoader>> {
-        let kernel_url =
-            unsafe { path_to_nsurl(&config.kernel_path()) }.context("kernel path to NSURL")?;
-        // SAFETY: initWithKernelURL: is a standard init; kernel_url is a valid file URL.
-        let boot_loader = unsafe {
-            VZLinuxBootLoader::initWithKernelURL(VZLinuxBootLoader::alloc(), &kernel_url)
-        };
-
-        let initrd_path = config.initramfs_path();
-        if initrd_path.exists() {
-            let initrd_url =
-                unsafe { path_to_nsurl(&initrd_path) }.context("initrd path to NSURL")?;
-            // SAFETY: setInitialRamdiskURL: is a standard setter; initrd_url is a valid file URL.
-            unsafe { boot_loader.setInitialRamdiskURL(Some(&initrd_url)) };
+    /// Thread safety is handled by the caller.
+    unsafe fn build_efi_boot(
+        vm_dir: &Path,
+    ) -> Result<(
+        Retained<VZGenericPlatformConfiguration>,
+        Retained<VZEFIBootLoader>,
+        Retained<VZVirtioBlockDeviceConfiguration>,
+    )> {
+        let assets = EfiBootAssets::default_paths(vm_dir);
+        if !assets.esp_image.exists() {
+            bail!(
+                "EFI boot image not found at {}. Run `cargo xtask build-vm-image` first.",
+                assets.esp_image.display()
+            );
         }
 
-        // virtiofs root: use the tag name, not a block device path.
-        let cmdline =
-            NSString::from_str("console=hvc0 root=minibox-rootfs rootfstype=virtiofs rw quiet");
-        // SAFETY: setCommandLine: is a standard setter.
-        unsafe { boot_loader.setCommandLine(&cmdline) };
+        let platform = unsafe { VZGenericPlatformConfiguration::new() };
+        let store = assets
+            .ensure_variable_store()
+            .context("EFI variable store")?;
+        let boot_loader =
+            unsafe { assets.build_boot_loader(&store) }.context("build VZEFIBootLoader")?;
 
-        Ok(boot_loader)
+        let esp_url = unsafe { path_to_nsurl(&assets.esp_image) }.context("ESP path to NSURL")?;
+        let attachment = unsafe {
+            VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
+                VZDiskImageStorageDeviceAttachment::alloc(),
+                &esp_url,
+                true,
+            )
+        }
+        .map_err(|e| anyhow::anyhow!("attach EFI disk image: {e:?}"))?;
+        let block = unsafe {
+            VZVirtioBlockDeviceConfiguration::initWithAttachment(
+                VZVirtioBlockDeviceConfiguration::alloc(),
+                &attachment,
+            )
+        };
+
+        Ok((platform, boot_loader, block))
     }
 
     /// Build a single virtiofs device configuration.
@@ -227,22 +247,31 @@ mod imp {
             // This function is only called on the GCD main queue.
             let vm_config = unsafe { VZVirtualMachineConfiguration::new() };
 
-            let boot_loader =
-                unsafe { build_boot_loader(&config) }.context("build VZLinuxBootLoader")?;
-            // SAFETY: setBootLoader: accepts a VZLinuxBootLoader which conforms to VZBootLoader.
+            let (platform, boot_loader, esp_block) =
+                unsafe { build_efi_boot(&config.vm_dir) }.context("build EFI boot loader")?;
+            // SAFETY: setPlatform: requires a VZGenericPlatformConfiguration when paired with
+            // VZEFIBootLoader; it must not be combined with a macOS (VZMac*) platform config.
+            unsafe { vm_config.setPlatform(&platform) };
+            // SAFETY: setBootLoader: accepts a VZEFIBootLoader which conforms to VZBootLoader.
             unsafe { vm_config.setBootLoader(Some(&*boot_loader)) };
+            // SAFETY: setStorageDevices: is a standard setter; esp_block is a valid
+            // VZVirtioBlockDeviceConfiguration which conforms to VZStorageDeviceConfiguration.
+            let storage_devices: Retained<NSArray<VZStorageDeviceConfiguration>> =
+                NSArray::from_retained_slice(&[esp_block.into_super()]);
+            unsafe { vm_config.setStorageDevices(&storage_devices) };
 
             // SAFETY: setMemorySize: / setCPUCount: are standard setters.
             unsafe { vm_config.setMemorySize(config.memory_bytes) };
             unsafe { vm_config.setCPUCount(config.cpu_count) };
 
             let rootfs_dev =
-                unsafe { build_virtiofs("minibox-rootfs", &config.rootfs_path(), false) }
+                unsafe { build_virtiofs(vm_boot::ROOTFS_TAG, &config.rootfs_path(), false) }
                     .context("build virtiofs minibox-rootfs")?;
-            let images_dev = unsafe { build_virtiofs("minibox-images", &config.images_dir, true) }
-                .context("build virtiofs minibox-images")?;
+            let images_dev =
+                unsafe { build_virtiofs(vm_boot::IMAGES_TAG, &config.images_dir, true) }
+                    .context("build virtiofs minibox-images")?;
             let containers_dev =
-                unsafe { build_virtiofs("minibox-containers", &config.containers_dir, false) }
+                unsafe { build_virtiofs(vm_boot::CONTAINERS_TAG, &config.containers_dir, false) }
                     .context("build virtiofs minibox-containers")?;
 
             // SAFETY: into_super() is a safe upcast; setDirectorySharingDevices: is a standard setter.

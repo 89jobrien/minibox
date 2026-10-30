@@ -63,6 +63,7 @@ mod test_image;
 mod test_in_vm;
 mod test_linux;
 mod utils;
+mod vm_image;
 mod xconfig;
 
 fn main() -> Result<()> {
@@ -127,6 +128,11 @@ fn main() -> Result<()> {
         Some("setup-test-vm") => {
             let force = env::args().any(|a| a == "--force");
             setup_test_vm::run(root, force)
+        }
+        Some("build-vm-image") => {
+            let args: Vec<String> = env::args().skip(2).collect();
+            let opts = vm_image::Options::from_args(&args)?;
+            vm_image::run(&opts)
         }
         Some("test-in-vm") => {
             let args: Vec<String> = env::args().skip(2).collect();
@@ -713,6 +719,8 @@ fn print_help() -> Result<()> {
     eprintln!("Build / VM:");
     eprintln!("  build-test-image [--force]     cross-compile + OCI tarball");
     eprintln!("  setup-test-vm [--force]        persistent smolvm VM with Rust");
+    eprintln!("  build-vm-image [--force] [--vm-dir <dir>]");
+    eprintln!("                       build the macOS vz EFI boot disk (macOS only)");
     eprintln!("  test-in-vm [--skip-build] [--keep] [--smolfile <path>]");
     eprintln!("  e2e-local                      macOS smoke test: mbx build + run + exec");
     eprintln!("  test-linux                     build + load + run tests in container");

@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = "1"
 dirs = "6"
+fatfs = "0.3"
+flate2 = "1"
 hex = "0.4"
 sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
@@ -22,6 +24,7 @@ chrono = { version = "0.4", features = ["serde"] }
 xshell = "0.2"
 miette = { workspace = true }
 thiserror = { workspace = true }
+minibox-core = { workspace = true }
 minibox-testsuite = { workspace = true }
 cargo_metadata = "0.20.0"
 syn = { version = "3.0.9", features = ["full", "visit"] }

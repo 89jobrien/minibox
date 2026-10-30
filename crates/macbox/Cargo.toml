@@ -20,6 +20,8 @@ vz-probe = [
     "objc2-virtualization/VZStorageDeviceAttachment",
     "objc2-virtualization/VZDiskImageStorageDeviceAttachment",
     "objc2-virtualization/VZVirtioBlockDeviceConfiguration",
+    "objc2-virtualization/VZSingleDirectoryShare",
+    "objc2-virtualization/VZVirtioFileSystemDeviceConfiguration",
 ]
 
 [dependencies]
