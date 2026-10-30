@@ -366,6 +366,10 @@ fn apply_layer_directory(source: &Path, destination: &Path) -> Result<()> {
                 preserve_ownership(&target, &metadata)?;
             } else if metadata.is_file() {
                 std::fs::copy(&source_path, &target)?;
+                // Set mtime before permissions: preserve_mtime needs a
+                // writable fd, and set_permissions below may narrow the
+                // file to the source's (possibly read-only) mode.
+                preserve_mtime(&target, &metadata)?;
                 std::fs::set_permissions(&target, metadata.permissions())?;
                 preserve_ownership(&target, &metadata)?;
             } else {
@@ -414,6 +418,26 @@ fn preserve_ownership(path: &Path, metadata: &std::fs::Metadata) -> Result<()> {
 #[cfg(not(unix))]
 fn preserve_ownership(_path: &Path, _metadata: &std::fs::Metadata) -> Result<()> {
     Ok(())
+}
+
+/// Preserves a regular file's source mtime on its materialized copy.
+///
+/// `std::fs::copy` stamps the destination with the current time, not the
+/// source's mtime. `tar_directory`'s `append_dir_all` bakes each entry's
+/// mtime into the tar header, so without this, committing byte-identical
+/// content twice can produce two different tar byte streams (and therefore
+/// two different layer digests) purely from copy-timing, breaking
+/// content-addressed layer dedup.
+fn preserve_mtime(path: &Path, metadata: &std::fs::Metadata) -> Result<()> {
+    let modified = metadata
+        .modified()
+        .with_context(|| format!("read source mtime for {}", path.display()))?;
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .with_context(|| format!("open {} to set mtime", path.display()))?;
+    file.set_modified(modified)
+        .with_context(|| format!("preserve layer mtime for {}", path.display()))
 }
 
 #[cfg(unix)]
