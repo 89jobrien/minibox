@@ -88,12 +88,9 @@ mod imp {
         Retained<VZVirtioBlockDeviceConfiguration>,
     )> {
         let assets = EfiBootAssets::default_paths(vm_dir);
-        if !assets.esp_image.exists() {
-            bail!(
-                "EFI boot image not found at {}. Run `cargo xtask build-vm-image` first.",
-                assets.esp_image.display()
-            );
-        }
+        assets
+            .check_boot_assets()
+            .context("EFI boot asset preflight")?;
 
         let platform = unsafe { VZGenericPlatformConfiguration::new() };
         let store = assets
@@ -240,7 +237,9 @@ mod imp {
         /// queue as required by VZ.framework on Tahoe (macOS 26+).
         pub fn prepare_on_main_queue(config: VzVmConfig) -> Result<(Self, StartSignal)> {
             use crate::vz::bindings::load_vz_framework;
+            use crate::vz::boot::validate_boot_mode_env;
 
+            validate_boot_mode_env().context("MINIBOX_VZ_BOOT")?;
             load_vz_framework().context("load Virtualization.framework")?;
 
             // SAFETY: All VZ object allocations below are standard ObjC inits.
@@ -350,6 +349,12 @@ mod imp {
                     if let Some(ref outcome) = *guard {
                         match outcome {
                             Ok(()) => break,
+                            Err(msg) if msg.contains("code=1") => {
+                                bail!(
+                                    "VM start failed: {msg}; {}",
+                                    crate::vz::boot::code1_remediation_trailer()
+                                )
+                            }
                             Err(msg) => bail!("VM start failed: {msg}"),
                         }
                     }

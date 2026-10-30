@@ -6,7 +6,7 @@ license.workspace = true
 publish = false
 
 [features]
-vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization", "dep:serde_json"]
+vz = ["dep:block2", "dep:objc2", "dep:objc2-foundation", "dep:objc2-virtualization", "dep:serde_json", "dep:sha2"]
 # Phase 0 boot probe (crates/macbox/examples/vz_boot_probe.rs). Kept separate from `vz` so
 # the shipped adapter's Virtualization.framework surface stays unchanged until the gate
 # in docs/designs/2026-10-22-vz-efi-boot-design.md has been decided.
@@ -59,6 +59,7 @@ objc2-virtualization = { version = "0.3", optional = true, features = [
     "VZVirtioSocketDeviceConfiguration",
 ] }
 serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
 minibox-macros = { workspace = true }
