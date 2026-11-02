@@ -37,7 +37,7 @@ generated: 2026-09-16
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-10-10
+Last updated: 2026-10-18
 
 ---
 
@@ -54,6 +54,14 @@ Last updated: 2026-10-10
 | `vz` | `macos` | Blocked | -- |
 | `winbox` | `windows` | Stub | -- |
 <!-- END GENERATED: adapter-suites -->
+
+Platform constraints for the suites above:
+
+- `native`[^1]
+- `gke`[^2]
+- `smolvm`[^3]
+- `krun`[^4]
+- `vz`[^5]
 
 [^1]: `native` requires root (UID 0); daemon startup rejects non-root native selection. Linux only
       (`cfg!(target_os = "linux")`). Cgroup v2 and overlay FS require kernel support.

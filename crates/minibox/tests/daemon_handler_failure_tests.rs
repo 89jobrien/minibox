@@ -85,6 +85,7 @@ async fn test_policy_denies_bind_mount_by_default() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -126,11 +127,13 @@ async fn test_policy_denies_privileged_by_default() {
             mounts: vec![],
             privileged: true,
             shared_uid_range: false,
-            env: // privileged
-        vec![],
+            env: vec![], // privileged
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -212,6 +215,7 @@ async fn test_policy_can_be_configured_to_allow_mounts() {
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,
@@ -251,11 +255,13 @@ async fn test_policy_can_be_configured_to_allow_privileged() {
             mounts: vec![],
             privileged: true,
             shared_uid_range: false,
-            env: // privileged
-        vec![],
+            env: vec![], // privileged
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -281,7 +287,7 @@ fn test_validate_policy_plain_container_always_allowed() {
 
     let policy = ContainerPolicy::default(); // deny-all defaults
     assert!(
-        validate_policy(&[], false, None, &policy).is_ok(),
+        validate_policy(&[], false, false, None, &policy).is_ok(),
         "plain container must always pass policy"
     );
 }
@@ -302,7 +308,7 @@ fn test_validate_policy_denies_bind_mount() {
         container_path: std::path::PathBuf::from("/data"),
         read_only: false,
     }];
-    let err = validate_policy(&mounts, false, None, &policy).unwrap_err();
+    let err = validate_policy(&mounts, false, false, None, &policy).unwrap_err();
     assert!(
         err.contains("bind mount") || err.contains("policy"),
         "expected bind-mount policy error, got: {err}"
@@ -319,7 +325,7 @@ fn test_validate_policy_denies_privileged() {
         allow_privileged: false,
         ..Default::default()
     };
-    let err = validate_policy(&[], true, None, &policy).unwrap_err();
+    let err = validate_policy(&[], true, false, None, &policy).unwrap_err();
     assert!(
         err.contains("privileged") || err.contains("policy"),
         "expected privileged policy error, got: {err}"
@@ -351,6 +357,7 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
             name: Some("mybox".to_string()),
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -383,6 +390,7 @@ async fn test_handle_run_duplicate_container_name_returns_error() {
             name: Some("mybox".to_string()),
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -610,6 +618,7 @@ async fn test_handle_run_bind_mount_denied_by_policy() {
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,
@@ -694,6 +703,7 @@ async fn test_handle_run_privileged_denied_by_policy() {
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,
@@ -735,6 +745,7 @@ async fn test_handle_pause_stopped_container_returns_not_running() {
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state.clone(),
         deps.clone(),
@@ -837,7 +848,10 @@ async fn test_handle_run_streaming_client_disconnect_does_not_panic() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -893,6 +907,7 @@ async fn test_persisted_running_container_not_reattached_after_restart() {
                 creation_params: None,
                 manifest_path: None,
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
     }
@@ -1007,6 +1022,7 @@ async fn handle_run_with_policy(
             cgroup_parent: None,
             priority: None,
             policy_override: None,
+            dind: false,
         },
         state,
         deps,

@@ -37,8 +37,6 @@ use minibox_core::client::DaemonClient;
 use minibox_core::domain::{BindMount, NetworkMode, UidRangeMode};
 use minibox_core::protocol::{DaemonRequest, DaemonResponse, OutputStreamKind};
 use std::io::{IsTerminal as _, Write};
-#[cfg(test)]
-use std::path::PathBuf;
 
 /// Parse a `-v src:dst[:ro]` volume shorthand into a `BindMount`.
 pub fn parse_volume(s: &str) -> anyhow::Result<BindMount> {
@@ -51,6 +49,9 @@ pub fn parse_mount(s: &str) -> anyhow::Result<BindMount> {
 }
 
 /// Options for the `run` subcommand, bundled to avoid a long parameter list.
+// Each bool is an independent CLI flag (--privileged, --tty, --rm, --dind);
+// they don't form combinable state and a state machine would just be this struct again.
+#[allow(clippy::struct_excessive_bools)]
 pub struct RunOpts {
     pub image: String,
     pub tag: String,
@@ -70,6 +71,19 @@ pub struct RunOpts {
     pub auto_remove: bool,
     pub platform: Option<String>,
     pub cgroup_parent: Option<String>,
+    pub dind: bool,
+    pub dind_debug: bool,
+}
+
+/// Nested daemons need full container-creation privileges, so `--dind`
+/// implies `--privileged` regardless of whether the flag was passed directly.
+const fn effective_privileged(privileged: bool, dind: bool) -> bool {
+    privileged || dind
+}
+
+/// Get the CLI version for protocol version negotiation.
+fn get_cli_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
 }
 
 /// Execute the `run` subcommand.
@@ -97,7 +111,11 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         auto_remove,
         platform,
         cgroup_parent,
+        dind,
+        dind_debug,
     } = opts;
+    let privileged = effective_privileged(privileged, dind);
+
     let network_mode = match network.as_str() {
         "none" => NetworkMode::None,
         "bridge" => NetworkMode::Bridge,
@@ -142,6 +160,9 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         execution_context: None,
         platform,
         cgroup_parent,
+        dind,
+        dind_debug,
+        client_version: dind.then(get_cli_version),
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -228,6 +249,7 @@ mod tests {
     use super::super::test_helpers::setup;
     use super::*;
     use minibox_core::protocol::{DaemonResponse, OutputStreamKind};
+    use std::path::PathBuf;
 
     /// ContainerCreated is the non-streaming legacy path — returns Ok(()) without
     /// calling process::exit, so it's the only execute() path testable in-process.
@@ -258,6 +280,8 @@ mod tests {
                 auto_remove: false,
                 platform: None,
                 cgroup_parent: None,
+                dind: false,
+                dind_debug: false,
             },
             &socket_path,
         )
@@ -266,6 +290,48 @@ mod tests {
             result.is_ok(),
             "execute should return Ok on ContainerCreated: {result:?}"
         );
+    }
+
+    #[test]
+    fn test_dind_enables_privileged() {
+        assert!(effective_privileged(false, true));
+    }
+
+    #[test]
+    fn test_dind_false_does_not_force_privileged() {
+        assert!(!effective_privileged(false, false));
+    }
+
+    #[test]
+    fn test_privileged_flag_alone_still_works() {
+        assert!(effective_privileged(true, false));
+    }
+
+    #[test]
+    fn test_dind_opts() {
+        let opts = RunOpts {
+            image: "alpine".to_string(),
+            tag: "latest".to_string(),
+            command: vec!["/bin/sh".to_string()],
+            memory_limit_bytes: None,
+            cpu_weight: None,
+            network: "none".to_string(),
+            privileged: false,
+            uid_range_mode: UidRangeMode::Exclusive,
+            volumes: vec![],
+            mount_specs: vec![],
+            name: None,
+            tty: false,
+            env: vec![],
+            entrypoint: None,
+            user: None,
+            auto_remove: false,
+            platform: None,
+            cgroup_parent: None,
+            dind: true,
+            dind_debug: false,
+        };
+        assert!(opts.dind);
     }
 
     fn network_mode_from_str(s: &str) -> Result<NetworkMode> {

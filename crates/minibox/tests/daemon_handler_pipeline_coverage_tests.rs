@@ -211,6 +211,7 @@ async fn test_handle_update_restart_true_stopped_container_not_restarted() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 

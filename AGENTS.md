@@ -181,7 +181,31 @@ Another agent using the same checkout can also:
 
 Before any multi-step git operation, re-read the branch and
 `git status --porcelain`. Do not reformat, stage, or commit a file you did not
-author — flag it instead. **Isolated worktrees are the fix.**
+author — either review & commit it or flag it instead. **Isolated worktrees are the fix.**
+
+### When a commit sweeps in someone else's work
+
+`cargo xtask pre-commit`'s `cargo fmt --all` + `git add -u` step stages by
+pathspec, but a concurrent writer can stage and commit between your `git add`
+and your `git commit` landing, so the commit that actually runs can capture
+whatever is in the index at that instant — their staged files under your
+message — instead of what you staged. Check for this after every commit:
+`git show --stat <sha>` should list only the paths you intended.
+
+This is not a reason to stop and wait. Resolve it without blocking:
+
+1. **If the content is real work and HEAD has not moved past it**: the
+   message is wrong but nothing is lost. Leave it — don't `reset`/`amend` a
+   commit once anything else may be built on top of it, including a
+   concurrent writer's next commit.
+2. **If your own change never landed**: it's still sitting unstaged in your
+   working tree (the hook only reformats; it doesn't discard anything you
+   staged under a path it didn't touch). Just stage and commit it again,
+   under its own correct message, as a new commit. Do not retroactively fix
+   the mislabeled one.
+3. Only reach for `reset`/`amend` when you are certain nothing — not even a
+   concurrent writer — has committed on top yet. Once something has, treat
+   the history as shared and append, never rewrite.
 
 ## Architecture Guardrails
 
@@ -211,6 +235,51 @@ author — flag it instead. **Isolated worktrees are the fix.**
   (e.g. Alpine's `etc/mtab -> ../proc/mounts`) — call `.follow_symlinks(false)`
   before tarring an extracted layer/rootfs dir, or it fails with ENOENT on the
   host. See `docker_archive.rs`, `commit.rs`, `push.rs`, `colima_push.rs`.
+
+## Component Removal Audit Checklist
+
+When deleting a component (crate, module, file, feature, or dependency), verify all of the
+following before committing. **18 instances of incomplete grep/audit have been detected**
+post-deletion, leaving stale references and broken imports. See GitHub issue #601 for detailed
+guidance and examples.
+
+### Grep Verification
+
+- [ ] `grep -r "component_name" --include="*.rs" .` — all Rust imports/usages
+- [ ] `grep -r "component_name" --include="*.toml" .` — `Cargo.toml`, features, workspace
+- [ ] `grep -r "component_name" --include="*.md" .` — docs, README, CHANGELOG
+- [ ] `cargo tree -i <crate_name>` — verify no dependents remain
+
+### Ecosystem Impact
+
+- [ ] Check re-exports in public libs; remove if the component was re-exported
+- [ ] Verify no conditional compilation gates reference the deleted module
+- [ ] If a domain port was deleted, confirm no protocol messages reference it
+- [ ] Update `taskit.toml` `[[protocol.surfaces]]` if applicable; run `taskit protocol drift --update`
+- [ ] Check `crates/miniboxd/src/main.rs` handler dependencies — adapter suite construction sites may need updates
+
+### Test & Documentation
+
+- [ ] Search for disabled/skipped tests depending on the removed component
+- [ ] Verify conformance suite tests do not reference the deleted adapter/runtime
+- [ ] Check `.github/workflows/*.yml` for references (test targets, release artifacts)
+- [ ] Update `CRATE_INVENTORY.mbx.md` (crate list and counts)
+- [ ] Update `ARCHITECTURE.mbx.md` (diagram and description)
+- [ ] Update `AGENTS.md` Quick Reference if applicable
+- [ ] Check `DEVELOPMENT.md` for build/test instructions
+- [ ] Update `CHANGELOG.md` if user-visible
+
+### Final Verification
+
+- [ ] `cargo xtask verify` passes (docs-audit, architecture rings, clippy)
+- [ ] `cargo xtask test unit` passes
+- [ ] `cargo build --all-features --release` succeeds
+- [ ] `cargo build --no-default-features` succeeds (test minimal builds)
+- [ ] No stale `.gitignore` entries remain
+
+**Reference commit example**: 833692a7 deleted a Dockerfile but left stale references in
+5 files (assets/index.html, CI docs, shell helpers, commented code). Always grep for file
+paths and regex patterns, not just direct component names.
 
 ## Rust and Test Conventions
 

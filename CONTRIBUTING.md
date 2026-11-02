@@ -17,7 +17,7 @@ What replaces the freeze:
   block.
 - Chain I stabilization-track issues (#94, #20, #83, and related) are unblocked.
 - The mandatory gates remain enforced in CI (`stability-gates.yml`,
-  `protocol-drift.yml`, `pr.yml`/`merge.yml`) — a regression in any gate is a
+  `protocol-drift.yml`, `merge.yml`) — a regression in any gate is a
   merge blocker exactly as during the freeze.
 
 ---

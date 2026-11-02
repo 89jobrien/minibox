@@ -137,6 +137,7 @@ pub fn make_stub_record(id: impl Into<String>) -> crate::daemon::state::Containe
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     }
 }
 

@@ -110,10 +110,8 @@ async fn handle_run_once(
             tag: tag,
             command: command,
             memory_limit_bytes: None,
-            cpu_weight: // memory_limit_bytes
-        None,
-            ephemeral: // cpu_weight
-        false,
+            cpu_weight: None, // memory_limit_bytes
+            ephemeral: false, // cpu_weight
             network: None,
             mounts: vec![],
             privileged: false,
@@ -121,7 +119,10 @@ async fn handle_run_once(
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,

@@ -750,6 +750,7 @@ async fn test_handle_update_containers_true_collects_refs() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -823,6 +824,7 @@ async fn test_handle_update_restart_stop_fails_continues() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -917,6 +919,7 @@ async fn test_handle_update_restart_no_creation_params_warns() {
         creation_params: None, // No creation_params — cannot restart.
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1012,6 +1015,7 @@ async fn test_handle_list_multiple_containers() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
     }
@@ -1133,6 +1137,7 @@ async fn test_handle_get_manifest_success() {
         creation_params: None,
         manifest_path: Some(manifest_path),
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1237,6 +1242,7 @@ async fn test_handle_verify_manifest_allowed() {
         creation_params: None,
         manifest_path: Some(manifest_path),
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1344,6 +1350,7 @@ async fn test_handle_verify_manifest_denied() {
         creation_params: None,
         manifest_path: Some(manifest_path),
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -1520,7 +1527,10 @@ async fn test_handle_run_ephemeral_exercises_streaming_path() {
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+                dind: false,
+                priority: None,
+                policy_override: None,
         },
         Arc::clone(&state),
         deps,

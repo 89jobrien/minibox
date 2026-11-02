@@ -183,6 +183,7 @@ just test-integration        # cgroup tests + native adapter isolation
 just test-e2e                # protocol e2e tests (any platform)
 just test-system             # full daemon+CLI suite (Linux + root)
 just test-e2e-vps            # run full-stack suite on VPS via SSH
+just e2e-local               # macOS smoke test: mbx build + run + exec (ops/ci-runner/)
 ```
 
 ### Property-based tests (any platform)
@@ -196,6 +197,25 @@ cargo xtask test property
 ```bash
 just test-adapters           # Colima + handler adapter swap tests
 just test-cli-subprocess     # CLI subprocess integration tests
+```
+
+### Docker-in-Docker (`--dind`) test (Linux + root)
+
+`mbx run --dind` implies `--privileged`. It copies the host `miniboxd` and `mbx`
+binaries plus a wrapper script into a temp dir, bind-mounts that dir (read-only)
+together with host-backed inner data/run dirs and `/sys/fs/cgroup`, then
+overrides the entrypoint with a wrapper that starts a nested `miniboxd` on its
+own socket (`/minibox-run/miniboxd.sock`) and exports `MINIBOX_SOCKET_PATH`
+before handing off to the container's own command. The nested daemon gets a
+per-run delegated cgroup slice and pulls images into its own host-backed data
+dir; the outer daemon socket and image cache are deliberately not shared.
+Requires a Linux host with cgroup v2 at `/sys/fs/cgroup` and a Linux (ELF)
+`miniboxd` on `PATH`. Ignored by default (needs a real adapter and network
+access to pull the base image); run explicitly with:
+
+```bash
+cargo build -p miniboxd -p minibox-cli
+cargo nextest run -p minibox-cli --test cli_dind --features subprocess-tests -- --include-ignored
 ```
 
 ### VM tests
@@ -266,9 +286,12 @@ just test-all                # nuke state -> doctor -> unit + integration + e2e 
 ## Benchmarks
 
 All criterion benchmarks live in `crates/minibox-bench`. Results are written to
-`bench/results/` (gitignored); tracked per-env baselines live at
-`bench/baseline.{local,selfhosted,hosted}.json`. The nightly CI bench job produces the
-canonical numbers.
+`bench/results/` (gitignored). Per-env baselines are read from
+`bench/baseline.{local,selfhosted,hosted}.json` — **none of these files are
+currently tracked in git**, so `--check` has nothing to compare against until
+`just bench-baseline` is run and committed for the relevant `--env`. The nightly CI
+bench jobs are `continue-on-error: true`, which is why the missing baselines have not
+surfaced as a failure.
 
 ```bash
 just bench                       # run benches, save to bench/results/
@@ -352,18 +375,26 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 ### Codebase Integrity Checks
 
-| Task                                  | Command                                     | When to use                         |
-| ------------------------------------- | ------------------------------------------- | ----------------------------------- |
-| Detect stale crate/binary names       | `cargo xtask check stale-names`             | After renames; CI gate              |
-| Verify protocol contract hashes       | `cargo xtask check protocol-drift`          | After protocol.rs changes           |
-| Update protocol hash baseline         | `cargo xtask check protocol-drift --update` | After intentional protocol changes  |
-| Verify HandlerDependencies site count | `cargo xtask check protocol-sites`          | After adding/removing handler sites |
-| Scan for `.unwrap()` in production    | `cargo xtask check no-unwrap`               | Advisory; use `--strict` to fail    |
-| Verify adapter test coverage          | `cargo xtask check adapter-coverage`        | After adding a new adapter          |
-| Check for tracked generated artifacts | `cargo xtask check repo-clean`              | Before PRs                          |
-| Lint legacy plan/spec frontmatter     | `cargo xtask docs lint`                     | Only scans docs/superpowers/        |
-| Enforce dependency rings              | `cargo xtask architecture`                  | After changing crate dependencies   |
-| Cross-build release binaries for musl | `cargo xtask musl-check`                    | Before pushing Linux-gated changes  |
+| Task                                  | Command                                     | When to use                                                       |
+| ------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------- |
+| Detect stale crate/binary names       | `cargo xtask check stale-names`             | After renames; CI gate                                            |
+| Verify protocol contract hashes       | `cargo xtask check protocol-drift`          | After protocol.rs changes                                         |
+| Update protocol hash baseline         | `cargo xtask check protocol-drift --update` | After intentional protocol changes                                |
+| Verify HandlerDependencies site count | `cargo xtask check protocol-sites`          | After adding/removing handler sites                               |
+| Scan for `.unwrap()` in production    | `cargo xtask check no-unwrap`               | Advisory; use `--strict` to fail                                  |
+| Verify adapter test coverage          | `cargo xtask check adapter-coverage`        | After adding a new adapter                                        |
+| Check for tracked generated artifacts | `cargo xtask check repo-clean`              | Before PRs                                                        |
+| Lint plan/spec frontmatter            | `cargo xtask docs lint`                     | Intended for `docs/{plans,specs}/`; currently a no-op — see below |
+| Enforce dependency rings              | `cargo xtask architecture`                  | After changing crate dependencies                                 |
+| Cross-build release binaries for musl | `cargo xtask musl-check`                    | Before pushing Linux-gated changes                                |
+
+**Known gap:** `cargo xtask docs lint` resolves its scan root to
+`docs/superpowers/{plans,specs}/`, a path that no longer exists. It reports
+`checked 0 files` and exits clean, so the gate is currently inert. The live
+plan and spec documents are in `docs/plans/` and `docs/specs/`. Fixing this is
+a change to `xtask/src/docs_lint.rs`, not a docs edit — the 35 documents it
+would newly cover have never been linted, so treat the first run as a baseline
+rather than expecting it to pass.
 
 ### Build
 
@@ -408,6 +439,61 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 ---
 
+## Nushell Development Patterns
+
+### Background Processes and with-env Scoping
+
+**Problem**: Background daemons spawned with `&` inside a `with-env` block are automatically terminated when the block exits. Nushell scopes background child processes to the with-env block and kills them on scope exit.
+
+**Example (incorrect)**:
+
+```nu
+with-env { MY_VAR: "value" } {
+    miniboxd &  # Backgrounded, but will be SIGKILL'd when block exits
+    some-command
+}
+# miniboxd is dead before some-command finishes
+```
+
+**Fix**: Explicitly kill or cleanup background processes **before** exiting the with-env block:
+
+```nu
+with-env { MY_VAR: "value" } {
+    miniboxd &
+    let daemon_pid = (jobs | last).pid
+    some-command
+    # Explicit cleanup before block exit
+    kill $daemon_pid
+}
+```
+
+**Pattern for persistent daemons**:
+
+```nu
+def spawn-daemon-with-cleanup [daemon_fn: closure, work_fn: closure, cleanup_fn: closure] {
+    # Spawn daemon and keep it alive through closure scope
+    with-env { ... } {
+        (do $daemon_fn) &
+        let daemon_pid = (jobs | last).pid
+        try {
+            (do $work_fn)
+        } finally {
+            # Guaranteed cleanup before with-env scope exit
+            (do $cleanup_fn $daemon_pid)
+        }
+    }
+}
+```
+
+**Real example** (ops/ci-runner/e2e-local.nu):
+
+- Stage 1 (build): miniboxd runs, exits cleanly with explicit `kill-miniboxd` before with-env block closes
+- Stage 2 (run+exec): krun container, `kill-miniboxd` called before scope exit to prevent SIGKILL orphaning
+
+See `ops/ci-runner/e2e-local.nu` for working implementation.
+
+---
+
 ## scripts/ Directory
 
 The `scripts/` directory contains AI agent tooling and operational helpers.
@@ -421,6 +507,9 @@ for recipes that wrap them.
 | `sync-check.nu`           | Fetch + rebase check before push                         |
 | `ai-review.nu`            | AI-assisted code review of staged diff                   |
 | `council.nu`              | Multi-model council analysis                             |
+| `agentbox-council.nu`     | agentbox council analysis (Go toolchain)                 |
+| `agentbox-meta-agent.nu`  | agentbox orchestration meta-agent                        |
+| `agentbox-commit-msg.nu`  | agentbox commit-message helper                           |
 | `standup.nu`              | Generate standup summary from recent commits             |
 | `diagnose.nu`             | Container/daemon diagnostics                             |
 | `start-daemon.nu`         | Start miniboxd with adapter selection                    |
@@ -436,3 +525,22 @@ for recipes that wrap them.
 | `check-protocol-sites.nu` | Protocol site audit (wraps xtask)                        |
 | `trace-lima.nu`           | Trace Lima VM activity                                   |
 | `parse-geiger.nu`         | Parse cargo-geiger unsafe usage output                   |
+
+## Documentation
+
+`docs/core/*.mbx.md` is the canonical reference set, ordered by
+`docs/core/SUMMARY.md` and mirrored in `docs/docs.yaml`. The root `book.toml` is the
+only mdBook config in the repo and renders that set:
+
+```bash
+mdbook build          # docs/core -> book/ (gitignored)
+mdbook serve          # live preview at http://localhost:3000
+```
+
+`book/` is local-only. The GitHub Pages surface is the separate hand-built `site/`
+directory, published by `.github/workflows/pages.yml`.
+
+There was previously a second, parallel mdBook at `docs/book.toml` over `docs/src/`,
+holding 22 short per-crate stubs that duplicated `docs/core` content and carried none
+of the provenance frontmatter. It was removed so there is exactly one book and one
+canonical home for reference content.

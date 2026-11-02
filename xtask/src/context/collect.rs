@@ -1446,6 +1446,8 @@ build = "build.rs"
             let status = Command::new("git")
                 .args(args)
                 .current_dir(current_dir)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
                 .status()
                 .expect("git fixture command should run");
             assert!(
@@ -1474,6 +1476,8 @@ build = "build.rs"
                 .arg(worktree)
                 .arg("HEAD")
                 .current_dir(&repository)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_SYSTEM", "/dev/null")
                 .status()
                 .expect("git worktree command should run");
             assert!(status.success(), "git worktree command should succeed");

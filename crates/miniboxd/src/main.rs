@@ -59,7 +59,6 @@ fn main() {
     // Load config and bridge adapter into env before the runtime starts.
     // SAFETY: single-threaded — no tokio workers exist yet.
     let config = miniboxd::config::DaemonConfig::load();
-
     // Priority: --adapter CLI flag > MINIBOX_ADAPTER env var > config.adapter > auto-detect.
     if let Some(ref adapter_name) = cli.adapter {
         // Validate early so we fail before spawning the runtime.
@@ -349,7 +348,7 @@ use minibox::daemon::handler::{ContainerPolicy, HandlerDependencies, PtySessionR
 #[cfg(unix)]
 use minibox::daemon::state::{DaemonState, FsCgroupFreezeChecker, KillProcessChecker};
 #[cfg(unix)]
-use minibox_core::adapters::HostnameRegistryRouter;
+use minibox_core::adapters::{HostnameRegistryRouter, LockedImageRegistry};
 #[cfg(unix)]
 use minibox_core::events::BroadcastEventBroker;
 #[cfg(unix)]
@@ -553,6 +552,7 @@ fn resolve_container_policy(config: &miniboxd::config::DaemonConfig) -> Containe
             .policy
             .allow_privileged
             .unwrap_or(env_policy.allow_privileged),
+        allow_dind: config.policy.allow_dind.unwrap_or(env_policy.allow_dind),
         ..Default::default()
     }
 }
@@ -690,6 +690,7 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
     tracing::info!(
         allow_bind_mounts = policy.allow_bind_mounts,
         allow_privileged = policy.allow_privileged,
+        allow_dind = policy.allow_dind,
         "container policy configured (config > env > default)"
     );
 
@@ -969,16 +970,16 @@ fn build_native_handler_dependencies(
     native_network: Arc<dyn minibox_core::domain::NetworkProvider>,
 ) -> Result<Arc<HandlerDependencies>> {
     let registry_router = Arc::new(HostnameRegistryRouter::new(
-        Arc::new(
+        Arc::new(LockedImageRegistry::new(Arc::new(
             DockerHubRegistry::new(Arc::clone(&state.image_store))
                 .context("creating Docker Hub registry adapter")?,
-        ),
+        ))),
         [(
             "ghcr.io",
-            Arc::new(
+            Arc::new(LockedImageRegistry::new(Arc::new(
                 GhcrRegistry::new(Arc::clone(&state.image_store))
                     .context("creating GHCR registry adapter")?,
-            ) as minibox_core::domain::DynImageRegistry,
+            ))) as minibox_core::domain::DynImageRegistry,
         )],
     ));
     let commit_adapter = minibox::adapters::commit::overlay_commit_adapter(
@@ -1052,16 +1053,16 @@ fn build_gke_handler_dependencies(
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
     let registry_router = Arc::new(HostnameRegistryRouter::new(
-        Arc::new(
+        Arc::new(LockedImageRegistry::new(Arc::new(
             DockerHubRegistry::new(Arc::clone(&state.image_store))
                 .context("creating Docker Hub registry adapter")?,
-        ),
+        ))),
         [(
             "ghcr.io",
-            Arc::new(
+            Arc::new(LockedImageRegistry::new(Arc::new(
                 GhcrRegistry::new(Arc::clone(&state.image_store))
                     .context("creating GHCR registry adapter")?,
-            ) as minibox_core::domain::DynImageRegistry,
+            ))) as minibox_core::domain::DynImageRegistry,
         )],
     ));
     let proot_runtime =
@@ -1177,9 +1178,14 @@ fn build_smolvm_handler_dependencies(
     image_gc: Arc<dyn ImageGarbageCollector>,
 ) -> Result<Arc<HandlerDependencies>> {
     let smolvm_registry = Arc::new(SmolVmRegistry::new(Arc::clone(&state.image_store))?);
-    let default_registry = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
-    let ghcr = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry;
-    let image_loader = smolvm_registry as minibox_core::domain::DynImageLoader;
+    let image_loader = Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageLoader;
+    let default_registry: minibox_core::domain::DynImageRegistry =
+        Arc::new(LockedImageRegistry::new(
+            Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry
+        ));
+    let ghcr: minibox_core::domain::DynImageRegistry = Arc::new(LockedImageRegistry::new(
+        Arc::clone(&smolvm_registry) as minibox_core::domain::DynImageRegistry,
+    ));
     let registry_router = Arc::new(HostnameRegistryRouter::new(
         default_registry,
         [("ghcr.io", ghcr)],
@@ -1247,11 +1253,13 @@ fn build_krun_handler_dependencies(
         KrunRegistry::new(Arc::clone(&state.image_store))
             .context("creating krun registry adapter")?,
     );
-    let registry_port: minibox_core::domain::DynImageRegistry = registry;
-    let ghcr = Arc::new(
-        GhcrRegistry::new(Arc::clone(&state.image_store))
-            .context("creating GHCR registry adapter for krun")?,
-    ) as minibox_core::domain::DynImageRegistry;
+    let registry_port: minibox_core::domain::DynImageRegistry =
+        Arc::new(LockedImageRegistry::new(registry));
+    let ghcr: minibox_core::domain::DynImageRegistry =
+        Arc::new(LockedImageRegistry::new(Arc::new(
+            GhcrRegistry::new(Arc::clone(&state.image_store))
+                .context("creating GHCR registry adapter for krun")?,
+        )));
     let krun_runtime = Arc::new(KrunRuntime::new());
 
     Ok(Arc::new(HandlerDependencies {
@@ -1739,8 +1747,10 @@ mod tests {
             .expect("parse image ref");
         let routed = deps.image.registry_router.route(&image_ref);
         assert!(
-            routed.as_any().is::<minibox::adapters::SmolVmRegistry>(),
-            "smolvm suite must route run cache checks and pulls through SmolVmRegistry"
+            routed
+                .as_any()
+                .is::<minibox_core::adapters::LockedImageRegistry>(),
+            "smolvm suite must route run cache checks and pulls through LockedImageRegistry wrapping SmolVmRegistry"
         );
     }
 

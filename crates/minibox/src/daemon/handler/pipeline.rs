@@ -169,6 +169,7 @@ pub async fn handle_pipeline(
                     allow_bind_mounts: Some(true),
                     ..Default::default()
                 }),
+                dind: false,
             };
             handle_run(params, pipeline_state, pipeline_deps_clone, inner_tx).await;
         });

@@ -779,6 +779,7 @@ async fn test_handle_run_explicit_network_none() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -997,6 +998,7 @@ async fn test_run_with_network_mode_host() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -1327,6 +1329,7 @@ async fn test_handle_stop_container_without_pid_returns_error() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -1343,6 +1346,65 @@ async fn test_handle_stop_container_without_pid_returns_error() {
         }
         other => panic!("expected Error response, got: {other:?}"),
     }
+}
+
+/// `remove_inner` deletes the `DinD` staging directory recorded on
+/// `ContainerRecord.temp_dir_path` when a container is removed.
+#[tokio::test]
+async fn test_remove_inner_cleans_up_dind_staging_dir() {
+    use minibox::daemon::state::ContainerRecord;
+    use minibox_core::protocol::ContainerInfo;
+
+    let temp_dir = TempDir::new().expect("create temp dir");
+    let deps = create_test_deps_with_dir(&temp_dir);
+    let state = create_test_state_with_dir(&temp_dir);
+
+    let staging_dir = temp_dir.path().join("dind-staging-abc123");
+    std::fs::create_dir_all(&staging_dir).expect("create staging dir");
+    assert!(staging_dir.exists(), "precondition: staging dir exists");
+
+    let container_id = "dindcontainer0001".to_string();
+    state
+        .add_container(ContainerRecord {
+            info: ContainerInfo {
+                id: container_id.clone(),
+                name: None,
+                image: "alpine:latest".to_string(),
+                command: "/bin/sh".to_string(),
+                state: "Stopped".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339(),
+                pid: None,
+            },
+            pid: None,
+            runtime_id: None,
+            rootfs_path: std::path::PathBuf::from("/mock/rootfs"),
+            cgroup_path: std::path::PathBuf::from("/mock/cgroup"),
+            post_exit_hooks: vec![],
+            rootfs_metadata: None,
+            source_image_ref: None,
+            upper_dir: None,
+            merged_dir: None,
+            step_state: None,
+            priority: None,
+            urgency: None,
+            execution_context: None,
+            creation_params: None,
+            manifest_path: None,
+            workload_digest: None,
+            temp_dir_path: Some(staging_dir.clone()),
+        })
+        .await;
+
+    let response = handler::handle_remove(container_id, state, deps).await;
+
+    match response {
+        DaemonResponse::Success { .. } => {}
+        other => panic!("expected Success response, got: {other:?}"),
+    }
+    assert!(
+        !staging_dir.exists(),
+        "dind staging dir must be removed by remove_inner"
+    );
 }
 
 /// `remove_inner` cgroup cleanup failure is best-effort — `handle_remove` still
@@ -1623,6 +1685,7 @@ async fn test_handle_stop_dead_pid_succeeds() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -1697,6 +1760,7 @@ async fn test_handle_stop_triggers_network_cleanup() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -1872,6 +1936,7 @@ async fn test_handle_remove_created_container_succeeds() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -2132,6 +2197,7 @@ async fn test_handle_remove_running_container_returns_error() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -2169,6 +2235,7 @@ async fn test_handle_run_bridge_network_mode_calls_setup() {
             name: None,
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -2280,6 +2347,7 @@ async fn test_daemon_state_persistence_survives_restart() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
     }
@@ -2338,6 +2406,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
         state.remove_container(container_id).await;
@@ -2384,6 +2453,7 @@ async fn test_handle_stop_resolves_by_name() {
             name: Some("my-stop-ctr".to_string()),
             platform: None,
             cgroup_parent: None,
+            dind: false,
             priority: None,
             policy_override: None,
         },
@@ -2454,6 +2524,7 @@ async fn test_handle_remove_resolves_by_name() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 
@@ -2582,6 +2653,7 @@ async fn test_handle_logs_client_disconnect_mid_stream() {
         creation_params: None,
         manifest_path: None,
         workload_digest: None,
+        temp_dir_path: None,
     };
     state.add_container(record).await;
 

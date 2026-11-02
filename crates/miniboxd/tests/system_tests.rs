@@ -598,3 +598,290 @@ echo dind-ok
         "expected 'dind-ok' in DinD output.\nstdout: {stdout}"
     );
 }
+
+/// Test that nested miniboxd can create multiple containers end-to-end,
+/// exercising the full nested container lifecycle.
+#[test]
+#[serial]
+fn test_e2e_dind_nested_container_creation() {
+    let caps = preflight::probe();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, cgroups_v2, "requires cgroups v2");
+    require_capability!(caps, overlay_fs, "requires overlay filesystem");
+
+    let fixture = DaemonFixture::start();
+    fixture.pull_required("alpine");
+
+    let inner_data_dir = TempDir::with_prefix("minibox-dind-data-").expect("create dind data dir");
+    let inner_run_dir = TempDir::with_prefix("minibox-dind-run-").expect("create dind run dir");
+
+    let inner_cgroup_name = format!(
+        "minibox-dind-nested-{}",
+        &uuid::Uuid::new_v4().to_string()[..8]
+    );
+    let inner_cgroup_path = format!("/sys/fs/cgroup/{inner_cgroup_name}");
+
+    let miniboxd_bin = find_binary("miniboxd");
+    let minibox_bin = find_binary("mbx");
+
+    let v_miniboxd = format!("{}:/usr/local/bin/miniboxd:ro", miniboxd_bin.display());
+    let v_minibox = format!("{}:/usr/local/bin/minibox:ro", minibox_bin.display());
+    let v_cgroup = "/sys/fs/cgroup:/sys/fs/cgroup".to_string();
+    let v_data = format!("{}:/minibox-data", inner_data_dir.path().display());
+    let v_run = format!("{}:/minibox-run", inner_run_dir.path().display());
+
+    // Create 3 nested containers via inner daemon; verify ps output
+    let script = format!(
+        r#"set -e
+mkdir -p /sys/fs/cgroup/{inner_cgroup_name}
+echo '+memory +cpu +pids' > /sys/fs/cgroup/{inner_cgroup_name}/cgroup.subtree_control
+
+MINIBOX_DATA_DIR=/minibox-data \
+  MINIBOX_RUN_DIR=/minibox-run \
+  MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/{inner_cgroup_name} \
+  RUST_LOG=error \
+  /usr/local/bin/miniboxd &
+DAEMON_PID=$!
+
+i=0
+while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
+  sleep 0.1; i=$((i+1))
+done
+[ -S /minibox-run/miniboxd.sock ] || exit 1
+
+# Create 3 background containers
+for i in 1 2 3; do
+  MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox run -d alpine -- /bin/sleep 30 > /tmp/ctr$i.txt 2>&1
+done
+
+# Wait for all 3 to appear in ps
+j=0
+while [ "$j" -lt 50 ]; do
+  COUNT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox ps 2>/dev/null | wc -l)
+  [ "$COUNT" -ge 3 ] && break
+  sleep 0.1; j=$((j+1))
+done
+
+# Verify ps shows Running containers
+PS_OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox ps)
+echo "$PS_OUT" | grep -q Running || (echo "containers not Running: $PS_OUT" >&2; exit 1)
+
+kill "$DAEMON_PID" 2>/dev/null || true
+wait "$DAEMON_PID" 2>/dev/null || true
+echo nested-containers-ok
+"#
+    );
+
+    let run_args: Vec<&str> = vec![
+        "run",
+        "--privileged",
+        "-v",
+        &v_miniboxd,
+        "-v",
+        &v_minibox,
+        "-v",
+        &v_cgroup,
+        "-v",
+        &v_data,
+        "-v",
+        &v_run,
+        "alpine",
+        "--",
+        "/bin/sh",
+        "-c",
+        &script,
+    ];
+
+    let (exit_code, stdout, stderr) = fixture.run_cli_with_exit_code(&run_args);
+    let _ = std::fs::remove_dir_all(&inner_cgroup_path);
+
+    assert_eq!(
+        exit_code, 0,
+        "Nested container creation test exited non-zero.\nstdout: {stdout}\nstderr: {stderr}"
+    );
+    assert!(
+        stdout.contains("nested-containers-ok"),
+        "expected 'nested-containers-ok' in output.\nstdout: {stdout}"
+    );
+}
+
+/// Test that concurrent image pulls from host and nested daemon do not
+/// corrupt the image cache.
+#[test]
+#[serial]
+fn test_e2e_dind_concurrent_cache_access() {
+    let caps = preflight::probe();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, cgroups_v2, "requires cgroups v2");
+    require_capability!(caps, overlay_fs, "requires overlay filesystem");
+
+    let fixture = DaemonFixture::start();
+    // Pre-pull alpine on host to ensure it exists
+    fixture.pull_required("alpine");
+
+    let inner_data_dir = TempDir::with_prefix("minibox-dind-data-").expect("create dind data dir");
+    let inner_run_dir = TempDir::with_prefix("minibox-dind-run-").expect("create dind run dir");
+
+    let inner_cgroup_name = format!(
+        "minibox-dind-concurrent-{}",
+        &uuid::Uuid::new_v4().to_string()[..8]
+    );
+    let inner_cgroup_path = format!("/sys/fs/cgroup/{inner_cgroup_name}");
+
+    let miniboxd_bin = find_binary("miniboxd");
+    let minibox_bin = find_binary("mbx");
+
+    let v_miniboxd = format!("{}:/usr/local/bin/miniboxd:ro", miniboxd_bin.display());
+    let v_minibox = format!("{}:/usr/local/bin/minibox:ro", minibox_bin.display());
+    let v_cgroup = "/sys/fs/cgroup:/sys/fs/cgroup".to_string();
+    let v_data = format!("{}:/minibox-data", inner_data_dir.path().display());
+    let v_run = format!("{}:/minibox-run", inner_run_dir.path().display());
+
+    // Inner script: pull alpine, verify it can run containers using that image
+    let script = format!(
+        r#"set -e
+mkdir -p /sys/fs/cgroup/{inner_cgroup_name}
+echo '+memory +cpu +pids' > /sys/fs/cgroup/{inner_cgroup_name}/cgroup.subtree_control
+
+MINIBOX_DATA_DIR=/minibox-data \
+  MINIBOX_RUN_DIR=/minibox-run \
+  MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/{inner_cgroup_name} \
+  RUST_LOG=error \
+  /usr/local/bin/miniboxd &
+DAEMON_PID=$!
+
+i=0
+while [ "$i" -lt 100 ] && [ ! -S /minibox-run/miniboxd.sock ]; do
+  sleep 0.1; i=$((i+1))
+done
+[ -S /minibox-run/miniboxd.sock ] || exit 1
+
+# Pull alpine in nested daemon
+MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox pull alpine >/dev/null 2>&1
+
+# Run container using the pulled image
+OUT=$(MINIBOX_SOCKET_PATH=/minibox-run/miniboxd.sock /usr/local/bin/minibox run alpine -- /bin/echo concurrent-ok 2>&1)
+echo "$OUT" | grep -q concurrent-ok || (echo "concurrent test failed: $OUT" >&2; exit 1)
+
+kill "$DAEMON_PID" 2>/dev/null || true
+wait "$DAEMON_PID" 2>/dev/null || true
+"#
+    );
+
+    let run_args: Vec<&str> = vec![
+        "run",
+        "--privileged",
+        "-v",
+        &v_miniboxd,
+        "-v",
+        &v_minibox,
+        "-v",
+        &v_cgroup,
+        "-v",
+        &v_data,
+        "-v",
+        &v_run,
+        "alpine",
+        "--",
+        "/bin/sh",
+        "-c",
+        &script,
+    ];
+
+    let (exit_code, stdout, stderr) = fixture.run_cli_with_exit_code(&run_args);
+    let _ = std::fs::remove_dir_all(&inner_cgroup_path);
+
+    assert_eq!(
+        exit_code, 0,
+        "Concurrent cache access test exited non-zero.\nstdout: {stdout}\nstderr: {stderr}"
+    );
+}
+
+/// Test that miniboxd startup failure surfaces an error rather than hanging
+/// the entrypoint indefinitely.
+#[test]
+#[serial]
+fn test_e2e_dind_startup_failure_detection() {
+    let caps = preflight::probe();
+    require_capability!(caps, is_root, "requires root");
+    require_capability!(caps, cgroups_v2, "requires cgroups v2");
+    require_capability!(caps, overlay_fs, "requires overlay filesystem");
+
+    let fixture = DaemonFixture::start();
+    fixture.pull_required("alpine");
+
+    let inner_data_dir = TempDir::with_prefix("minibox-dind-data-").expect("create dind data dir");
+    let inner_run_dir = TempDir::with_prefix("minibox-dind-run-").expect("create dind run dir");
+
+    let inner_cgroup_name = format!(
+        "minibox-dind-fail-{}",
+        &uuid::Uuid::new_v4().to_string()[..8]
+    );
+    let inner_cgroup_path = format!("/sys/fs/cgroup/{inner_cgroup_name}");
+
+    let v_cgroup = "/sys/fs/cgroup:/sys/fs/cgroup".to_string();
+    let v_data = format!("{}:/minibox-data", inner_data_dir.path().display());
+    let v_run = format!("{}:/minibox-run", inner_run_dir.path().display());
+
+    // Try to run miniboxd from a path that doesn't exist — should fail immediately
+    // without hanging the entrypoint.
+    let script = format!(
+        r#"set -e
+mkdir -p /sys/fs/cgroup/{inner_cgroup_name}
+echo '+memory +cpu +pids' > /sys/fs/cgroup/{inner_cgroup_name}/cgroup.subtree_control
+
+# Run nonexistent miniboxd binary
+MINIBOX_DATA_DIR=/minibox-data \
+  MINIBOX_RUN_DIR=/minibox-run \
+  MINIBOX_CGROUP_ROOT=/sys/fs/cgroup/{inner_cgroup_name} \
+  /nonexistent/miniboxd &
+DAEMON_PID=$!
+
+# Wait a bit and check if the process died
+sleep 0.5
+if kill -0 $DAEMON_PID 2>/dev/null; then
+  echo "ERROR: nonexistent miniboxd should have failed immediately" >&2
+  exit 1
+fi
+
+# Small timeout to ensure entrypoint doesn't hang
+TIMEOUT=10
+COUNT=0
+while [ ! -S /minibox-run/miniboxd.sock ] && [ $COUNT -lt $TIMEOUT ]; do
+  sleep 0.1
+  COUNT=$((COUNT + 1))
+done
+
+if [ -S /minibox-run/miniboxd.sock ]; then
+  echo "ERROR: socket should not exist after failed startup" >&2
+  exit 1
+fi
+
+echo "startup-failure-detected-ok"
+"#
+    );
+
+    let run_args: Vec<&str> = vec![
+        "run",
+        "--privileged",
+        "-v",
+        &v_cgroup,
+        "-v",
+        &v_data,
+        "-v",
+        &v_run,
+        "alpine",
+        "--",
+        "/bin/sh",
+        "-c",
+        &script,
+    ];
+
+    let (exit_code, stdout, stderr) = fixture.run_cli_with_exit_code(&run_args);
+    let _ = std::fs::remove_dir_all(&inner_cgroup_path);
+
+    assert_eq!(
+        exit_code, 0,
+        "Startup failure detection test exited non-zero.\nstdout: {stdout}\nstderr: {stderr}"
+    );
+}

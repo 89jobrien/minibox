@@ -462,6 +462,24 @@ async fn start_vz(
     let vm_dir = default_vm_dir()
         .ok_or_else(|| anyhow::anyhow!("vz: cannot determine home directory for VM image path"))?;
 
+    // macOS validates the virtualization entitlement before any configuration is
+    // accepted, so an unsigned daemon fails configuration validation (VZErrorDomain
+    // code=2, `invalidVirtualMachineConfiguration`) with a message naming the missing
+    // entitlement, regardless of VM image, adapter wiring, or boot loader. State it
+    // before the boot attempt instead of letting it surface as an opaque boot error.
+    match vz::signing::process_is_virtualization_entitled() {
+        Ok(true) => info!(
+            "vz: process is signed with {}",
+            vz::signing::VIRTUALIZATION_ENTITLEMENT
+        ),
+        Ok(false) => warn!(
+            "vz: process is NOT signed with {} — configuration validation will fail \
+             with VZErrorDomain code=2; run `just sign-vz` and restart the daemon",
+            vz::signing::VIRTUALIZATION_ENTITLEMENT
+        ),
+        Err(error) => warn!(%error, "vz: could not read signing entitlements"),
+    }
+
     info!(vm_dir = %vm_dir.display(), "vz: booting Linux VM");
 
     let config = VzVmConfig {

@@ -448,6 +448,21 @@ impl TemporaryDockerfile {
         }
         Ok(Self { path })
     }
+
+    /// Explicitly remove the temporary Dockerfile from disk.
+    /// This is called before the function returns to ensure cleanup happens reliably,
+    /// independent of Drop. The Drop impl serves as a safety net for missed cleanup paths.
+    fn explicit_cleanup(&self) {
+        if let Err(error) = std::fs::remove_file(&self.path)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            warn!(
+                path = %self.path.display(),
+                error = %error,
+                "build: failed to remove temporary Dockerfile during explicit cleanup"
+            );
+        }
+    }
 }
 
 impl Drop for TemporaryDockerfile {
@@ -530,7 +545,7 @@ pub async fn handle_build(
         TemporaryDockerfile::create(&context_for_dockerfile, &dockerfile_bytes)
     })
     .await;
-    let (_temporary_dockerfile, dockerfile_name) = match temporary {
+    let (temporary_dockerfile, dockerfile_name) = match temporary {
         Ok(Ok(result)) => result,
         Ok(Err(error)) => {
             send_error(&tx, "handle_build", format!("write Dockerfile: {error}")).await;
@@ -599,6 +614,8 @@ pub async fn handle_build(
             let _ = tx
                 .send(DaemonResponse::BuildComplete { image_id, tag })
                 .await;
+            // Explicit cleanup: remove temporary Dockerfile before returning
+            temporary_dockerfile.explicit_cleanup();
         }
         Err(e) => {
             deps.events.metrics.increment_counter(
@@ -611,6 +628,8 @@ pub async fn handle_build(
                 &[("op", "build"), ("adapter", "daemon")],
             );
             send_error(&tx, "handle_build", format!("build failed: {e}")).await;
+            // Explicit cleanup: remove temporary Dockerfile before returning
+            temporary_dockerfile.explicit_cleanup();
         }
     }
 }

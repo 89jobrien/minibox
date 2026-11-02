@@ -218,6 +218,9 @@ fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonR
         execution_context: None,
         platform: input.platform,
         cgroup_parent: None,
+        dind: false,
+        dind_debug: false,
+        client_version: None,
     })
 }
 

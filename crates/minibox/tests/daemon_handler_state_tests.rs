@@ -84,6 +84,7 @@ async fn test_daemon_state_persistence_survives_restart() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
     }
@@ -142,6 +143,7 @@ async fn test_daemon_state_remove_persists_to_disk() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
         state.remove_container(container_id).await;

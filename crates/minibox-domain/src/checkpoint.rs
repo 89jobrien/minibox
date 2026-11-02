@@ -31,7 +31,7 @@ pub struct SnapshotInfo {
 /// Port for saving and restoring VM state checkpoints.
 ///
 /// The port is defined but **unimplemented**: no adapter in this workspace
-/// satisfies it, and none declares [`BackendCapability::Checkpoint`]. Every
+/// satisfies it, and none declares the `Checkpoint` capability. Every
 /// production wiring site therefore installs [`NoopVmCheckpoint`], so snapshot
 /// requests fail with an explicit "not supported" error rather than reporting
 /// state that was never persisted. An adapter that gains real checkpointing

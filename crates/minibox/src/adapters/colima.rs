@@ -588,7 +588,7 @@ impl minibox_core::domain::RootfsSetup for ColimaFilesystem {
 
     /// Unmount the overlay and remove its VM-local directory inside the VM.
     ///
-    /// Uses the same [`overlay_base_dir`] mapping as `setup_rootfs`; addressing
+    /// Uses the same `overlay_base_dir` mapping as `setup_rootfs`; addressing
     /// the two differently would leave the mount behind and the directory
     /// behind it with it.
     ///

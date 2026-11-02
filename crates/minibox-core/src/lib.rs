@@ -43,6 +43,7 @@
 //! | [`adapter_registry`] | The single adapter table: which suites exist, which are compiled in, and which the environment selects. Shared by `miniboxd` startup and `mbx doctor`. |
 //! | [`doctor`] | Runtime health check engine behind `mbx doctor` — host, virtualization, adapter binaries, CNI plugins, daemon reachability, optional toolchain probes. |
 //! | [`error`] | Top-level [`MiniboxError`] type and cross-platform error types. |
+//! | [`vm_boot`] | Guest VM boot contract (kernel command line, virtiofs tags, ESP layout) shared by the macOS `vz` adapter and `cargo xtask build-vm-image`. |
 //!
 //! ## Feature flags
 //!
@@ -63,6 +64,7 @@ pub mod progress;
 pub mod protocol;
 pub mod trace;
 pub mod tracing_init;
+pub mod vm_boot;
 
 pub mod client;
 pub mod image;

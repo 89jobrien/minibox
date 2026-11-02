@@ -283,6 +283,14 @@ pub struct ContainerRecord {
     /// Sealed workload digest from the execution manifest.
     #[serde(default)]
     pub workload_digest: Option<String>,
+    /// Path to the container-specific temporary directory created at startup.
+    ///
+    /// Persisted so that paths to helper binaries and entrypoint scripts
+    /// written into this directory (e.g. the `DinD` wrapper script) survive a
+    /// daemon restart and remain accessible for the container's lifetime.
+    /// `None` for containers that did not require a temp directory.
+    #[serde(default)]
+    pub temp_dir_path: Option<PathBuf>,
 }
 
 impl ContainerRecord {
@@ -906,6 +914,7 @@ mod tests {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         }
     }
 
@@ -1643,6 +1652,43 @@ mod tests {
         assert_eq!(
             containers[0].state, "Orphaned",
             "Paused container with no PID must become Orphaned"
+        );
+    }
+
+    /// `temp_dir_path` must survive a JSON serialization/deserialization
+    /// round-trip so it is recoverable after a daemon restart.
+    #[test]
+    fn temp_dir_path_round_trips_through_serialization() {
+        let path = std::path::PathBuf::from("/tmp/minibox-dind-abc123");
+        let mut record = make_record_with_name("abc123", None);
+        record.temp_dir_path = Some(path.clone());
+
+        let json = serde_json::to_string(&record).expect("serialize");
+        let restored: ContainerRecord = serde_json::from_str(&json).expect("deserialize");
+
+        assert_eq!(
+            restored.temp_dir_path,
+            Some(path),
+            "temp_dir_path must round-trip through JSON serialization"
+        );
+    }
+
+    /// A `ContainerRecord` without `temp_dir_path` in its JSON (e.g. from
+    /// an older daemon version) must deserialize successfully with `None`.
+    #[test]
+    fn temp_dir_path_defaults_to_none_when_absent_from_json() {
+        let mut record = make_record_with_name("abc123", None);
+        record.temp_dir_path = None;
+
+        let json = serde_json::to_string(&record).expect("serialize");
+        // Strip the field from the JSON to simulate an older serialized record.
+        let stripped = json.replace(",\"temp_dir_path\":null", "");
+        let restored: ContainerRecord =
+            serde_json::from_str(&stripped).expect("deserialize without field");
+
+        assert_eq!(
+            restored.temp_dir_path, None,
+            "temp_dir_path must default to None when absent from persisted JSON"
         );
     }
 }

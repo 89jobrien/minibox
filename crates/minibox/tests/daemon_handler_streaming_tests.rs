@@ -244,15 +244,17 @@ async fn test_handle_run_ephemeral_dispatches_streaming_path() {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: true,
-            network: // ephemeral=true → streaming path
-        None,
+            network: None, // ephemeral=true → streaming path
             mounts: vec![],
             privileged: false,
             shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -339,15 +341,17 @@ async fn test_handle_run_ephemeral_pull_failure_sends_error() {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: true,
-            network: // ephemeral=true
-        None,
+            network: None, // ephemeral=true
             mounts: vec![],
             privileged: false,
             shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -658,15 +662,17 @@ async fn test_handle_run_streaming_emits_container_created_first() {
             memory_limit_bytes: None,
             cpu_weight: None,
             ephemeral: true,
-            network: // ephemeral — triggers streaming path
-        None,
+            network: None, // ephemeral — triggers streaming path
             mounts: vec![],
             privileged: false,
             shared_uid_range: false,
             env: vec![],
             name: None,
             platform: None,
-            cgroup_parent: None, priority: None, policy_override: None,
+            cgroup_parent: None,
+            dind: false,
+            priority: None,
+            policy_override: None,
         },
         state,
         deps,
@@ -771,6 +777,7 @@ async fn test_stop_dead_pid_exits_immediately() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 
@@ -846,6 +853,7 @@ async fn test_stop_container_no_pid_returns_error() {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         })
         .await;
 

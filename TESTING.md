@@ -297,27 +297,31 @@ CI responsibilities are listed by workflow name rather than a hard-coded workflo
 | Workflow | Primary purpose |
 | --- | --- |
 | `ci.yml` | Core checks for main/staging/release and PRs to main |
-| `pr.yml` | PR lint, unit, protocol, and docs jobs |
-| `merge.yml` | Push/merge-group matrix across active workflow branches |
+| `merge.yml` | Push/PR matrix across active workflow branches: lint, unit, e2e, integration, protocol e2e, docs, audit, deny, machete, actionlint, plus the `promote-staging` / `promote-release` stability promotions |
 | `macos.yml` | macOS `cargo fmt --all --check` |
 | `conformance.yml` | Conformance, property, krun, CLI, borrow, and quickcheck suites |
-| `context-snapshot.yml` | Cross-platform v3 context evidence collection and aggregate validation |
-| `stability-gates.yml` | docs, adapter coverage, no-unwrap, compile, and handler coverage |
+| `stability-gates.yml` | doc-sync, adapter integration tests, no-unwrap, stability compile, stale-name check, and `check-protocol-sites` |
 | `protocol-drift.yml` | Protocol hash/variant drift |
-| `protocol-sites.yml` | Handler dependency construction-site drift |
-| `rust-clippy.yml` | Clippy review workflow |
-| `nightly.yml` | Scheduled audits and coverage check |
-| `promote.yml` | Stability-branch promotion |
+| `nightly.yml` | Scheduled geiger, mutants, handler `coverage-check`, all-features, shuttle, turmoil, archive tests, and bench baselines |
 | `release.yml` | crates and binary release workflow |
 | `publish-mbx.yml` | CLI package publishing |
+| `pages.yml` | Publishes `site/` to GitHub Pages |
 | `summary.yml` | Issue summary automation |
+
+Workflows that no longer exist, folded into the rows above: `pr.yml` (its lint,
+unit, and docs jobs are now `merge.yml`), `rust-clippy.yml` (now `merge.yml`'s
+`lint` job), `protocol-sites.yml` (now `stability-gates.yml`'s
+`check-protocol-sites` job), `promote.yml` (now `merge.yml`'s `promote-staging`
+and `promote-release` jobs), and `context-snapshot.yml`.
 
 ### Remaining CI gaps
 
 - Sandbox tests: `cargo xtask test sandbox` (Linux + root)
 - Feature-gated CLI subprocess suite: `just test-cli-subprocess`
 
-Property tests, borrow fixtures, krun conformance, and the handler coverage gate all have CI jobs.
+Property tests, borrow fixtures, and krun conformance all have CI jobs. The handler
+coverage gate runs only in `nightly.yml` (`coverage-check`, `continue-on-error`), not
+on per-push CI.
 
 ---
 

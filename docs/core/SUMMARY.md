@@ -10,6 +10,7 @@
 - [Gotchas](GOTCHAS.mbx.md)
 - [Support Tiers](SUPPORT_TIERS.mbx.md)
 - [Test Infrastructure](TEST_INFRASTRUCTURE.mbx.md)
+- [xtask CLI Reference](XTASK_CLI.mbx.md)
 - [Mutation Audit](MUTATION_AUDIT.mbx.md)
 - [Docs Audit](DOCS_AUDIT.mbx.md)
 - [Stability Checklist](STABILITY_CHECKLIST.mbx.md)

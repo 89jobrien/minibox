@@ -151,6 +151,9 @@ fn generate_request_corpus() {
                 execution_context: None,
                 platform: None,
                 cgroup_parent: None,
+                dind: false,
+                dind_debug: false,
+                client_version: None,
             },
         ),
         (
@@ -177,6 +180,9 @@ fn generate_request_corpus() {
                 execution_context: None,
                 platform: Some("linux/amd64".into()),
                 cgroup_parent: None,
+                dind: false,
+                dind_debug: false,
+                client_version: None,
             },
         ),
         (

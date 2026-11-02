@@ -10,7 +10,7 @@ use crate::types::{
     PsOutput, PullImageInput, PullImageOutput, RunContainerInput, RunContainerOutput, SimpleOutput,
 };
 use rmcp::handler::server::{router::tool::ToolRouter, wrapper::Parameters};
-use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::model::{ServerCapabilities, ServerConfig};
 use rmcp::{ErrorData as McpError, Json, ServerHandler, tool, tool_handler, tool_router};
 
 /// MCP server exposing minibox daemon operations.
@@ -258,8 +258,8 @@ impl MiniboxMcpServer {
 #[tool_handler(router = self.tool_router)]
 #[allow(clippy::unused_async_trait_impl)] // Generated ServerHandler methods must be async.
 impl ServerHandler for MiniboxMcpServer {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+    fn get_info(&self) -> ServerConfig {
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_instructions("Control a local minibox daemon through safe, typed MCP tools.")
     }
 }

@@ -95,6 +95,9 @@ pub struct PolicyConfig {
     /// Whether host bind mounts may be requested.
     #[serde(default)]
     pub allow_bind_mounts: Option<bool>,
+    /// Whether Docker-in-Docker (nested miniboxd) may be requested.
+    #[serde(default)]
+    pub allow_dind: Option<bool>,
     /// Optional maximum image size in mebibytes.
     #[serde(default)]
     pub max_image_size_mb: Option<u64>,
@@ -263,6 +266,11 @@ impl DaemonConfig {
         {
             self.policy.allow_bind_mounts = Some(b);
         }
+        if let Ok(v) = std::env::var("MINIBOX_ALLOW_DIND")
+            && let Some(b) = parse_policy_bool("MINIBOX_ALLOW_DIND", &v)
+        {
+            self.policy.allow_dind = Some(b);
+        }
         if let Ok(v) = std::env::var("MINIBOX_MAX_IMAGE_SIZE_MB") {
             if let Ok(n) = v.parse::<u64>() {
                 self.policy.max_image_size_mb = Some(n);
@@ -305,6 +313,7 @@ impl DaemonConfig {
                     .policy
                     .allow_bind_mounts
                     .or(self.policy.allow_bind_mounts),
+                allow_dind: other.policy.allow_dind.or(self.policy.allow_dind),
                 max_image_size_mb: other
                     .policy
                     .max_image_size_mb

@@ -320,6 +320,9 @@ pub struct ContainerPolicy {
     /// Allow containers to run in privileged mode.
     /// Default: `false` (deny).
     pub allow_privileged: bool,
+    /// Allow Docker-in-Docker (nested miniboxd).
+    /// Default: `false` (deny).
+    pub allow_dind: bool,
     /// Minimum priority a container must have to be accepted.
     /// Default: `None` (no minimum).
     pub min_priority: Option<slashcrux::Priority>,
@@ -333,6 +336,8 @@ pub struct PolicyOverride {
     pub allow_bind_mounts: Option<bool>,
     /// Optional override for privileged container permission.
     pub allow_privileged: Option<bool>,
+    /// Optional override for Docker-in-Docker permission.
+    pub allow_dind: Option<bool>,
     /// Optional override for the minimum accepted priority, including clearing it.
     pub min_priority: Option<Option<slashcrux::Priority>>,
 }
@@ -347,6 +352,7 @@ impl ContainerPolicy {
                 .allow_bind_mounts
                 .unwrap_or(self.allow_bind_mounts),
             allow_privileged: overrides.allow_privileged.unwrap_or(self.allow_privileged),
+            allow_dind: overrides.allow_dind.unwrap_or(self.allow_dind),
             min_priority: overrides.min_priority.unwrap_or(self.min_priority),
         }
     }
@@ -355,11 +361,13 @@ impl ContainerPolicy {
     ///
     /// - `MINIBOX_ALLOW_BIND_MOUNTS=1|true|yes` enables bind mounts (default: deny).
     /// - `MINIBOX_ALLOW_PRIVILEGED=1|true|yes` enables privileged mode (default: deny).
+    /// - `MINIBOX_ALLOW_DIND=1|true|yes` enables Docker-in-Docker (default: deny).
     #[must_use]
     pub fn from_env() -> Self {
         Self {
             allow_bind_mounts: env_flag("MINIBOX_ALLOW_BIND_MOUNTS"),
             allow_privileged: env_flag("MINIBOX_ALLOW_PRIVILEGED"),
+            allow_dind: env_flag("MINIBOX_ALLOW_DIND"),
             min_priority: None,
         }
     }
@@ -383,6 +391,7 @@ pub(crate) fn env_flag(name: &str) -> bool {
 pub fn validate_policy(
     mounts: &[minibox_core::domain::BindMount],
     privileged: bool,
+    dind: bool,
     priority: Option<slashcrux::Priority>,
     policy: &ContainerPolicy,
 ) -> Result<(), String> {
@@ -394,6 +403,12 @@ pub fn validate_policy(
     if privileged && !policy.allow_privileged {
         return Err(
             "policy violation: privileged mode requested but privileged containers are not allowed"
+                .into(),
+        );
+    }
+    if dind && !policy.allow_dind {
+        return Err(
+            "policy violation: Docker-in-Docker requested but not allowed; set MINIBOX_ALLOW_DIND=1"
                 .into(),
         );
     }
@@ -676,6 +691,7 @@ mod pub_crate_handler_tests {
             creation_params: None,
             manifest_path: None,
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
 
@@ -763,6 +779,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: None,
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -927,7 +944,7 @@ mod pub_crate_handler_tests {
             allow_privileged: false,
             ..Default::default()
         };
-        let result = validate_policy(&[], false, None, &policy);
+        let result = validate_policy(&[], false, false, None, &policy);
         assert!(
             result.is_ok(),
             "no mounts + not privileged must pass strict policy"
@@ -947,7 +964,7 @@ mod pub_crate_handler_tests {
             container_path: std::path::PathBuf::from("/mnt"),
             read_only: false,
         }];
-        let result = validate_policy(&mounts, false, None, &policy);
+        let result = validate_policy(&mounts, false, false, None, &policy);
         assert!(result.is_err(), "bind mounts must be denied by policy");
     }
 
@@ -958,7 +975,7 @@ mod pub_crate_handler_tests {
             allow_privileged: false,
             ..Default::default()
         };
-        let result = validate_policy(&[], true, None, &policy);
+        let result = validate_policy(&[], true, false, None, &policy);
         assert!(result.is_err(), "privileged must be denied by policy");
     }
 
@@ -968,9 +985,10 @@ mod pub_crate_handler_tests {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             min_priority: Some(Priority::High),
         };
-        let result = validate_policy(&[], false, Some(Priority::Low), &policy);
+        let result = validate_policy(&[], false, false, Some(Priority::Low), &policy);
         assert!(
             result.is_err(),
             "priority below min_priority must be rejected"
@@ -988,14 +1006,15 @@ mod pub_crate_handler_tests {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             min_priority: Some(Priority::Medium),
         };
         assert!(
-            validate_policy(&[], false, Some(Priority::High), &policy).is_ok(),
+            validate_policy(&[], false, false, Some(Priority::High), &policy).is_ok(),
             "priority above min must pass"
         );
         assert!(
-            validate_policy(&[], false, Some(Priority::Medium), &policy).is_ok(),
+            validate_policy(&[], false, false, Some(Priority::Medium), &policy).is_ok(),
             "priority equal to min must pass"
         );
     }
@@ -1006,10 +1025,11 @@ mod pub_crate_handler_tests {
         let policy = ContainerPolicy {
             allow_bind_mounts: false,
             allow_privileged: false,
+            allow_dind: false,
             min_priority: Some(Priority::High),
         };
         // None priority means "not specified" — reject when min is set
-        let result = validate_policy(&[], false, None, &policy);
+        let result = validate_policy(&[], false, false, None, &policy);
         assert!(
             result.is_err(),
             "None priority must be rejected when min_priority is set"
@@ -1104,6 +1124,7 @@ mod pub_crate_handler_tests {
                 read_only: true,
             }],
             policy_override: None,
+            dind: false,
             ..Default::default()
         };
         handle_run(params, state, deps, tx).await;
@@ -1192,6 +1213,7 @@ mod pub_crate_handler_tests {
             creation_params: None,
             manifest_path: Some(std::path::PathBuf::from("/nonexistent/manifest.json")),
             workload_digest: None,
+            temp_dir_path: None,
         };
         state.add_container(record).await;
 
@@ -1249,6 +1271,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: None,
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -1346,6 +1369,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: Some(manifest_path),
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 
@@ -1444,6 +1468,7 @@ mod pub_crate_handler_tests {
                 creation_params: None,
                 manifest_path: Some(manifest_path),
                 workload_digest: None,
+                temp_dir_path: None,
             })
             .await;
 

@@ -123,6 +123,16 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     crate::container::filesystem::bind_rootfs_mount_point(&config.rootfs)
         .context("parent: make rootfs a mount point")?;
 
+    // Same reasoning as the mount point above, but for ownership rather than
+    // mount locking: the overlay `merged` tree is owned by real host UID 0,
+    // and a privileged container's child runs under a non-identity userns
+    // UID map, so it cannot create bind-mount target directories/files
+    // inside it after clone -- `fs::create_dir_all` fails with EACCES
+    // regardless of the child's in-namespace capability set. See
+    // `precreate_bind_mount_targets`'s doc comment.
+    crate::container::filesystem::precreate_bind_mount_targets(&config.mounts, &config.rootfs)
+        .context("parent: pre-create bind mount targets")?;
+
     // Parent/child barrier: the child must not proceed — in particular must not
     // reach `execve` — until the parent has installed the UID/GID maps. Without
     // this the child could `exec` while its user namespace is still unmapped,

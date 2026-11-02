@@ -21,6 +21,7 @@ use minibox::domain::{ResourceConfig, ResourceLimiter, RootfsSetup};
 use minibox::preflight::probe;
 use minibox_macros::require_capability;
 use rstest::{fixture, rstest};
+use serial_test::serial;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -106,6 +107,7 @@ fn fake_layer(dir: &std::path::Path) {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[serial]
 fn overlay_write_goes_to_upper_not_lower() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -144,6 +146,7 @@ fn mount_overlay(
 }
 
 #[test]
+#[serial]
 fn overlay_multiple_layers_all_visible_in_merged() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -179,6 +182,7 @@ fn overlay_multiple_layers_all_visible_in_merged() {
 }
 
 #[test]
+#[serial]
 fn overlay_cleanup_unmounts_merged() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -198,6 +202,7 @@ fn overlay_cleanup_unmounts_merged() {
 }
 
 #[test]
+#[serial]
 fn overlay_empty_layers_returns_error() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -262,6 +267,7 @@ fn cgroup_env(tag: &str, cfg: ResourceConfig) -> CgroupEnv {
 }
 
 #[test]
+#[serial]
 fn cgroup_create_and_cleanup_lifecycle() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -286,6 +292,7 @@ fn cgroup_create_and_cleanup_lifecycle() {
 /// which control file the kernel exposes it in, and the expected value —
 /// so they are one table, not three near-identical functions.
 #[rstest]
+#[serial]
 #[case::memory(
     ResourceConfig { memory_limit_bytes: Some(128 * 1024 * 1024), ..ResourceConfig::default() },
     "memory.max",
@@ -318,6 +325,7 @@ fn cgroup_limit_written_correctly(
 }
 
 #[test]
+#[serial]
 fn cgroup_add_process_writes_pid_to_cgroup_procs() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -374,6 +382,7 @@ fn cgroup_add_process_writes_pid_to_cgroup_procs() {
 /// expose host state through the mount, and no amount of `pivot_root` would
 /// stop it. Runtime-level containment is covered by the system suite.
 #[test]
+#[serial]
 fn overlay_mount_paths_stay_inside_the_supplied_base() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -432,6 +441,8 @@ fn overlay_mount_paths_stay_inside_the_supplied_base() {
 //   crates/minibox-core/src/image/layer.rs:711  absolute_symlink_with_parent_traversal_rejected
 //   crates/minibox/tests/security_regression.rs:290  regression_absolute_symlink_with_traversal_is_rejected
 //   crates/minibox/tests/security_regression.rs:319  regression_busybox_applet_symlink_is_rewritten_not_rejected
+#[test]
+#[serial]
 fn cgroup_pid_zero_is_rejected() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");
@@ -456,6 +467,7 @@ fn cgroup_pid_zero_is_rejected() {
 }
 
 #[test]
+#[serial]
 fn cgroup_cleanup_removes_all_state() {
     let caps = probe();
     require_capability!(caps, is_root, "requires root");

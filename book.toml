@@ -1,3 +1,15 @@
+# The repo's only mdBook config. Renders docs/core (the canonical reference set)
+# into book/, which is gitignored. See DEVELOPMENT.md -> Documentation.
+#
+# There was a second config at docs/book.toml over a parallel docs/src/ tree of
+# per-crate stubs; it duplicated docs/core and has been removed.
+#
+#   mdbook build   # -> book/
+#   mdbook serve   # live preview
+#
+# Note: this book is local-only. GitHub Pages publishes the separate hand-built
+# site/ directory via .github/workflows/pages.yml.
+
 [book]
 title = "minibox"
 description = "Agentic container runtime."
