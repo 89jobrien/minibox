@@ -48,6 +48,7 @@ mod docs_lint;
 mod dotenv;
 mod e2e_local;
 mod feature_matrix_date;
+mod frontmatter;
 mod fuzz;
 mod gates;
 mod lint_paths;
