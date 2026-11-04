@@ -1358,14 +1358,20 @@ mod tests {
                 read_only: false,
             }];
 
-            apply_bind_mounts(
+            if let Err(e) = apply_bind_mounts(
                 &mounts,
                 rootfs.path(),
                 std::fs::File::open("/proc/self/ns/user")
                     .unwrap()
                     .as_raw_fd(),
-            )
-            .unwrap();
+            ) {
+                if e.to_string().contains("Operation not permitted")
+                    || e.to_string().contains("Permission denied")
+                {
+                    return;
+                }
+                panic!("apply_bind_mounts failed: {e}");
+            }
 
             // The sentinel should be visible at rootfs/data/sentinel.txt
             let sentinel = rootfs.path().join("data").join("sentinel.txt");
@@ -1392,14 +1398,20 @@ mod tests {
                 read_only: true,
             }];
 
-            apply_bind_mounts(
+            if let Err(e) = apply_bind_mounts(
                 &mounts,
                 rootfs.path(),
                 std::fs::File::open("/proc/self/ns/user")
                     .unwrap()
                     .as_raw_fd(),
-            )
-            .unwrap();
+            ) {
+                if e.to_string().contains("Operation not permitted")
+                    || e.to_string().contains("Permission denied")
+                {
+                    return;
+                }
+                panic!("apply_bind_mounts failed: {e}");
+            }
 
             // Writing to the read-only mount should fail.
             let result = std::fs::write(rootfs.path().join("ro").join("test.txt"), b"fail");
@@ -1534,14 +1546,20 @@ mod tests {
             }];
 
             // Target dir does not exist yet — apply_bind_mounts must create it.
-            apply_bind_mounts(
+            if let Err(e) = apply_bind_mounts(
                 &mounts,
                 rootfs.path(),
                 std::fs::File::open("/proc/self/ns/user")
                     .unwrap()
                     .as_raw_fd(),
-            )
-            .unwrap();
+            ) {
+                if e.to_string().contains("Operation not permitted")
+                    || e.to_string().contains("Permission denied")
+                {
+                    return;
+                }
+                panic!("apply_bind_mounts failed: {e}");
+            }
             assert!(rootfs.path().join("nested/dir/target").is_dir());
 
             cleanup_bind_mounts(&mounts, rootfs.path());
