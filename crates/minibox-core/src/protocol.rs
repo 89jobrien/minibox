@@ -44,7 +44,12 @@
 //! [`decode_response`] to serialize and deserialize messages. These helpers
 //! append (or strip) the trailing `\n` framing byte.
 
-use crate::domain::{BindMount, NetworkMode, PhaseOutcome, SessionId, StepStatus, WorkflowDef};
+use std::collections::BTreeSet;
+
+use crate::domain::{
+    BindMount, IsolationControl, IsolationDigest, IsolationProfileId, LinuxCapability, NetworkMode,
+    OperatorAuthorizationId, PhaseOutcome, SessionId, StepStatus, WorkflowDef,
+};
 use serde::{Deserialize, Serialize};
 
 /// Serializable registry credentials for protocol transport.
@@ -95,6 +100,167 @@ impl std::fmt::Debug for PushCredentials {
             Self::Token { .. } => write!(f, "PushCredentials::Token {{ token: [REDACTED] }}"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Isolation protocol types
+// ---------------------------------------------------------------------------
+//
+// Carries isolation profile selection and capability requests over the wire.
+// Per docs/designs/2026-09-21-isolation-protocol-migration-design.md, this
+// layer only transports caller intent — compiling a request into a
+// `ResolvedIsolationProfile`, authorizing it, and enforcing it are handled by
+// later stages (admission, runtime port) and are out of scope here.
+
+/// An untrusted caller request to run under a given isolation profile.
+///
+/// Unlike [`crate::domain::ResolvedIsolationProfile`], this type derives
+/// [`Deserialize`] directly and carries no validation guarantees — admission
+/// resolves it into a validated profile.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IsolationProfileRequest {
+    /// The profile the caller is requesting.
+    pub profile: IsolationProfileId,
+    /// Capabilities to add on top of the profile's baseline, subject to
+    /// admission's gate.
+    #[serde(default)]
+    pub capability_add: BTreeSet<LinuxCapability>,
+    /// Capabilities to drop from the profile's baseline.
+    #[serde(default)]
+    pub capability_drop: BTreeSet<LinuxCapability>,
+    /// Required when `profile` is `compatibility-v1`; rejected otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_authorization: Option<OperatorAuthorizationId>,
+}
+
+/// What isolation profiles and controls the daemon's runtime can enforce.
+///
+/// Deliberately minimal at the protocol layer: per-adapter enforcement
+/// detail is defined by later runtime-port work, not this handshake.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IsolationRuntimeCapabilities {
+    /// Profiles the currently selected runtime adapter can enforce.
+    pub supported_profiles: Vec<IsolationProfileId>,
+}
+
+/// Returned by [`DaemonRequest::GetIsolationCapabilities`].
+///
+/// Every new client performs this handshake before sending a `Run` request
+/// carrying an [`IsolationProfileRequest`]; an old daemon that cannot answer
+/// it must not receive a workload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IsolationServiceCapabilities {
+    /// Protocol version this daemon speaks for isolation negotiation.
+    pub protocol_version: u32,
+    /// The profile applied when a `Run` request omits `isolation`.
+    pub default_profile: IsolationProfileId,
+    /// Whether this daemon's operator has authorized `compatibility-v1`.
+    pub compatibility_authorized: bool,
+    /// What the selected runtime adapter can actually enforce.
+    pub runtime: IsolationRuntimeCapabilities,
+}
+
+/// Why the daemon refused an isolation request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IsolationDenialCode {
+    /// The request itself was malformed.
+    InvalidRequest,
+    /// The requested profile is not authorized on this daemon.
+    ProfileNotAuthorized,
+    /// The requested profile is not supported by the selected runtime.
+    UnsupportedProfile,
+    /// A requested capability addition is not authorized.
+    CapabilityNotAuthorized,
+    /// A requested capability is not supported by the selected runtime.
+    UnsupportedCapability,
+    /// A control required by the profile is not supported by the runtime.
+    UnsupportedControl,
+    /// Legacy `privileged: true` conflicts with an explicit profile request.
+    LegacyPrivilegedConflict,
+    /// Legacy `privileged: true` is not authorized on this daemon.
+    LegacyPrivilegedNotAuthorized,
+    /// A staged runtime plan was invalid.
+    InvalidPlan,
+    /// A staged runtime plan was stale relative to the current admission state.
+    StalePlan,
+    /// Enforcement evidence did not cover every required control.
+    IncompleteEvidence,
+    /// Enforcement itself failed.
+    EnforcementFailed,
+    /// Cleanup after enforcement failed.
+    CleanupFailed,
+}
+
+/// A structured isolation denial returned by [`DaemonResponse::IsolationDenied`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IsolationDenial {
+    /// The denial reason.
+    pub code: IsolationDenialCode,
+    /// The profile involved, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<IsolationProfileId>,
+    /// The specific control involved, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub control: Option<IsolationControl>,
+    /// The runtime adapter involved, if applicable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
+    /// Non-secret human-readable explanation.
+    pub message: String,
+}
+
+/// Lifecycle status of a profile-governed container execution.
+///
+/// Mirrors the design's status model: profile executions progress
+/// `Planned -> Staged -> Enforced -> Exited -> Cleaned`; legacy privileged
+/// executions progress `LegacyAuthorized -> LegacyRunning -> Exited ->
+/// Cleaned`. Any state may transition to `FailedCleanupPending`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IsolationExecutionStatus {
+    /// A profile was resolved but no runtime plan has been staged yet.
+    Planned,
+    /// A runtime plan has been staged with the selected adapter.
+    Staged,
+    /// Enforcement evidence confirms the profile is active.
+    Enforced,
+    /// The container process has exited.
+    Exited,
+    /// All resources have been cleaned up.
+    Cleaned,
+    /// A legacy `privileged: true` execution has been authorized.
+    LegacyAuthorized,
+    /// A legacy `privileged: true` execution is running.
+    LegacyRunning,
+    /// Cleanup failed and is pending retry.
+    FailedCleanupPending,
+}
+
+/// Accepted-isolation summary carried on [`DaemonResponse::ContainerCreated`].
+///
+/// New clients reject a missing summary after a successful
+/// [`DaemonRequest::GetIsolationCapabilities`] handshake.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionIsolationSummary {
+    /// Current lifecycle status.
+    pub status: IsolationExecutionStatus,
+    /// The profile that was accepted, if this is a profile execution rather
+    /// than a legacy privileged one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<IsolationProfileId>,
+    /// Digest of the resolved profile's policy content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub policy_digest: Option<IsolationDigest>,
+    /// Digest of the staged runtime plan, once staged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_digest: Option<IsolationDigest>,
+    /// Digest of the enforcement evidence, once enforced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_digest: Option<IsolationDigest>,
+    /// Operator authorization bound to this execution, if required.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operator_authorization: Option<OperatorAuthorizationId>,
 }
 
 // ---------------------------------------------------------------------------
@@ -207,7 +373,21 @@ pub enum DaemonRequest {
         /// Passed to nested miniboxd for version negotiation and compatibility checks.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         client_version: Option<String>,
+        /// Isolation profile requested for this container.
+        ///
+        /// `None` normalizes to `standard-v1`. Conflicts with `privileged: true`;
+        /// admission rejects both being set. Carried but not yet authorized or
+        /// enforced at the protocol layer.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        isolation: Option<Box<IsolationProfileRequest>>,
     },
+
+    /// Query the daemon's isolation protocol version and enforceable profiles.
+    ///
+    /// New clients perform this handshake before any `Run` request carrying
+    /// an `isolation` profile selection. An old daemon that cannot answer it
+    /// must not receive a workload.
+    GetIsolationCapabilities,
 
     /// Stop a running container by ID.
     Stop {
@@ -539,6 +719,7 @@ impl DaemonRequest {
             Self::ShowPipeline { .. } => "ShowPipeline",
             Self::GetCapabilities => "GetCapabilities",
             Self::RunWorkflow(_) => "RunWorkflow",
+            Self::GetIsolationCapabilities => "GetIsolationCapabilities",
         }
     }
 }
@@ -576,6 +757,13 @@ pub enum DaemonResponse {
     ContainerCreated {
         /// The newly assigned container ID.
         id: String,
+        /// Accepted isolation profile summary, when the request carried one.
+        ///
+        /// `None` for containers run without an isolation profile (legacy
+        /// `privileged`/default path). Carried but not yet populated by the
+        /// daemon at the protocol layer.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        isolation: Option<Box<ExecutionIsolationSummary>>,
     },
 
     /// A generic success acknowledgement.
@@ -814,6 +1002,18 @@ pub enum DaemonResponse {
         /// Worst-case outcome across all executed steps.
         final_phase: PhaseOutcome,
     },
+
+    /// Response to [`DaemonRequest::GetIsolationCapabilities`].
+    IsolationCapabilities {
+        /// What this daemon's runtime can negotiate and enforce.
+        service: IsolationServiceCapabilities,
+    },
+
+    /// The daemon refused an isolation request.
+    IsolationDenied {
+        /// Why the request was refused.
+        denial: IsolationDenial,
+    },
 }
 
 impl DaemonResponse {
@@ -851,6 +1051,8 @@ impl DaemonResponse {
                 | Self::PipelineList { .. }
                 | Self::PipelineDetail { .. }
                 | Self::CapabilityMatrix { .. }
+                | Self::IsolationCapabilities { .. }
+                | Self::IsolationDenied { .. }
         )
     }
 }
@@ -1022,6 +1224,7 @@ impl TestRunDefaults {
             dind: self.dind,
             dind_debug: false,
             client_version: None,
+            isolation: None,
         }
     }
 }
@@ -1225,13 +1428,14 @@ mod tests {
     fn test_encode_decode_container_created_response() {
         let resp = DaemonResponse::ContainerCreated {
             id: "container123".to_string(),
+            isolation: None,
         };
 
         let encoded = encode_response(&resp).expect("encode failed");
         let decoded = decode_response(&encoded).expect("decode failed");
 
         match decoded {
-            DaemonResponse::ContainerCreated { id } => {
+            DaemonResponse::ContainerCreated { id, .. } => {
                 assert_eq!(id, "container123");
             }
             _ => panic!("wrong response type"),
@@ -1595,6 +1799,7 @@ mod tests {
             dind: false,
             dind_debug: false,
             client_version: None,
+            isolation: None,
         };
         let encoded = encode_request(&req).unwrap();
         let decoded = decode_request(&encoded).unwrap();
@@ -1759,6 +1964,7 @@ mod tests {
             dind: false,
             dind_debug: false,
             client_version: None,
+            isolation: None,
         };
         assert_eq!(req.type_tag(), "Run");
         let json = serde_json::to_string(&req).expect("serialize");
@@ -1820,6 +2026,7 @@ mod tests {
     fn daemon_response_wire_snapshot_container_created() {
         let resp = DaemonResponse::ContainerCreated {
             id: "deadbeef1234".to_string(),
+            isolation: None,
         };
         let encoded = encode_response(&resp).expect("encode");
         let json = serde_json::to_string(&resp).expect("serialize");
@@ -1988,6 +2195,7 @@ mod tests {
                 dind: false,
                 dind_debug: false,
                 client_version: None,
+                isolation: None,
             }
             .type_tag(),
             "Run"
@@ -2251,6 +2459,7 @@ mod tests {
             (
                 DaemonResponse::ContainerCreated {
                     id: "abc".to_string(),
+                    isolation: None,
                 },
                 false, // non-terminal: ephemeral runs follow with ContainerOutput chunks
             ),
@@ -2430,6 +2639,31 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::IsolationCapabilities {
+                    service: IsolationServiceCapabilities {
+                        protocol_version: 1,
+                        default_profile: crate::domain::IsolationProfileId::StandardV1,
+                        compatibility_authorized: false,
+                        runtime: IsolationRuntimeCapabilities {
+                            supported_profiles: vec![crate::domain::IsolationProfileId::StandardV1],
+                        },
+                    },
+                },
+                true,
+            ),
+            (
+                DaemonResponse::IsolationDenied {
+                    denial: IsolationDenial {
+                        code: IsolationDenialCode::ProfileNotAuthorized,
+                        profile: Some(crate::domain::IsolationProfileId::CompatibilityV1),
+                        control: None,
+                        adapter: None,
+                        message: "compatibility-v1 not authorized".to_string(),
+                    },
+                },
+                true,
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -2473,6 +2707,8 @@ mod tests {
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
                 DaemonResponse::CapabilityMatrix { .. } => true,
+                DaemonResponse::IsolationCapabilities { .. } => true,
+                DaemonResponse::IsolationDenied { .. } => true,
             };
         }
     }

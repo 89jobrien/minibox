@@ -816,6 +816,16 @@ async fn dispatch(
             )
             .await;
         }
+        DaemonRequest::GetIsolationCapabilities => {
+            send_terminal_response(
+                &tx,
+                "GetIsolationCapabilities",
+                DaemonResponse::Error {
+                    message: "GetIsolationCapabilities not yet implemented".to_string(),
+                },
+            )
+            .await;
+        }
     }
 }
 
@@ -1012,6 +1022,7 @@ mod tests {
             (
                 DaemonResponse::ContainerCreated {
                     id: "abc".to_string(),
+                    isolation: None,
                 },
                 false, // non-terminal: ephemeral runs follow with ContainerOutput chunks
             ),
@@ -1163,6 +1174,33 @@ mod tests {
                 },
                 true,
             ),
+            (
+                DaemonResponse::IsolationCapabilities {
+                    service: minibox_core::protocol::IsolationServiceCapabilities {
+                        protocol_version: 1,
+                        default_profile: minibox_core::domain::IsolationProfileId::StandardV1,
+                        compatibility_authorized: false,
+                        runtime: minibox_core::protocol::IsolationRuntimeCapabilities {
+                            supported_profiles: vec![
+                                minibox_core::domain::IsolationProfileId::StandardV1,
+                            ],
+                        },
+                    },
+                },
+                true, // terminal: single handshake response
+            ),
+            (
+                DaemonResponse::IsolationDenied {
+                    denial: minibox_core::protocol::IsolationDenial {
+                        code: minibox_core::protocol::IsolationDenialCode::ProfileNotAuthorized,
+                        profile: Some(minibox_core::domain::IsolationProfileId::CompatibilityV1),
+                        control: None,
+                        adapter: None,
+                        message: "compatibility-v1 not authorized".to_string(),
+                    },
+                },
+                true, // terminal: denial ends the request
+            ),
         ];
 
         for (variant, expected_terminal) in variants {
@@ -1208,6 +1246,8 @@ mod tests {
                 DaemonResponse::PipelineList { .. } => true,
                 DaemonResponse::PipelineDetail { .. } => true,
                 DaemonResponse::CapabilityMatrix { .. } => true,
+                DaemonResponse::IsolationCapabilities { .. } => true,
+                DaemonResponse::IsolationDenied { .. } => true,
             };
         }
     }
@@ -1238,7 +1278,8 @@ mod tests {
         );
         assert!(
             !is_terminal_response(&DaemonResponse::ContainerCreated {
-                id: "abc".to_string()
+                id: "abc".to_string(),
+                isolation: None,
             }),
             "ContainerCreated must be non-terminal (ephemeral runs follow with ContainerOutput)"
         );

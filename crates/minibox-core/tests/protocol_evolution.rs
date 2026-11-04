@@ -86,6 +86,7 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         // --- terminal variants ---
         DaemonResponse::ContainerCreated {
             id: "abc123".to_string(),
+            isolation: None,
         },
         DaemonResponse::Success {
             message: "ok".to_string(),
@@ -218,6 +219,25 @@ fn all_response_variants() -> Vec<DaemonResponse> {
         },
         DaemonResponse::CapabilityMatrix {
             matrix: minibox_core::domain::capability_matrix(),
+        },
+        DaemonResponse::IsolationCapabilities {
+            service: minibox_core::protocol::IsolationServiceCapabilities {
+                protocol_version: 1,
+                default_profile: minibox_core::domain::IsolationProfileId::StandardV1,
+                compatibility_authorized: false,
+                runtime: minibox_core::protocol::IsolationRuntimeCapabilities {
+                    supported_profiles: vec![minibox_core::domain::IsolationProfileId::StandardV1],
+                },
+            },
+        },
+        DaemonResponse::IsolationDenied {
+            denial: minibox_core::protocol::IsolationDenial {
+                code: minibox_core::protocol::IsolationDenialCode::ProfileNotAuthorized,
+                profile: Some(minibox_core::domain::IsolationProfileId::CompatibilityV1),
+                control: None,
+                adapter: None,
+                message: "compatibility-v1 not authorized".to_string(),
+            },
         },
     ]
 }
@@ -445,6 +465,10 @@ fn classify_terminal(r: &DaemonResponse) -> bool {
         // Workflow — step updates are non-terminal; final summary is terminal.
         DaemonResponse::WorkflowStepComplete { .. } => false,
         DaemonResponse::WorkflowComplete { .. } => true,
+
+        // Isolation handshake/denial — single terminal response per request.
+        DaemonResponse::IsolationCapabilities { .. } => true,
+        DaemonResponse::IsolationDenied { .. } => true,
     }
 }
 
@@ -523,6 +547,25 @@ fn test_terminal_classification_is_exhaustive() {
         DaemonResponse::CapabilityMatrix {
             matrix: minibox_core::domain::capability_matrix(),
         },
+        DaemonResponse::IsolationCapabilities {
+            service: minibox_core::protocol::IsolationServiceCapabilities {
+                protocol_version: 1,
+                default_profile: minibox_core::domain::IsolationProfileId::StandardV1,
+                compatibility_authorized: false,
+                runtime: minibox_core::protocol::IsolationRuntimeCapabilities {
+                    supported_profiles: vec![minibox_core::domain::IsolationProfileId::StandardV1],
+                },
+            },
+        },
+        DaemonResponse::IsolationDenied {
+            denial: minibox_core::protocol::IsolationDenial {
+                code: minibox_core::protocol::IsolationDenialCode::ProfileNotAuthorized,
+                profile: Some(minibox_core::domain::IsolationProfileId::CompatibilityV1),
+                control: None,
+                adapter: None,
+                message: "compatibility-v1 not authorized".to_string(),
+            },
+        },
     ];
 
     for v in &terminal_variants {
@@ -540,6 +583,7 @@ fn test_terminal_classification_is_exhaustive() {
     let non_terminal_variants: Vec<DaemonResponse> = vec![
         DaemonResponse::ContainerCreated {
             id: "x".to_string(),
+            isolation: None,
         },
         DaemonResponse::ContainerOutput {
             stream: OutputStreamKind::Stdout,
