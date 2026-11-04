@@ -134,6 +134,8 @@ pub enum Instruction {
     },
     /// Declare mount points persisted in the image config.
     Volume(Vec<PathBuf>),
+    /// Declare a container health check.
+    Healthcheck(String),
     /// Preserve a source comment.
     Comment(String),
 }
@@ -223,6 +225,7 @@ pub fn parse(input: &str) -> Result<Vec<Instruction>> {
             ),
             "USER" => parse_user(rest).with_context(line_context)?,
             "VOLUME" => parse_volume(rest).with_context(line_context)?,
+            "HEALTHCHECK" => Instruction::Healthcheck(rest.to_string()),
             other => bail!(
                 "line {}: unsupported instruction: {}",
                 logical_line.number,
@@ -693,6 +696,13 @@ mod tests {
     fn parse_workdir() {
         let instrs = parse("FROM alpine\nWORKDIR /app\n").expect("valid dockerfile");
         assert!(matches!(&instrs[1], Instruction::Workdir(p) if p.to_string_lossy() == "/app"));
+    }
+
+    #[test]
+    fn parse_healthcheck() {
+        let instrs = parse("FROM alpine\nHEALTHCHECK CMD curl -f http://localhost/ || exit 1\n")
+            .expect("valid dockerfile");
+        assert!(matches!(&instrs[1], Instruction::Healthcheck(text) if text.contains("CMD")));
     }
 
     #[test]

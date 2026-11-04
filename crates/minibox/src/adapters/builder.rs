@@ -125,6 +125,7 @@ fn instr_display(instr: &Instruction) -> String {
         Instruction::Label(_) => "LABEL".to_string(),
         Instruction::User { name, .. } => format!("USER {name}"),
         Instruction::Volume(paths) => format!("VOLUME {} paths", paths.len()),
+        Instruction::Healthcheck(_) => "HEALTHCHECK".to_string(),
         Instruction::Comment(_) => "# comment".to_string(),
     }
 }
@@ -1047,6 +1048,11 @@ impl ImageBuilder for MiniboxImageBuilder {
                     for path in resolved {
                         volumes.insert(path, json!({}));
                     }
+                }
+                Instruction::Healthcheck(text) => {
+                    let stage = current.as_mut().context("HEALTHCHECK appears before FROM")?;
+                    let config = image_config_mut(&mut stage.config)?;
+                    config.insert("Healthcheck".to_string(), json!(text.trim()));
                 }
                 Instruction::Copy {
                     srcs,
