@@ -50,6 +50,7 @@ pub struct VsockServerListener {
 impl VsockServerListener {
     /// Bind an `AF_VSOCK` listener on `port`, accepting connections from any CID.
     pub fn bind(port: u32) -> Result<Self> {
+        use anyhow::Context;
         use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
         // SAFETY: socket() is called with constant, valid arguments; the
@@ -101,6 +102,7 @@ impl ServerListener for VsockServerListener {
     type Stream = tokio::net::UnixStream;
 
     async fn accept(&self) -> Result<(Self::Stream, Option<PeerCreds>)> {
+        use anyhow::Context;
         use std::os::fd::{AsRawFd, FromRawFd};
         loop {
             let mut guard = self
@@ -136,6 +138,7 @@ impl ServerListener for VsockServerListener {
 /// Set `fd` to non-blocking mode via `fcntl`.
 #[cfg(target_os = "linux")]
 fn set_nonblocking(fd: std::os::fd::RawFd) -> Result<()> {
+    use anyhow::Context;
     // SAFETY: fd is a valid, open socket fd owned by the caller.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL, 0) };
     if flags < 0 {
