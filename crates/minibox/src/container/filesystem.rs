@@ -409,10 +409,6 @@ pub fn pivot_root_to(new_root: &Path) -> anyhow::Result<()> {
     // non-systemd images receive a fresh /run, with /var/run pointing at it.
     setup_runtime_directories(new_root).context("pivot_root: setup runtime directories")?;
 
-    // Hide image-provided PID files before init starts. Both systemd and
-    // non-systemd images receive a fresh /run, with /var/run pointing at it.
-    setup_runtime_directories(new_root).context("pivot_root: setup runtime directories")?;
-
     // Mount proc inside new_root.
     // SECURITY: Mount with nosuid, nodev, noexec flags
     let proc_dir = new_root.join("proc");
@@ -690,6 +686,30 @@ pub fn precreate_bind_mount_targets(
         }
     }
 
+    Ok(())
+}
+
+/// Create `{new_root}/.put_old`, the landing directory `pivot_root_to` passes
+/// to `pivot_root(2)`.
+///
+/// **Must be called in the parent, before `clone`**, for the identical
+/// ownership reason documented on [`precreate_bind_mount_targets`]: the
+/// overlay `merged` tree is built by the daemon as real host UID 0, and a
+/// privileged container's child runs under a non-identity user-namespace UID
+/// map, so its own `fs::create_dir_all(&put_old)` call inside `pivot_root_to`
+/// fails with `EACCES` regardless of the child's in-namespace capability
+/// set -- this was masked for a long time by the virtiofs/overlay EROFS bug
+/// (see "Why scratch is tmpfs" above) failing first on the same path, so it
+/// only became visible once that fix made the overlay genuinely writable.
+/// Creating it here, while still real root, avoids the check entirely; the
+/// child's own (unchanged) `fs::create_dir_all` call then finds the path
+/// already present and is a no-op.
+pub fn precreate_put_old(new_root: &Path) -> anyhow::Result<()> {
+    let put_old = new_root.join(".put_old");
+    fs::create_dir_all(&put_old).map_err(|source| FilesystemError::CreateDir {
+        path: put_old.display().to_string(),
+        source,
+    })?;
     Ok(())
 }
 

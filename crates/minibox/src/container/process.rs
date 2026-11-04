@@ -133,6 +133,13 @@ pub fn spawn_container_process(config: ContainerConfig) -> anyhow::Result<SpawnR
     crate::container::filesystem::precreate_bind_mount_targets(&config.mounts, &config.rootfs)
         .context("parent: pre-create bind mount targets")?;
 
+    // Same ownership reason as the bind-mount targets above, applied to
+    // pivot_root's own `.put_old` landing directory: the child's in-namespace
+    // `fs::create_dir_all` call for it fails with EACCES against the
+    // real-root-owned overlay tree. See `precreate_put_old`'s doc comment.
+    crate::container::filesystem::precreate_put_old(&config.rootfs)
+        .context("parent: pre-create pivot_root .put_old")?;
+
     // Parent/child barrier: the child must not proceed — in particular must not
     // reach `execve` — until the parent has installed the UID/GID maps. Without
     // this the child could `exec` while its user namespace is still unmapped,
