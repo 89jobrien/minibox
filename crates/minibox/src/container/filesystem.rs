@@ -86,10 +86,27 @@ pub(crate) fn validate_layer_path(path: &Path, base_dir: &Path) -> anyhow::Resul
 ///
 /// Given ordered image layers (bottom-to-top) and a per-container working
 /// directory, this function:
-/// 1. Creates `{container_dir}/merged/`, `upper/`, and `work/` directories.
-/// 2. Constructs the `lowerdir=` string from the layers in the correct order
+/// 1. Creates `{container_dir}/merged/`.
+/// 2. Mounts a tmpfs scratch area at `{container_dir}/scratch/` and creates
+///    `upper/` and `work/` inside it (see "Why scratch is tmpfs" below).
+/// 3. Constructs the `lowerdir=` string from the layers in the correct order
 ///    (overlayfs wants them listed top-to-bottom, i.e. reversed).
-/// 3. Mounts the overlay and returns the path to `merged/`.
+/// 4. Mounts the overlay and returns the path to `merged/`.
+///
+/// # Why scratch is tmpfs, not a plain directory under `container_dir`
+///
+/// `container_dir` can sit on whatever filesystem backs `/var/lib/minibox`,
+/// including a virtiofs (FUSE) share inside a VZ.framework guest. overlayfs's
+/// upper filesystem must support `d_type` and rename/whiteout semantics that
+/// FUSE-backed filesystems don't provide; when they're missing, the kernel
+/// doesn't fail the `mount(2)` call for `upperdir`/`workdir` on such a
+/// filesystem -- it silently downgrades the overlay to a read-only mount.
+/// That produces a confusing failure mode: `setup_overlay_with_base` returns
+/// `Ok`, logs "overlay mounted", and the container only discovers the
+/// problem later, inside its own init, when the first write (e.g.
+/// `pivot_root`'s `.put_old` directory) fails with `EROFS`. Mounting a fresh
+/// tmpfs for `upper`/`work` sidesteps this unconditionally, on every backend,
+/// because tmpfs always supports what overlayfs needs.
 ///
 /// # Security
 ///
@@ -111,54 +128,105 @@ pub fn setup_overlay_with_base(
     images_base: &Path,
 ) -> anyhow::Result<PathBuf> {
     let merged = container_dir.join("merged");
-    let upper = container_dir.join("upper");
-    let work = container_dir.join("work");
+    let scratch = container_dir.join("scratch");
 
-    for dir in [&merged, &upper, &work] {
-        fs::create_dir_all(dir).map_err(|source| FilesystemError::CreateDir {
-            path: dir.display().to_string(),
-            source,
-        })?;
-    }
+    fs::create_dir_all(&merged).map_err(|source| FilesystemError::CreateDir {
+        path: merged.display().to_string(),
+        source,
+    })?;
+    fs::create_dir_all(&scratch).map_err(|source| FilesystemError::CreateDir {
+        path: scratch.display().to_string(),
+        source,
+    })?;
 
-    // SECURITY: Validate all layer paths to prevent path traversal.
-    for layer_path in image_layers {
-        validate_layer_path(layer_path, images_base)
-            .with_context(|| format!("validating layer path {layer_path:?}"))?;
-    }
-
-    // overlayfs lowerdir lists layers from **top** (most recent) to **bottom**
-    // (oldest). The caller provides them bottom-to-top, so we reverse here.
-    let lowerdir: String = image_layers
-        .iter()
-        .rev()
-        .map(|p| p.display().to_string())
-        .collect::<Vec<_>>()
-        .join(":");
-
-    let options = format!(
-        "lowerdir={lowerdir},upperdir={upper},workdir={work}",
-        upper = upper.display(),
-        work = work.display(),
-    );
-
-    debug!(overlay_options = %options, "filesystem: mounting overlay");
-
-    // SECURITY: Mount with nosuid and nodev to prevent privilege escalation
+    // See "Why scratch is tmpfs" above: upper/work must live on a filesystem
+    // that supports the features overlayfs requires, which the directory
+    // underlying `container_dir` cannot be relied on to provide.
     mount(
-        Some("overlay"),
-        &merged,
-        Some("overlay"),
+        Some("tmpfs"),
+        &scratch,
+        Some("tmpfs"),
         MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
-        Some(options.as_str()),
+        Some("size=512m"),
     )
-    .map_err(|source| {
-        FilesystemError::OverlayMount(format!("mount overlay -> {}: {source}", merged.display()))
+    .map_err(|source| FilesystemError::Mount {
+        fs: "tmpfs-scratch".into(),
+        target: scratch.display().to_string(),
+        source,
     })
-    .with_context(|| "overlay mount failed")?;
+    .with_context(|| format!("tmpfs scratch mount at {}", scratch.display()))?;
 
-    info!(merged = %merged.display(), "filesystem: overlay mounted");
-    Ok(merged)
+    // From here on, `scratch` is a live mount. If any of the remaining setup
+    // steps fail, unmount it before propagating the error rather than leaving
+    // an active tmpfs mount behind (see .claude/rules/rust-patterns.md's
+    // "Cleanup on failure" convention; mirrors unmount_bind_mounts above).
+    match (|| -> anyhow::Result<()> {
+        let upper = scratch.join("upper");
+        let work = scratch.join("work");
+        for dir in [&upper, &work] {
+            fs::create_dir_all(dir).map_err(|source| FilesystemError::CreateDir {
+                path: dir.display().to_string(),
+                source,
+            })?;
+        }
+
+        // SECURITY: Validate all layer paths to prevent path traversal.
+        for layer_path in image_layers {
+            validate_layer_path(layer_path, images_base)
+                .with_context(|| format!("validating layer path {layer_path:?}"))?;
+        }
+
+        // overlayfs lowerdir lists layers from **top** (most recent) to
+        // **bottom** (oldest). The caller provides them bottom-to-top, so we
+        // reverse here.
+        let lowerdir: String = image_layers
+            .iter()
+            .rev()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(":");
+
+        let options = format!(
+            "lowerdir={lowerdir},upperdir={upper},workdir={work}",
+            upper = upper.display(),
+            work = work.display(),
+        );
+
+        debug!(overlay_options = %options, "filesystem: mounting overlay");
+
+        // SECURITY: Mount with nosuid and nodev to prevent privilege escalation
+        mount(
+            Some("overlay"),
+            &merged,
+            Some("overlay"),
+            MsFlags::MS_NOSUID | MsFlags::MS_NODEV,
+            Some(options.as_str()),
+        )
+        .map_err(|source| {
+            FilesystemError::OverlayMount(format!(
+                "mount overlay -> {}: {source}",
+                merged.display()
+            ))
+        })
+        .with_context(|| "overlay mount failed")?;
+
+        Ok(())
+    })() {
+        Ok(()) => {
+            info!(merged = %merged.display(), "filesystem: overlay mounted");
+            Ok(merged)
+        }
+        Err(e) => {
+            if let Err(cleanup_err) = umount2(&scratch, MntFlags::MNT_DETACH) {
+                warn!(
+                    target = %scratch.display(),
+                    error = %cleanup_err,
+                    "filesystem: scratch tmpfs cleanup failed after setup error (best-effort)"
+                );
+            }
+            Err(e)
+        }
+    }
 }
 
 /// Set up a container filesystem, falling back to tmpfs copy if overlay-on-overlay
@@ -969,6 +1037,17 @@ pub fn cleanup_mounts(container_dir: &Path) -> anyhow::Result<()> {
         }
     }
 
+    // The tmpfs scratch mount (see `setup_overlay_with_base`) is a separate
+    // mountpoint from `merged`, not part of its stack, so it needs its own
+    // unmount or `remove_dir_all` below fails with EBUSY on a still-mounted
+    // directory. Best-effort: if setup never got as far as mounting it (or
+    // it's already gone), this is a harmless no-op.
+    let scratch = container_dir.join("scratch");
+    if scratch.exists() {
+        debug!(scratch = %scratch.display(), "filesystem: unmounting tmpfs scratch");
+        let _ = umount2(&scratch, MntFlags::MNT_DETACH);
+    }
+
     // Remove the entire per-container directory tree.
     if container_dir.exists() {
         fs::remove_dir_all(container_dir).map_err(|source| FilesystemError::Cleanup {
@@ -1204,6 +1283,39 @@ mod tests {
         use std::os::fd::AsRawFd as _;
         use std::path::PathBuf;
         use tempfile::TempDir;
+
+        #[test]
+        fn setup_overlay_unmounts_scratch_tmpfs_on_later_setup_failure() {
+            // SAFETY: geteuid only reads the current process credentials.
+            if unsafe { libc::geteuid() } != 0 {
+                return;
+            }
+
+            // Regression for the EROFS/virtiofs scratch-tmpfs fix: the tmpfs
+            // mount at `{container_dir}/scratch` must be torn down if a later
+            // step in `setup_overlay_with_base` (here, `validate_layer_path`)
+            // fails, not left mounted. Before the fix this leaked an active
+            // tmpfs mount on every such failure, which made a later
+            // `remove_dir_all(container_dir)` fail with EBUSY.
+            let images_base = TempDir::new().unwrap();
+            let outside = TempDir::new().unwrap();
+            let container_dir = TempDir::new().unwrap();
+
+            // A layer path outside `images_base` fails `validate_layer_path`
+            // after the scratch tmpfs has already been mounted.
+            let bogus_layer = outside.path().join("layer0");
+            fs::create_dir_all(&bogus_layer).unwrap();
+
+            let result =
+                setup_overlay_with_base(&[bogus_layer], container_dir.path(), images_base.path());
+            assert!(result.is_err(), "layer outside images_base must fail");
+
+            // If the tmpfs scratch mount were still active, removing the
+            // container dir would fail with EBUSY. A successful removal here
+            // proves the mount was torn down on the failure path.
+            fs::remove_dir_all(container_dir.path())
+                .expect("container_dir must be removable after a torn-down scratch mount");
+        }
 
         #[test]
         fn apply_bind_mounts_mounts_directory() {

@@ -76,11 +76,11 @@ impl OverlayEnv {
     }
 
     fn upper(&self) -> PathBuf {
-        self.container_dir.join("upper")
+        self.container_dir.join("scratch").join("upper")
     }
 
     fn work(&self) -> PathBuf {
-        self.container_dir.join("work")
+        self.container_dir.join("scratch").join("work")
     }
 
     /// Unmount. Borrowed rather than consuming so a test can still inspect

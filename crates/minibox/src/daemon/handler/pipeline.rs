@@ -49,7 +49,8 @@ pub struct PipelineParams {
 ///
 /// # Trace file
 ///
-/// After the container exits the handler looks for `<containers_base>/<id>/upper/trace.json`.
+/// After the container exits the handler looks for
+/// `<containers_base>/<id>/scratch/upper/trace.json`.
 /// If the file is present it is parsed as JSON and included in `PipelineComplete.trace`.
 /// If absent or unparseable, a synthetic empty trace `{"steps":[]}` is used —
 /// the pipeline still completes successfully (the exit code determines success).
@@ -181,7 +182,7 @@ pub async fn handle_pipeline(
         loop {
             match inner_rx.recv().await {
                 None => break,
-                Some(DaemonResponse::ContainerCreated { id }) => {
+                Some(DaemonResponse::ContainerCreated { id, .. }) => {
                     container_id = id;
                     // Do not forward ContainerCreated — pipeline clients receive
                     // PipelineComplete instead.
@@ -225,11 +226,14 @@ pub async fn handle_pipeline(
             return;
         }
 
-        // Read trace.json from the overlay upper dir.
+        // Read trace.json from the overlay upper dir (now a tmpfs scratch
+        // mount, not a plain directory under container_dir — see
+        // setup_overlay_with_base's doc comment for why).
         let trace_path = deps
             .lifecycle
             .containers_base
             .join(&container_id)
+            .join("scratch")
             .join("upper")
             .join("trace.json");
 

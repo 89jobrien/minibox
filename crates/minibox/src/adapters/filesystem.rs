@@ -91,7 +91,10 @@ impl minibox_core::domain::RootfsSetup for OverlayFilesystem {
         Ok(RootfsLayout {
             merged_dir: merged_dir.into(),
             rootfs_metadata: Some(crate::domain::BackendRootfsMetadata::Overlay {
-                upper_dir: container_dir.join("upper").into(),
+                // `upper` now lives under a tmpfs scratch mount, not directly
+                // under container_dir -- see setup_overlay_with_base's doc
+                // comment for why.
+                upper_dir: container_dir.join("scratch").join("upper").into(),
                 metadata: std::collections::HashMap::new(),
             }),
             source_image_ref: None,
