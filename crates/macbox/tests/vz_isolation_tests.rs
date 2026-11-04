@@ -64,6 +64,7 @@ fn main() {
 #[cfg(all(target_os = "macos", feature = "vz"))]
 mod suite {
     use base64::Engine as _;
+    use macbox::vz::boot::EfiBootAssets;
     use macbox::vz::proxy::VzProxy;
     use macbox::vz::vm::{VzVm, VzVmConfig};
     use macbox::vz::vsock::connect_to_agent;
@@ -134,9 +135,9 @@ mod suite {
     }
 
     fn vm_image_available() -> bool {
-        let d = vm_dir();
-        d.join("boot").join("vmlinuz-virt").exists()
-            && d.join("rootfs").join("sbin").join("minibox-agent").exists()
+        EfiBootAssets::default_paths(&vm_dir())
+            .check_boot_assets()
+            .is_ok()
     }
 
     struct VmFixture {

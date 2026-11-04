@@ -112,6 +112,7 @@ fn arb_request() -> impl Strategy<Value = DaemonRequest> {
                         dind: false,
                         dind_debug: false,
                         client_version: None,
+                        isolation: None,
                     }
                 }
             ),
@@ -296,7 +297,10 @@ fn arb_container_event() -> impl Strategy<Value = ContainerEvent> {
 
 fn arb_response() -> impl Strategy<Value = DaemonResponse> {
     prop_oneof![
-        any::<String>().prop_map(|id| DaemonResponse::ContainerCreated { id }),
+        any::<String>().prop_map(|id| DaemonResponse::ContainerCreated {
+            id,
+            isolation: None
+        }),
         any::<String>().prop_map(|message| DaemonResponse::Success { message }),
         any::<String>().prop_map(|id| DaemonResponse::ContainerPaused { id }),
         any::<String>().prop_map(|id| DaemonResponse::ContainerResumed { id }),
@@ -426,6 +430,7 @@ proptest! {
             dind: false,
             dind_debug: false,
             client_version: None,
+            isolation: None,
         };
         let encoded = encode_request(&req).expect("encode must succeed");
         let decoded = decode_request(&encoded).expect("decode must succeed");

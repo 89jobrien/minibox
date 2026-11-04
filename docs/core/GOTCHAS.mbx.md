@@ -16,7 +16,7 @@ generated: 2026-09-16
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-10-18
+Last updated: 2026-11-04
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -106,6 +106,20 @@ file's module doc for the authoritative flow. Summary, grounded in the current c
   VM adapters are available according to their platform gates; VZ requires macOS plus `vz` and
   is currently nonfunctional because VM boot fails. See per-adapter descriptions in
   `adapter_registry::all_adapters()`.
+- **VZ boot triage** — the EFI boot path (`crates/macbox/src/vz/boot.rs`, `vm.rs`) diagnoses
+  which stage failed by what the serial console shows, not by the generic `code=1` the
+  framework returns for almost any failure below it. `wait_for_running` appends a remediation
+  trailer naming the three likeliest causes whenever the completion handler's error contains
+  `"code=1"`; `EfiBootAssets::check_boot_assets()` catches a missing/mismatched ESP before the
+  VM ever starts. Use this table to go from symptom to cause once a VM is actually running:
+
+  | Symptom (serial console)                     | Cause                                                  |
+  | ---------------------------------------------- | -------------------------------------------------------- |
+  | No output at all, `code=1` at start            | Entitlement / start refused before firmware ran — run `just sign-vz`. |
+  | Firmware banner, then "no bootable device"     | ESP layout wrong; `BOOTAA64.EFI` not at the expected path — rebuild with `just build-vm-image --force`. |
+  | GRUB prompt or `error: file not found`         | `grub.cfg` paths or the kernel/initrd are missing from the ESP — rebuild the image. |
+  | Kernel panic, `VFS: Unable to mount root fs`   | `minibox-rootfs` virtiofs tag absent or kernel cmdline drift. |
+  | Boots, agent unreachable on vsock              | Guest init changed; not a boot-loader problem — check `minibox-agent` inside the image. |
 - **Unset `MINIBOX_ADAPTER`** — `adapter_from_env()` probes for the `smolvm` binary on PATH
   (`smolvm --version`). If found, uses `smolvm` (`DEFAULT_ADAPTER_SUITE`). If absent, silently
   falls back to `FALLBACK_ADAPTER_SUITE`: `native` on Linux, `krun` on macOS/other.

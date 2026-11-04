@@ -93,6 +93,12 @@ coverage:
     crux run crux/dev/coverage.crux
     @echo "coverage: target/llvm-cov/html/index.html"
 
+# Build the EFI boot assets (ESP image + manifest) for the vz adapter at ~/.minibox/vm/.
+# Idempotent: re-run after changing GRUB config, kernel cmdline, or the pinned Alpine
+# release. See docs/designs/2026-10-22-vz-efi-boot-design.md.
+build-vm-image *args:
+    cargo xtask build-vm-image {{args}}
+
 # VZ isolation tests (macOS, requires VM image at ~/.minibox/vm/)
 # Builds the test binary, codesigns it with the virtualization entitlement,
 # then runs it directly (bypasses cargo test runner to preserve dispatch_main harness).

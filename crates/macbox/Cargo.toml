@@ -57,6 +57,10 @@ objc2-virtualization = { version = "0.3", optional = true, features = [
     "VZVirtioSocketConnection",
     "VZVirtioSocketDevice",
     "VZVirtioSocketDeviceConfiguration",
+    "VZNetworkDeviceConfiguration",
+    "VZNetworkDeviceAttachment",
+    "VZNATNetworkDeviceAttachment",
+    "VZVirtioNetworkDeviceConfiguration",
 ] }
 serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }

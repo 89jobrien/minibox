@@ -124,7 +124,7 @@ async fn test_handle_run_with_cached_image() {
     .await;
 
     match response {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert_ne!(id, "");
             assert_eq!(id.len(), 16); // UUID truncated to 16 chars
 
@@ -465,7 +465,7 @@ async fn test_handle_remove_success() {
     .await;
 
     let container_id = match create_response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("failed to create container"),
     };
 
@@ -547,7 +547,7 @@ async fn test_handle_remove_running_container() {
     .await;
 
     let container_id = match create_response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("failed to create container"),
     };
 
@@ -610,7 +610,7 @@ async fn test_full_container_lifecycle() {
     .await;
 
     let container_id = match run_response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("expected ContainerCreated"),
     };
 
@@ -804,7 +804,7 @@ async fn test_handle_run_explicit_network_none() {
 /// Extract container ID from a ContainerCreated response; panics otherwise.
 fn extract_container_id(response: &DaemonResponse) -> String {
     match response {
-        DaemonResponse::ContainerCreated { id } => id.clone(),
+        DaemonResponse::ContainerCreated { id, .. } => id.clone(),
         other => panic!("expected ContainerCreated, got: {other:?}"),
     }
 }
@@ -2695,7 +2695,7 @@ async fn test_handle_run_propagates_env_vars() {
 
     // Should succeed -- env vars are passed through to the spawn config.
     match response {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert!(!id.is_empty(), "container ID should be non-empty");
             // Container should be registered in state.
             let container = state.get_container(&id).await;

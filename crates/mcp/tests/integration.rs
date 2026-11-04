@@ -168,6 +168,7 @@ async fn minibox_run_collects_streaming_output() {
         vec![
             DaemonResponse::ContainerCreated {
                 id: "run123".to_string(),
+                isolation: None,
             },
             DaemonResponse::ContainerOutput {
                 stream: OutputStreamKind::Stdout,
@@ -487,6 +488,7 @@ async fn minibox_run_rejects_metadata_overflow() {
         listener,
         vec![DaemonResponse::ContainerCreated {
             id: "x".repeat(64 * 1024),
+            isolation: None,
         }],
         tx,
     ));
@@ -539,6 +541,7 @@ async fn minibox_run_returns_bounded_truncated_output() {
         vec![
             DaemonResponse::ContainerCreated {
                 id: "run123".to_string(),
+                isolation: None,
             },
             DaemonResponse::ContainerOutput {
                 stream: OutputStreamKind::Stdout,

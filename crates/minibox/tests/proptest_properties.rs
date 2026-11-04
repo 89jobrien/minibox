@@ -195,6 +195,7 @@ proptest! {
                 dind: false,
                 dind_debug: false,
                 client_version: None,
+                isolation: None,
             },
         ];
 
@@ -212,6 +213,7 @@ proptest! {
         let responses = [
             DaemonResponse::ContainerCreated {
                 id: "abc123".to_string(),
+                isolation: None,
             },
             DaemonResponse::Success {
                 message: "done".to_string(),

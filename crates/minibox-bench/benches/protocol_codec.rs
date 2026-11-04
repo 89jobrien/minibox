@@ -116,12 +116,14 @@ fn list_request() -> DaemonRequest {
 fn small_container_created_response() -> DaemonResponse {
     DaemonResponse::ContainerCreated {
         id: "deadbeefdeadbeef".to_string(),
+        isolation: None,
     }
 }
 
 fn large_container_created_response() -> DaemonResponse {
     DaemonResponse::ContainerCreated {
         id: "deadbeefdeadbeefdeadbeefdeadbeef".to_string(),
+        isolation: None,
     }
 }
 

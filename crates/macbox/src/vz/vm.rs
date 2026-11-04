@@ -46,10 +46,11 @@ mod imp {
     use objc2_virtualization::{
         VZDirectorySharingDeviceConfiguration, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
         VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
-        VZSerialPortConfiguration, VZSharedDirectory, VZSingleDirectoryShare,
-        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
-        VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
-        VZVirtioFileSystemDeviceConfiguration, VZVirtioSocketDeviceConfiguration, VZVirtualMachine,
+        VZNATNetworkDeviceAttachment, VZNetworkDeviceConfiguration, VZSerialPortConfiguration,
+        VZSharedDirectory, VZSingleDirectoryShare, VZSocketDeviceConfiguration,
+        VZStorageDeviceConfiguration, VZVirtioBlockDeviceConfiguration,
+        VZVirtioConsoleDeviceSerialPortConfiguration, VZVirtioFileSystemDeviceConfiguration,
+        VZVirtioNetworkDeviceConfiguration, VZVirtioSocketDeviceConfiguration, VZVirtualMachine,
         VZVirtualMachineConfiguration, VZVirtualMachineState,
     };
     use std::path::Path;
@@ -266,8 +267,10 @@ mod imp {
             let rootfs_dev =
                 unsafe { build_virtiofs(vm_boot::ROOTFS_TAG, &config.rootfs_path(), false) }
                     .context("build virtiofs minibox-rootfs")?;
+            // The guest daemon pulls images itself (see handle_run's pull_image path) and
+            // writes layers directly into this share, so it cannot be read-only.
             let images_dev =
-                unsafe { build_virtiofs(vm_boot::IMAGES_TAG, &config.images_dir, true) }
+                unsafe { build_virtiofs(vm_boot::IMAGES_TAG, &config.images_dir, false) }
                     .context("build virtiofs minibox-images")?;
             let containers_dev =
                 unsafe { build_virtiofs(vm_boot::CONTAINERS_TAG, &config.containers_dir, false) }
@@ -294,6 +297,19 @@ mod imp {
                 NSArray::from_retained_slice(&[serial_cfg.into_super()]);
             // SAFETY: setSerialPorts: is a standard setter.
             unsafe { vm_config.setSerialPorts(&serial_devices) };
+
+            // NAT networking so the guest can resolve DNS and pull images. MACAddress
+            // defaults to a random locally-administered address; no setMACAddress: needed
+            // for this single-shot, ephemeral VM (no persistent DHCP lease state to collide).
+            // SAFETY: VZNATNetworkDeviceAttachment::new()/VZVirtioNetworkDeviceConfiguration::new()
+            // follow ObjC +new; setAttachment: is a standard setter taking an owned reference.
+            let net_attachment = unsafe { VZNATNetworkDeviceAttachment::new() };
+            let net_dev = unsafe { VZVirtioNetworkDeviceConfiguration::new() };
+            unsafe { net_dev.setAttachment(Some(&net_attachment)) };
+            let network_devices: Retained<NSArray<VZNetworkDeviceConfiguration>> =
+                NSArray::from_retained_slice(&[net_dev.into_super()]);
+            // SAFETY: setNetworkDevices: is a standard setter.
+            unsafe { vm_config.setNetworkDevices(&network_devices) };
 
             // SAFETY: validateWithError: is a standard validation method.
             unsafe { vm_config.validateWithError() }.map_err(|e| {

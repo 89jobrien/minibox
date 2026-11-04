@@ -163,6 +163,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
         dind,
         dind_debug,
         client_version: dind.then(get_cli_version),
+        isolation: None,
     };
 
     let client = DaemonClient::with_socket(socket_path);
@@ -197,7 +198,7 @@ pub async fn execute(opts: RunOpts, socket_path: &std::path::Path) -> Result<()>
                 drop(raw_guard);
                 std::process::exit(exit_code);
             }
-            DaemonResponse::ContainerCreated { id } => {
+            DaemonResponse::ContainerCreated { id, .. } => {
                 // Print the container ID for the caller.  In the ephemeral
                 // streaming path this is the first message; ContainerOutput
                 // chunks and ContainerStopped follow.  In the non-ephemeral
@@ -258,6 +259,7 @@ mod tests {
     async fn execute_returns_ok_on_container_created() {
         let (_tmp, socket_path) = setup(DaemonResponse::ContainerCreated {
             id: "abc123".to_string(),
+            isolation: None,
         })
         .await;
         let result = execute(

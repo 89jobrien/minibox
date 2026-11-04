@@ -279,6 +279,7 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
                         dind: false,
                         dind_debug: false,
                         client_version: None,
+                        isolation: None,
                     }
                 },
             ),
@@ -322,7 +323,10 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
 /// (SnapshotInfo lacks PartialEq). Uses Value comparison anyway.
 fn arb_daemon_response() -> impl Strategy<Value = DaemonResponse> {
     prop_oneof![
-        "[a-f0-9]{8}".prop_map(|id| DaemonResponse::ContainerCreated { id }),
+        "[a-f0-9]{8}".prop_map(|id| DaemonResponse::ContainerCreated {
+            id,
+            isolation: None
+        }),
         "[a-z ]{5,30}".prop_map(|m| DaemonResponse::Success { message: m }),
         "[a-f0-9]{8}".prop_map(|id| DaemonResponse::ContainerPaused { id }),
         "[a-f0-9]{8}".prop_map(|id| DaemonResponse::ContainerResumed { id }),

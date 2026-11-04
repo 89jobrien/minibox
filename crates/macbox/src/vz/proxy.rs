@@ -203,6 +203,7 @@ mod tests {
         // Build response sequence: ContainerCreated -> 2x ContainerOutput -> ContainerStopped
         let resp1 = DaemonResponse::ContainerCreated {
             id: "test-id".to_string(),
+            isolation: None,
         };
         let resp2 = DaemonResponse::ContainerOutput {
             stream: OutputStreamKind::Stdout,
@@ -305,6 +306,7 @@ mod tests {
             use tokio::io::AsyncWriteExt;
             let resp = DaemonResponse::ContainerCreated {
                 id: "test-id-123".to_string(),
+                isolation: None,
             };
             let line = serde_json::to_string(&resp).unwrap() + "\n";
             server.write_all(line.as_bytes()).await.ok();
@@ -323,7 +325,7 @@ mod tests {
         assert_eq!(responses.len(), 1);
         assert!(matches!(
             &responses[0],
-            DaemonResponse::ContainerCreated { id } if id == "test-id-123"
+            DaemonResponse::ContainerCreated { id, .. } if id == "test-id-123"
         ));
     }
 

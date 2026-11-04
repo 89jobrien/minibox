@@ -226,7 +226,7 @@ async fn test_native_adapter_suite_run_returns_container_created() {
     .await;
 
     match response {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert!(!id.is_empty(), "container id must be non-empty");
         }
         other => panic!("native suite: expected ContainerCreated, got {other:?}"),
@@ -299,7 +299,7 @@ async fn test_gke_adapter_suite_run_returns_container_created() {
     .await;
 
     match response {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert!(!id.is_empty(), "gke suite: container id must be non-empty");
         }
         other => panic!("gke suite: expected ContainerCreated, got {other:?}"),
@@ -382,7 +382,7 @@ async fn test_colima_adapter_suite_run_returns_container_created() {
     .await;
 
     match response {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert!(
                 !id.is_empty(),
                 "colima suite: container id must be non-empty"

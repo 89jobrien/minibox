@@ -692,7 +692,7 @@ async fn test_handle_run_streaming_emits_container_created_first() {
         "streaming run must send at least one response"
     );
     match &responses[0] {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert!(!id.is_empty(), "ContainerCreated id must not be empty");
         }
         other => {

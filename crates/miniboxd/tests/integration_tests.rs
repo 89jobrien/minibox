@@ -259,7 +259,7 @@ async fn test_run_simple_container() {
     .await;
 
     let container_id = match response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("expected ContainerCreated, got {:?}", response),
     };
 
@@ -306,7 +306,7 @@ async fn test_run_container_with_resource_limits() {
     .await;
 
     let container_id = match response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("expected ContainerCreated, got {:?}", response),
     };
 
@@ -357,7 +357,7 @@ async fn test_container_removal_cleanup() {
     .await;
 
     let container_id = match response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("expected ContainerCreated, got {:?}", response),
     };
 
@@ -490,7 +490,7 @@ async fn test_complete_container_lifecycle() {
     .await;
 
     let container_id = match run_response {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         _ => panic!("expected ContainerCreated, got {:?}", run_response),
     };
 
@@ -576,7 +576,7 @@ async fn test_multiple_concurrent_containers() {
     for task in tasks {
         let response = task.await.expect("task panicked");
         match response {
-            DaemonResponse::ContainerCreated { id } => {
+            DaemonResponse::ContainerCreated { id, .. } => {
                 container_ids.push(id);
             }
             _ => panic!("expected ContainerCreated"),

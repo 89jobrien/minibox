@@ -612,6 +612,7 @@ fn test_daemon_response_serde_round_trip_all_variants() {
     let variants: Vec<DaemonResponse> = vec![
         DaemonResponse::ContainerCreated {
             id: "abc123".to_string(),
+            isolation: None,
         },
         DaemonResponse::Success {
             message: "ok".to_string(),

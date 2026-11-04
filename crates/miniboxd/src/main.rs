@@ -717,6 +717,39 @@ async fn run_daemon(config: miniboxd::config::DaemonConfig) -> Result<()> {
 
     let listener = UnixServerListener(raw_listener);
 
+    // ── Optional vsock listener (vz adapter guest-agent mode) ────────────
+    // Set only inside a VZ Linux guest (see
+    // docs/designs/2026-10-22-vz-efi-boot-design.md): there is no shared
+    // filesystem for a Unix socket until the virtiofs shares mount, so the
+    // host reaches this same miniboxd binary over AF_VSOCK instead. vsock
+    // has no SO_PEERCRED equivalent, so this listener always runs with
+    // require_root_auth = false — the guest VM itself is the trust boundary.
+    #[cfg(target_os = "linux")]
+    if let Ok(port_str) = std::env::var("MINIBOX_VSOCK_PORT") {
+        let port: u32 = port_str
+            .parse()
+            .with_context(|| format!("MINIBOX_VSOCK_PORT={port_str} is not a valid u32"))?;
+        let vsock_listener = miniboxd::listener::VsockServerListener::bind(port)
+            .context("binding AF_VSOCK listener")?;
+        let vsock_state = Arc::clone(&state);
+        let vsock_deps = Arc::clone(&deps);
+        info!(port, "listening on vsock");
+        tokio::spawn(async move {
+            let never_shuts_down = std::future::pending::<()>();
+            if let Err(e) = minibox::daemon::server::run_server(
+                vsock_listener,
+                vsock_state,
+                vsock_deps,
+                false,
+                never_shuts_down,
+            )
+            .await
+            {
+                tracing::error!("vsock server error: {e:#}");
+            }
+        });
+    }
+
     // ── Accept loop via run_server ──────────────────────────────────────
     minibox::daemon::server::run_server(listener, state, deps, require_root_auth, shutdown).await?;
 

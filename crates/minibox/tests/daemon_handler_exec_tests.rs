@@ -479,7 +479,7 @@ async fn test_handle_logs_missing_log_dir_sends_success() {
     )
     .await;
     let container_id = match rx_run.recv().await.expect("unwrap in test") {
-        DaemonResponse::ContainerCreated { id } => id,
+        DaemonResponse::ContainerCreated { id, .. } => id,
         other => panic!("expected ContainerCreated, got {other:?}"),
     };
 

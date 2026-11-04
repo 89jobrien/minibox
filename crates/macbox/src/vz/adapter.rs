@@ -201,6 +201,7 @@ impl ContainerRuntime for VzRuntime {
             dind: false,
             dind_debug: false,
             client_version: None,
+            isolation: None,
         };
 
         let responses = call_agent(&self.vm, &req)

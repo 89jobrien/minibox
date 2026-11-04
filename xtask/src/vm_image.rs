@@ -47,7 +47,10 @@ pub const LINUX_VIRT_URL: &str =
 pub const LINUX_VIRT_SHA256: &str =
     "345b2d561443cd8c978cbcc0f36f2374b3ef702debb747221384b4ddc07d6a77";
 /// `uname -r` of the pinned kernel, i.e. the `/lib/modules` directory name.
-pub const KERNEL_RELEASE: &str = "6.12.114-0-virt";
+///
+/// Re-exported from [`vm_boot::KERNEL_RELEASE`] rather than redefined, so this builder and
+/// the guest init script (`crates/macbox/src/vz/agent_init.rs`) cannot silently diverge.
+pub use vm_boot::KERNEL_RELEASE;
 
 /// Size of the FAT32 ESP image in bytes.
 pub const ESP_SIZE_BYTES: u64 = 128 * 1024 * 1024;
@@ -104,6 +107,50 @@ pub const VSOCK_MODULES: &[ModuleSpec] = &[
         depends: &["vsock", "vmw_vsock_virtio_transport_common"],
     },
 ];
+
+/// Modules appended to the Alpine initramfs for the guest's network device and
+/// `udhcpc`'s DHCP transport. `virtio_net` is the driver for the
+/// `VZVirtioNetworkDeviceConfiguration` NIC itself -- without it `eth0` never
+/// exists (`ip: can't find device 'eth0'`), so nothing downstream (DHCP, DNS,
+/// image pulls) can work. `virtio_net` itself depends on `net_failover`, which
+/// depends on `failover` (confirmed via each `.ko`'s embedded `depends=` modinfo
+/// string) -- `insmod virtio_net.ko` with either missing fails with an unresolved
+/// symbol error that the guest's `2>/dev/null || true` swallows, so `eth0` silently
+/// never appears even though the kernel cmdline's `modules=` and the rcS insmod
+/// line both name `virtio_net`. `udhcpc` separately opens an `AF_PACKET` socket to
+/// send/receive raw DHCP frames. All ship as loadable modules on the `linux-virt`
+/// kernel, not built in.
+pub const NET_MODULES: &[ModuleSpec] = &[
+    ModuleSpec {
+        name: "failover",
+        path: "kernel/net/core/failover.ko",
+        depends: &[],
+    },
+    ModuleSpec {
+        name: "net_failover",
+        path: "kernel/drivers/net/net_failover.ko",
+        depends: &["failover"],
+    },
+    ModuleSpec {
+        name: "virtio_net",
+        path: "kernel/drivers/net/virtio_net.ko",
+        depends: &["failover", "net_failover"],
+    },
+    ModuleSpec {
+        name: "af_packet",
+        path: "kernel/net/packet/af_packet.ko",
+        depends: &[],
+    },
+];
+
+/// Modules appended to the Alpine initramfs for container overlay rootfs mounts.
+/// `mount -t overlay` returns `ENODEV` without this; the `linux-virt` kernel ships
+/// overlayfs as a loadable module, not built in.
+pub const FS_MODULES: &[ModuleSpec] = &[ModuleSpec {
+    name: "overlay",
+    path: "kernel/fs/overlayfs/overlay.ko",
+    depends: &[],
+}];
 
 /// Inputs and outputs recorded in [`MANIFEST_FILE`].
 #[derive(Debug, Serialize, serde::Deserialize)]
@@ -573,9 +620,13 @@ fn extract_member(archive: &Path, member: &str, dest: &Path, gzipped: bool) -> R
     Ok(())
 }
 
-fn read_modules(apk: &Path, staging: &Path) -> Result<Vec<(ModuleSpec, Vec<u8>)>> {
-    let mut modules = Vec::with_capacity(VSOCK_MODULES.len());
-    for spec in VSOCK_MODULES {
+fn read_modules(
+    apk: &Path,
+    staging: &Path,
+    specs: &[ModuleSpec],
+) -> Result<Vec<(ModuleSpec, Vec<u8>)>> {
+    let mut modules = Vec::with_capacity(specs.len());
+    for spec in specs {
         let source = format!("lib/modules/{KERNEL_RELEASE}/{}.gz", spec.path);
         let extracted = staging.join(&source);
         extract_member(apk, &source, &extracted, true)?;
@@ -617,9 +668,301 @@ impl Options {
     }
 }
 
+/// `AF_VSOCK` port the guest agent listens on. Must match
+/// `crates/macbox/src/vz/vsock.rs::AGENT_PORT` (the host side of the same
+/// channel) and `crates/miniboxd/src/listener.rs::VsockServerListener`.
+///
+/// Re-exported from [`vm_boot::VSOCK_AGENT_PORT`] rather than redefined, so this builder
+/// and the guest init script (`crates/macbox/src/vz/agent_init.rs`) cannot silently
+/// diverge.
+use vm_boot::VSOCK_AGENT_PORT;
+
+/// Target triple the guest agent is cross-compiled for (Apple Silicon hosts
+/// run an `aarch64` VZ guest).
+const AGENT_TARGET_TRIPLE: &str = "aarch64-unknown-linux-musl";
+
+/// Generate `/etc/inittab` content that boots the guest agent (`miniboxd`
+/// itself, staged as `/sbin/minibox-agent` and started with
+/// `MINIBOX_VSOCK_PORT` set) via busybox init.
+///
+/// Intentionally duplicated from the shape of `macbox::vz::agent_init`
+/// rather than shared via a dependency: `xtask` does not depend on `macbox`,
+/// which pulls in macOS-only Virtualization.framework bindings behind the
+/// `vz` feature.
+///
+/// `MINIBOX_ALLOW_PRIVILEGED`/`MINIBOX_ALLOW_BIND_MOUNTS` are set because the
+/// guest agent IS the thing the vz isolation tests exercise -- they boot
+/// privileged containers inside this VM specifically to assert namespace
+/// isolation. The policy gate's default-deny is a host-daemon protection
+/// against an untrusted local client; it does not apply here, since the only
+/// client that can reach this agent is the macOS host over vsock (see
+/// `VsockServerListener`'s doc comment in `crates/miniboxd/src/listener.rs`
+/// for why that's already the trust boundary).
+fn generate_inittab() -> String {
+    format!(
+        "::sysinit:/etc/init.d/rcS\n::once:/bin/sh -c \"MINIBOX_VSOCK_PORT={VSOCK_AGENT_PORT} MINIBOX_ALLOW_PRIVILEGED=1 MINIBOX_ALLOW_BIND_MOUNTS=1 exec /sbin/minibox-agent\"\n::ctrlaltdel:/sbin/reboot\n::shutdown:/bin/umount -a -r\n"
+    )
+}
+
+/// Generate `/etc/init.d/rcS` content: minimal system prep before the agent starts.
+fn generate_rc_local() -> String {
+    format!(
+        r"#!/bin/sh
+# Minimal system initialization for the minibox vz-adapter guest agent
+set -e
+
+# The virtiofs root is shared read-write from the host (see build_virtiofs()
+# in crates/macbox/src/vz/vm.rs, called with read_only=false for ROOTFS_TAG)
+# and the kernel cmdline passes `rw` (see minibox_core::vm_boot::kernel_cmdline),
+# but the initramfs that hands off to this script still mounts the virtiofs
+# root read-only before switch_root. Force it rw before anything below tries
+# to create a directory on it.
+mount -o remount,rw / 2>/dev/null || true
+
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sys /sys 2>/dev/null || true
+mount -t devtmpfs dev /dev 2>/dev/null || true
+mount -t tmpfs tmpfs /tmp 2>/dev/null || true
+
+# cgroup v2 unified hierarchy. miniboxd creates container cgroups under
+# /sys/fs/cgroup/minibox; without this mount that mkdir fails with ENOENT
+# because /sys/fs/cgroup is never populated by the sysfs mount above --
+# cgroupfs is a separate filesystem type that must be mounted explicitly.
+mkdir -p /sys/fs/cgroup
+mount -t cgroup2 cgroup2 /sys/fs/cgroup 2>/dev/null || true
+
+# virtiofs (FUSE-backed) does not support AF_UNIX bind(2) on its shared
+# directories -- miniboxd's own control socket at /run/minibox/miniboxd.sock
+# must live on a real Linux filesystem, so give it a tmpfs.
+mkdir -p /run
+mount -t tmpfs tmpfs /run 2>/dev/null || true
+mkdir -p /run/minibox
+
+# The `modules=` kernel cmdline param asks the initramfs to modprobe these
+# before switch_root, but that has been observed not to actually load them.
+# Load explicitly, in dependency order, so AF_VSOCK is available to the agent.
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/net/vmw_vsock/vsock.ko 2>/dev/null || true
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/net/vmw_vsock/vmw_vsock_virtio_transport_common.ko 2>/dev/null || true
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/net/vmw_vsock/vmw_vsock_virtio_transport.ko 2>/dev/null || true
+
+# virtio_net is the driver for the guest NIC itself (VZVirtioNetworkDeviceConfiguration);
+# without it eth0 never exists at all. It depends on net_failover, which depends on
+# failover -- load those first or insmod fails on an unresolved symbol (silently, since
+# errors are discarded below) and eth0 never appears. udhcpc separately opens an
+# AF_PACKET socket for raw DHCP frames. Same modules= gap as above.
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/net/core/failover.ko && echo OK:failover || echo FAIL:failover
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/drivers/net/net_failover.ko && echo OK:net_failover || echo FAIL:net_failover
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/drivers/net/virtio_net.ko && echo OK:virtio_net || echo FAIL:virtio_net
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/net/packet/af_packet.ko && echo OK:af_packet || echo FAIL:af_packet
+lsmod
+
+# overlay rootfs mounts need this; same modules= gap as above.
+insmod /lib/modules/{KERNEL_RELEASE}/kernel/fs/overlayfs/overlay.ko 2>/dev/null || true
+
+mkdir -p /var/lib/minibox/images /var/lib/minibox/containers
+mount -t virtiofs minibox-images /var/lib/minibox/images 2>/dev/null || true
+mount -t virtiofs minibox-containers /var/lib/minibox/containers 2>/dev/null || true
+
+ip link set lo up 2>/dev/null || true
+
+# Guest network device (VZVirtioNetworkDeviceConfiguration + NAT attachment, see
+# crates/macbox/src/vz/vm.rs). udhcpc + its default script (both pre-provisioned
+# in this rootfs) write /etc/resolv.conf from the DHCP-offered nameserver.
+ip link set eth0 up 2>/dev/null || true
+
+# eth0 can still be negotiating (or the host's VZNATNetworkDeviceAttachment
+# DHCP server not yet ready) the instant this script runs, which makes a
+# single udhcpc -n attempt fail with no lease and never retries, leaving the
+# guest with no route/DNS for the rest of boot. Retry briefly instead of
+# treating link-not-ready as permanent failure.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    udhcpc -i eth0 -n -q 2>/dev/null && break
+    sleep 1
+done
+
+echo '-- net diag --'
+ip link show || true
+ip addr show eth0 2>&1 || true
+ip route 2>&1 || true
+cat /etc/resolv.conf 2>&1 || true
+echo '-- virtio bus devices --'
+ls /sys/bus/virtio/devices 2>&1 || true
+for d in /sys/bus/virtio/devices/*; do
+    echo $d: || true
+    cat $d/device 2>&1 || true
+    cat $d/driver_override 2>&1 || true
+    ls $d/driver 2>&1 || true
+done
+echo '-- dmesg --'
+dmesg 2>&1 | grep -iE 'virtio|failover|eth0|net_fail' | tail -40 || true
+echo '-- end net diag --'
+
+hostname minibox-vm 2>/dev/null || true
+"
+    )
+}
+
+/// Install busybox init files into `rootfs_dir/etc/`.
+fn install_init_files(rootfs_dir: &Path) -> Result<()> {
+    let etc = rootfs_dir.join("etc");
+    fs::create_dir_all(&etc).with_context(|| format!("creating {}", etc.display()))?;
+
+    let inittab = etc.join("inittab");
+    fs::write(&inittab, generate_inittab())
+        .with_context(|| format!("writing {}", inittab.display()))?;
+
+    let initd = etc.join("init.d");
+    fs::create_dir_all(&initd).with_context(|| format!("creating {}", initd.display()))?;
+    let rcs = initd.join("rcS");
+    fs::write(&rcs, generate_rc_local()).with_context(|| format!("writing {}", rcs.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&rcs, fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("chmod {}", rcs.display()))?;
+    }
+    Ok(())
+}
+
+/// Resolve the workspace root from `xtask`'s own `CARGO_MANIFEST_DIR`.
+fn workspace_root() -> Result<PathBuf> {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("resolving workspace root from CARGO_MANIFEST_DIR")
+        .map(Path::to_path_buf)
+}
+
+/// Cross-compile `miniboxd` for [`AGENT_TARGET_TRIPLE`] and stage it into
+/// `rootfs/sbin/minibox-agent`, alongside the busybox-init files that start
+/// it with `MINIBOX_VSOCK_PORT` set. Runs on every `build-vm-image`
+/// invocation (cargo's own incremental build makes repeats cheap) so the
+/// rootfs stays correct even when the ESP itself is cache-hit and skipped.
+fn provision_rootfs(vm_dir: &Path, workspace_root: &Path) -> Result<()> {
+    let rootfs_dir = vm_dir.join("rootfs");
+    fs::create_dir_all(&rootfs_dir)
+        .with_context(|| format!("creating {}", rootfs_dir.display()))?;
+
+    println!("  cargo build --release --target {AGENT_TARGET_TRIPLE} -p miniboxd");
+    let status = Command::new("cargo")
+        .current_dir(workspace_root)
+        .args([
+            "build",
+            "--release",
+            "--target",
+            AGENT_TARGET_TRIPLE,
+            "-p",
+            "miniboxd",
+        ])
+        .status()
+        .context("spawning cargo build for the guest agent")?;
+    if !status.success() {
+        bail!("cargo build --release --target {AGENT_TARGET_TRIPLE} -p miniboxd failed");
+    }
+
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .map_or_else(|_| workspace_root.join("target"), PathBuf::from);
+    let built_binary = target_dir
+        .join(AGENT_TARGET_TRIPLE)
+        .join("release")
+        .join("miniboxd");
+    anyhow::ensure!(
+        built_binary.exists(),
+        "expected built agent binary at {} but it is missing",
+        built_binary.display()
+    );
+
+    let sbin = rootfs_dir.join("sbin");
+    fs::create_dir_all(&sbin).with_context(|| format!("creating {}", sbin.display()))?;
+    let agent_path = sbin.join("minibox-agent");
+    fs::copy(&built_binary, &agent_path).with_context(|| {
+        format!(
+            "copying {} to {}",
+            built_binary.display(),
+            agent_path.display()
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&agent_path, fs::Permissions::from_mode(0o755))
+            .with_context(|| format!("chmod {}", agent_path.display()))?;
+    }
+
+    install_init_files(&rootfs_dir)?;
+    println!("  staged  {}", agent_path.display());
+    println!(
+        "  wrote   {}/etc/inittab, {}/etc/init.d/rcS",
+        rootfs_dir.display(),
+        rootfs_dir.display()
+    );
+
+    install_kernel_modules(
+        vm_dir,
+        &rootfs_dir,
+        VSOCK_MODULES,
+        "vsock-module-extract",
+        "vsock",
+    )?;
+    install_kernel_modules(
+        vm_dir,
+        &rootfs_dir,
+        NET_MODULES,
+        "net-module-extract",
+        "net",
+    )?;
+    install_kernel_modules(vm_dir, &rootfs_dir, FS_MODULES, "fs-module-extract", "fs")?;
+    Ok(())
+}
+
+/// Stage the given `.ko` files onto the rootfs itself (not just the initramfs).
+///
+/// `GUEST_MODULES`/`modules=` on the kernel cmdline asks the Alpine initramfs's own
+/// init to `modprobe` these before it mounts the virtiofs root, but that mechanism
+/// was observed not to actually load them (`socket(AF_VSOCK)` still failed with
+/// `EAFNOSUPPORT` after `switch_root`, and the same was later observed for `AF_PACKET`).
+/// `rcS` now `insmod`s these explicitly, in dependency order, as a belt-and-suspenders fix.
+fn install_kernel_modules(
+    vm_dir: &Path,
+    rootfs_dir: &Path,
+    specs: &[ModuleSpec],
+    staging_name: &str,
+    label: &str,
+) -> Result<()> {
+    let cache = vm_dir.join("cache");
+    fs::create_dir_all(&cache).with_context(|| format!("creating {}", cache.display()))?;
+    let apk = cache.join(LINUX_VIRT_PACKAGE);
+    ensure_download(LINUX_VIRT_URL, &apk, LINUX_VIRT_SHA256)?;
+
+    let staging = cache.join(staging_name);
+    fs::create_dir_all(&staging).with_context(|| format!("creating {}", staging.display()))?;
+    let modules = read_modules(&apk, &staging, specs)?;
+
+    for (spec, data) in &modules {
+        let rel_dir = Path::new(spec.path)
+            .parent()
+            .with_context(|| format!("module path {} has no parent dir", spec.path))?;
+        let module_dir = rootfs_dir
+            .join("lib/modules")
+            .join(KERNEL_RELEASE)
+            .join(rel_dir);
+        fs::create_dir_all(&module_dir)
+            .with_context(|| format!("creating {}", module_dir.display()))?;
+        let file_name = Path::new(spec.path)
+            .file_name()
+            .with_context(|| format!("module path {} has no file name", spec.path))?;
+        let dest = module_dir.join(file_name);
+        fs::write(&dest, data).with_context(|| format!("writing {}", dest.display()))?;
+        println!("  staged  {label} module into {}", dest.display());
+    }
+    Ok(())
+}
+
 /// Build the ESP and boot assets, skipping the work when nothing changed.
 pub fn run(options: &Options) -> Result<()> {
     let vm_dir = &options.vm_dir;
+    provision_rootfs(vm_dir, &workspace_root()?)?;
+
     let cache = vm_dir.join("cache");
     let efi_dir = vm_dir.join("efi");
     let esp_path = efi_dir.join(vm_boot::ESP_IMAGE);
@@ -658,7 +1001,13 @@ pub fn run(options: &Options) -> Result<()> {
     extract_member(&iso, "efi/boot/bootaa64.efi", &grub_source, false)?;
     println!("  extract boot/vmlinuz-virt, boot/initramfs-virt, efi/boot/bootaa64.efi");
 
-    let modules = read_modules(&apk, &staging)?;
+    let all_module_specs: Vec<ModuleSpec> = VSOCK_MODULES
+        .iter()
+        .chain(NET_MODULES)
+        .chain(FS_MODULES)
+        .copied()
+        .collect();
+    let modules = read_modules(&apk, &staging, &all_module_specs)?;
     let alpine_cpio = gzip_decode(&initramfs_source)?;
     let initramfs = augment_initramfs(&alpine_cpio, &modules)?;
 

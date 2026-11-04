@@ -563,6 +563,7 @@ async fn invoke_run_with_mounts_sends_correct_bind_mounts() {
         listener,
         DaemonResponse::ContainerCreated {
             id: "test-123".into(),
+            isolation: None,
         },
         tx,
     ));
@@ -686,6 +687,7 @@ async fn invoke_run_completes_on_stream_close_after_container_created() {
         listener,
         vec![DaemonResponse::ContainerCreated {
             id: "abc123".into(),
+            isolation: None,
         }],
     ));
     let mut h = PluginHarness::spawn(&socket_path);
@@ -777,7 +779,10 @@ async fn invoke_run_returns_container_created() {
     tokio::spawn(mock_daemon_multi(
         listener,
         vec![
-            DaemonResponse::ContainerCreated { id: "abc".into() },
+            DaemonResponse::ContainerCreated {
+                id: "abc".into(),
+                isolation: None,
+            },
             DaemonResponse::ContainerStopped { exit_code: 0 },
         ],
     ));
@@ -804,7 +809,10 @@ async fn invoke_run_with_mounts_and_env() {
     let (tx, rx) = oneshot::channel();
     tokio::spawn(mock_daemon_verify(
         listener,
-        DaemonResponse::ContainerCreated { id: "abc".into() },
+        DaemonResponse::ContainerCreated {
+            id: "abc".into(),
+            isolation: None,
+        },
         tx,
     ));
     let mut h = PluginHarness::spawn(&socket_path);

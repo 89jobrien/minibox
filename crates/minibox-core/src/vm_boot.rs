@@ -17,6 +17,16 @@ pub const IMAGES_TAG: &str = "minibox-images";
 /// virtiofs tag of the writable container-state share.
 pub const CONTAINERS_TAG: &str = "minibox-containers";
 
+/// Kernel release string for the guest's `/lib/modules/<release>/` tree.
+///
+/// `cargo xtask build-vm-image` stages modules under this path and the guest init
+/// script `insmod`s them from the same path — defined once here so the builder and
+/// the guest init script (`agent_init.rs`) cannot silently diverge.
+pub const KERNEL_RELEASE: &str = "6.12.114-0-virt";
+
+/// vsock port the guest agent listens on, and the port the host VZ adapter connects to.
+pub const VSOCK_AGENT_PORT: u32 = 9000;
+
 /// Modules the guest loads before it mounts the virtiofs root.
 ///
 /// The Alpine initramfs already carries `virtiofs` and `fuse`; the vsock transport the
@@ -26,6 +36,11 @@ pub const GUEST_MODULES: &[&str] = &[
     "vsock",
     "vmw_vsock_virtio_transport_common",
     "vmw_vsock_virtio_transport",
+    "failover",
+    "net_failover",
+    "virtio_net",
+    "af_packet",
+    "overlay",
 ];
 
 /// Kernel command line rendered into `grub.cfg`.

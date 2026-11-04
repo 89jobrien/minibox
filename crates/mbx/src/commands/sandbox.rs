@@ -137,6 +137,7 @@ pub fn build_request(params: SandboxBuildParams<'_>) -> Result<DaemonRequest> {
         dind: false,
         dind_debug: false,
         client_version: None,
+        isolation: None,
     })
 }
 
@@ -203,7 +204,7 @@ pub async fn execute(params: SandboxExecParams, socket_path: &Path) -> Result<()
                     }
                     bail!("sandbox: container exited with code {exit_code}");
                 }
-                DaemonResponse::ContainerCreated { id } => {
+                DaemonResponse::ContainerCreated { id, .. } => {
                     debug!(container_id = %id, "sandbox: container created");
                 }
                 DaemonResponse::Error { message } => {

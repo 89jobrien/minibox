@@ -1,44 +1,43 @@
-# Handoff — minibox (2026-09-18)
+# Handoff — minibox (2026-11-03)
 
-**Branch:** develop | **Build/tests:** not revalidated for the current dirty worktree
-Current tracked state is mirrored in `.ctx/HANDOFF.minibox.minibox.yaml`; the worktree has
-pre-existing documentation, context, and isolation-design changes.
-
-## Prior Recorded Activity (2026-08-22)
-
-EOD update on branch chore/xtask-borrow-fixtures. Recent work: 6aaf6b3 test(xtask): add borrow fixture verification
-3650cad perf(xtask): move release build + conformance from pre-commit to pre-push
-3b9901a fix(ci): make cargo-geiger non-blocking in nightly workflow
-f9229da perf(xtask): skip cargo compilation in pre-commit when no Rust files staged
-0b93001 fix(ci): use absolute paths for cargo-geiger manifest-path
-7516e53 feat(ci): add daily nightly/YYYYMMDD tagged releases
-659f1c2 fix: apply sentinel suggestion-level fixes
-1429d80 fix(ci): pre-trust workspace dir on self-hosted runner before checkout
-df5dca0 refactor: move pre-commit bump logic into cargo xtask pre-commit
-edbb22e feat(xtask): rate-limit minor version bumps to once per calendar day
-c7fd3d3 fix: close clone closure and pipe fds on spawn paths
-366af49 fix: update socket-auth regression expectations
-8446efa fix(ci): add missing daily_orchestration.rs and fix version bump for workspace deps
-8debe13 fix(ci): harden release, reviewdog, and issue triage workflows
-10e4a6c fix(ci): ignore pty_exec_echo_roundtrip in unprivileged CI
-5a3568b ci: retrigger merge workflow after stuck run
-60bb538 ci: retrigger merge workflow
-269947e refactor: move xtask crate to workspace root
-5681a39 fix(ci): replace cancel-on-failure with ci-ok sentinel job
-d4fb4b7 ci: trigger workflow
-89d071a ci(merge): add lint + unit test jobs on ubuntu-latest for all pushes
-9dfbf82 ci: migrate macOS CI from self-hosted to GitHub runners
-327b559 drop(vm): remove QEMU vm_image and vm_run xtask commands
-00ee442 drop(vz): remove VZ adapter and all associated code
-30bfa14 Fix typo in README.md regarding software structure. Validation: cargo check passed; cargo test passed.
-
-## Items
-
-| ID               | P   | Status  | Title                                         |
-| ---------------- | --- | ------- | --------------------------------------------- |
-| gh-473           | P2  | blocked | Squash chain branches during promotion        |
-| uncommitted-work | P1  | open    | Uncommitted documentation and context changes |
+| ID                       | P   | Status  | Title                                                        |
+| ------------------------ | --- | ------- | ------------------------------------------------------------ |
+| gh-473                   | P2  | blocked | feat(xtask): squash chain branches during promotion          |
+| gh-507                   | P2  | blocked | feat(oci): stabilize push, commit, and build                 |
+| gh-492                   | P2  | pending | feat(security): apply a default capability drop policy       |
+| gh-493                   | P2  | pending | feat(security): add user namespaces and rootless support     |
+| gh-494                   | P2  | pending | feat(security): add general seccomp workload profiles        |
+| gh-495                   | P2  | pending | feat(security): add end-to-end isolation regressions         |
+| gh-496                   | P2  | pending | feat(context): validate readiness claims with evidence       |
+| gh-497                   | P2  | pending | feat(runtime): prove control-plane responsiveness under load |
+| gh-499                   | P2  | pending | feat(bench): benchmark GKE proot and copy filesystem         |
+| gh-501                   | P2  | pending | feat(context): define support-tier graduation thresholds     |
+| gh-503                   | P2  | pending | feat(capabilities): report operational platform support      |
+| gh-504                   | P2  | pending | feat(mcp): complete the agent control surface                |
+| gh-505                   | P2  | pending | feat(policy): unify policy across control surfaces           |
+| gh-506                   | P2  | pending | feat(audit): persist structured agent mutation records       |
+| gh-508                   | P2  | pending | feat(mac): support exec and historical logs                  |
+| gh-509                   | P2  | pending | feat(xtask): generate dispatch from a typed registry         |
+| gh-511                   | P2  | pending | feat(fuzz): discover targets and normalize corpus paths      |
+| gh-513                   | P2  | pending | feat(events): share Colima event and metrics infrastructure  |
+| gh-514                   | P2  | pending | feat(cni): package plugins and define operational rollout    |
+| gh-515                   | P2  | pending | feat(mbx): expose image list, build, and push commands       |
+| gh-517                   | P2  | pending | feat(checkpoint): replace the production no-op adapter       |
+| gh-518                   | P2  | pending | fix(crux): align handler inputs with daemon protocol         |
+| iso-colima-profile       | P2  | pending | feat(colima): enforce or reject isolation profiles           |
+| iso-gke-profile          | P2  | pending | feat(gke): enforce or reject isolation profiles              |
+| iso-krun-profile         | P2  | pending | feat(krun): enforce or reject isolation profiles             |
+| iso-native-standard-v1   | P2  | pending | feat(security): integrate native standard-v1 enforcement     |
+| iso-profile-admission    | P2  | pending | feat(policy): compile and authorize isolation profiles       |
+| iso-profile-conformance  | P2  | pending | test(security): add isolation profile conformance suite      |
+| iso-profile-docs         | P2  | pending | docs(security): document isolation profiles and migration    |
+| iso-profile-protocol     | P2  | pending | feat(protocol): carry isolation profile requests             |
+| iso-profile-runtime-port | P2  | pending | feat(runtime): add isolation plan and evidence port          |
+| iso-profile-selection    | P2  | pending | feat(runtime): select adapters by isolation profile support  |
+| iso-smolvm-profile       | P2  | pending | feat(smolvm): enforce or reject isolation profiles           |
+| iso-vz-profile           | P2  | pending | feat(vz): enforce or reject isolation profiles               |
+| iso-winbox-profile       | P2  | pending | feat(winbox): define standard-v1 equivalent or rejection     |
 
 ## Log
 
-- 20260918.201226: done=60 running=0 pending=27 blocked=1
+- 20261103.084900: done=103 running=0 pending=33 blocked=2 [6d8c009, 73aedb1, 4cd2fa4, e4c5e61, 741fe1e, 48d0ecd, 6534808, a417675, 0c7a3c8, c95450d]

@@ -328,6 +328,7 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
                         dind: false,
                         dind_debug: false,
                         client_version: None,
+                        isolation: None,
                     }
                 },
             ),
@@ -454,7 +455,10 @@ fn arb_daemon_request() -> impl Strategy<Value = DaemonRequest> {
 
 fn arb_daemon_response() -> impl Strategy<Value = DaemonResponse> {
     prop_oneof![
-        arb_nonempty_string().prop_map(|id| DaemonResponse::ContainerCreated { id }),
+        arb_nonempty_string().prop_map(|id| DaemonResponse::ContainerCreated {
+            id,
+            isolation: None
+        }),
         arb_nonempty_string().prop_map(|msg| DaemonResponse::Success { message: msg }),
         arb_nonempty_string().prop_map(|id| DaemonResponse::ContainerPaused { id }),
         arb_nonempty_string().prop_map(|id| DaemonResponse::ContainerResumed { id }),

@@ -75,7 +75,10 @@ pub async fn handle_run(
     }
 
     let response = match run_inner(params, state, deps).await {
-        Ok(id) => DaemonResponse::ContainerCreated { id },
+        Ok(id) => DaemonResponse::ContainerCreated {
+            id,
+            isolation: None,
+        },
         Err(error) => {
             error!("handle_run error: {error:#}");
             DaemonResponse::Error {
@@ -130,6 +133,7 @@ async fn handle_run_streaming(
     let _ = tx
         .send(DaemonResponse::ContainerCreated {
             id: container_id.clone(),
+            isolation: None,
         })
         .await;
     debug!(pid, "streaming: ContainerCreated sent, spawning drain");

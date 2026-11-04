@@ -259,7 +259,7 @@ async fn test_run_with_all_success_adapters() {
     .await;
 
     match response {
-        DaemonResponse::ContainerCreated { id } => {
+        DaemonResponse::ContainerCreated { id, .. } => {
             assert_ne!(id, "");
             assert_eq!(id.len(), 16);
 

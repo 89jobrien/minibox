@@ -221,6 +221,7 @@ fn run_request(input: RunContainerInput, policy: &AgentPolicy) -> Result<DaemonR
         dind: false,
         dind_debug: false,
         client_version: None,
+        isolation: None,
     })
 }
 
@@ -278,7 +279,7 @@ fn normalize_run_output(
 
     for response in responses {
         match response {
-            DaemonResponse::ContainerCreated { id } => {
+            DaemonResponse::ContainerCreated { id, .. } => {
                 container_id = Some(id);
             }
             DaemonResponse::ContainerOutput { stream, data } => {
@@ -560,6 +561,7 @@ mod tests {
             vec![
                 DaemonResponse::ContainerCreated {
                     id: "abc123".to_string(),
+                    isolation: None,
                 },
                 DaemonResponse::ContainerOutput {
                     stream: OutputStreamKind::Stdout,

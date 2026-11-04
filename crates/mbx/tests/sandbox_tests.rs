@@ -67,6 +67,7 @@ async fn serve_hang(socket_path: &std::path::Path) {
 
     let resp = DaemonResponse::ContainerCreated {
         id: "test-hang".to_string(),
+        isolation: None,
     };
     let mut json = serde_json::to_string(&resp).unwrap();
     json.push('\n');

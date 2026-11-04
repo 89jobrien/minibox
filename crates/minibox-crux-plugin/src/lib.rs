@@ -332,6 +332,7 @@ pub fn build_request(handler: &str, input: &Value) -> Result<DaemonRequest> {
                 dind: false,
                 dind_debug: false,
                 client_version: None,
+                isolation: None,
             })
         }
 

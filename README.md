@@ -12,7 +12,7 @@ architecture keeps adapter suites swappable at startup with no recompile. A buil
 server exposes policy-gated daemon operations directly to MCP clients so agents can drive container
 lifecycle without shelling out to the CLI.
 
-**Status:** Active development — `v0.33.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.34.1`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---

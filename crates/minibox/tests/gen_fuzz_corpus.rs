@@ -154,6 +154,7 @@ fn generate_request_corpus() {
                 dind: false,
                 dind_debug: false,
                 client_version: None,
+                isolation: None,
             },
         ),
         (
@@ -183,6 +184,7 @@ fn generate_request_corpus() {
                 dind: false,
                 dind_debug: false,
                 client_version: None,
+                isolation: None,
             },
         ),
         (
@@ -218,6 +220,7 @@ fn generate_response_corpus() {
             "created",
             DaemonResponse::ContainerCreated {
                 id: "deadbeefdeadbeef".into(),
+                isolation: None,
             },
         ),
         (

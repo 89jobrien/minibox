@@ -134,7 +134,7 @@ pub async fn handle_run_once(
 /// Extract container ID from a ContainerCreated response; panics otherwise.
 pub fn extract_container_id(response: &DaemonResponse) -> String {
     match response {
-        DaemonResponse::ContainerCreated { id } => id.clone(),
+        DaemonResponse::ContainerCreated { id, .. } => id.clone(),
         other => panic!("expected ContainerCreated, got: {other:?}"),
     }
 }

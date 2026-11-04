@@ -47,9 +47,10 @@ fn main() {
         VZDirectorySharingDeviceConfiguration, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
         VZEFIVariableStore, VZEFIVariableStoreInitializationOptions,
         VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration, VZLinuxBootLoader,
-        VZSerialPortConfiguration, VZSharedDirectory, VZSingleDirectoryShare,
-        VZStorageDeviceConfiguration, VZVirtioBlockDeviceConfiguration,
-        VZVirtioConsoleDeviceSerialPortConfiguration, VZVirtioFileSystemDeviceConfiguration,
+        VZNATNetworkDeviceAttachment, VZNetworkDeviceConfiguration, VZSerialPortConfiguration,
+        VZSharedDirectory, VZSingleDirectoryShare, VZStorageDeviceConfiguration,
+        VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
+        VZVirtioFileSystemDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
         VZVirtualMachine, VZVirtualMachineConfiguration, VZVirtualMachineState,
     };
     use std::path::{Path, PathBuf};
@@ -81,6 +82,10 @@ fn main() {
         disk: Option<PathBuf>,
         /// `(tag, host_path)` pairs attached as read-only virtiofs shares.
         shares: Vec<(String, PathBuf)>,
+        /// Attach a single VZVirtioNetworkDeviceConfiguration + VZNATNetworkDeviceAttachment,
+        /// isolated from minibox's own vm.rs wiring, to check whether the guest ever sees a
+        /// net device independent of any minibox code.
+        net: bool,
     }
 
     impl Args {
@@ -91,6 +96,7 @@ fn main() {
             let mut hold_secs = 0u64;
             let mut disk = None;
             let mut shares = Vec::new();
+            let mut net = false;
             let mut it = std::env::args().skip(1);
             while let Some(arg) = it.next() {
                 match arg.as_str() {
@@ -136,6 +142,9 @@ fn main() {
                         }
                         shares.push((tag.to_string(), PathBuf::from(path)));
                     }
+                    "--net" => {
+                        net = true;
+                    }
                     other => bail!("unexpected argument {other:?}"),
                 }
             }
@@ -146,6 +155,7 @@ fn main() {
                 hold_secs,
                 disk,
                 shares,
+                net,
             })
         }
     }
@@ -223,9 +233,16 @@ fn main() {
                 let boot_loader = unsafe {
                     VZLinuxBootLoader::initWithKernelURL(VZLinuxBootLoader::alloc(), &kernel_url)
                 };
-                // SAFETY: standard setter.
+                // SAFETY: standard setter. Uses the real production cmdline (root=/
+                // rootfstype=virtiofs/modules=) when shares are attached, so this repro
+                // actually reaches rcS instead of panicking with no root filesystem.
+                let cmdline = if args.shares.is_empty() {
+                    "console=hvc0".to_string()
+                } else {
+                    minibox_core::vm_boot::kernel_cmdline()
+                };
                 unsafe {
-                    boot_loader.setCommandLine(&NSString::from_str("console=hvc0"));
+                    boot_loader.setCommandLine(&NSString::from_str(&cmdline));
                 }
                 // SAFETY: VZLinuxBootLoader conforms to VZBootLoader.
                 unsafe { vm_config.setBootLoader(Some(&*boot_loader)) };
@@ -353,6 +370,20 @@ fn main() {
             unsafe { vm_config.setDirectorySharingDevices(&devices) };
         }
 
+        if args.net {
+            // SAFETY: VZNATNetworkDeviceAttachment::new()/VZVirtioNetworkDeviceConfiguration::new()
+            // follow ObjC +new; setAttachment: is a standard setter taking an owned reference.
+            // This mirrors minibox's own crates/macbox/src/vz/vm.rs:301-312 exactly, written
+            // fresh here so a failure can't be blamed on anything in vm.rs itself.
+            let net_attachment = unsafe { VZNATNetworkDeviceAttachment::new() };
+            let net_dev = unsafe { VZVirtioNetworkDeviceConfiguration::new() };
+            unsafe { net_dev.setAttachment(Some(&net_attachment)) };
+            let network_devices: Retained<NSArray<VZNetworkDeviceConfiguration>> =
+                NSArray::from_retained_slice(&[net_dev.into_super()]);
+            // SAFETY: standard setter.
+            unsafe { vm_config.setNetworkDevices(&network_devices) };
+        }
+
         // SAFETY: standard validation method.
         unsafe { vm_config.validateWithError() }
             .map_err(|e| anyhow!("configuration validation failed: {e:?}"))?;
@@ -396,6 +427,7 @@ fn main() {
             work_dir: PathBuf,
             disk: Option<PathBuf>,
             shares: Vec<(String, PathBuf)>,
+            net: bool,
             result: Option<Result<Prepared>>,
         }
         unsafe extern "C" fn trampoline(ctx: *mut std::ffi::c_void) {
@@ -409,6 +441,7 @@ fn main() {
                 hold_secs: 0,
                 disk: ctx.disk.clone(),
                 shares: ctx.shares.clone(),
+                net: ctx.net,
             };
             // SAFETY: running on the GCD main queue, as VZ requires.
             ctx.result = Some(unsafe { prepare(&args) });
@@ -419,6 +452,7 @@ fn main() {
             work_dir: args.work_dir.clone(),
             disk: args.disk.clone(),
             shares: args.shares.clone(),
+            net: args.net,
             result: None,
         };
         // SAFETY: `_dispatch_main_q` is live because `main` calls `dispatch_main()`;

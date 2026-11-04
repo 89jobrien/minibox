@@ -1,6 +1,6 @@
 project: minibox
 id: minibox
-updated: 2026-10-22
+updated: 2026-11-04
 items:
 - id: gh-473
   doob_uuid: null
@@ -12,7 +12,7 @@ items:
   files: []
   completed: null
   extra:
-  - date: 2026-10-02
+  - date: 2026-11-03
     type: blocker
     field: null
     value: null
@@ -28,60 +28,343 @@ items:
   files: []
   completed: null
   extra:
-  - date: 2026-10-02
+  - date: 2026-11-03
     type: blocker
     field: null
     value: null
     reviewed: null
     note: Dockerfile.minibox-build cleanup remains unresolved; move temporary Dockerfiles under daemon-owned state before continuing OCI stabilization
-- id: 2026-09-22-signed-governed-execution-daemon-t1
+- id: gh-492
   doob_uuid: null
-  name: pin-the-immutable-crux-contract
+  name: feat-security---apply-a-default-capability-drop-policy
   priority: P2
-  status: blocked
-  title: Pin the immutable Crux contract
-  description: 'Preconditions unmet: (1) normative design doc docs/designs/2026-09-22-signed-governed-execution-daemon-design.md does not exist; (2) crux-types not in Cargo.lock, no local crux checkout, no published V1 contract or golden vectors to pin; (3) explicit user authorization for Crux commit/publication/dependency pin not granted. t1 gates t2-t10 via linear chain. Also native-Linux-only feature cannot be verified on darwin host.'
-  files: []
-  completed: null
-  extra:
-  - date: 2026-10-02
-    type: blocker
-    field: null
-    value: null
-    reviewed: null
-    note: 'Preconditions unmet: (1) normative design doc docs/designs/2026-09-22-signed-governed-execution-daemon-design.md does not exist; (2) crux-types not in Cargo.lock, no local crux checkout, no published V1 contract or golden vectors to pin; (3) explicit user authorization for Crux commit/publication/dependency pin not granted. t1 gates t2-t10 via linear chain. Also native-Linux-only feature cannot be verified on darwin host.'
-- id: 2026-10-01-minibox-ci-remediation-t1
-  doob_uuid: null
-  name: ignore-the-todo-sync-lockfile-before-it-is-committed-by-accident
-  priority: P2
-  status: open
-  title: Ignore the todo-sync lockfile before it is committed by accident
-  description: Task 2026-10-01-minibox-ci-remediation-t1 in progress
+  status: pending
+  title: 'feat(security): apply a default capability drop policy'
+  description: Queued work, not yet started (gh-492)
   files: []
   completed: null
   extra: []
-- id: uncommitted-work
+- id: gh-493
   doob_uuid: null
-  name: uncommitted-work
-  priority: P1
-  status: open
-  title: Uncommitted changes (5 files)
-  description: |-
-    Working tree has uncommitted changes:
-    .ctx/HANDOFF.md
-    .ctx/HANDOFF.minibox.minibox.yaml
-    .gitignore
-    docs/plans/2026-10-01-minibox-ci-remediation.md
-    taskit-todo-sync.lock
-  files:
-  - .ctx/HANDOFF.md
-  - .ctx/HANDOFF.minibox.minibox.yaml
-  - .gitignore
-  - docs/plans/2026-10-01-minibox-ci-remediation.md
-  - taskit-todo-sync.lock
+  name: feat-security---add-user-namespaces-and-rootless-support
+  priority: P2
+  status: pending
+  title: 'feat(security): add user namespaces and rootless support'
+  description: Queued work, not yet started (gh-493)
+  files: []
+  completed: null
+  extra: []
+- id: gh-494
+  doob_uuid: null
+  name: feat-security---add-general-seccomp-workload-profiles
+  priority: P2
+  status: pending
+  title: 'feat(security): add general seccomp workload profiles'
+  description: Queued work, not yet started (gh-494)
+  files: []
+  completed: null
+  extra: []
+- id: gh-495
+  doob_uuid: null
+  name: feat-security---add-end-to-end-isolation-regressions
+  priority: P2
+  status: pending
+  title: 'feat(security): add end-to-end isolation regressions'
+  description: Queued work, not yet started (gh-495)
+  files: []
+  completed: null
+  extra: []
+- id: gh-496
+  doob_uuid: null
+  name: feat-context---validate-readiness-claims-with-evidence
+  priority: P2
+  status: pending
+  title: 'feat(context): validate readiness claims with evidence'
+  description: Queued work, not yet started (gh-496)
+  files: []
+  completed: null
+  extra: []
+- id: gh-497
+  doob_uuid: null
+  name: feat-runtime---prove-control-plane-responsiveness-under-load
+  priority: P2
+  status: pending
+  title: 'feat(runtime): prove control-plane responsiveness under load'
+  description: Queued work, not yet started (gh-497)
+  files: []
+  completed: null
+  extra: []
+- id: gh-499
+  doob_uuid: null
+  name: feat-bench---benchmark-gke-proot-and-copy-filesystem
+  priority: P2
+  status: pending
+  title: 'feat(bench): benchmark GKE proot and copy filesystem'
+  description: Queued work, not yet started (gh-499)
+  files: []
+  completed: null
+  extra: []
+- id: gh-501
+  doob_uuid: null
+  name: feat-context---define-support-tier-graduation-thresholds
+  priority: P2
+  status: pending
+  title: 'feat(context): define support-tier graduation thresholds'
+  description: Queued work, not yet started (gh-501)
+  files: []
+  completed: null
+  extra: []
+- id: gh-503
+  doob_uuid: null
+  name: feat-capabilities---report-operational-platform-support
+  priority: P2
+  status: pending
+  title: 'feat(capabilities): report operational platform support'
+  description: Queued work, not yet started (gh-503)
+  files: []
+  completed: null
+  extra: []
+- id: gh-504
+  doob_uuid: null
+  name: feat-mcp---complete-the-agent-control-surface
+  priority: P2
+  status: pending
+  title: 'feat(mcp): complete the agent control surface'
+  description: Queued work, not yet started (gh-504)
+  files: []
+  completed: null
+  extra: []
+- id: gh-505
+  doob_uuid: null
+  name: feat-policy---unify-policy-across-control-surfaces
+  priority: P2
+  status: pending
+  title: 'feat(policy): unify policy across control surfaces'
+  description: Queued work, not yet started (gh-505)
+  files: []
+  completed: null
+  extra: []
+- id: gh-506
+  doob_uuid: null
+  name: feat-audit---persist-structured-agent-mutation-records
+  priority: P2
+  status: pending
+  title: 'feat(audit): persist structured agent mutation records'
+  description: Queued work, not yet started (gh-506)
+  files: []
+  completed: null
+  extra: []
+- id: gh-508
+  doob_uuid: null
+  name: feat-mac---support-exec-and-historical-logs
+  priority: P2
+  status: pending
+  title: 'feat(mac): support exec and historical logs'
+  description: Queued work, not yet started (gh-508)
+  files: []
+  completed: null
+  extra: []
+- id: gh-509
+  doob_uuid: null
+  name: feat-xtask---generate-dispatch-from-a-typed-registry
+  priority: P2
+  status: pending
+  title: 'feat(xtask): generate dispatch from a typed registry'
+  description: Queued work, not yet started (gh-509)
+  files: []
+  completed: null
+  extra: []
+- id: gh-511
+  doob_uuid: null
+  name: feat-fuzz---discover-targets-and-normalize-corpus-paths
+  priority: P2
+  status: pending
+  title: 'feat(fuzz): discover targets and normalize corpus paths'
+  description: Queued work, not yet started (gh-511)
+  files: []
+  completed: null
+  extra: []
+- id: gh-513
+  doob_uuid: null
+  name: feat-events---share-colima-event-and-metrics-infrastructure
+  priority: P2
+  status: pending
+  title: 'feat(events): share Colima event and metrics infrastructure'
+  description: Queued work, not yet started (gh-513)
+  files: []
+  completed: null
+  extra: []
+- id: gh-514
+  doob_uuid: null
+  name: feat-cni---package-plugins-and-define-operational-rollout
+  priority: P2
+  status: pending
+  title: 'feat(cni): package plugins and define operational rollout'
+  description: Queued work, not yet started (gh-514)
+  files: []
+  completed: null
+  extra: []
+- id: gh-515
+  doob_uuid: null
+  name: feat-mbx---expose-image-list--build--and-push-commands
+  priority: P2
+  status: pending
+  title: 'feat(mbx): expose image list, build, and push commands'
+  description: Queued work, not yet started (gh-515)
+  files: []
+  completed: null
+  extra: []
+- id: gh-517
+  doob_uuid: null
+  name: feat-checkpoint---replace-the-production-no-op-adapter
+  priority: P2
+  status: pending
+  title: 'feat(checkpoint): replace the production no-op adapter'
+  description: Queued work, not yet started (gh-517)
+  files: []
+  completed: null
+  extra: []
+- id: gh-518
+  doob_uuid: null
+  name: fix-crux---align-handler-inputs-with-daemon-protocol
+  priority: P2
+  status: pending
+  title: 'fix(crux): align handler inputs with daemon protocol'
+  description: Queued work, not yet started (gh-518)
+  files: []
+  completed: null
+  extra: []
+- id: iso-colima-profile
+  doob_uuid: null
+  name: feat-colima---enforce-or-reject-isolation-profiles
+  priority: P2
+  status: pending
+  title: 'feat(colima): enforce or reject isolation profiles'
+  description: Queued work, not yet started (iso-colima-profile)
+  files: []
+  completed: null
+  extra: []
+- id: iso-gke-profile
+  doob_uuid: null
+  name: feat-gke---enforce-or-reject-isolation-profiles
+  priority: P2
+  status: pending
+  title: 'feat(gke): enforce or reject isolation profiles'
+  description: Queued work, not yet started (iso-gke-profile)
+  files: []
+  completed: null
+  extra: []
+- id: iso-krun-profile
+  doob_uuid: null
+  name: feat-krun---enforce-or-reject-isolation-profiles
+  priority: P2
+  status: pending
+  title: 'feat(krun): enforce or reject isolation profiles'
+  description: Queued work, not yet started (iso-krun-profile)
+  files: []
+  completed: null
+  extra: []
+- id: iso-native-standard-v1
+  doob_uuid: null
+  name: feat-security---integrate-native-standard-v1-enforcement
+  priority: P2
+  status: pending
+  title: 'feat(security): integrate native standard-v1 enforcement'
+  description: Queued work, not yet started (iso-native-standard-v1)
+  files: []
+  completed: null
+  extra: []
+- id: iso-profile-admission
+  doob_uuid: null
+  name: feat-policy---compile-and-authorize-isolation-profiles
+  priority: P2
+  status: pending
+  title: 'feat(policy): compile and authorize isolation profiles'
+  description: Queued work, not yet started (iso-profile-admission)
+  files: []
+  completed: null
+  extra: []
+- id: iso-profile-conformance
+  doob_uuid: null
+  name: test-security---add-isolation-profile-conformance-suite
+  priority: P2
+  status: pending
+  title: 'test(security): add isolation profile conformance suite'
+  description: Queued work, not yet started (iso-profile-conformance)
+  files: []
+  completed: null
+  extra: []
+- id: iso-profile-docs
+  doob_uuid: null
+  name: docs-security---document-isolation-profiles-and-migration
+  priority: P2
+  status: pending
+  title: 'docs(security): document isolation profiles and migration'
+  description: Queued work, not yet started (iso-profile-docs)
+  files: []
+  completed: null
+  extra: []
+- id: iso-profile-protocol
+  doob_uuid: null
+  name: feat-protocol---carry-isolation-profile-requests
+  priority: P2
+  status: pending
+  title: 'feat(protocol): carry isolation profile requests'
+  description: Queued work, not yet started (iso-profile-protocol)
+  files: []
+  completed: null
+  extra: []
+- id: iso-profile-runtime-port
+  doob_uuid: null
+  name: feat-runtime---add-isolation-plan-and-evidence-port
+  priority: P2
+  status: pending
+  title: 'feat(runtime): add isolation plan and evidence port'
+  description: Queued work, not yet started (iso-profile-runtime-port)
+  files: []
+  completed: null
+  extra: []
+- id: iso-profile-selection
+  doob_uuid: null
+  name: feat-runtime---select-adapters-by-isolation-profile-support
+  priority: P2
+  status: pending
+  title: 'feat(runtime): select adapters by isolation profile support'
+  description: Queued work, not yet started (iso-profile-selection)
+  files: []
+  completed: null
+  extra: []
+- id: iso-smolvm-profile
+  doob_uuid: null
+  name: feat-smolvm---enforce-or-reject-isolation-profiles
+  priority: P2
+  status: pending
+  title: 'feat(smolvm): enforce or reject isolation profiles'
+  description: Queued work, not yet started (iso-smolvm-profile)
+  files: []
+  completed: null
+  extra: []
+- id: iso-vz-profile
+  doob_uuid: null
+  name: feat-vz---enforce-or-reject-isolation-profiles
+  priority: P2
+  status: pending
+  title: 'feat(vz): enforce or reject isolation profiles'
+  description: Queued work, not yet started (iso-vz-profile)
+  files: []
+  completed: null
+  extra: []
+- id: iso-winbox-profile
+  doob_uuid: null
+  name: feat-winbox---define-standard-v1-equivalent-or-rejection
+  priority: P2
+  status: pending
+  title: 'feat(winbox): define standard-v1 equivalent or rejection'
+  description: Queued work, not yet started (iso-winbox-profile)
+  files: []
   completed: null
   extra: []
 log:
-- date: '20261002.180249'
-  summary: done=66 running=1 pending=67 blocked=3
+- date: '20261103.084900'
+  summary: done=103 running=0 pending=33 blocked=2
   commits: []

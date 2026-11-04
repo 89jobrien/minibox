@@ -571,7 +571,7 @@ mod conformance {
         .await;
 
         let container_id = match create_response {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("Expected ContainerCreated"),
         };
 
@@ -960,7 +960,7 @@ mod lifecycle_conformance {
         )
         .await;
         let id = match create_response {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated"),
         };
 
@@ -999,7 +999,7 @@ mod lifecycle_conformance {
         )
         .await;
         let id = match create_response {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated"),
         };
 
@@ -1802,7 +1802,7 @@ mod krun_suite {
             matches!(response, DaemonResponse::ContainerCreated { .. }),
             "K-H-01: expected ContainerCreated, got: {response:?}"
         );
-        if let DaemonResponse::ContainerCreated { id } = response {
+        if let DaemonResponse::ContainerCreated { id, .. } = response {
             assert!(!id.is_empty(), "K-H-01: container ID must not be empty");
         }
     }
@@ -1919,7 +1919,7 @@ mod krun_suite {
         .await;
 
         let container_id = match response {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             other => panic!("K-H-04: expected ContainerCreated, got: {other:?}"),
         };
 
@@ -1960,7 +1960,7 @@ mod krun_suite {
         .await;
 
         let container_id = match response {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             other => panic!("K-H-05: expected ContainerCreated, got: {other:?}"),
         };
 
@@ -2323,7 +2323,7 @@ mod logs_conformance {
         )
         .await;
         let id = match create_resp {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 
@@ -2364,7 +2364,7 @@ mod logs_conformance {
         )
         .await;
         let id = match create_resp {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 
@@ -2440,7 +2440,7 @@ mod list_conformance {
         )
         .await;
         let id = match create_resp {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 
@@ -2491,7 +2491,7 @@ mod list_conformance {
         )
         .await;
         let id = match create_resp {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 
@@ -2547,7 +2547,7 @@ mod list_conformance {
         )
         .await;
         let id = match create_resp {
-            DaemonResponse::ContainerCreated { id } => id,
+            DaemonResponse::ContainerCreated { id, .. } => id,
             _ => panic!("expected ContainerCreated, got: {create_resp:?}"),
         };
 

@@ -10,3 +10,11 @@ debug = true
 
 [alias]
 xtask = "run -p xtask --"
+
+# Guest-agent cross-compile target for the vz adapter (see
+# docs/designs/2026-10-22-vz-efi-boot-design.md and `cargo xtask
+# build-vm-image`). macOS's native `cc`/`ld` driver doesn't understand the
+# GNU-style linker flags a musl target needs, so route through the
+# Homebrew-installed `aarch64-linux-musl-gcc` cross toolchain instead.
+[target.aarch64-unknown-linux-musl]
+linker = "aarch64-linux-musl-gcc"
