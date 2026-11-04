@@ -99,6 +99,7 @@ images/
 *.profraw
 *.profdata
 *.crate
+/arc-hotspots.svg
 
 # IDE / Editor
 .vscode/
