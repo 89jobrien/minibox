@@ -203,16 +203,12 @@ jobs:
   test-e2e:
     name: e2e tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    # TODO(ci-p0): self-hosted "minibox" runner was decommissioned (0 registered
-    # runners confirmed via `gh api repos/89jobrien/minibox/actions/runners`).
-    # This job queued forever with no runner to pick it up, which permanently
-    # blocked `ci-ok` ("CI passed") and therefore the promote-* auto-merge path
-    # on staging/release. Disabled until a replacement runner exists. Original:
-    # if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
-    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
+    env:
+      MINIBOX_ADAPTER: native
+      MINIBOX_ALLOW_PRIVILEGED: "1"
     steps:
       - uses: actions/checkout@v5
       - name: pre-test runner cleanup
@@ -231,12 +227,12 @@ jobs:
   test-integration:
     name: integration tests (Linux, root)
     runs-on: [self-hosted, minibox]
-    # TODO(ci-p0): see test-e2e above -- same decommissioned self-hosted runner.
-    # if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
-    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
+    env:
+      MINIBOX_ADAPTER: native
+      MINIBOX_ALLOW_PRIVILEGED: "1"
     steps:
       - uses: actions/checkout@v5
       - name: pre-test runner cleanup
@@ -257,7 +253,9 @@ jobs:
     runs-on: [self-hosted, minibox]
     # TODO(ci-p0): see test-e2e above -- same decommissioned self-hosted runner.
     # if: contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
-    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
+    env:
+      MINIBOX_ADAPTER: native
+      MINIBOX_ALLOW_PRIVILEGED: "1"
     concurrency:
       group: minibox-selfhosted-e2e
       cancel-in-progress: false
@@ -489,7 +487,9 @@ jobs:
     runs-on: [self-hosted, minibox]
     # TODO(ci-p0): see test-e2e above -- same decommissioned self-hosted runner.
     # if: always() && contains(fromJSON('["refs/heads/staging","refs/heads/release"]'), github.ref)
-    if: github.ref == 'refs/heads/__disabled_no_self_hosted_runner__'
+    env:
+      MINIBOX_ADAPTER: native
+      MINIBOX_ALLOW_PRIVILEGED: "1"
     needs: [test-e2e, test-integration, test-protocol-e2e-linux]
     steps:
       - uses: actions/checkout@v5
