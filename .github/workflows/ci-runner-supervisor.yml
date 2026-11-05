@@ -1,0 +1,36 @@
+name: Minibox CI Runner Supervisor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"
+
+permissions:
+  contents: read
+  actions: write
+  id-token: write
+
+jobs:
+  supervisor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RUNNER_REPO: 89jobrien/minibox
+      RUNNER_IMAGE: ghcr.io/89jobrien/minibox-ci-runner
+      RUNNER_IMAGE_TAG: latest
+      RUNNER_LABELS: self-hosted,minibox
+
+    steps:
+      - name: Install tools
+        run: |
+          # gh CLI is available on ubuntu-latest
+          # mbx is available via cargo or pre-built binary
+
+      - name: Run supervisor loop
+        env:
+          RUNNER_REPO: ${{ env.RUNNER_REPO }}
+          RUNNER_IMAGE: ${{ env.RUNNER_IMAGE }}
+          RUNNER_IMAGE_TAG: ${{ env.RUNNER_IMAGE_TAG }}
+          RUNNER_LABELS: ${{ env.RUNNER_LABELS }}
+        run: |
+          ops/ci-runner/supervisor.sh
