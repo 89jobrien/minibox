@@ -1365,8 +1365,8 @@ mod tests {
                     .unwrap()
                     .as_raw_fd(),
             ) {
-                if e.to_string().contains("Operation not permitted")
-                    || e.to_string().contains("Permission denied")
+                if format!("{:#}", e).contains("Operation not permitted")
+                    || format!("{:#}", e).contains("Permission denied")
                 {
                     return;
                 }
@@ -1405,8 +1405,8 @@ mod tests {
                     .unwrap()
                     .as_raw_fd(),
             ) {
-                if e.to_string().contains("Operation not permitted")
-                    || e.to_string().contains("Permission denied")
+                if format!("{:#}", e).contains("Operation not permitted")
+                    || format!("{:#}", e).contains("Permission denied")
                 {
                     return;
                 }
@@ -1553,8 +1553,8 @@ mod tests {
                     .unwrap()
                     .as_raw_fd(),
             ) {
-                if e.to_string().contains("Operation not permitted")
-                    || e.to_string().contains("Permission denied")
+                if format!("{:#}", e).contains("Operation not permitted")
+                    || format!("{:#}", e).contains("Permission denied")
                 {
                     return;
                 }
