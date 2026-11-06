@@ -450,5 +450,16 @@
 - `xtask` binary not currently available (preflight reports fail)
 - CI coverage gaps — sandbox tests and the feature-gated CLI subprocess suite are
   not in any CI workflow
-- macOS VZ.framework — restored behind the opt-in `vz` feature, but VM boot remains
-  blocked by `VZLinuxBootLoader` failures on current macOS
+- macOS VZ.framework — Phase 1 (EFI/disk-image boot) is landed and verified. `VzVm`
+  now boots via `VZEFIBootLoader` + persistent `VZEFIVariableStore` with the ESP built by
+  `cargo xtask build-vm-image` (128 MiB FAT32, deterministic — fixed volume id/label and
+  DOS epoch timestamps; fatfs built without `chrono`). The ESP carries GRUB + the Alpine
+  `virt` kernel/initramfs, the kernel cmdline is baked into `/boot/grub/grub.cfg` (VZ has no
+  cmdline field), and an augmented initramfs carries the `vmw_vsock_virtio_transport`
+  module set (the Alpine virt initramfs lacks vsock, has `virtiofs`). Boot verified:
+  firmware → GRUB → kernel mounts virtiofs root with `rootfstype=virtiofs` (the appended
+  cpio segment is honored; without the share the guest fails with EINVAL). Shared with the
+  daemon via `minibox-core::vm_boot`; tags `minibox-rootfs`/`minibox-images`/
+  `minibox-containers`. Landed as 9200022e (probe/Phase 0), e9ec4b5c (signing/doctor),
+  4cd2fa47 (ESP builder + EFI switch, T2/T3), 6d8c009a (boot-mode resolution, preflight,
+  code=1 remediation, T4/T5), 538bfe90 (diagnostics). T6 docs/maturity still open.
