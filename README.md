@@ -153,8 +153,9 @@ top of the same daemon protocol the CLI uses:
   by default; run/pull/stop/rm are gated behind explicit agent policy.
 - `minibox-crux-plugin` — bridges minibox into [crux](https://github.com/89jobrien/crux) agent
   pipelines over JSON-RPC stdio.
-- `minibox-tui` (`mbx tui`) — read-only live dashboard (container table + streaming lifecycle
-  events) for watching what an agent is doing to the daemon in real time.
+- `minibox-tui` (`mbx tui`, behind the `tui` cargo feature) — read-only live dashboard
+  (container table + streaming lifecycle events) for watching what an agent is doing to the
+  daemon in real time.
 
 [`agentbox`](agentbox/) (a separate Go module in this repo) is the multi-role review/task-decomposition
 agent runtime used to develop minibox itself — not a minibox subcommand, but worth knowing about
@@ -168,7 +169,7 @@ Tests use mock adapters — no real HTTP or filesystem required.
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
-**Protocol.** JSON-over-newline on a Unix socket. 29 request variants, 28 response variants.
+**Protocol.** JSON-over-newline on a Unix socket. 32 request variants, 32 response variants.
 Canonical source: `crates/minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`docs/core/ARCHITECTURE.mbx.md`](docs/core/ARCHITECTURE.mbx.md).
@@ -194,13 +195,14 @@ mount-remount widening after container initialization.
 
 ## Configuration
 
-Configuration is layered from defaults, then system TOML, user TOML, and finally
+Configuration is layered from defaults, then project TOML, system TOML, user TOML, and finally
 environment-variable overrides.
 
 **Config files** (later overrides earlier):
 
-1. `/etc/minibox/config.toml` (system)
-2. `~/.config/minibox/config.toml` (user)
+1. `minibox.toml` (project — discovered by walking up from the working directory; lowest precedence, opt-in)
+2. `/etc/minibox/config.toml` (system)
+3. `~/.config/minibox/config.toml` (user)
 
 ```toml
 adapter = "smolvm"

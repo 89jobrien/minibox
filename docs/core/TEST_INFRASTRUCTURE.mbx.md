@@ -33,14 +33,17 @@ generated: 2026-09-16
 > crates/*/tests/ contents (minibox 54->56, minibox-core 7->10, miniboxd 6->13,
 > mbx 2->3, smolbox 0->2, winbox 0->1). Per-crate/category test-count estimates
 > not re-derived — file counts only.
+> Updated 2026-11-06: integration test file counts refreshed again (minibox 58,
+> minibox-core 13, miniboxd 15, minibox-cli 4, minibox-macros 1; 102 total).
+> Annotation tallies updated to ~1,100 integration / ~1,660 inline.
 
 ## Test Counts
 
 | Location                                  | Tests (est.) |
 | ----------------------------------------- | ------------ |
-| Integration test files (`crates/*/tests/*.rs`) | 96 files / ~1,060 annotations |
-| Inline (`#[cfg(test)]` in `src/`)              | ~1,228 annotations            |
-| **Source annotations**                         | **more than 2,200**            |
+| Integration test files (`crates/*/tests/*.rs`) | 102 files / ~1,100 annotations |
+| Inline (`#[cfg(test)]` in `src/`)              | ~1,660 annotations            |
+| **Source annotations**                         | **more than 2,700**            |
 
 These are source-level annotations, not a single-platform executed-test count. Linux-only,
 feature-gated, ignored, and root-required tests are selected by dedicated suites.
@@ -51,15 +54,15 @@ feature-gated, ignored, and root-required tests are selected by dedicated suites
 
 | Crate              | Integration files | Integration tests | Inline tests |
 | ------------------ | ----------------- | ----------------- | ------------ |
-| minibox            | 56                | ~479              | ~255         |
-| minibox-core       | 10                | ~126              | ~285         |
-| miniboxd           | 13                | ~72               | ~24          |
-| minibox-cli        | 3                 | ~32               | ~96          |
+| minibox            | 58                | ~479              | ~255         |
+| minibox-core       | 13                | ~126              | ~285         |
+| miniboxd           | 15                | ~72               | ~24          |
+| minibox-cli        | 4                 | ~32               | ~96          |
 | macbox             | 5                 | ~30               | ~63          |
 | minibox-testsuite  | 0                 | 0                 | ~24          |
 | smolbox            | 2                 | 0                 | ~3           |
 | winbox             | 1                 | 0                 | ~5           |
-| minibox-macros     | 0                 | 0                 | 0            |
+| minibox-macros     | 1                 | 0                 | 0            |
 | minibox-domain     | inline            | —                 | included     |
 | minibox-crux-plugin| integration       | —                 | included     |
 | minibox-mcp        | integration       | —                 | included     |
@@ -75,7 +78,7 @@ feature-gated, ignored, and root-required tests are selected by dedicated suites
 
 | Category                                     | Tests (est.) | Platform    | Root?  | In CI?      |
 | -------------------------------------------- | ------------ | ----------- | ------ | ----------- |
-| Unit (inline lib)                            | ~1,228 annotations | any    | no     | yes         |
+| Unit (inline lib)                            | ~1,660 annotations | any    | no     | yes         |
 | Handler + daemon conformance                 | ~209         | any         | no     | partial     |
 | minibox-core conformance                     | 126          | any         | no     | yes         |
 | Adapter isolation (colima/gke/native/smolvm) | ~66          | varies      | varies | partial     |

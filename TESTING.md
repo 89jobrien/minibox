@@ -260,8 +260,8 @@ Where `NNN` is the GitHub issue number. Examples:
 
 ## Test Counts
 
-The current tree contains **96 integration test files** under `crates/*/tests/`, with
-approximately **1,060 integration-test annotations** and **1,228 inline test annotations**.
+The current tree contains **102 integration test files** under `crates/*/tests/`, with
+approximately **1,100 integration-test annotations** and **1,660 inline test annotations**.
 Counts are source annotations rather than a claim that every platform executes every test:
 Linux-only, root-required, ignored, and feature-gated tests are selected by separate suites.
 

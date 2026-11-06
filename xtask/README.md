@@ -25,7 +25,8 @@ cargo xtask check repo-clean  # warn if generated artifacts are tracked
 ### Benchmarks
 
 All criterion benches live in `crates/minibox-bench`. Results go to `bench/results/`
-(gitignored); tracked per-env baselines live at `bench/baseline.{local,selfhosted,hosted}.json`.
+(gitignored); no per-env baselines are currently tracked in git, so `--check` compares only
+after `cargo xtask bench --save-baseline` has been run and the baseline is committed.
 
 ```bash
 cargo xtask bench                  # run criterion benchmarks, save to bench/results/

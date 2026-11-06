@@ -256,6 +256,6 @@ just bench-baseline                      # save results as the new per-env basel
 cargo xtask bench                        # underlying command (--check / --save-baseline / --env)
 ```
 
-> Results are written to `bench/results/` (gitignored). Tracked per-env baselines live at
-> `bench/baseline.{local,selfhosted,hosted}.json`; the nightly CI bench job produces the
-> canonical numbers.
+> Results are written to `bench/results/` (gitignored). No per-env baselines are currently
+> tracked in git; `just bench-check` has nothing to compare against until `just bench-baseline`
+> is run for the relevant `--env` and the baseline file is committed.

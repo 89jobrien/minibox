@@ -30,14 +30,14 @@ generated: 2026-09-16
 | Crate               | Type       | LOC    | Source files | Test files              | Features                  |
 | ------------------- | ---------- | ------ | ------------ | ----------------------- | ------------------------- |
 | minibox-domain      | lib        | ~6.1k  | 21           | inline                  | test-utils                |
-| minibox-core        | lib        | ~12.6k | 28           | 10 integration + inline | test-utils, fuzzing       |
-| minibox             | lib        | ~21.5k | 71           | 56 integration + inline | test-utils, metrics, otel |
+| minibox-core        | lib        | ~12.6k | 28           | 13 integration + inline | test-utils, fuzzing       |
+| minibox             | lib        | ~21.5k | 71           | 58 integration + inline | test-utils, metrics, otel |
 | minibox-macros      | lib        | ~175   | 9            | 1 integration           | --                        |
-| miniboxd            | bin+lib    | ~1.6k  | 4            | 13 integration + inline | metrics, otel, tailnet    |
+| miniboxd            | bin+lib    | ~1.6k  | 4            | 15 integration + inline | metrics, otel, tailnet    |
 | macbox              | lib        | ~3.6k  | 16           | 5                       | --                        |
 | smolbox             | lib        | ~148   | 4            | 2 integration           | --                        |
 | winbox              | lib        | ~280   | 5            | 1 integration           | --                        |
-| minibox-cli         | bin        | ~3.2k  | 18           | 3 integration + inline  | subprocess-tests, tui     |
+| minibox-cli         | bin        | ~3.2k  | 18           | 4 integration + inline  | subprocess-tests, tui     |
 | minibox-crux-plugin | bin        | ~1.2k  | 2            | 1 integration           | --                        |
 | minibox-mcp         | lib+bin    | ~1.6k  | 11           | 1 integration           | --                        |
 | minibox-testsuite   | lib+bin    | ~3.7k  | 27           | inline                  | --                        |
@@ -227,8 +227,9 @@ internally by `cargo xtask test conformance`.
 Dedicated benchmark crate. Leaf crate owning all criterion targets and fixtures; the only
 place where the `test-utils` features of the lib crates are enabled. Run via `just bench` /
 `just bench-check` / `just bench-baseline` (`cargo xtask bench` underneath). Results land in
-`bench/results/` (gitignored); per-env baselines are tracked at
-`bench/baseline.{local,selfhosted,hosted}.json`.
+`bench/results/` (gitignored); no per-env baselines are currently tracked in git, so `--check`
+has nothing to compare against until `just bench-baseline` is run and committed for the relevant
+`--env`.
 
 **Bench targets:** `protocol_codec`, `daemon_dispatch`, `trait_dispatch`, `layer_extract`,
 `image_pull`, plus root-gated Linux benches `linux_rootfs`, `linux_cgroup`, `linux_spawn`.
@@ -292,5 +293,5 @@ protocol-drift, protocol-sites, protocol-variants, adapter-coverage, no-unwrap, 
 `docs <action>` (audit, lint, update-date, sync-adapters), `info <target>` (metrics,
 context, changes), `capabilities verify`.
 
-The tree currently contains 104 tracked `.rs` files under `crates/*/tests/`; use grouped
+The tree currently contains 102 tracked `.rs` files directly under `crates/*/tests/` (106 including nested modules); use grouped
 commands such as `cargo xtask test unit` rather than the deprecated `test-unit` aliases.

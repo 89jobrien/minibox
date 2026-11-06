@@ -27,7 +27,7 @@ A container runtime written in Rust. Daemon/CLI split, OCI image pulling, Linux 
 isolation, cgroups v2 resource limits, and overlay filesystem support. Hexagonal architecture
 keeps adapter suites swappable at startup with no recompile.
 
-**Status:** Active development — `v0.33.0`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
+**Status:** Active development — `v0.34.1`. Linux runs natively and is production-ready; macOS feels like native but requires `smolvm`
 (VM-backed). See the [Platform Support](#platform-support) table.
 
 ---
@@ -139,7 +139,7 @@ Tests use mock adapters — no real HTTP or filesystem required.
 **Async/sync boundary.** Tokio handles socket I/O. Container operations (fork/clone/exec) run
 in `spawn_blocking` to avoid blocking the runtime.
 
-**Protocol.** JSON-over-newline on a Unix socket. 30 request variants, 29 response variants.
+**Protocol.** JSON-over-newline on a Unix socket. 32 request variants, 32 response variants.
 Canonical source: `crates/minibox-core/src/protocol.rs`.
 
 Full architecture reference: [`ARCHITECTURE`](ARCHITECTURE.mbx.md).

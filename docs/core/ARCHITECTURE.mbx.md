@@ -230,7 +230,7 @@ HandlerDependencies
 
 ## Protocol (JSON-over-newline on Unix socket)
 
-31 request variants, 30 response variants. Canonical source:
+32 request variants, 32 response variants. Canonical source:
 `crates/minibox-core/src/protocol.rs`.
 
 ### DaemonRequest Variants
@@ -239,7 +239,8 @@ Run, Stop, PauseContainer, ResumeContainer, Remove, List, Pull, LoadImage,
 Exec, SendInput, ResizePty, Push, Commit, Build, SubscribeEvents, Prune,
 ListImages, SearchImages, RemoveImage, ContainerLogs, RunPipeline, SaveSnapshot,
 RestoreSnapshot, ListSnapshots, Update, GetManifest, VerifyManifest,
-ListPipelines, ShowPipeline, GetCapabilities, RunWorkflow
+ListPipelines, ShowPipeline, GetCapabilities, RunWorkflow,
+GetIsolationCapabilities
 
 ### DaemonResponse Variants
 
@@ -250,7 +251,7 @@ when variants are added.
 ContainerPaused, ContainerResumed, ImageLoaded, ImageList, SearchResults,
 BuildComplete, Pruned, PipelineComplete, PipelineList, PipelineDetail,
 SnapshotSaved, SnapshotRestored, SnapshotList, Manifest, VerifyResult,
-WorkflowComplete, CapabilityMatrix
+WorkflowComplete, CapabilityMatrix, IsolationCapabilities, IsolationDenied
 
 **Non-terminal** (streaming): ContainerCreated, ContainerOutput, ExecStarted,
 PushProgress, BuildOutput, Event, LogLine, UpdateProgress, WorkflowStepComplete
