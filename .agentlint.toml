@@ -1,0 +1,18 @@
+# agentlint configuration for the minibox repo.
+#
+# Docs in docs/core use the NAME.mbx.md convention, so the filename stem is the
+# doctype (uppercase) and `mbx` is the project. The stock doctype enum is
+# lowercase, so the stems used here are listed explicitly. Titles follow
+# `mbx-<STEM>`.
+
+[docs]
+doctypes = [
+    "idea", "spec", "plan", "adr", "roadmap", "guide", "reference",
+    "runbook", "architecture", "capability-matrix", "testing",
+    "development", "readme",
+    "ABOUT", "STATE_MODEL", "PRERELEASE_CHANGELOG", "GOTCHAS",
+    "SUPPORT_TIERS", "XTASK_CLI", "CODE_STYLE", "CRATE_TIERS",
+    "CRATE_INVENTORY", "ARCHITECTURE", "STABILITY_CHECKLIST",
+    "FEATURE_MATRIX", "TEST_INFRASTRUCTURE", "ROADMAP",
+    "MUTATION_AUDIT", "SECURITY_INVARIANTS",
+]

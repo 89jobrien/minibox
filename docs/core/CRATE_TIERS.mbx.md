@@ -1,4 +1,10 @@
 ---
+title: mbx-CRATE_TIERS
+doctype: CRATE_TIERS
+project: mbx
+status: active
+created: 2026-06-13
+updated: 2026-11-06
 source_sha: 583d795681594db0435e7fbc4d196e19edfef358
 sources:
   - Cargo.toml
@@ -29,7 +35,7 @@ This document classifies every crate in the minibox workspace by support tier,
 defines ownership, and sets the stabilization policy that governs adding new
 crates and wiring new adapter suites.
 
-Last updated: 2026-10-18
+Last updated: 2026-11-07
 
 See also: `docs/core/SUPPORT_TIERS.mbx.md` (support commitment level — Tier 1 Production /
 Tier 2 Experimental / Tier 3 Stub — SLA, CI coverage, breaking-change policy).

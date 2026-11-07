@@ -58,6 +58,12 @@ use minibox_core::adapters::conformance::BackendDescriptor;
 use minibox_core::domain::BackendCapability;
 use std::sync::Arc;
 
+/// Capabilities this file proves by executing the adapter, as `(capability, test)`.
+/// Empty on purpose: these tests assert the capabilities the descriptor declares and
+/// do not execute them, so recording them would validate the declaration against itself.
+#[allow(dead_code)]
+const CAPABILITY_PROOFS: &[(&str, &str)] = &[];
+
 // ---------------------------------------------------------------------------
 // Helper: colima backend descriptor with injected executor
 // ---------------------------------------------------------------------------

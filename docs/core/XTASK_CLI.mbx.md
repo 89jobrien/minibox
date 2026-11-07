@@ -1,4 +1,10 @@
 ---
+title: mbx-XTASK_CLI
+doctype: XTASK_CLI
+project: mbx
+status: active
+created: 2026-07-25
+updated: 2026-11-06
 source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - xtask/src/main.rs
@@ -15,7 +21,7 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-10-18
+Last updated: 2026-11-07
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -104,7 +110,7 @@ Bare `cargo xtask info` prints the target list.
 | Target | Flags | Notes |
 |---|---|---|
 | `metrics` | `--save` | Aggregate crate count, test count, source lines. `--save` persists the snapshot to disk. |
-| `context` | `--save` `--strict` `--validate-all` `--evidence-dir <path>` | Emit the evidence-ledger context snapshot v3; persistence and validation policy are explicit. |
+| `context` | `--save` `--strict` `--validate-all` `--record-capabilities` `--evidence-dir <path>` | Emit the evidence-ledger context snapshot v3; persistence and validation policy are explicit. |
 | `changes` | `[<base-ref>]` | Classify changed paths; emits GitHub Actions step outputs. Default base ref: `HEAD^`. |
 
 Deprecated aliases: `collect-metrics`, `context`, `detect-changes`.
@@ -119,6 +125,7 @@ Options:
 - `--strict` applies the required native-profile threshold. JSON is emitted before a strict validation error produces a nonzero exit.
 - `--validate-all` attempts every profile declared in `xtask/context.toml`. By itself it reports failures in JSON and exits zero.
 - `--validate-all --strict` requires current validated evidence for every profile marked `required_in_ci`; optional profile failures remain diagnostics.
+- `--record-capabilities` runs the `conformance_commit`, `conformance_build`, and `conformance_push` nextest targets with `MINIBOX_CAPABILITY_EVIDENCE_DIR` set to the current evidence key's directory, then reads the records. Non-blocking: a failing or missing record leaves the capability unvalidated, and the run's exit status is reported on stderr only.
 - `--evidence-dir <path>` imports CI profile evidence. Exact-key records can satisfy required profiles; stale records remain visible for diagnostics but contribute no executable tests.
 
 `cargo xtask docs sync-adapters` idempotently rewrites only the explicitly marked adapter-suite and capability tables in `docs/core/FEATURE_MATRIX.mbx.md` from `xtask/context.toml`.

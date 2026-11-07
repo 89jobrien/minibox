@@ -1,4 +1,10 @@
 ---
+title: mbx-STABILITY_CHECKLIST
+doctype: STABILITY_CHECKLIST
+project: mbx
+status: active
+created: 2026-06-13
+updated: 2026-11-06
 source_sha: a72281f338bd3ea9b790b77145de108c97281f20
 sources:
   - .github/workflows
@@ -13,7 +19,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-10-18
+Last updated: 2026-11-07
 
 ---
 

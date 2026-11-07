@@ -624,9 +624,183 @@ pub(in crate::context) fn read_profile_evidence(
     Ok(imported)
 }
 
+/// Directory, relative to the workspace root, that holds capability records.
+const CAPABILITY_EVIDENCE_DIR: &str = "artifacts/context/evidence/capabilities";
+
+/// Manifest capability names a backend test can prove. Any other name stays unvalidated.
+const PROVABLE_CAPABILITIES: &[&str] = &["build", "commit", "push"];
+
+#[derive(Deserialize, Serialize)]
+struct CapabilityEvidenceArtifact {
+    schema_version: u32,
+    adapter_id: String,
+    capability: String,
+    status: ArtifactCapabilityStatus,
+    proof_test: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ArtifactCapabilityStatus {
+    Validated,
+    Failed,
+}
+
+/// Directory holding capability records for one evidence key. The key's hash is the
+/// directory name, so records written under an older key are never read.
+pub(in crate::context) fn capability_evidence_dir(
+    root: &Path,
+    key: &ProfileEvidenceCacheKey,
+) -> PathBuf {
+    root.join(CAPABILITY_EVIDENCE_DIR)
+        .join(profile_evidence_cache_key(key))
+}
+
+/// Reads capability records into `adapter -> capability -> Yes` for validated records.
+///
+/// Failed records are not evidence and are skipped, so the capability stays unvalidated.
+/// Records that fail to parse or carry an unsupported schema version are skipped with a
+/// stderr warning, matching the non-blocking contract in `docs/core/XTASK_CLI.mbx.md`.
+/// Records naming an unknown adapter or a non-provable capability are an error.
+pub(in crate::context) fn read_capability_evidence(
+    evidence_dir: &Path,
+    adapters: &BTreeSet<String>,
+) -> Result<BTreeMap<String, BTreeMap<String, CapabilitySupport>>> {
+    let mut tested: BTreeMap<String, BTreeMap<String, CapabilitySupport>> = BTreeMap::new();
+    if !evidence_dir.exists() {
+        return Ok(tested);
+    }
+    let mut paths = std::fs::read_dir(evidence_dir)
+        .with_context(|| format!("read capability evidence {}", evidence_dir.display()))?
+        .map(|entry| {
+            entry
+                .map(|entry| entry.path())
+                .with_context(|| format!("read entry in {}", evidence_dir.display()))
+        })
+        .collect::<Result<Vec<PathBuf>>>()?;
+    paths.retain(|path| path.extension().and_then(|extension| extension.to_str()) == Some("json"));
+    paths.sort();
+
+    for path in paths {
+        let bytes = std::fs::read(&path)
+            .with_context(|| format!("read capability evidence {}", path.display()))?;
+        let artifact: CapabilityEvidenceArtifact = match serde_json::from_slice(&bytes) {
+            Ok(artifact) => artifact,
+            Err(error) => {
+                eprintln!(
+                    "capability evidence {} is unreadable, skipping: {error}",
+                    path.display()
+                );
+                continue;
+            }
+        };
+        if artifact.schema_version != 1 {
+            eprintln!(
+                "capability evidence {} has unsupported schema version {}, skipping",
+                path.display(),
+                artifact.schema_version
+            );
+            continue;
+        }
+        if artifact.status == ArtifactCapabilityStatus::Failed {
+            continue;
+        }
+        if !adapters.contains(&artifact.adapter_id) {
+            bail!(
+                "capability evidence {} names unknown adapter {:?}",
+                path.display(),
+                artifact.adapter_id
+            );
+        }
+        if !PROVABLE_CAPABILITIES.contains(&artifact.capability.as_str()) {
+            bail!(
+                "capability evidence {} names non-provable capability {:?}",
+                path.display(),
+                artifact.capability
+            );
+        }
+        tested
+            .entry(artifact.adapter_id)
+            .or_default()
+            .insert(artifact.capability, CapabilitySupport::Yes);
+    }
+    Ok(tested)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn write_capability_record(dir: &Path, name: &str, record: serde_json::Value) {
+        std::fs::write(
+            dir.join(name),
+            serde_json::to_vec(&record).expect("serialize"),
+        )
+        .expect("write capability record");
+    }
+
+    #[test]
+    fn capability_evidence_imports_only_validated_records() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let adapters = BTreeSet::from(["native".to_string(), "smolvm".to_string()]);
+        let record = |adapter: &str, capability: &str, status: &str| {
+            serde_json::json!({
+                "schema_version": 1,
+                "adapter_id": adapter,
+                "capability": capability,
+                "status": status,
+                "proof_test": "some_test",
+            })
+        };
+        write_capability_record(
+            temp.path(),
+            "native.commit.json",
+            record("native", "commit", "validated"),
+        );
+        write_capability_record(
+            temp.path(),
+            "native.build.json",
+            record("native", "build", "failed"),
+        );
+
+        let tested = read_capability_evidence(temp.path(), &adapters).expect("valid records");
+        assert_eq!(
+            tested,
+            BTreeMap::from([(
+                "native".to_string(),
+                BTreeMap::from([("commit".to_string(), CapabilitySupport::Yes)]),
+            )]),
+            "only the validated commit record may prove a capability"
+        );
+
+        write_capability_record(
+            temp.path(),
+            "smolvm.run.json",
+            record("smolvm", "run", "validated"),
+        );
+        let error = read_capability_evidence(temp.path(), &adapters)
+            .expect_err("run is not a provable capability");
+        assert!(error.to_string().contains("non-provable capability"));
+
+        std::fs::remove_file(temp.path().join("smolvm.run.json")).expect("remove record");
+        write_capability_record(
+            temp.path(),
+            "ghost.commit.json",
+            record("ghost", "commit", "validated"),
+        );
+        let error = read_capability_evidence(temp.path(), &adapters)
+            .expect_err("ghost is not a configured adapter");
+        assert!(error.to_string().contains("unknown adapter"));
+    }
+
+    #[test]
+    fn capability_evidence_missing_dir_imports_nothing() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let adapters = BTreeSet::from(["native".to_string()]);
+        let tested = read_capability_evidence(&temp.path().join("absent"), &adapters)
+            .expect("missing directory is not an error");
+        assert!(tested.is_empty());
+    }
 
     fn fact(declared: serde_json::Value, observed: serde_json::Value) -> serde_json::Value {
         serde_json::json!({

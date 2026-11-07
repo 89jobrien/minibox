@@ -56,6 +56,8 @@
 //! not observable at this level — the suite verifies the structural contract:
 //! result present, metadata preserved, store updated.
 
+mod support;
+
 use anyhow::Result;
 use minibox::adapters::MiniboxImageBuilder;
 use minibox::testing::backend::BackendDescriptor;
@@ -68,7 +70,16 @@ use minibox_core::domain::{
 use minibox_core::image::ImageStore;
 use minibox_core::progress::TokioProgressSink;
 use std::sync::Arc;
+use support::{ProofStatus, record_proof};
 use tokio::sync::mpsc;
+
+/// Adapter id under which these records are stored; matches `xtask/context.toml`.
+const ADAPTER_ID: &str = "native";
+
+/// Capabilities this file proves, as `(capability, test)`. The build tests run
+/// `MiniboxImageBuilder` against mock filesystem, runtime, and registry adapters, so
+/// the proof covers the builder's structural contract, not a real RUN side effect.
+const CAPABILITY_PROOFS: &[(&str, &str)] = &[("build", "build_minimal_dockerfile_succeeds")];
 
 // ---------------------------------------------------------------------------
 // Backend descriptor factory
@@ -132,6 +143,13 @@ async fn build_minimal_dockerfile_succeeds() -> Result<()> {
     {
         return Ok(()); // skip
     }
+    record_proof(
+        CAPABILITY_PROOFS,
+        ADAPTER_ID,
+        "build",
+        "build_minimal_dockerfile_succeeds",
+        ProofStatus::Failed,
+    );
 
     let (tx, mut rx) = mpsc::channel(64);
 
@@ -159,6 +177,13 @@ async fn build_minimal_dockerfile_succeeds() -> Result<()> {
     assert!(
         !meta.name.is_empty(),
         "build result must have a non-empty image name"
+    );
+    record_proof(
+        CAPABILITY_PROOFS,
+        ADAPTER_ID,
+        "build",
+        "build_minimal_dockerfile_succeeds",
+        ProofStatus::Validated,
     );
 
     Ok(())

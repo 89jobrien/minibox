@@ -1,4 +1,10 @@
 ---
+title: mbx-ABOUT
+doctype: ABOUT
+project: mbx
+status: active
+created: 2026-03-15
+updated: 2026-11-06
 source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - Cargo.toml

@@ -1,4 +1,10 @@
 ---
+title: mbx-STATE_MODEL
+doctype: STATE_MODEL
+project: mbx
+status: active
+created: 2026-04-19
+updated: 2026-11-06
 source_sha: 78e6b888e7c43b7d93ac244c4123295ea59d9f89
 sources:
   - crates/minibox/src/daemon/state.rs
@@ -9,7 +15,7 @@ generated: 2026-08-28
 
 How minibox tracks container state across daemon restarts.
 
-Last updated: 2026-09-29
+Last updated: 2026-11-07
 
 ---
 

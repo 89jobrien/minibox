@@ -55,6 +55,8 @@
 //! `StateHandle`.  This is intentional: the conformance suite tests the *algorithm*,
 //! not the daemon integration.
 
+mod support;
+
 use anyhow::Result;
 use async_trait::async_trait;
 use minibox::adapters::commit_upper_dir_to_image;
@@ -67,6 +69,7 @@ use minibox_core::domain::{
 use minibox_core::image::ImageStore;
 use std::path::PathBuf;
 use std::sync::Arc;
+use support::{ProofStatus, record_proof};
 
 // ---------------------------------------------------------------------------
 // Inline commit adapter for conformance (no StateHandle required)
@@ -129,6 +132,12 @@ fn minibox_commit_backend(
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// Adapter id under which these records are stored; matches `xtask/context.toml`.
+const ADAPTER_ID: &str = "native";
+
+/// Capabilities this file proves by executing the adapter, as `(capability, test)`.
+const CAPABILITY_PROOFS: &[(&str, &str)] = &[("commit", "commit_returns_metadata")];
+
 fn make_image_store(tmp: &tempfile::TempDir) -> Arc<ImageStore> {
     Arc::new(ImageStore::new(tmp.path().join("images")).expect("ImageStore::new"))
 }
@@ -158,6 +167,13 @@ async fn commit_returns_metadata() -> Result<()> {
     if !backend.capabilities.supports(BackendCapability::Commit) {
         return Ok(()); // skip
     }
+    record_proof(
+        CAPABILITY_PROOFS,
+        ADAPTER_ID,
+        "commit",
+        "commit_returns_metadata",
+        ProofStatus::Failed,
+    );
 
     let cid = ContainerId::try_new("conformancecommit01".to_string()).expect("ContainerId");
     let meta = committer
@@ -172,6 +188,13 @@ async fn commit_returns_metadata() -> Result<()> {
     assert!(
         !meta.layers.is_empty(),
         "commit result must have at least one layer"
+    );
+    record_proof(
+        CAPABILITY_PROOFS,
+        ADAPTER_ID,
+        "commit",
+        "commit_returns_metadata",
+        ProofStatus::Validated,
     );
 
     Ok(())

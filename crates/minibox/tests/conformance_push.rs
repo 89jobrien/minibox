@@ -54,6 +54,8 @@
 //! Set `CONFORMANCE_PUSH_REGISTRY=localhost:5000` and ensure a registry is running
 //! on that address to activate tier 2 tests.
 
+mod support;
+
 use anyhow::Result;
 use minibox::adapters::{OciPushAdapter, commit_upper_dir_to_image};
 use minibox::testing::backend::BackendDescriptor;
@@ -63,6 +65,15 @@ use minibox_core::image::ImageStore;
 use minibox_core::image::reference::ImageRef;
 use minibox_core::image::registry::RegistryClient;
 use std::sync::Arc;
+use support::{ProofStatus, record_proof};
+
+/// Adapter id under which these records are stored; matches `xtask/context.toml`.
+const ADAPTER_ID: &str = "native";
+
+/// Capabilities this file proves by executing the adapter, as `(capability, test)`.
+/// `push_image_returns_digest` only runs when `CONFORMANCE_PUSH_REGISTRY` is set, so
+/// without a registry the push capability stays unvalidated.
+const CAPABILITY_PROOFS: &[(&str, &str)] = &[("push", "push_image_returns_digest")];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -230,6 +241,13 @@ async fn push_image_returns_digest() -> Result<()> {
     {
         return Ok(()); // skip
     }
+    record_proof(
+        CAPABILITY_PROOFS,
+        ADAPTER_ID,
+        "push",
+        "push_image_returns_digest",
+        ProofStatus::Failed,
+    );
 
     let result = pusher
         .push_image(&image_ref, &RegistryCredentials::Anonymous, None)
@@ -245,6 +263,13 @@ async fn push_image_returns_digest() -> Result<()> {
         result.digest
     );
     assert!(result.size_bytes > 0, "push result size must be > 0");
+    record_proof(
+        CAPABILITY_PROOFS,
+        ADAPTER_ID,
+        "push",
+        "push_image_returns_digest",
+        ProofStatus::Validated,
+    );
 
     Ok(())
 }

@@ -498,9 +498,11 @@ fn musl_check_required() -> bool {
 
 /// Unit tests (any platform, matches CI).
 ///
-/// Runs `--lib` tests only (no integration test files that require Linux root
-/// or a running daemon). On Linux, excludes macbox (macOS-only crate) to match
-/// CI behavior. Integration and e2e tests have dedicated gates.
+/// Runs `--lib` tests for the workspace, plus `--bins` tests for xtask. xtask is
+/// a binary crate, so its inline tests live outside `--lib` and need their own
+/// run. No integration test files that require Linux root or a running daemon.
+/// On Linux, excludes macbox (macOS-only crate) to match CI behavior.
+/// Integration and e2e tests have dedicated gates.
 ///
 /// Set `MINIBOX_FAIL_FAST=true` to stop on the first test failure.
 pub fn test_unit(sh: &Shell) -> Result<()> {
@@ -520,6 +522,9 @@ pub fn test_unit(sh: &Shell) -> Result<()> {
             .run()
             .context("nextest workspace --lib tests failed")?;
         }
+        cmd!(sh, "cargo nextest run -p xtask --bins {fail_fast...}")
+            .run()
+            .context("nextest xtask --bins tests failed")?;
         check_minibox_testsuite_has_tests(&sh)?;
         Ok(())
     })
@@ -2017,12 +2022,13 @@ mod agentlint_semantic_tests {
     }
 }
 
-/// Returns `["--fail-fast"]` when `MINIBOX_FAIL_FAST=true`, otherwise empty.
-fn fail_fast_flag() -> Vec<&'static str> {
+/// Returns `Some("--fail-fast")` when `MINIBOX_FAIL_FAST=true`, otherwise `None`.
+/// `Option<&str>` is `Copy`, so call sites can splat it into several `cmd!` invocations.
+fn fail_fast_flag() -> Option<&'static str> {
     if std::env::var("MINIBOX_FAIL_FAST").as_deref() == Ok("true") {
-        vec!["--fail-fast"]
+        Some("--fail-fast")
     } else {
-        vec![]
+        None
     }
 }
 

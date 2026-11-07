@@ -55,6 +55,12 @@ use minibox_core::domain::BackendCapability;
 use minibox_core::image::ImageStore;
 use std::sync::Arc;
 
+/// Capabilities this file proves by executing the adapter, as `(capability, test)`.
+/// Empty on purpose: these tests assert the capabilities the descriptor declares and
+/// do not execute them, so recording them would validate the declaration against itself.
+#[allow(dead_code)]
+const CAPABILITY_PROOFS: &[(&str, &str)] = &[];
+
 /// Build a registry backed by a throwaway temp-dir image store, for tests
 /// that don't care about the specific store location.
 fn test_registry() -> SmolVmRegistry {

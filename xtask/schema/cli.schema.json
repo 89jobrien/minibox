@@ -142,6 +142,7 @@
               "save": { "type": "boolean", "default": false, "appliesTo": ["metrics", "context"], "description": "Persist the validated snapshot; context JSON is always printed first." },
               "strict": { "type": "boolean", "default": false, "appliesTo": ["context"], "description": "After emitting JSON, exit non-zero when required validation evidence or blocking diagnostics are missing." },
               "validate_all": { "type": "boolean", "default": false, "appliesTo": ["context"], "description": "Attempt every configured validation profile instead of only the native host profile." },
+              "record_capabilities": { "type": "boolean", "default": false, "appliesTo": ["context"], "description": "Run the per-backend conformance targets with capability recording enabled before reading capability evidence. Non-blocking: failing or missing records stay unvalidated." },
               "evidence_dir": { "type": "string", "format": "path", "appliesTo": ["context"], "description": "Import exact-cache-key profile evidence; stale evidence remains diagnostic-only." },
               "base_ref": { "type": "string", "default": "HEAD^", "appliesTo": ["changes"], "description": "Git ref to diff against. Emits GitHub Actions step outputs classifying changed paths." }
             }

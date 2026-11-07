@@ -1,4 +1,10 @@
 ---
+title: mbx-CODE_STYLE
+doctype: CODE_STYLE
+project: mbx
+status: active
+created: 2026-06-13
+updated: 2026-11-06
 source_sha: 583d795681594db0435e7fbc4d196e19edfef358
 sources:
   - crates/minibox-domain

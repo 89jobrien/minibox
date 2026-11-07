@@ -1,4 +1,10 @@
 ---
+title: mbx-MUTATION_AUDIT
+doctype: MUTATION_AUDIT
+project: mbx
+status: active
+created: 2026-06-13
+updated: 2026-11-06
 source_sha: a72281f338bd3ea9b790b77145de108c97281f20
 sources:
   - crates/minibox-core/src/image/layer.rs

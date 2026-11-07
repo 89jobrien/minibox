@@ -606,7 +606,9 @@ fn cmd_info(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> {
         eprintln!();
         eprintln!("Targets:");
         eprintln!("  metrics [--save]             aggregate crate count, test count, source lines");
-        eprintln!("  context [--save] [--strict] [--validate-all] [--evidence-dir <path>]");
+        eprintln!(
+            "  context [--save] [--strict] [--validate-all] [--record-capabilities] [--evidence-dir <path>]"
+        );
         eprintln!("  changes [<base-ref>]         classify changed paths; emit GHA outputs");
         Ok(())
     }
@@ -639,6 +641,9 @@ fn parse_info_context_args(rest: &[String]) -> Result<context::ContextOptions> {
             "--save" if !options.save => options.save = true,
             "--strict" if !options.strict => options.strict = true,
             "--validate-all" if !options.validate_all => options.validate_all = true,
+            "--record-capabilities" if !options.record_capabilities => {
+                options.record_capabilities = true;
+            }
             "--evidence-dir" if options.evidence_dir.is_none() => {
                 index += 1;
                 let value = rest
@@ -649,7 +654,7 @@ fn parse_info_context_args(rest: &[String]) -> Result<context::ContextOptions> {
             }
             _ => bail!(
                 "usage: cargo xtask info context [--save] [--strict] [--validate-all] \
-                 [--evidence-dir <path>]"
+                 [--record-capabilities] [--evidence-dir <path>]"
             ),
         }
         index += 1;
@@ -826,6 +831,7 @@ mod dispatch_args_tests {
             "--save".to_string(),
             "--strict".to_string(),
             "--validate-all".to_string(),
+            "--record-capabilities".to_string(),
             "--evidence-dir".to_string(),
             "artifacts/evidence".to_string(),
         ])
@@ -833,6 +839,7 @@ mod dispatch_args_tests {
         assert!(parsed.save);
         assert!(parsed.strict);
         assert!(parsed.validate_all);
+        assert!(parsed.record_capabilities);
         assert_eq!(
             parsed.evidence_dir,
             Some(std::path::PathBuf::from("artifacts/evidence"))
@@ -842,6 +849,10 @@ mod dispatch_args_tests {
             vec!["--save".to_string(), "--save".to_string()],
             vec!["--strict".to_string(), "--strict".to_string()],
             vec!["--validate-all".to_string(), "--validate-all".to_string()],
+            vec![
+                "--record-capabilities".to_string(),
+                "--record-capabilities".to_string(),
+            ],
             vec!["--evidence-dir".to_string()],
             vec!["--evidence-dir".to_string(), "--strict".to_string()],
             vec!["positional".to_string()],
@@ -898,7 +909,13 @@ mod dispatch_args_tests {
                 .expect("CLI schema should parse");
         let info_args =
             &schema["\u{24}defs"]["commands"]["info"]["properties"]["args"]["properties"];
-        for flag in ["save", "strict", "validate_all", "evidence_dir"] {
+        for flag in [
+            "save",
+            "strict",
+            "validate_all",
+            "record_capabilities",
+            "evidence_dir",
+        ] {
             assert!(info_args.get(flag).is_some(), "schema omits {flag:?}");
         }
         let docs_actions =
