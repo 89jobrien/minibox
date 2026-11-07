@@ -28,6 +28,12 @@ fuzz/*
 **/fuzz/seeds/
 **/fuzz/corpus/
 **/fuzz/artifacts/
+# Stray build-context Dockerfiles from local `mbx build` runs against
+# tests/e2e/images/* fixtures. The daemon writes its own hidden,
+# UUID-named temp Dockerfile (.minibox-build-<uuid>.Dockerfile) and
+# cleans it up; this pattern only guards against a leftover copy like
+# the one removed from these fixture dirs (see .ctx/HANDOFF gh-507).
+tests/e2e/images/*/Dockerfile.minibox-build
 
 # Claude Code — track everything except local settings and ephemeral state
 .claude/settings.local.json
