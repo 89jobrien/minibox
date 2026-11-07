@@ -85,6 +85,11 @@ pub enum IsolationError {
     /// A `compatibility-v1` degraded control carried an empty reason.
     #[error("compatibility-v1 degraded control missing a reason")]
     DegradationMissingReason,
+
+    /// A requested host mount is not permitted by the operator's
+    /// [`HostMountPolicy`].
+    #[error("host mount not permitted by operator policy: {0}")]
+    HostMountNotAllowed(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -1229,6 +1234,244 @@ pub fn compatibility_v1(
 }
 
 // ---------------------------------------------------------------------------
+// Admission
+// ---------------------------------------------------------------------------
+//
+// Implements the policy-resolution half of
+// `docs/designs/2026-09-21-isolation-admission-lifecycle-design.md`. The
+// binding/typestate/runtime-port half of that design lives with the
+// aggregate `IsolationRuntime` port, not here.
+
+/// Where a resolved identity's numeric UID/GID source came from.
+///
+/// Callers cannot self-assert this; it is always derived by the application
+/// layer from image config, an explicit caller override, or the profile
+/// default, in that precedence order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum IdentitySource {
+    /// Taken from the image's `USER` directive.
+    ImageConfig,
+    /// Supplied explicitly by the caller, overriding the image.
+    CallerOverride,
+    /// Neither the image nor the caller specified one; the profile default
+    /// applies.
+    ProfileDefault,
+}
+
+/// A resolved workload identity: numeric UID/GID plus where they came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolvedWorkloadIdentity {
+    /// Resolved numeric UID.
+    pub uid: u32,
+    /// Resolved numeric GID.
+    pub gid: u32,
+    /// Where `uid`/`gid` were sourced from.
+    pub source: IdentitySource,
+}
+
+/// Governs which host paths an operator has allow-listed for bind mounts.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HostMountPolicy {
+    /// No host mounts are permitted. The default.
+    #[default]
+    DenyAll,
+    /// Only mounts rooted under one of these host path prefixes are
+    /// permitted.
+    AllowListed(Vec<String>),
+}
+
+/// One immutable workload, resolved from image defaults, caller overrides,
+/// and profile defaults, prior to admission.
+///
+/// This mirrors `EffectiveIsolationWorkload` from the admission-lifecycle
+/// design. Fields are intentionally a subset of the design's full shape —
+/// mounts/resources/environment reuse this module's existing request/policy
+/// types rather than duplicating them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EffectiveIsolationWorkload {
+    /// The resolved container command.
+    pub command: Vec<String>,
+    /// The resolved workload identity.
+    pub identity: ResolvedWorkloadIdentity,
+    /// Requested host mounts, prior to policy filtering.
+    pub requested_host_mounts: Vec<HostMountRule>,
+    /// Requested resource limits, prior to profile resolution.
+    pub resources: ResourceRequest,
+    /// Requested Linux capability additions/drops, prior to gating.
+    pub capability_request: LinuxCapabilityRequest,
+    /// A non-empty value requests legacy host lifecycle hooks. `standard-v1`
+    /// rejects any non-empty value; see [`IsolationAdmissionPolicy`].
+    #[serde(default)]
+    pub host_lifecycle_hooks: Vec<String>,
+}
+
+/// A caller's run-time isolation request: desired profile plus any
+/// compatibility/privileged escape-hatch selection.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RunIsolationRequest {
+    /// The profile the caller is requesting. `None` means "the default"
+    /// (`standard-v1`).
+    #[serde(default)]
+    pub profile: Option<IsolationProfileId>,
+    /// An explicit compatibility authorization presented by the caller, if
+    /// any. Still subject to [`IsolationAdmissionPolicy::compatibility_authorization`].
+    #[serde(default)]
+    pub compatibility_authorization: Option<OperatorAuthorizationId>,
+    /// An explicit legacy-privileged authorization presented by the caller,
+    /// if any. Still subject to
+    /// [`IsolationAdmissionPolicy::legacy_privileged_authorization`].
+    #[serde(default)]
+    pub legacy_privileged_authorization: Option<OperatorAuthorizationId>,
+}
+
+/// The operator-controlled admission policy. Pipeline-level overrides may
+/// narrow this policy but can never widen it.
+///
+/// The default (via [`Default`]) denies every optional authorization and
+/// every host mount — this is the fail-closed starting point
+/// `IsolationConfig::default()` in `miniboxd` must preserve.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IsolationAdmissionPolicy {
+    /// If set, the operator has pre-authorized `compatibility-v1` under
+    /// this ID. `None` means compatibility is never authorized.
+    pub compatibility_authorization: Option<OperatorAuthorizationId>,
+    /// Governs which capability additions a request may make.
+    pub capability_gate: LinuxCapabilityGate,
+    /// Governs which host mount paths are permitted.
+    pub host_mount_policy: HostMountPolicy,
+    /// If set, the operator has pre-authorized the legacy (pre-isolation-
+    /// profile) privileged run path under this ID.
+    pub legacy_privileged_authorization: Option<OperatorAuthorizationId>,
+}
+
+impl Default for IsolationAdmissionPolicy {
+    fn default() -> Self {
+        Self {
+            compatibility_authorization: None,
+            capability_gate: LinuxCapabilityGate::DenyAllAdditions,
+            host_mount_policy: HostMountPolicy::DenyAll,
+            legacy_privileged_authorization: None,
+        }
+    }
+}
+
+/// The admission-resolved isolation mode for one run request.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolvedIsolationMode {
+    /// Run under a resolved `standard-v1` or operator-authorized
+    /// `compatibility-v1` profile.
+    Profile(Box<ResolvedIsolationProfile>),
+    /// Run under the legacy (pre-isolation-profile) privileged path. Only
+    /// reachable when the policy carries a
+    /// `legacy_privileged_authorization` and the request presents the
+    /// matching ID.
+    LegacyPrivileged,
+}
+
+/// Resolve a run request's isolation mode against the operator's admission
+/// policy.
+///
+/// This performs policy resolution only — it does not call into a runtime,
+/// perform any mutation, or construct the full binding sequence described
+/// in `docs/designs/2026-09-21-isolation-admission-lifecycle-design.md`.
+/// Those remain the aggregate `IsolationRuntime` port's responsibility.
+///
+/// # Errors
+///
+/// Returns [`IsolationError`] when the request asks for something the
+/// policy does not authorize, or asks for a profile combination the
+/// contract itself rejects (e.g. `compatibility-v1` without a reason — see
+/// [`compatibility_v1`]).
+pub fn resolve_isolation_mode(
+    policy: &IsolationAdmissionPolicy,
+    request: &RunIsolationRequest,
+    workload: &EffectiveIsolationWorkload,
+    cap_last_cap: u16,
+) -> Result<ResolvedIsolationMode, IsolationError> {
+    if !workload.host_lifecycle_hooks.is_empty() {
+        let is_authorized_compatibility = request
+            .compatibility_authorization
+            .as_ref()
+            .zip(policy.compatibility_authorization.as_ref())
+            .is_some_and(|(requested, authorized)| requested == authorized);
+        if !is_authorized_compatibility {
+            return Err(IsolationError::CompatibilityRequiresAuthorization);
+        }
+    }
+
+    if let Some(requested) = &request.legacy_privileged_authorization {
+        let authorized = policy
+            .legacy_privileged_authorization
+            .as_ref()
+            .is_some_and(|authorized| authorized == requested);
+        if authorized {
+            return Ok(ResolvedIsolationMode::LegacyPrivileged);
+        }
+    }
+
+    let host_mounts =
+        resolve_host_mounts(&policy.host_mount_policy, &workload.requested_host_mounts)?;
+
+    match request.profile.unwrap_or_default() {
+        IsolationProfileId::StandardV1 => standard_v1(
+            host_mounts,
+            &workload.capability_request,
+            &policy.capability_gate,
+            cap_last_cap,
+            workload.resources.clone(),
+        )
+        .map(|profile| ResolvedIsolationMode::Profile(Box::new(profile))),
+        IsolationProfileId::CompatibilityV1 => {
+            let authorized = request
+                .compatibility_authorization
+                .clone()
+                .zip(policy.compatibility_authorization.clone())
+                .filter(|(requested, authorized)| requested == authorized)
+                .map(|(id, _)| id)
+                .ok_or(IsolationError::CompatibilityRequiresAuthorization)?;
+
+            compatibility_v1(
+                authorized,
+                BTreeMap::new(),
+                host_mounts,
+                &workload.capability_request,
+                &policy.capability_gate,
+                cap_last_cap,
+                workload.resources.clone(),
+            )
+            .map(|profile| ResolvedIsolationMode::Profile(Box::new(profile)))
+        }
+    }
+}
+
+/// Filter a workload's requested host mounts against the operator's
+/// [`HostMountPolicy`], rejecting any mount outside an allow-listed prefix.
+fn resolve_host_mounts(
+    policy: &HostMountPolicy,
+    requested: &[HostMountRule],
+) -> Result<Vec<HostMountRule>, IsolationError> {
+    match policy {
+        HostMountPolicy::DenyAll => match requested.first() {
+            None => Ok(Vec::new()),
+            Some(rule) => Err(IsolationError::HostMountNotAllowed(rule.host_path.clone())),
+        },
+        HostMountPolicy::AllowListed(prefixes) => {
+            let disallowed = requested.iter().find(|rule| {
+                !prefixes
+                    .iter()
+                    .any(|prefix| rule.host_path.starts_with(prefix))
+            });
+            match disallowed {
+                None => Ok(requested.to_vec()),
+                Some(rule) => Err(IsolationError::HostMountNotAllowed(rule.host_path.clone())),
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1848,6 +2091,177 @@ mod tests {
             err.to_string()
                 .contains("unknown isolation profile schema version 99"),
             "got: {err}"
+        );
+    }
+
+    // -- admission ----------------------------------------------------------
+
+    fn workload(host_mounts: Vec<HostMountRule>) -> EffectiveIsolationWorkload {
+        EffectiveIsolationWorkload {
+            command: vec!["/bin/sh".to_string()],
+            identity: ResolvedWorkloadIdentity {
+                uid: 1000,
+                gid: 1000,
+                source: IdentitySource::ProfileDefault,
+            },
+            requested_host_mounts: host_mounts,
+            resources: ResourceRequest::default(),
+            capability_request: LinuxCapabilityRequest::default(),
+            host_lifecycle_hooks: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn default_policy_denies_compatibility_capability_and_host_mounts() {
+        let policy = IsolationAdmissionPolicy::default();
+        assert_eq!(
+            policy.capability_gate,
+            LinuxCapabilityGate::DenyAllAdditions
+        );
+        assert_eq!(policy.host_mount_policy, HostMountPolicy::DenyAll);
+        assert!(policy.compatibility_authorization.is_none());
+        assert!(policy.legacy_privileged_authorization.is_none());
+    }
+
+    #[test]
+    fn resolve_isolation_mode_defaults_to_standard_v1() {
+        let policy = IsolationAdmissionPolicy::default();
+        let request = RunIsolationRequest::default();
+        let mode = resolve_isolation_mode(&policy, &request, &workload(vec![]), 63).unwrap();
+        match mode {
+            ResolvedIsolationMode::Profile(profile) => {
+                assert_eq!(profile.profile(), IsolationProfileId::StandardV1);
+            }
+            ResolvedIsolationMode::LegacyPrivileged => panic!("expected a profile"),
+        }
+    }
+
+    #[test]
+    fn compatibility_v1_without_authorization_is_denied() {
+        let policy = IsolationAdmissionPolicy::default();
+        let request = RunIsolationRequest {
+            profile: Some(IsolationProfileId::CompatibilityV1),
+            ..Default::default()
+        };
+        let err = resolve_isolation_mode(&policy, &request, &workload(vec![]), 63).unwrap_err();
+        assert_eq!(err, IsolationError::CompatibilityRequiresAuthorization);
+    }
+
+    #[test]
+    fn compatibility_v1_with_matching_authorization_succeeds() {
+        let auth = OperatorAuthorizationId::new("op-123");
+        let policy = IsolationAdmissionPolicy {
+            compatibility_authorization: Some(auth.clone()),
+            ..IsolationAdmissionPolicy::default()
+        };
+        let request = RunIsolationRequest {
+            profile: Some(IsolationProfileId::CompatibilityV1),
+            compatibility_authorization: Some(auth),
+            ..Default::default()
+        };
+        let mode = resolve_isolation_mode(&policy, &request, &workload(vec![]), 63).unwrap();
+        match mode {
+            ResolvedIsolationMode::Profile(profile) => {
+                assert_eq!(profile.profile(), IsolationProfileId::CompatibilityV1);
+            }
+            ResolvedIsolationMode::LegacyPrivileged => panic!("expected a profile"),
+        }
+    }
+
+    #[test]
+    fn legacy_privileged_requires_matching_authorization() {
+        let auth = OperatorAuthorizationId::new("legacy-op-1");
+        let policy = IsolationAdmissionPolicy {
+            legacy_privileged_authorization: Some(auth.clone()),
+            ..IsolationAdmissionPolicy::default()
+        };
+        let request = RunIsolationRequest {
+            legacy_privileged_authorization: Some(auth),
+            ..Default::default()
+        };
+        let mode = resolve_isolation_mode(&policy, &request, &workload(vec![]), 63).unwrap();
+        assert_eq!(mode, ResolvedIsolationMode::LegacyPrivileged);
+    }
+
+    #[test]
+    fn legacy_privileged_with_mismatched_authorization_falls_through_to_standard_v1() {
+        let policy = IsolationAdmissionPolicy {
+            legacy_privileged_authorization: Some(OperatorAuthorizationId::new("real-op")),
+            ..IsolationAdmissionPolicy::default()
+        };
+        let request = RunIsolationRequest {
+            legacy_privileged_authorization: Some(OperatorAuthorizationId::new("wrong-op")),
+            ..Default::default()
+        };
+        let mode = resolve_isolation_mode(&policy, &request, &workload(vec![]), 63).unwrap();
+        match mode {
+            ResolvedIsolationMode::Profile(profile) => {
+                assert_eq!(profile.profile(), IsolationProfileId::StandardV1);
+            }
+            ResolvedIsolationMode::LegacyPrivileged => panic!("expected a profile"),
+        }
+    }
+
+    #[test]
+    fn host_lifecycle_hooks_require_compatibility_authorization() {
+        let policy = IsolationAdmissionPolicy::default();
+        let mut workload = workload(vec![]);
+        workload.host_lifecycle_hooks = vec!["pre-start.sh".to_string()];
+        let request = RunIsolationRequest::default();
+        let err = resolve_isolation_mode(&policy, &request, &workload, 63).unwrap_err();
+        assert_eq!(err, IsolationError::CompatibilityRequiresAuthorization);
+    }
+
+    #[test]
+    fn host_mount_outside_allowlist_is_denied() {
+        let policy = IsolationAdmissionPolicy {
+            host_mount_policy: HostMountPolicy::AllowListed(vec!["/srv/allowed".to_string()]),
+            ..IsolationAdmissionPolicy::default()
+        };
+        let request = RunIsolationRequest::default();
+        let mounts = vec![HostMountRule {
+            host_path: "/etc/passwd".to_string(),
+            access: MountAccessMode::ReadOnly,
+        }];
+        let err = resolve_isolation_mode(&policy, &request, &workload(mounts), 63).unwrap_err();
+        assert_eq!(
+            err,
+            IsolationError::HostMountNotAllowed("/etc/passwd".to_string())
+        );
+    }
+
+    #[test]
+    fn host_mount_under_allowlisted_prefix_is_permitted() {
+        let policy = IsolationAdmissionPolicy {
+            host_mount_policy: HostMountPolicy::AllowListed(vec!["/srv/allowed".to_string()]),
+            ..IsolationAdmissionPolicy::default()
+        };
+        let request = RunIsolationRequest::default();
+        let mounts = vec![HostMountRule {
+            host_path: "/srv/allowed/data".to_string(),
+            access: MountAccessMode::ReadOnly,
+        }];
+        let mode = resolve_isolation_mode(&policy, &request, &workload(mounts), 63).unwrap();
+        match mode {
+            ResolvedIsolationMode::Profile(profile) => {
+                assert_eq!(profile.mount().host_mounts.len(), 1);
+            }
+            ResolvedIsolationMode::LegacyPrivileged => panic!("expected a profile"),
+        }
+    }
+
+    #[test]
+    fn default_host_mount_policy_denies_any_requested_mount() {
+        let policy = IsolationAdmissionPolicy::default();
+        let request = RunIsolationRequest::default();
+        let mounts = vec![HostMountRule {
+            host_path: "/anything".to_string(),
+            access: MountAccessMode::ReadOnly,
+        }];
+        let err = resolve_isolation_mode(&policy, &request, &workload(mounts), 63).unwrap_err();
+        assert_eq!(
+            err,
+            IsolationError::HostMountNotAllowed("/anything".to_string())
         );
     }
 }
