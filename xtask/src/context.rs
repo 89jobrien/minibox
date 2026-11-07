@@ -49,10 +49,19 @@ pub struct ContextOptions {
 const CAPABILITY_EVIDENCE_ENV: &str = "MINIBOX_CAPABILITY_EVIDENCE_DIR";
 
 /// Per-backend test targets that prove declared capabilities by executing them.
+///
+/// `colima_conformance_tests` and `smolvm_conformance_tests` are registered ahead
+/// of having any proof-equipped test: both adapters declare
+/// `BackendCapability::PushToRegistry` but neither file yet exercises a real push,
+/// so their `CAPABILITY_PROOFS` stay empty for now. Listing them here means a push
+/// test added to either file starts producing evidence immediately, with no xtask
+/// change required (see gh-496).
 const CAPABILITY_PRODUCER_TARGETS: &[&str] = &[
     "conformance_commit",
     "conformance_build",
     "conformance_push",
+    "colima_conformance_tests",
+    "smolvm_conformance_tests",
 ];
 
 trait SnapshotOutput {
@@ -1224,7 +1233,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
         );
     }
     #[test]
-    fn capability_producer_runs_only_the_proving_targets() {
+    fn capability_producer_runs_the_registered_targets() {
         assert_eq!(
             capability_producer_args(),
             [
@@ -1239,6 +1248,10 @@ pub fn all_adapters() -> Vec<AdapterInfo> { vec![AdapterInfo { name: "native", a
                 "conformance_build",
                 "--test",
                 "conformance_push",
+                "--test",
+                "colima_conformance_tests",
+                "--test",
+                "smolvm_conformance_tests",
             ]
         );
     }
