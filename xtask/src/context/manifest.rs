@@ -625,7 +625,7 @@ required_in_ci = true
             .iter()
             .find(|adapter| adapter.id == "vz")
             .expect("VZ declaration should exist");
-        assert_eq!(vz.maturity, AdapterMaturity::Blocked);
+        assert_eq!(vz.maturity, AdapterMaturity::Experimental);
         assert!(
             vz.capabilities.values().all(|support| matches!(
                 support,
@@ -796,7 +796,7 @@ pub fn all_adapters() -> Vec<AdapterInfo> {
             .iter()
             .find(|adapter| adapter.id == "vz")
             .expect("VZ should remain declared");
-        assert_eq!(vz.maturity.declared, Some(AdapterMaturity::Blocked));
+        assert_eq!(vz.maturity.declared, Some(AdapterMaturity::Experimental));
         assert_eq!(vz.registry_presence.observed, Some(true));
         assert!(
             vz.capabilities

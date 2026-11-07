@@ -257,7 +257,7 @@ uts_namespace = "yes"
 
 [[adapters]]
 id = "vz"
-maturity = "blocked"
+maturity = "experimental"
 platforms = ["macos"]
 default_roles = []
 

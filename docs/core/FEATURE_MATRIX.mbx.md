@@ -1,4 +1,10 @@
 ---
+title: mbx-FEATURE_MATRIX
+doctype: FEATURE_MATRIX
+project: mbx
+status: active
+created: 2026-04-19
+updated: 2026-11-06
 source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/daemon/handler
@@ -37,7 +43,7 @@ generated: 2026-09-16
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-10-18
+Last updated: 2026-11-07
 
 ---
 
@@ -51,7 +57,7 @@ Last updated: 2026-10-18
 | `krun` | `linux`, `macos` | Experimental | `macos_fallback` |
 | `native` | `linux` | Production | `linux_fallback` |
 | `smolvm` | `linux`, `macos` | Experimental | `unix_default` |
-| `vz` | `macos` | Blocked | -- |
+| `vz` | `macos` | Experimental | -- |
 | `winbox` | `windows` | Stub | -- |
 <!-- END GENERATED: adapter-suites -->
 
@@ -73,15 +79,15 @@ Platform constraints for the suites above:
       `smolvm` binary is absent and `MINIBOX_ADAPTER` is unset.
 [^5]: `vz` requires macOS + the `vz` Cargo feature (off by default). Removed
       2026-05-07 (commit `00ee4427`, issue #305) after a Tahoe-beta VZ.framework
-      regression (`VZErrorInternal(1)`); code restored 2026-08-15, but the
-      adapter is **currently non-functional** — a follow-up minimal repro
-      showed `VZLinuxBootLoader` still fails with `VZErrorDomain code=1` on
-      macOS 26.4, confirmed against two independent kernel images. See the
-      status update at the top of
-      `docs/designs/2026-08-15-vz-adapter-revival-design.md`. Bypasses the
-      shared `run_daemon()`/`AdapterSuite` dispatch entirely — selected in
-      `main()` before the tokio runtime starts, because VM boot needs the OS main
-      thread for GCD completion-handler callbacks.
+      regression (`VZErrorInternal(1)`); code restored 2026-08-15, and the adapter now
+      boots a guest end-to-end via a pinned EFI system partition (`cargo xtask
+      build-vm-image`) on macOS 26.x (M5 Pro, build 25E246). Still opt-in, off by
+      default, and excluded from the shared `run_daemon()`/`AdapterSuite` dispatch —
+      VZ requires the GCD main queue for `VZVirtualMachine` construction and its
+      completion-handler callbacks, so `vz` is selected in `main()` before the tokio
+      runtime starts. See
+      `docs/designs/2026-10-22-vz-efi-boot-design.md` for the boot mechanism, evidence,
+      and remaining gaps (isolation suite and full agent traffic are not yet green).
 
 ---
 
@@ -254,17 +260,20 @@ Key implementation sites backing the "Yes" entries above:
   completion-handler callbacks must run on the GCD main queue, which
   requires bypassing `#[tokio::main]` entirely
   (see `vz_main()`/`start_vz()` in `crates/miniboxd/src/main.rs` and
-  `crates/macbox/src/lib.rs`). Removed 2026-05-07 (issue #305) after
-  a macOS 26 Tahoe-beta regression (`VZErrorInternal(1)`); code
-  restored 2026-08-15, but **currently non-functional** — a follow-up
-  minimal repro (isolated from all minibox configuration, tested
-  against two independent kernel images) showed `VZLinuxBootLoader`
-  still fails with `VZErrorDomain code=1` on macOS 26.4. The earlier
-  belief that the regression was fixed was based on a Lima repro that
-  used `VZEFIBootLoader` — a different boot mechanism than this
-  adapter needs. See the status update in
-  `docs/designs/2026-08-15-vz-adapter-revival-design.md`.
-  `exec`/`logs`/`push`/`commit`/`build` are unimplemented, same gaps
+  `crates/macbox/src/lib.rs`). `VZLinuxBootLoader` fails deterministically
+  on macOS 26.x (`VZErrorDomain code=1`); the adapter now boots through
+  `VZEFIBootLoader` from a pinned FAT32 ESP built by `cargo xtask
+  build-vm-image` (GRUB + the Alpine `virt` kernel/initramfs, with the
+  kernel command line rendered from `minibox_core::vm_boot::kernel_cmdline`)
+  and launching the config requires the daemon to carry the
+  `com.apple.security.virtualization` entitlement (`just sign-vz`, checked by
+  `cargo xtask doctor`). Guest networking (virtio-net, DHCP with retries) and
+  virtiofs root mount are wired in and diagnostic-instrumented but not yet
+  verified end-to-end; the isolation suite and `mbx run` over vsock are not
+  yet verified end-to-end.
+  Removed 2026-05-07 (issue #305); code restored 2026-08-15. See
+  `docs/designs/2026-10-22-vz-efi-boot-design.md` for the boot mechanism and
+  evidence. `exec`/`logs`/`push`/`commit`/`build` are unimplemented, same gaps
   as `krun`.
 - **`docker_desktop` adapter**
   (`DockerDesktopRuntime`/`Filesystem`/`Limiter`) exists in
