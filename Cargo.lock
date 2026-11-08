@@ -5308,6 +5308,7 @@ dependencies = [
  "anyhow",
  "cargo_metadata",
  "chrono",
+ "crc32fast",
  "dirs",
  "fatfs",
  "flate2",

@@ -28,12 +28,84 @@
       ]
     },
     {
+      "id": "de2f4d0a-7a8c-4d03-9650-7c61b3b5b7fe",
+      "name": "17-member workspace",
+      "type": "architecture_component",
+      "supporting_text": "Workspace structure across 17 crates",
+      "source_docs": [
+        "crate_inventory_mbx"
+      ]
+    },
+    {
       "id": "7e732b91-9978-4e2a-8f60-47183ba3acf1",
       "name": "1db50b86",
       "type": "commit_sha",
       "supporting_text": "develop at 1db50b86, 8 commits ahead of origin/develop, unpushed",
       "source_docs": [
         "active_context_mbx"
+      ]
+    },
+    {
+      "id": "1c8772c3-8693-4cea-a622-1281a8322883",
+      "name": "ABOUT.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "about"
+      ]
+    },
+    {
+      "id": "3f84e3f1-4e6b-4733-8416-97ed05dad406",
+      "name": "Arc<RwLock>",
+      "type": "synchronization",
+      "supporting_text": "Allows many concurrent readers, exclusive writes",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "244bebb8-7643-465e-9456-0d0655baf0b8",
+      "name": "Atomic Rename",
+      "type": "protocol",
+      "supporting_text": "Write protocol prevents partial state writes",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
+      "id": "c7ce15f0-f9a3-4dcf-b2f3-f18b447de908",
+      "name": "CARGO_TARGET_DIR",
+      "type": "gotcha",
+      "supporting_text": "Can cause binary staleness if mtime not checked",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "45c56f5a-ae2c-4948-a540-8f7bba2dbf21",
+      "name": "CODE_STYLE.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "code_style"
+      ]
+    },
+    {
+      "id": "fce9e3a5-b716-4211-97ca-6be4749b3e41",
+      "name": "CRATE_INVENTORY.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "crate_inventory"
+      ]
+    },
+    {
+      "id": "c1ae0f4f-1b38-4ccc-8491-5ab2661ba909",
+      "name": "CRATE_TIERS.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "crate_tiers"
       ]
     },
     {
@@ -64,12 +136,48 @@
       ]
     },
     {
+      "id": "42425e4f-3ebe-401a-bddb-d38bdad3d019",
+      "name": "Conformance Suite",
+      "type": "test_category",
+      "supporting_text": "Backend-agnostic adapter contract tests",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "81f879c9-c1a1-4d18-b76a-a159828aad40",
+      "name": "Container State",
+      "type": "state_type",
+      "supporting_text": "Created, Running, Paused, Stopped, Failed, Orphaned states",
+      "source_docs": [
+        "state_model_mbx"
+      ]
+    },
+    {
       "id": "56faf79f-87ce-4538-b825-9439a5d9ce27",
       "name": "ContainerPolicy auth gate",
       "type": "security_control",
       "supporting_text": "Auth-policy gate: ContainerPolicy deny-by-default for bind mounts and privileged mode, Env-var opt-in (MINIBOX_ALLOW_BIND_MOUNTS, MINIBOX_ALLOW_PRIVILEGED), validate_policy() enforced on every run request",
       "source_docs": [
         "progress_mbx"
+      ]
+    },
+    {
+      "id": "a15e3c0c-f941-4a80-8e95-f929bd8e273b",
+      "name": "DOCS_AUDIT.mbx.md",
+      "type": "document",
+      "supporting_text": "# Docs Audit",
+      "source_docs": [
+        "docs_audit"
+      ]
+    },
+    {
+      "id": "e6c70038-2345-43c4-a05b-4c1054166c4e",
+      "name": "Device Node Rejection",
+      "type": "security_invariant",
+      "supporting_text": "Block/Char device nodes rejected",
+      "source_docs": [
+        "security_invariants_mbx"
       ]
     },
     {
@@ -82,6 +190,15 @@
       ]
     },
     {
+      "id": "488713c9-7fc8-412b-ac2a-b5650bfc4627",
+      "name": "FEATURE_MATRIX.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "feature_matrix"
+      ]
+    },
+    {
       "id": "eff1a299-aaab-43d1-b7ce-c303e9a141a2",
       "name": "GitHub Actions billing lock",
       "type": "issue",
@@ -89,6 +206,60 @@
       "source_docs": [
         "active_context_mbx",
         "progress_mbx"
+      ]
+    },
+    {
+      "id": "42b71c69-a691-4a8b-9d1b-8086a5f6d547",
+      "name": "Image Pull Size Limits",
+      "type": "security_invariant",
+      "supporting_text": "10GiB per-layer, 50GiB aggregate",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
+      "id": "2a4fccf5-0d97-4472-a964-20466ddf4520",
+      "name": "Inline Tests",
+      "type": "test_category",
+      "supporting_text": "~1,228 inline #[cfg(test)] annotations",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "81a1adba-7223-4836-8a45-dfcd79223337",
+      "name": "Integration Tests",
+      "type": "test_category",
+      "supporting_text": "96 integration test files with ~1,060 annotations",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "08443212-a975-4908-b3ca-7e8ba61079a1",
+      "name": "Linux",
+      "type": "platform",
+      "supporting_text": "Linux platform with native container support",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "81731013-00ad-4b20-b3c5-48d4036cc488",
+      "name": "Linux Native Adapter",
+      "type": "adapter",
+      "supporting_text": "Full namespace/cgroup isolation, overlay FS, bridge networking",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "2df8a018-c16b-40e2-91c1-0765ee6b652d",
+      "name": "MUTATION_AUDIT.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "mutation_audit"
       ]
     },
     {
@@ -110,12 +281,111 @@
       ]
     },
     {
+      "id": "220b8477-7478-4714-87a0-39b73aa58f5d",
+      "name": "PRERELEASE_CHANGELOG.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "prerelease_changelog"
+      ]
+    },
+    {
+      "id": "96d6d1ac-ec5d-4244-8457-51c3108caf3c",
+      "name": "Platform-Gated Code",
+      "type": "gotcha",
+      "supporting_text": "#[cfg(target_os = linux)] paths never validated on macOS",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "aba70edb-3552-4d23-b268-88691c262df0",
+      "name": "Property Tests",
+      "type": "test_category",
+      "supporting_text": "~46 proptest tests for roundtrip/bounds/state",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "27e992fd-3486-4284-a4cb-7690a8833d58",
+      "name": "ROADMAP.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "roadmap"
+      ]
+    },
+    {
+      "id": "b344ddef-7024-46b8-8bbc-30ee2854ae24",
+      "name": "SO_PEERCRED",
+      "type": "security_check",
+      "supporting_text": "Mandatory auth check before request processing",
+      "source_docs": [
+        "security_invariants_mbx"
+      ]
+    },
+    {
       "id": "abd62ff2-3fce-4941-ab18-9d5b7746b080",
       "name": "SO_PEERCRED auth mandatory",
       "type": "security_control",
       "supporting_text": "SO_PEERCRED auth is mandatory — The UID==0 check in minibox/src/daemon/server.rs must run before any request processing. Never bypass or weaken it",
       "source_docs": [
         "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "b2e195c9-b6b2-488b-ac6a-4fe5365056bc",
+      "name": "STABILITY_CHECKLIST.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "stability_checklist"
+      ]
+    },
+    {
+      "id": "a0b7f093-95b5-4bd8-b940-f87102cdb8cc",
+      "name": "SUMMARY.md",
+      "type": "document",
+      "supporting_text": "# Summary",
+      "source_docs": [
+        "summary.md"
+      ]
+    },
+    {
+      "id": "d0eac33d-47c2-4efb-9d83-14dbf6d8c406",
+      "name": "SUPPORT_TIERS.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "support_tiers"
+      ]
+    },
+    {
+      "id": "2579f5f1-d2de-4d9d-90d0-7615a8bbfb84",
+      "name": "Security Regression Tests",
+      "type": "test_category",
+      "supporting_text": "19 tests pinning security invariants",
+      "source_docs": [
+        "test_infrastructure_mbx"
+      ]
+    },
+    {
+      "id": "1e162eeb-5272-4a93-a278-559b3a43ceef",
+      "name": "Subprocess Tests",
+      "type": "test_pattern",
+      "supporting_text": "Use Command::from_std with MINIBOX_TEST_BIN_DIR",
+      "source_docs": [
+        "gotchas_mbx"
+      ]
+    },
+    {
+      "id": "0ec2b0d8-e366-4399-957c-a3e0211e1473",
+      "name": "Symlink Rewrite",
+      "type": "security_invariant",
+      "supporting_text": "Absolute symlinks converted to container-relative",
+      "source_docs": [
+        "security_invariants_mbx"
       ]
     },
     {
@@ -134,6 +404,24 @@
       "supporting_text": "Windows (WSL2) adapter: ~40% scaffolded. Wsl2Runtime/Wsl2Filesystem/Wsl2Limiter implement traits via wsl.exe delegation ... Not wired into miniboxd",
       "source_docs": [
         "progress_mbx"
+      ]
+    },
+    {
+      "id": "524ec882-15b9-414c-a99f-7f4510ac617a",
+      "name": "XTASK_CLI.mbx.md",
+      "type": "document",
+      "supporting_text": "---",
+      "source_docs": [
+        "xtask_cli"
+      ]
+    },
+    {
+      "id": "ab73b987-ef7f-4eb1-a723-1540fe818461",
+      "name": "Zip Slip",
+      "type": "security_invariant",
+      "supporting_text": "Path traversal prevention via validate_tar_entry_path",
+      "source_docs": [
+        "security_invariants_mbx"
       ]
     },
     {
@@ -183,6 +471,15 @@
       ]
     },
     {
+      "id": "5904cda0-5457-4fed-9e09-e370c20f92ca",
+      "name": "architecture rings",
+      "type": "gate",
+      "supporting_text": "Validates hexagonal architecture layering",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
       "id": "b7a4b256-8b4b-4120-bfa1-f347ad0a6ef5",
       "name": "as_any! macro",
       "type": "tool",
@@ -202,12 +499,30 @@
       ]
     },
     {
+      "id": "bcbaa9dc-37aa-44b0-8aee-8db31265ed39",
+      "name": "bridge networking",
+      "type": "capability",
+      "supporting_text": "veth pairs + NAT via iptables",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
       "id": "abac3a3e-bbd5-4071-844c-0820428a1717",
       "name": "capability dropping partial",
       "type": "backlog_item",
       "supporting_text": "Capability dropping: Grant path implemented (apply_full_capabilities with curated whitelist minus SYS*MODULE/SYS_BOOT/MAC*_) ... Drop path for unprivileged containers missing",
       "source_docs": [
         "progress_mbx"
+      ]
+    },
+    {
+      "id": "896b2d62-6edf-4316-ae95-be8014a99100",
+      "name": "cargo fmt --all",
+      "type": "gotcha",
+      "supporting_text": "Rewrites untracked files, clobbers concurrent writers",
+      "source_docs": [
+        "gotchas_mbx"
       ]
     },
     {
@@ -242,6 +557,24 @@
       "name": "cargo xtask check protocol-sites",
       "type": "tool",
       "supporting_text": "cargo xtask check protocol-sites verifies HandlerDependencies construction-site count, default file crates/miniboxd/src/main.rs, default expected 4.",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "b1fae1a5-a4eb-4d24-b6a9-76379c005641",
+      "name": "cargo xtask ci-watch",
+      "type": "command",
+      "supporting_text": "Monitor GHA run status with job-level detail",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
+      "id": "22042480-96f4-4086-bc9f-9f3c8e2da647",
+      "name": "cargo xtask demo",
+      "type": "command",
+      "supporting_text": "Showcase binary with demo scenarios",
       "source_docs": [
         "xtask_cli_mbx"
       ]
@@ -326,12 +659,22 @@
       ]
     },
     {
+      "id": "21f7c924-b5e2-4f29-8da0-e4387b70bee8",
+      "name": "cargo xtask test property",
+      "type": "command",
+      "supporting_text": "Property tests via proptest",
+      "source_docs": [
+        "xtask_cli_mbx"
+      ]
+    },
+    {
       "id": "2b36eaf7-3060-4f27-a27a-9fa62eed6192",
       "name": "cargo xtask test unit",
       "type": "tool",
       "supporting_text": "cargo xtask test unit runs workspace --lib tests plus the minibox-testsuite zero-test guard.",
       "source_docs": [
-        "xtask_cli_mbx"
+        "xtask_cli_mbx",
+        "test_infrastructure_mbx"
       ]
     },
     {
@@ -601,6 +944,15 @@
       ]
     },
     {
+      "id": "4896ec85-879a-484e-aa76-2f15bd761ff1",
+      "name": "exec",
+      "type": "capability",
+      "supporting_text": "Exec-into-running-container (Linux only)",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
       "id": "ad147f7b-2b05-4399-9f6d-795ad8ae11a4",
       "name": "execution manifest integrity",
       "type": "concept",
@@ -803,6 +1155,24 @@
       ]
     },
     {
+      "id": "bcd1f717-30c4-49a6-941e-92bec0b10273",
+      "name": "logs",
+      "type": "capability",
+      "supporting_text": "Log retrieval (Linux native only)",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
+      "id": "bf82ea1e-ac3b-4af8-925e-43a996d63bf5",
+      "name": "macOS",
+      "type": "platform",
+      "supporting_text": "macOS platform with VM-based adapters",
+      "source_docs": [
+        "feature_matrix_mbx"
+      ]
+    },
+    {
       "id": "59a3350c-86cd-4d71-b5cc-f1fd321e9e63",
       "name": "macbox",
       "type": "system",
@@ -829,7 +1199,8 @@
       "supporting_text": "mbx constructs daemon protocol requests (crates/mbx/src/commands/run.rs:119-142).",
       "source_docs": [
         "minibox-context-map-f5481a94",
-        "architecture_mbx"
+        "architecture_mbx",
+        "crate_inventory_mbx"
       ]
     },
     {
@@ -1085,7 +1456,8 @@
       "type": "concept",
       "supporting_text": "minibox::testing (behind the test-utils feature) provides mocks ... fixtures ... helpers ... backend descriptors.",
       "source_docs": [
-        "test_infrastructure_mbx"
+        "test_infrastructure_mbx",
+        "gotchas_mbx"
       ]
     },
     {
@@ -1153,12 +1525,31 @@
       ]
     },
     {
+      "id": "b177d1cc-161f-45e0-a81f-827508f0d89d",
+      "name": "nextest",
+      "type": "tool",
+      "supporting_text": "Primary test runner for the workspace",
+      "source_docs": [
+        "test_infrastructure_mbx",
+        "xtask_cli_mbx"
+      ]
+    },
+    {
       "id": "e0204da4-1fdd-4170-99cc-bc27ee99f077",
       "name": "no unwrap in production rule",
       "type": "rule",
       "supporting_text": "No .unwrap() in production — Use .into_diagnostic().wrap_err(\"description\")? (or .wrap_err(\"description\")? directly for miette-native error types). Tests: use expect(\"reason\")",
       "source_docs": [
         "rust_patterns_md"
+      ]
+    },
+    {
+      "id": "cf7e8580-6adb-4805-b9fd-68a01a1cb1e7",
+      "name": "overlay filesystem",
+      "type": "capability",
+      "supporting_text": "Layer-based rootfs construction",
+      "source_docs": [
+        "feature_matrix_mbx"
       ]
     },
     {
@@ -1400,6 +1791,15 @@
       "supporting_text": "The StateRepository trait abstracts persistence with load_containers and save_containers.",
       "source_docs": [
         "state_model_mbx"
+      ]
+    },
+    {
+      "id": "11b30d5b-60ad-41b9-abb5-01eb87881d99",
+      "name": "std::env::set_var",
+      "type": "gotcha",
+      "supporting_text": "Unsafe in Rust 2024; requires static Mutex guard in tests",
+      "source_docs": [
+        "gotchas_mbx"
       ]
     },
     {
@@ -2639,6 +3039,150 @@
       "confidence": 0.6,
       "supporting_text": "Non-Negotiable Minibox Rules",
       "source_doc": "rust_patterns_md"
+    },
+    {
+      "id": "a0f7ee66-dec1-4762-847e-2c7a45182421",
+      "source": "ab73b987-ef7f-4eb1-a723-1540fe818461",
+      "target": "f16d3ee2-16c2-4be3-9ab7-99af6e19c1e9",
+      "type": "enforced_by",
+      "confidence": 1.0,
+      "supporting_text": "Prevents .. traversal in tar entries",
+      "source_doc": "security_invariants_mbx"
+    },
+    {
+      "id": "753f408c-5d7d-4c8d-ac1d-daad56ffd912",
+      "source": "2579f5f1-d2de-4d9d-90d0-7615a8bbfb84",
+      "target": "81a1adba-7223-4836-8a45-dfcd79223337",
+      "type": "subset_of",
+      "confidence": 1.0,
+      "supporting_text": "19 security tests are part of the integration suite",
+      "source_doc": "test_infrastructure_mbx"
+    },
+    {
+      "id": "39602439-9b81-4f8d-b531-72850c55a20b",
+      "source": "f01e660b-d5bc-4f87-932c-8706d06a978b",
+      "target": "0a699224-d392-4ddb-8fd8-b6b05f820698",
+      "type": "persisted_to",
+      "confidence": 1.0,
+      "supporting_text": "DaemonState mutations written to state.json",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "a6ad27ee-d5ef-4bc1-8608-2b25ffe9ec04",
+      "source": "244bebb8-7643-465e-9456-0d0655baf0b8",
+      "target": "0a699224-d392-4ddb-8fd8-b6b05f820698",
+      "type": "protects",
+      "confidence": 1.0,
+      "supporting_text": "Atomic rename prevents partial writes",
+      "source_doc": "state_model_mbx"
+    },
+    {
+      "id": "0cc13e3f-e362-4070-9a8d-883c73da8ab0",
+      "source": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "dependency",
+      "confidence": 1.0,
+      "supporting_text": "minibox re-exports minibox-core",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "13c17157-d59a-4b74-b24f-d1d7a9d98359",
+      "source": "c0146026-609f-4088-af08-f7e43c98aadd",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "miniboxd daemon binary",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "17370ba2-07ee-48d8-a575-b377537abf1d",
+      "source": "22b49672-2713-4827-af21-68358a3fae70",
+      "target": "5e1f83a1-c465-41c7-a888-8dbf146caf1c",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "CLI uses core protocol",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "829c8950-ab07-48cf-881b-28ac771d025f",
+      "source": "7e01501c-18e0-4aae-bbb9-624423198521",
+      "target": "0e0c8991-4bf7-44ac-85ca-ade4b43e23b5",
+      "type": "tests",
+      "confidence": 1.0,
+      "supporting_text": "Conformance suite tests adapters",
+      "source_doc": "crate_inventory_mbx"
+    },
+    {
+      "id": "6e1f8215-5904-47e9-99ef-b43bf2a25768",
+      "source": "b862c324-42ee-4434-9548-7ae2e4d8daed",
+      "target": "bf82ea1e-ac3b-4af8-925e-43a996d63bf5",
+      "type": "available_on",
+      "confidence": 1.0,
+      "supporting_text": "Default macOS adapter",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "0729c051-2672-4432-bf18-5662ed1824ac",
+      "source": "4896ec85-879a-484e-aa76-2f15bd761ff1",
+      "target": "08443212-a975-4908-b3ca-7e8ba61079a1",
+      "type": "supported_on",
+      "confidence": 1.0,
+      "supporting_text": "Exec only on Linux native",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "4a21230d-522d-4f0a-aae8-0cac656c2283",
+      "source": "81731013-00ad-4b20-b3c5-48d4036cc488",
+      "target": "08443212-a975-4908-b3ca-7e8ba61079a1",
+      "type": "available_on",
+      "confidence": 1.0,
+      "supporting_text": "Linux native adapter",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "abf08d62-1290-4ad2-b733-e50d314d3272",
+      "source": "f7650520-5d35-42b3-a760-9c78318b1af2",
+      "target": "b862c324-42ee-4434-9548-7ae2e4d8daed",
+      "type": "fallback_for",
+      "confidence": 0.9,
+      "supporting_text": "krun is fallback when smolvm unavailable",
+      "source_doc": "feature_matrix_mbx"
+    },
+    {
+      "id": "4a510ce9-614c-4107-8f7f-3eee3c5e06cc",
+      "source": "399770be-73c1-4c46-aa31-02011ed9a301",
+      "target": "b177d1cc-161f-45e0-a81f-827508f0d89d",
+      "type": "uses",
+      "confidence": 1.0,
+      "supporting_text": "verify gate includes nextest",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "d1fb0fbf-c3b2-4578-a1c7-721ac7331331",
+      "source": "6787f9a3-51ea-45ed-ab3d-78061bc6796b",
+      "target": "399770be-73c1-4c46-aa31-02011ed9a301",
+      "type": "includes",
+      "confidence": 0.9,
+      "supporting_text": "prepush runs superset of verify",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "ef644531-2235-49a4-8f46-e43760639652",
+      "source": "0a3cc6a1-1f0c-4140-9d23-49e96249ed44",
+      "target": "399770be-73c1-4c46-aa31-02011ed9a301",
+      "type": "lighter_than",
+      "confidence": 0.8,
+      "supporting_text": "pre-commit is subset of verify",
+      "source_doc": "xtask_cli_mbx"
+    },
+    {
+      "id": "4b41c987-8b6c-4088-94c1-ee343aaf193d",
+      "source": "f6455905-e024-4f71-ab37-839d7d3902cc",
+      "target": "b177d1cc-161f-45e0-a81f-827508f0d89d",
+      "type": "requires_passing",
+      "confidence": 1.0,
+      "supporting_text": "promote checks CI passed before cascading",
+      "source_doc": "xtask_cli_mbx"
     }
   ]
 }

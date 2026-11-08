@@ -1,4 +1,10 @@
 ---
+title: mbx-GOTCHAS
+doctype: GOTCHAS
+project: mbx
+status: active
+created: 2026-06-13
+updated: 2026-11-06
 source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/lib.rs
@@ -16,7 +22,7 @@ generated: 2026-09-16
 
 # Gotchas and Non-Obvious Patterns
 
-Last updated: 2026-11-04
+Last updated: 2026-11-08
 
 Deep reference for debugging container init, cgroups, proptest, macros, and protocol edges.
 For Rust coding conventions see `.claude/rules/rust-patterns.md`.
@@ -103,8 +109,10 @@ file's module doc for the authoritative flow. Summary, grounded in the current c
 
 - **Valid values** (`adapter_registry::VALID_ADAPTERS`): `native`, `gke`, `colima`, `smolvm`,
   `krun`, and feature-gated `vz`. `native`/`gke` are compiled only on Linux; the normal Unix
-  VM adapters are available according to their platform gates; VZ requires macOS plus `vz` and
-  is currently nonfunctional because VM boot fails. See per-adapter descriptions in
+  VM adapters are available according to their platform gates; VZ is experimental — the guest
+  boots through firmware, GRUB, kernel, and initramfs to a virtiofs-mounted root on macOS
+  26.x via the EFI path (see the VZ boot triage entry below), but remains opt-in and
+  unverified for full agent traffic. See per-adapter descriptions in
   `adapter_registry::all_adapters()`.
 - **VZ boot triage** — the EFI boot path (`crates/macbox/src/vz/boot.rs`, `vm.rs`) diagnoses
   which stage failed by what the serial console shows, not by the generic `code=1` the

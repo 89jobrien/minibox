@@ -1,14 +1,14 @@
-# Handoff — minibox (2026-11-03)
+# Handoff — minibox (2026-11-07)
 
 | ID                       | P   | Status  | Title                                                        |
 | ------------------------ | --- | ------- | ------------------------------------------------------------ |
 | gh-473                   | P2  | blocked | feat(xtask): squash chain branches during promotion          |
+| gh-496                   | P2  | blocked | feat(context): validate readiness claims with evidence       |
 | gh-507                   | P2  | blocked | feat(oci): stabilize push, commit, and build                 |
 | gh-492                   | P2  | pending | feat(security): apply a default capability drop policy       |
 | gh-493                   | P2  | pending | feat(security): add user namespaces and rootless support     |
 | gh-494                   | P2  | pending | feat(security): add general seccomp workload profiles        |
 | gh-495                   | P2  | pending | feat(security): add end-to-end isolation regressions         |
-| gh-496                   | P2  | pending | feat(context): validate readiness claims with evidence       |
 | gh-497                   | P2  | pending | feat(runtime): prove control-plane responsiveness under load |
 | gh-499                   | P2  | pending | feat(bench): benchmark GKE proot and copy filesystem         |
 | gh-501                   | P2  | pending | feat(context): define support-tier graduation thresholds     |
@@ -40,4 +40,4 @@
 
 ## Log
 
-- 20261103.084900: done=103 running=0 pending=33 blocked=2 [6d8c009, 73aedb1, 4cd2fa4, e4c5e61, 741fe1e, 48d0ecd, 6534808, a417675, 0c7a3c8, c95450d]
+- 20261107.055524: done=105 running=0 pending=32 blocked=3 [4f84cfe, c80a562, 6a1cfb1, 54a3eca, b38afd5, 8c2ca3e, a9c8d0d, d2dbe8f, 526663b, fe8513d]

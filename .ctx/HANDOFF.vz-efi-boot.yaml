@@ -1,0 +1,59 @@
+id: vz-efi
+title: VZ EFI boot path — session closeout (2026-11-05)
+updated: 2026-11-05
+status: ready_for_handoff
+items:
+  - id: vb-open-1
+    name: fatfs-determinism-fix
+    title: fix(xtask): drop fatfs chrono timestamps to keep ESP builds deterministic
+    status: committed_or_pending_confirmation
+    description: >-
+      FAT image differed byte-wise because fatfs's default chrono feature stamped
+      directory entries with Local::now(). Verified with
+      vm_image::tests::fat_image_is_deterministic_and_contains_every_file after the
+      fix; all 8 vm_image tests pass, plus 2 vm_boot tests in minibox-core.
+      Pre-commit gates passed (fmt/clippy/architecture), but the shell environment
+      broke mid-session (see vb-env-1), so the commit may or may not have landed;
+      confirm with `git log --oneline -3` and re-run targeted tests if needed.
+    files:
+      - xtask/Cargo.toml
+      - Cargo.lock
+  - id: vb-open-2
+    name: vz-efi-phase-1
+    title: Phase 1 EFI boot — landed (by concurrent agents' commits)
+    status: merged_to_develop
+    description: >-
+      Commits 9200022e (probe/Phase 0), e9ec4b5c (T1 signing/doctor), 4cd2fa47
+      (T2/T3: cargo xtask build-vm-image + VZEFIBootLoader adapter), 6d8c009a
+      (T4/T5: boot-mode resolution, preflight, code=1 remediation), 538bfe90
+      (isolation handshake + VZ EFI-boot net/module diagnostics). Verified end to
+      end on a signed vz daemon: firmware → GRUB → Alpine virt kernel mounts a
+      virtiofs root (tag minibox-rootfs) via appended cpio modules; cmdline is baked
+      into /boot/grub/grub.cfg since VZEFIBootLoader has no cmdline field. The vsock
+      transport modules are appended the same way (Alpine virt initramfs lacks them).
+    remaining:
+      - T6 docs / maturity (FEATURE_MATRIX.mbx.md, xtask/context.toml)
+      - determinism re-check of ESP against real build after fatfs fix
+      - memory-bank files updated in-session (.ctx is gitignored except progress.mbx.md)
+  - id: vb-env-1
+    name: mise-nu-broken
+    title: Shell blocked — mise shim `nu` fails after another agent edited mise.toml
+    status: blocked_on_user
+    description: >-
+      Every shell invocation now fails with `mise ERROR No version is set for
+      shim: nu` even in /Users/joe/dev. Cause: `mise.toml` (another agent's
+      uncommitted change) no longer provides a nu version. Do not revert that file;
+      either restore `nu = "0.111.0"` under [tools] in mise.toml (their change, their
+      call) or run `mise use -g nu@0.111.0` yourself. No commit/push can run until the
+      shell works.
+    action: user_decision_required
+  - id: vb-note-1
+    name: shared-tree-sweep
+    title: Shared working tree with other agents — stage only your paths
+    status: operating_norm
+    description: >-
+      This session's uncommitted VZ changes (Phase 1) were swept into collaborator
+      commits 4cd2fa47, 6d8c009a, 538bfe90 without my knowledge. Several files remain
+      modified by other agents (HANDOFF.md, .kgx/data/*, CLAUDE.md, mise.toml,
+      ops/ci-runner/supervisor.sh, scripts/extract_and_ingest.rs) — do not stage them.
+      `scripts/extract_and_ingest.rs` is untracked and not ours.

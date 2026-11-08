@@ -56,6 +56,10 @@ run = "cargo xtask run bench-agent"
 description = "Security + correctness review of staged changes"
 run = "cargo xtask run ai-review"
 
+[tasks.extract-and-ingest]
+description = "Extract and ingest missing minibox docs via ollama:gpt-oss"
+run = "nu /tmp/extract_and_ingest.nu"
+
 [tasks.kani]
 description = "Run Kani formal verification proofs across the workspace"
 run = """

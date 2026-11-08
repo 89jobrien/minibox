@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+crc32fast = "1"
 dirs = "6"
 fatfs = { version = "0.3", default-features = false, features = ["alloc", "std"] }
 flate2 = "1"

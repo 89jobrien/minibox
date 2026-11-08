@@ -310,16 +310,16 @@ Issues and PRs are welcome. A few things to know before contributing:
 
 ## Roadmap
 
-| Feature                | Status                                              |
-| ---------------------- | --------------------------------------------------- |
-| Bridge networking      | Experimental                                        |
-| OCI push/commit/build  | Experimental                                        |
-| macOS VZ.framework     | Restored behind opt-in `vz`; boot currently blocked |
-| Seccomp / capabilities | Planned                                             |
-| Rootless support       | Planned                                             |
-| Port forwarding / DNS  | Implemented for Linux `native` bridge networking    |
-| Windows (WSL2)         | Planned                                             |
-| MCP control surface    | Initial MCP stdio server implemented                |
+| Feature                | Status                                           |
+| ---------------------- | ------------------------------------------------ |
+| Bridge networking      | Experimental                                     |
+| OCI push/commit/build  | Experimental                                     |
+| macOS VZ.framework     | Experimental; boots via EFI disk image (opt-in)  |
+| Seccomp / capabilities | Planned                                          |
+| Rootless support       | Planned                                          |
+| Port forwarding / DNS  | Implemented for Linux `native` bridge networking |
+| Windows (WSL2)         | Planned                                          |
+| MCP control surface    | Initial MCP stdio server implemented             |
 
 Full details: [`docs/core/ROADMAP.mbx.md`](docs/core/ROADMAP.mbx.md).
 

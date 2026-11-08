@@ -51,6 +51,7 @@ mod feature_matrix_date;
 mod frontmatter;
 mod fuzz;
 mod gates;
+mod gpt;
 mod lint_paths;
 mod preflight;
 mod profile;

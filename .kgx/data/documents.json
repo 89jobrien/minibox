@@ -1,6 +1,20 @@
 {
   "documents": [
     {
+      "id": "about",
+      "title": "ABOUT.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/ABOUT.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "bbc3f126-7abb-4b1f-9a05-318dff7efe5a",
+          "doc_id": "about",
+          "text": "---",
+          "offset": 0
+        }
+      ]
+    },
+    {
       "id": "active_context_mbx",
       "title": "active-context.mbx.md",
       "source": "/Users/joe/dev/minibox/.ctx/memory-bank/active-context.mbx.md",
@@ -73,28 +87,58 @@
       ]
     },
     {
+      "id": "code_style",
+      "title": "CODE_STYLE.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/CODE_STYLE.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "7daf421e-9f15-4991-9b9a-b2515a962d0b",
+          "doc_id": "code_style",
+          "text": "---",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "crate_inventory",
+      "title": "CRATE_INVENTORY.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/CRATE_INVENTORY.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "9c84fed5-e09c-4be9-8fb8-e1c4120b725c",
+          "doc_id": "crate_inventory",
+          "text": "---",
+          "offset": 0
+        }
+      ]
+    },
+    {
       "id": "crate_inventory_mbx",
       "title": "CRATE_INVENTORY.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/CRATE_INVENTORY.mbx.md",
-      "raw_content": "minibox-domain is the pure inner dependency ring and canonical owner of domain values, policies, lifecycle events, and ports; production dependencies contain no async runtime, HTTP client, process runner, socket transport, or filesystem adapter. minibox-core is cross-platform shared infrastructure: single source of truth for protocol, shared errors, image management, registry clients, and the Unix socket client; domain/ is a compatibility facade over minibox-domain. minibox is the largest crate: Linux container primitives plus all platform adapter implementations plus daemon server/handler/state plus testing infrastructure, about 21.5k LOC. minibox-macros contains declarative macro_rules! macros for adapter boilerplate reduction: as_any!, default_new!, adapt!, provide!, require_capability!, normalize_name!/normalize_digest!/normalize!/denormalize_digest!, test_run!. miniboxd is the daemon binary; platform-dispatches Unix to run_daemon(), Windows to winbox::start(). macbox is macOS platform support; krun implementations live in macbox::krun; Colima composition and the feature-gated VZ path also live here. smolbox is a compatibility facade for smolvm and krun adapter imports. winbox is a Phase 1 Windows stub; start() returns error unconditionally. minibox-cli (binary mbx) is the CLI client that connects to the daemon via Unix socket. minibox-crux-plugin exposes minibox container operations over JSON-RPC stdio for the crux agentic DSL runtime; depends on minibox-core only, the former crux-plugin dependency has been removed. minibox-mcp is an MCP stdio server for agent-controlled minibox operations, wrapping daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm with MCP-specific policy gates. minibox-testsuite is a conformance test harness for adapter trait contracts, not published, used internally by cargo xtask test conformance. minibox-bench is a dedicated benchmark crate owning all criterion targets and fixtures; the only place where the test-utils features of the lib crates are enabled. minibox-cni is CNI plugin exec protocol and chain orchestration; the native bridge path uses it when miniboxd is built with the opt-in cni feature. minibox-tui is a read-only Ratatui dashboard for container status and lifecycle events, used by minibox-cli only when its tui feature is enabled. ail is a placeholder binary for the agent-improvement loop with no implementation yet. xtask is the development tool containing all CI gate commands.",
+      "raw_content": "17-member workspace: minibox-core (domain ports, protocol), minibox (daemon, container init), miniboxd (binary), mbx (CLI), macbox (macOS VM), and 11 plugin/helper crates.",
       "chunks": [
         {
-          "id": "80003495-4813-4ab3-934f-f89eef1af8bf",
+          "id": "cceba2e0-99ae-446d-a1f3-634174641c3c",
           "doc_id": "crate_inventory_mbx",
-          "text": "minibox-domain is the pure inner dependency ring and canonical owner of domain values, policies, lifecycle events, and ports; production dependencies contain no async runtime, HTTP client, process runner, socket transport, or filesystem adapter. minibox-core is cross-platform shared infrastructure: single source of truth for protocol, shared errors, image management, registry clients, and the Unix socket client; domain/ is a compatibility facade over minibox-domain. minibox is the largest crate: Linux container primitives plus all platform adapter implementations plus daemon server/handler/state plus testing infrastructure, about 21.5k LOC. minibox-macros contains declarative macro_rules! macros for adapter boilerplate reduction: as_any!, default_new!, adapt!, provide!, require_capability!, normalize_name!/normalize_digest!/normalize!/denormalize_digest!, test_run!. miniboxd is the daemon binary; platform-dispatches Unix to run_daemon(), Windows to winbox::start(). macbox is macOS plat",
+          "text": "17-member workspace: minibox-core (domain ports, protocol), minibox (daemon, container init), miniboxd (binary), mbx (CLI), macbox (macOS VM), and 11 plugin/helper crates.",
           "offset": 0
-        },
+        }
+      ]
+    },
+    {
+      "id": "crate_tiers",
+      "title": "CRATE_TIERS.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/CRATE_TIERS.mbx.md",
+      "raw_content": "---",
+      "chunks": [
         {
-          "id": "1ed358e7-8ebf-45e2-9d07-83c095d51f7e",
-          "doc_id": "crate_inventory_mbx",
-          "text": ", normalize_name!/normalize_digest!/normalize!/denormalize_digest!, test_run!. miniboxd is the daemon binary; platform-dispatches Unix to run_daemon(), Windows to winbox::start(). macbox is macOS platform support; krun implementations live in macbox::krun; Colima composition and the feature-gated VZ path also live here. smolbox is a compatibility facade for smolvm and krun adapter imports. winbox is a Phase 1 Windows stub; start() returns error unconditionally. minibox-cli (binary mbx) is the CLI client that connects to the daemon via Unix socket. minibox-crux-plugin exposes minibox container operations over JSON-RPC stdio for the crux agentic DSL runtime; depends on minibox-core only, the former crux-plugin dependency has been removed. minibox-mcp is an MCP stdio server for agent-controlled minibox operations, wrapping daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm with MCP-specific policy gates. minibox-testsuite is a conformance test harness",
-          "offset": 800
-        },
-        {
-          "id": "ab5cdeea-d6e6-4b70-aca9-37574aa61338",
-          "doc_id": "crate_inventory_mbx",
-          "text": "ed minibox operations, wrapping daemon protocol requests for doctor, ps, images, logs, manifest, pull, run, stop, and rm with MCP-specific policy gates. minibox-testsuite is a conformance test harness for adapter trait contracts, not published, used internally by cargo xtask test conformance. minibox-bench is a dedicated benchmark crate owning all criterion targets and fixtures; the only place where the test-utils features of the lib crates are enabled. minibox-cni is CNI plugin exec protocol and chain orchestration; the native bridge path uses it when miniboxd is built with the opt-in cni feature. minibox-tui is a read-only Ratatui dashboard for container status and lifecycle events, used by minibox-cli only when its tui feature is enabled. ail is a placeholder binary for the agent-improvement loop with no implementation yet. xtask is the development tool containing all CI gate commands.",
-          "offset": 1600
+          "id": "57b1cb12-a451-435e-b97a-511ddb75ce0e",
+          "doc_id": "crate_tiers",
+          "text": "---",
+          "offset": 0
         }
       ]
     },
@@ -113,34 +157,44 @@
       ]
     },
     {
+      "id": "docs_audit",
+      "title": "DOCS_AUDIT.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/DOCS_AUDIT.mbx.md",
+      "raw_content": "# Docs Audit",
+      "chunks": [
+        {
+          "id": "6be7cb66-eb2d-4ba4-a7f7-38b6bbb8bafe",
+          "doc_id": "docs_audit",
+          "text": "# Docs Audit",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "feature_matrix",
+      "title": "FEATURE_MATRIX.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/FEATURE_MATRIX.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "2dfe5be0-1407-42d3-a4f4-1d2897e8da0b",
+          "doc_id": "feature_matrix",
+          "text": "---",
+          "offset": 0
+        }
+      ]
+    },
+    {
       "id": "feature_matrix_mbx",
       "title": "FEATURE_MATRIX.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/FEATURE_MATRIX.mbx.md",
-      "raw_content": "Adapter suites: colima (linux, macos, experimental), gke (linux, production), krun (linux, macos, experimental, macos_fallback), native (linux, production, linux_fallback), smolvm (linux, macos, experimental, unix_default), vz (macos, blocked), winbox (windows, stub). native requires root (UID 0); daemon startup rejects non-root native selection, Linux only, cgroup v2 and overlay FS require kernel support. gke is Linux only, unprivileged, uses proot and copy-based filesystem instead of overlay. smolvm is compiled only on Unix, requires the smolvm binary on PATH at runtime. krun fallback platform-splits: native on Linux, krun on macOS, when smolvm binary is absent and MINIBOX_ADAPTER is unset. vz requires macOS plus the vz Cargo feature, off by default; removed 2026-05-07 after a Tahoe-beta VZ.framework regression VZErrorInternal(1); code restored 2026-08-15 but the adapter is currently non-functional because VZLinuxBootLoader still fails with VZErrorDomain code=1 on macOS 26.4. native supports bind_mounts, bridge_network, cgroups_v2, commit, dns, events, exec, logs, pause_resume, peer_credential_auth, port_forwarding, privileged_mode, prune_rmi, push, restart; it is the only adapter with bind_mounts, bridge_network, pause_resume, peer_credential_auth, port_forwarding, privileged_mode, and prune_rmi. gke adapter uses proot for filesystem isolation and a no-op resource limiter, designed for running inside unprivileged GKE pods where namespaces and cgroups are unavailable. colima adapter delegates to nerdctl/limactl inside a Lima VM; exec and logs are limited because they go through Lima's SSH tunnel; push, commit, and build are wired via ColimaImagePusher, ColimaContainerCommitter, and MiniboxImageBuilder. smolvm adapter is the default on Unix when MINIBOX_ADAPTER is unset and the smolvm binary is present on PATH; falls back to native on Linux or krun on macOS when the binary is absent; lightweight Linux VMs with subsecond boot. krun adapter uses libkrun to run containers in lightweight VMs; all four adapter ports (runtime, registry, filesystem, limiter) are wired into the daemon and pass 29 krun-specific conformance tests; acts as the fallback when smolvm is unavailable. docker_desktop adapter exists in crates/minibox/src/adapters/docker_desktop.rs and is publicly exported, but is not registered in AdapterSuite or wired into the daemon. Execution integrity is implemented at the daemon handler layer, not inside individual adapters; all adapters that support run inherit manifest persist, mbx manifest, mbx verify, and admission-policy gating. Environment variable values are stored as SHA-256 digests, never plaintext, in execution-manifest.json.",
+      "raw_content": "Platform and adapter capability matrix. Linux native: full namespace/cgroup isolation, overlay FS, bridge networking. macOS: smolvm/krun adapters (run/stop/ps only, no exec/logs). GKE: unprivileged proot. Windows WSL2: scaffolded. Exec/logs missing on macOS adapters.",
       "chunks": [
         {
-          "id": "ecdc4031-7d9a-4015-9b83-206058f9b6cf",
+          "id": "ca2ff9c9-9cd0-4fab-ac2b-ff411f9fbf78",
           "doc_id": "feature_matrix_mbx",
-          "text": "Adapter suites: colima (linux, macos, experimental), gke (linux, production), krun (linux, macos, experimental, macos_fallback), native (linux, production, linux_fallback), smolvm (linux, macos, experimental, unix_default), vz (macos, blocked), winbox (windows, stub). native requires root (UID 0); daemon startup rejects non-root native selection, Linux only, cgroup v2 and overlay FS require kernel support. gke is Linux only, unprivileged, uses proot and copy-based filesystem instead of overlay. smolvm is compiled only on Unix, requires the smolvm binary on PATH at runtime. krun fallback platform-splits: native on Linux, krun on macOS, when smolvm binary is absent and MINIBOX_ADAPTER is unset. vz requires macOS plus the vz Cargo feature, off by default; removed 2026-05-07 after a Tahoe-beta VZ.framework regression VZErrorInternal(1); code restored 2026-08-15 but the adapter is currently non-functional because VZLinuxBootLoader still fails with VZErrorDomain code=1 on macOS 26.4. native ",
+          "text": "Platform and adapter capability matrix. Linux native: full namespace/cgroup isolation, overlay FS, bridge networking. macOS: smolvm/krun adapters (run/stop/ps only, no exec/logs). GKE: unprivileged proot. Windows WSL2: scaffolded. Exec/logs missing on macOS adapters.",
           "offset": 0
-        },
-        {
-          "id": "a2501cb3-078a-4e3e-a966-7dc4dd72e636",
-          "doc_id": "feature_matrix_mbx",
-          "text": " VZ.framework regression VZErrorInternal(1); code restored 2026-08-15 but the adapter is currently non-functional because VZLinuxBootLoader still fails with VZErrorDomain code=1 on macOS 26.4. native supports bind_mounts, bridge_network, cgroups_v2, commit, dns, events, exec, logs, pause_resume, peer_credential_auth, port_forwarding, privileged_mode, prune_rmi, push, restart; it is the only adapter with bind_mounts, bridge_network, pause_resume, peer_credential_auth, port_forwarding, privileged_mode, and prune_rmi. gke adapter uses proot for filesystem isolation and a no-op resource limiter, designed for running inside unprivileged GKE pods where namespaces and cgroups are unavailable. colima adapter delegates to nerdctl/limactl inside a Lima VM; exec and logs are limited because they go through Lima's SSH tunnel; push, commit, and build are wired via ColimaImagePusher, ColimaContainerCommitter, and MiniboxImageBuilder. smolvm adapter is the default on Unix when MINIBOX_ADAPTER is unse",
-          "offset": 800
-        },
-        {
-          "id": "c7ad83fa-d2b8-41f1-807d-3d2ccec898ef",
-          "doc_id": "feature_matrix_mbx",
-          "text": "hrough Lima's SSH tunnel; push, commit, and build are wired via ColimaImagePusher, ColimaContainerCommitter, and MiniboxImageBuilder. smolvm adapter is the default on Unix when MINIBOX_ADAPTER is unset and the smolvm binary is present on PATH; falls back to native on Linux or krun on macOS when the binary is absent; lightweight Linux VMs with subsecond boot. krun adapter uses libkrun to run containers in lightweight VMs; all four adapter ports (runtime, registry, filesystem, limiter) are wired into the daemon and pass 29 krun-specific conformance tests; acts as the fallback when smolvm is unavailable. docker_desktop adapter exists in crates/minibox/src/adapters/docker_desktop.rs and is publicly exported, but is not registered in AdapterSuite or wired into the daemon. Execution integrity is implemented at the daemon handler layer, not inside individual adapters; all adapters that support run inherit manifest persist, mbx manifest, mbx verify, and admission-policy gating. Environment var",
-          "offset": 1600
-        },
-        {
-          "id": "e780bf40-4fa7-4c1c-9957-a091e957a3bf",
-          "doc_id": "feature_matrix_mbx",
-          "text": " implemented at the daemon handler layer, not inside individual adapters; all adapters that support run inherit manifest persist, mbx manifest, mbx verify, and admission-policy gating. Environment variable values are stored as SHA-256 digests, never plaintext, in execution-manifest.json.",
-          "offset": 2400
         }
       ]
     },
@@ -148,25 +202,13 @@
       "id": "gotchas_mbx",
       "title": "GOTCHAS.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/GOTCHAS.mbx.md",
-      "raw_content": "std::env::set_var/remove_var are unsafe in Rust 2024; wrap in unsafe {} and serialise with a static Mutex<()> guard to prevent parallel test races. Subprocess tests must use Command::from_std(std::process::Command::new(find_minibox())) plus MINIBOX_TEST_BIN_DIR env var, never Command::cargo_bin(), which triggers a full recompile. minibox::testing import path is gated behind #[cfg(feature = test-utils)]. as_any! macro uses crate::domain::AsAny; crate resolves at the call site (minibox), not the defining crate (minibox-macros); suppress crate_in_macro_def with #[allow], do not change to $crate. adapt! requires new() -> Self; adapt! calls default_new! which implements Default via Self::new(); adapters whose new() returns Result<Self> must use as_any! only. Single DaemonRequest definition: canonical source is crates/minibox-core/src/protocol.rs; minibox re-exports it; wire format snapshot tests pin serialization. HandlerDependencies construction sites: adding fields requires updating the four normal dependency builders (native, gke, smolvm, krun) plus the delegated Colima builder in macbox. handle_run param chain: adding a parameter requires updating in order daemon/server.rs dispatch, handle_run, handle_run_streaming, run_inner_capture, run_inner; all five sites must change together. Silent channel-send discards are a bug: never let _ = tx.send(...).await; use if tx.send(...).await.is_err() then warn!(...) so dropped connections are observable. Valid MINIBOX_ADAPTER values are native, gke, colima, smolvm, krun, and feature-gated vz; native/gke are compiled only on Linux. Unset MINIBOX_ADAPTER: adapter_from_env() probes for the smolvm binary on PATH; if found uses smolvm; if absent silently falls back to native on Linux or krun on macOS/other. Explicit MINIBOX_ADAPTER disables the fallback entirely. native without root: parsing succeeds but daemon startup emits a warning and rejects the suite unless UID is 0. pivot_root requires MS_PRIVATE first: after CLONE_NEWNS the child inherits shared mount propagation; pivot_root fails EINVAL unless you call mount with MS_REC|MS_PRIVATE before the bind-mount. close_extra_fds uses close_range(2) fast path, falling back to /proc/self/fd iteration which must collect FD numbers into a Vec before closing. child_init uses execve not execvp.",
+      "raw_content": "Non-obvious patterns and gotchas. std::env::set_var/remove_var are unsafe in Rust 2024 — use static Mutex guard. minibox::testing feature-gated behind test-utils. Subprocess tests use Command::from_std with MINIBOX_TEST_BIN_DIR, never Command::cargo_bin. Platform-gated tests (#[cfg(target_os=linux)]) not compiled on macOS. cargo fmt --all rewrites untracked files. Overlays with FUSE backends downgrade to read-only silently. Container init inside CLONE_NEWNS child. Binary staleness from CARGO_TARGET_DIR.",
       "chunks": [
         {
-          "id": "0851bf1d-b2e7-4a58-8bcf-4c75af2e26e0",
+          "id": "cb3bf554-1c72-4c83-b7eb-3d4781a2ab70",
           "doc_id": "gotchas_mbx",
-          "text": "std::env::set_var/remove_var are unsafe in Rust 2024; wrap in unsafe {} and serialise with a static Mutex<()> guard to prevent parallel test races. Subprocess tests must use Command::from_std(std::process::Command::new(find_minibox())) plus MINIBOX_TEST_BIN_DIR env var, never Command::cargo_bin(), which triggers a full recompile. minibox::testing import path is gated behind #[cfg(feature = test-utils)]. as_any! macro uses crate::domain::AsAny; crate resolves at the call site (minibox), not the defining crate (minibox-macros); suppress crate_in_macro_def with #[allow], do not change to $crate. adapt! requires new() -> Self; adapt! calls default_new! which implements Default via Self::new(); adapters whose new() returns Result<Self> must use as_any! only. Single DaemonRequest definition: canonical source is crates/minibox-core/src/protocol.rs; minibox re-exports it; wire format snapshot tests pin serialization. HandlerDependencies construction sites: adding fields requires updating the f",
+          "text": "Non-obvious patterns and gotchas. std::env::set_var/remove_var are unsafe in Rust 2024 — use static Mutex guard. minibox::testing feature-gated behind test-utils. Subprocess tests use Command::from_std with MINIBOX_TEST_BIN_DIR, never Command::cargo_bin. Platform-gated tests (#[cfg(target_os=linux)]) not compiled on macOS. cargo fmt --all rewrites untracked files. Overlays with FUSE backends downgrade to read-only silently. Container init inside CLONE_NEWNS child. Binary staleness from CARGO_TARGET_DIR.",
           "offset": 0
-        },
-        {
-          "id": "14913dd4-0277-4cdb-a1ea-1437f5f3bba8",
-          "doc_id": "gotchas_mbx",
-          "text": "onical source is crates/minibox-core/src/protocol.rs; minibox re-exports it; wire format snapshot tests pin serialization. HandlerDependencies construction sites: adding fields requires updating the four normal dependency builders (native, gke, smolvm, krun) plus the delegated Colima builder in macbox. handle_run param chain: adding a parameter requires updating in order daemon/server.rs dispatch, handle_run, handle_run_streaming, run_inner_capture, run_inner; all five sites must change together. Silent channel-send discards are a bug: never let _ = tx.send(...).await; use if tx.send(...).await.is_err() then warn!(...) so dropped connections are observable. Valid MINIBOX_ADAPTER values are native, gke, colima, smolvm, krun, and feature-gated vz; native/gke are compiled only on Linux. Unset MINIBOX_ADAPTER: adapter_from_env() probes for the smolvm binary on PATH; if found uses smolvm; if absent silently falls back to native on Linux or krun on macOS/other. Explicit MINIBOX_ADAPTER disab",
-          "offset": 800
-        },
-        {
-          "id": "9d94d24d-4032-467c-aa41-746686bfd884",
-          "doc_id": "gotchas_mbx",
-          "text": " MINIBOX_ADAPTER: adapter_from_env() probes for the smolvm binary on PATH; if found uses smolvm; if absent silently falls back to native on Linux or krun on macOS/other. Explicit MINIBOX_ADAPTER disables the fallback entirely. native without root: parsing succeeds but daemon startup emits a warning and rejects the suite unless UID is 0. pivot_root requires MS_PRIVATE first: after CLONE_NEWNS the child inherits shared mount propagation; pivot_root fails EINVAL unless you call mount with MS_REC|MS_PRIVATE before the bind-mount. close_extra_fds uses close_range(2) fast path, falling back to /proc/self/fd iteration which must collect FD numbers into a Vec before closing. child_init uses execve not execvp.",
-          "offset": 1600
         }
       ]
     },
@@ -197,6 +239,34 @@
       ]
     },
     {
+      "id": "mutation_audit",
+      "title": "MUTATION_AUDIT.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/MUTATION_AUDIT.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "4653489a-9055-43a3-b515-41fb4970a296",
+          "doc_id": "mutation_audit",
+          "text": "---",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "prerelease_changelog",
+      "title": "PRERELEASE_CHANGELOG.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/PRERELEASE_CHANGELOG.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "af57c49a-5d84-4afc-9e31-0dcbacde47f7",
+          "doc_id": "prerelease_changelog",
+          "text": "---",
+          "offset": 0
+        }
+      ]
+    },
+    {
       "id": "progress_mbx",
       "title": "progress.mbx.md",
       "source": "/Users/joe/dev/minibox/.ctx/memory-bank/progress.mbx.md",
@@ -206,6 +276,20 @@
           "id": "f1570fba-9f60-42d1-b8a8-c3a6e74749c8",
           "doc_id": "progress_mbx",
           "text": "Progress: what works, in-progress, backlog, known issues.",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "roadmap",
+      "title": "ROADMAP.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/ROADMAP.mbx.md",
+      "raw_content": "---",
+      "chunks": [
+        {
+          "id": "77f51047-e790-4e35-8b78-2824b7c52851",
+          "doc_id": "roadmap",
+          "text": "---",
           "offset": 0
         }
       ]
@@ -228,31 +312,27 @@
       "id": "security_invariants_mbx",
       "title": "SECURITY_INVARIANTS.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/SECURITY_INVARIANTS.mbx.md",
-      "raw_content": "This document maps each critical security invariant to the code path that enforces it and the regression test that pins the behaviour. Zip Slip / Path Traversal Prevention: tar entries whose paths contain .. components must be rejected before any filesystem write occurs, enforced by validate_tar_entry_path() in crates/minibox-core/src/image/layer.rs, fixed in commit 8ea4f73. Device Node Extraction Rejection: tar entries of type Block or Char must be rejected outright, fixed in commit 8ea4f73. Absolute Symlink Host Leakage Prevention: absolute symlink targets must be rewritten to container-relative paths via relative_path(), fixed in commit 2fc7036. Setuid/Setgid Bit Stripping: regular files extracted from OCI layers must have setuid, setgid, and sticky bits stripped before writing to disk via entry.header_mut().set_mode(mode & 0o777), fixed in commit 2fc7036. FD-Leak Prevention in Child Init: the container child process must close all file descriptors above stderr before calling execve, via close_extra_fds() in crates/minibox/src/container/process.rs, fast path SYS_close_range. Environment Isolation: the container child process must use execve not execvp, so the daemon's host environment is never exposed inside containers. SO_PEERCRED Unix Socket Authentication: the daemon's Unix socket must only accept connections from UID 0 when require_root_auth is enabled, enforced by is_authorized() in crates/minibox/src/daemon/server.rs. Tar Root Entry Skip: the tar archive root marker entries . and ./ must be silently skipped rather than passed to path validation. FIFO / Named Pipe Non-Crash Guarantee: tar entries of type Fifo must not cause a panic or corrupt daemon state. Request Size Limit: daemon request reads are bounded by MAX_REQUEST_SIZE = 1 MB to prevent memory exhaustion. Image Pull Resource Limits: MAX_MANIFEST_SIZE = 10 MiB, MAX_LAYER_SIZE = 10 GiB per layer, MAX_TOTAL_IMAGE_SIZE = 50 GiB aggregate, enforced in crates/minibox-core/src/image/registry.rs. Execution Manifest Integrity: every container run persists an execution-manifest.json before the container process is spawned, environment values represented only by SHA-256 digests, implemented in crates/minibox-domain/src/execution_manifest.rs. Mount Immutability Ratchet (Seccomp): once the container's init-time mounts are in place, no process in the container may widen a mount back to read-write via mount(2, MS_REMOUNT); the filter is built by build_mount_immutability_program() and installed by install_mount_immutability_filter() in crates/minibox/src/container/mount_seccomp.rs, called from child_init() immediately after pivot_root_to(). The kernel-enforcing integration test for the mount immutability ratchet has not yet been run on real Linux plus root. User Namespace UID Range Isolation: native containers create a user namespace and default to an exclusive, contiguous 65,536-ID host UID/GID range; reusing a host range weakens tenant isolation, so it requires the explicit mbx run --shared-uid-range opt-in, implemented via UidRangeMode in crates/minibox-domain/src/runtime.rs.",
+      "raw_content": "12 security invariants pinning critical container isolation behavior. Zip slip prevention: validate_tar_entry_path rejects paths containing .. before filesystem write. Device node rejection: blocks Block/Char device nodes. Symlink rewrite: absolute symlinks converted to container-relative paths. SO_PEERCRED auth mandatory. Image pull size limits (per-layer 10GiB, aggregate 50GiB). Container init uses execve with explicit env.",
       "chunks": [
         {
-          "id": "fd303f62-0c9f-469e-b6de-c19ef0c0ce26",
+          "id": "e969e208-91f0-4043-8d1b-f9fdac8947ba",
           "doc_id": "security_invariants_mbx",
-          "text": "This document maps each critical security invariant to the code path that enforces it and the regression test that pins the behaviour. Zip Slip / Path Traversal Prevention: tar entries whose paths contain .. components must be rejected before any filesystem write occurs, enforced by validate_tar_entry_path() in crates/minibox-core/src/image/layer.rs, fixed in commit 8ea4f73. Device Node Extraction Rejection: tar entries of type Block or Char must be rejected outright, fixed in commit 8ea4f73. Absolute Symlink Host Leakage Prevention: absolute symlink targets must be rewritten to container-relative paths via relative_path(), fixed in commit 2fc7036. Setuid/Setgid Bit Stripping: regular files extracted from OCI layers must have setuid, setgid, and sticky bits stripped before writing to disk via entry.header_mut().set_mode(mode & 0o777), fixed in commit 2fc7036. FD-Leak Prevention in Child Init: the container child process must close all file descriptors above stderr before calling execve",
+          "text": "12 security invariants pinning critical container isolation behavior. Zip slip prevention: validate_tar_entry_path rejects paths containing .. before filesystem write. Device node rejection: blocks Block/Char device nodes. Symlink rewrite: absolute symlinks converted to container-relative paths. SO_PEERCRED auth mandatory. Image pull size limits (per-layer 10GiB, aggregate 50GiB). Container init uses execve with explicit env.",
           "offset": 0
-        },
+        }
+      ]
+    },
+    {
+      "id": "stability_checklist",
+      "title": "STABILITY_CHECKLIST.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/STABILITY_CHECKLIST.mbx.md",
+      "raw_content": "---",
+      "chunks": [
         {
-          "id": "76503878-cbf3-4a03-aa7f-ba2af25b7c4d",
-          "doc_id": "security_invariants_mbx",
-          "text": "via entry.header_mut().set_mode(mode & 0o777), fixed in commit 2fc7036. FD-Leak Prevention in Child Init: the container child process must close all file descriptors above stderr before calling execve, via close_extra_fds() in crates/minibox/src/container/process.rs, fast path SYS_close_range. Environment Isolation: the container child process must use execve not execvp, so the daemon's host environment is never exposed inside containers. SO_PEERCRED Unix Socket Authentication: the daemon's Unix socket must only accept connections from UID 0 when require_root_auth is enabled, enforced by is_authorized() in crates/minibox/src/daemon/server.rs. Tar Root Entry Skip: the tar archive root marker entries . and ./ must be silently skipped rather than passed to path validation. FIFO / Named Pipe Non-Crash Guarantee: tar entries of type Fifo must not cause a panic or corrupt daemon state. Request Size Limit: daemon request reads are bounded by MAX_REQUEST_SIZE = 1 MB to prevent memory exhaustio",
-          "offset": 800
-        },
-        {
-          "id": "24a7572f-0be8-40f9-a322-bebb4514b173",
-          "doc_id": "security_invariants_mbx",
-          "text": "on-Crash Guarantee: tar entries of type Fifo must not cause a panic or corrupt daemon state. Request Size Limit: daemon request reads are bounded by MAX_REQUEST_SIZE = 1 MB to prevent memory exhaustion. Image Pull Resource Limits: MAX_MANIFEST_SIZE = 10 MiB, MAX_LAYER_SIZE = 10 GiB per layer, MAX_TOTAL_IMAGE_SIZE = 50 GiB aggregate, enforced in crates/minibox-core/src/image/registry.rs. Execution Manifest Integrity: every container run persists an execution-manifest.json before the container process is spawned, environment values represented only by SHA-256 digests, implemented in crates/minibox-domain/src/execution_manifest.rs. Mount Immutability Ratchet (Seccomp): once the container's init-time mounts are in place, no process in the container may widen a mount back to read-write via mount(2, MS_REMOUNT); the filter is built by build_mount_immutability_program() and installed by install_mount_immutability_filter() in crates/minibox/src/container/mount_seccomp.rs, called from child_ini",
-          "offset": 1600
-        },
-        {
-          "id": "7128d7d4-0ddd-48a6-92bf-579c7b83610a",
-          "doc_id": "security_invariants_mbx",
-          "text": "t(2, MS_REMOUNT); the filter is built by build_mount_immutability_program() and installed by install_mount_immutability_filter() in crates/minibox/src/container/mount_seccomp.rs, called from child_init() immediately after pivot_root_to(). The kernel-enforcing integration test for the mount immutability ratchet has not yet been run on real Linux plus root. User Namespace UID Range Isolation: native containers create a user namespace and default to an exclusive, contiguous 65,536-ID host UID/GID range; reusing a host range weakens tenant isolation, so it requires the explicit mbx run --shared-uid-range opt-in, implemented via UidRangeMode in crates/minibox-domain/src/runtime.rs.",
-          "offset": 2400
+          "id": "856da393-21e7-47c2-9d92-d9b53a9b934a",
+          "doc_id": "stability_checklist",
+          "text": "---",
+          "offset": 0
         }
       ]
     },
@@ -260,25 +340,41 @@
       "id": "state_model_mbx",
       "title": "STATE_MODEL.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/STATE_MODEL.mbx.md",
-      "raw_content": "DaemonState is the single shared data structure for all container metadata, held behind Arc<RwLock<...>> so many readers proceed concurrently while writes are exclusive. State is persisted to a JSON file after every mutation via atomic rename so readers never see a partial write. Container records, container state, and host PID survive a restart conditionally; overlay mount, cgroup tree, and allocated bridge IPs do not survive. State file location defaults to MINIBOX_DATA_DIR/state.json, overridable via MINIBOX_DATA_DIR. Atomic write protocol: serialise container map to pretty-printed JSON, write to state.json.tmp, set permissions to 0o600, rename state.json.tmp to state.json atomically on POSIX filesystems. On daemon start, load_from_disk() followed by reconcile_on_startup() adjusts stale records: Created becomes Stopped, Paused with PID alive and cgroup.freeze=1 stays Paused, Paused otherwise becomes Orphaned, Running in any PID state becomes Orphaned because a surviving process is unmonitored after restart, Stopped/Failed/Orphaned are unchanged. Reconciliation runs immediately after loading state; PID liveness is checked through the ProcessChecker port, default adapter uses kill(pid, 0). Container state machine: Created -> Running -> Stopped, Running -> Failed, Running -> Paused -> Running (resume) or Stopped, daemon restart -> Orphaned. Valid transitions are enforced by update_container_state; invalid transitions return an error. The StateRepository trait abstracts persistence with load_containers and save_containers; the production adapter is JsonFileRepository using atomic JSON file writes; the test adapter uses in-memory doubles or TempDir-backed DaemonState. DaemonState::with_repository() accepts an Arc<dyn StateRepository> for dependency injection; the production daemon uses DaemonState::new(), which operates directly on the raw state_file path without a repository; both paths coexist by design. State file is restricted to 0o600; SO_PEERCRED auth on the daemon socket prevents unauthorized state queries.",
+      "raw_content": "DaemonState persists container metadata across daemon restarts. Held behind Arc<RwLock> for concurrent readers and exclusive writes. State persisted to JSON after every mutation via atomic rename. Container records survive restart; container state adjusted on load. Host PID conditional. Overlay mounts not reattached. Cgroup trees not reattached. Bridge IPs (in-memory only) lost. State file at MINIBOX_DATA_DIR/state.json. Atomic write protocol prevents partial writes.",
       "chunks": [
         {
-          "id": "661e9151-a757-4f2c-9714-c80fed271dbf",
+          "id": "6bbfe012-c7b2-4fbe-8e8d-14eb25778f01",
           "doc_id": "state_model_mbx",
-          "text": "DaemonState is the single shared data structure for all container metadata, held behind Arc<RwLock<...>> so many readers proceed concurrently while writes are exclusive. State is persisted to a JSON file after every mutation via atomic rename so readers never see a partial write. Container records, container state, and host PID survive a restart conditionally; overlay mount, cgroup tree, and allocated bridge IPs do not survive. State file location defaults to MINIBOX_DATA_DIR/state.json, overridable via MINIBOX_DATA_DIR. Atomic write protocol: serialise container map to pretty-printed JSON, write to state.json.tmp, set permissions to 0o600, rename state.json.tmp to state.json atomically on POSIX filesystems. On daemon start, load_from_disk() followed by reconcile_on_startup() adjusts stale records: Created becomes Stopped, Paused with PID alive and cgroup.freeze=1 stays Paused, Paused otherwise becomes Orphaned, Running in any PID state becomes Orphaned because a surviving process is u",
+          "text": "DaemonState persists container metadata across daemon restarts. Held behind Arc<RwLock> for concurrent readers and exclusive writes. State persisted to JSON after every mutation via atomic rename. Container records survive restart; container state adjusted on load. Host PID conditional. Overlay mounts not reattached. Cgroup trees not reattached. Bridge IPs (in-memory only) lost. State file at MINIBOX_DATA_DIR/state.json. Atomic write protocol prevents partial writes.",
           "offset": 0
-        },
+        }
+      ]
+    },
+    {
+      "id": "summary.md",
+      "title": "SUMMARY.md",
+      "source": "/Users/joe/dev/minibox/docs/core/SUMMARY.md",
+      "raw_content": "# Summary",
+      "chunks": [
         {
-          "id": "05e5d48f-47dc-4071-b42e-a8e6ab9f0430",
-          "doc_id": "state_model_mbx",
-          "text": " records: Created becomes Stopped, Paused with PID alive and cgroup.freeze=1 stays Paused, Paused otherwise becomes Orphaned, Running in any PID state becomes Orphaned because a surviving process is unmonitored after restart, Stopped/Failed/Orphaned are unchanged. Reconciliation runs immediately after loading state; PID liveness is checked through the ProcessChecker port, default adapter uses kill(pid, 0). Container state machine: Created -> Running -> Stopped, Running -> Failed, Running -> Paused -> Running (resume) or Stopped, daemon restart -> Orphaned. Valid transitions are enforced by update_container_state; invalid transitions return an error. The StateRepository trait abstracts persistence with load_containers and save_containers; the production adapter is JsonFileRepository using atomic JSON file writes; the test adapter uses in-memory doubles or TempDir-backed DaemonState. DaemonState::with_repository() accepts an Arc<dyn StateRepository> for dependency injection; the producti",
-          "offset": 800
-        },
+          "id": "b10fc78a-ef2d-4f84-9428-195c4f78a75b",
+          "doc_id": "summary.md",
+          "text": "# Summary",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "id": "support_tiers",
+      "title": "SUPPORT_TIERS.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/SUPPORT_TIERS.mbx.md",
+      "raw_content": "---",
+      "chunks": [
         {
-          "id": "5b984c87-58e3-4cc5-8081-3551bb004d22",
-          "doc_id": "state_model_mbx",
-          "text": "tomic JSON file writes; the test adapter uses in-memory doubles or TempDir-backed DaemonState. DaemonState::with_repository() accepts an Arc<dyn StateRepository> for dependency injection; the production daemon uses DaemonState::new(), which operates directly on the raw state_file path without a repository; both paths coexist by design. State file is restricted to 0o600; SO_PEERCRED auth on the daemon socket prevents unauthorized state queries.",
-          "offset": 1600
+          "id": "f2259a87-ea8d-4abc-996a-71807ba2e0aa",
+          "doc_id": "support_tiers",
+          "text": "---",
+          "offset": 0
         }
       ]
     },
@@ -286,19 +382,27 @@
       "id": "test_infrastructure_mbx",
       "title": "TEST_INFRASTRUCTURE.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/TEST_INFRASTRUCTURE.mbx.md",
-      "raw_content": "96 integration test files under crates/*/tests/ with roughly 1,060 annotations, plus roughly 1,228 inline #[cfg(test)] annotations in src/, totaling more than 2,200 source annotations. Sandbox tests (about 17) and CLI subprocess tests (30) are not tested in any CI workflow. CI workflows include ci.yml, pr.yml, merge.yml for main gates; macos.yml and rust-clippy.yml for macOS formatting and clippy; conformance.yml for conformance/property/krun/CLI/borrow/quickcheck; context-snapshot.yml for cross-platform evidence collection; stability-gates.yml for docs/adapter/no-unwrap/handler coverage; protocol-drift.yml and protocol-sites.yml for protocol and construction-site drift; nightly.yml for scheduled audits and coverage check; promote.yml for branch promotion; release.yml and publish-mbx.yml for release and CLI publishing; summary.yml for issue summary automation. minibox::testing (behind the test-utils feature) provides mocks (MockRegistry, MockFilesystem, MockLimiter, MockRuntime, MockNetwork, MockExecRuntime, MockImagePusher, MockContainerCommitter, MockImageBuilder), fixtures (ContainerFixture, ImageFixture, BuildContextFixture, PushTargetFixture, UpperDirFixture), helpers (create_test_deps_with_dir, GC helpers, daemon helpers), and backend descriptors (BackendCapability, BackendDescriptor) for conformance. minibox-core::adapters (behind test-utils) provides mocks.rs as the canonical cross-platform mock adapters, which minibox::testing::mocks re-exports; test_fixtures.rs shared fixtures; conformance.rs the conformance harness.",
+      "raw_content": "96 integration test files (~1,060 annotations). ~1,228 inline test annotations. Total >2,200 source-level test annotations. Integration tests cover minibox (56 files), minibox-core (10), miniboxd (13), mbx (3), macbox (5). Conformance suite backend-agnostic. 19 security regression tests. ~46 proptest property tests. 15 e2e daemon+CLI tests (Linux+root). 16 cgroup integration tests. Nextest-based test runner. cargo xtask test unit, test property, prepush gates.",
       "chunks": [
         {
-          "id": "fde57cb1-13ab-4050-b893-c0bfd8238232",
+          "id": "09b5433b-fa71-4b6c-b69c-9e84ed7de7d7",
           "doc_id": "test_infrastructure_mbx",
-          "text": "96 integration test files under crates/*/tests/ with roughly 1,060 annotations, plus roughly 1,228 inline #[cfg(test)] annotations in src/, totaling more than 2,200 source annotations. Sandbox tests (about 17) and CLI subprocess tests (30) are not tested in any CI workflow. CI workflows include ci.yml, pr.yml, merge.yml for main gates; macos.yml and rust-clippy.yml for macOS formatting and clippy; conformance.yml for conformance/property/krun/CLI/borrow/quickcheck; context-snapshot.yml for cross-platform evidence collection; stability-gates.yml for docs/adapter/no-unwrap/handler coverage; protocol-drift.yml and protocol-sites.yml for protocol and construction-site drift; nightly.yml for scheduled audits and coverage check; promote.yml for branch promotion; release.yml and publish-mbx.yml for release and CLI publishing; summary.yml for issue summary automation. minibox::testing (behind the test-utils feature) provides mocks (MockRegistry, MockFilesystem, MockLimiter, MockRuntime, MockNe",
+          "text": "96 integration test files (~1,060 annotations). ~1,228 inline test annotations. Total >2,200 source-level test annotations. Integration tests cover minibox (56 files), minibox-core (10), miniboxd (13), mbx (3), macbox (5). Conformance suite backend-agnostic. 19 security regression tests. ~46 proptest property tests. 15 e2e daemon+CLI tests (Linux+root). 16 cgroup integration tests. Nextest-based test runner. cargo xtask test unit, test property, prepush gates.",
           "offset": 0
-        },
+        }
+      ]
+    },
+    {
+      "id": "xtask_cli",
+      "title": "XTASK_CLI.mbx.md",
+      "source": "/Users/joe/dev/minibox/docs/core/XTASK_CLI.mbx.md",
+      "raw_content": "---",
+      "chunks": [
         {
-          "id": "293fab67-dbf1-434c-ad5d-60c726441864",
-          "doc_id": "test_infrastructure_mbx",
-          "text": "or release and CLI publishing; summary.yml for issue summary automation. minibox::testing (behind the test-utils feature) provides mocks (MockRegistry, MockFilesystem, MockLimiter, MockRuntime, MockNetwork, MockExecRuntime, MockImagePusher, MockContainerCommitter, MockImageBuilder), fixtures (ContainerFixture, ImageFixture, BuildContextFixture, PushTargetFixture, UpperDirFixture), helpers (create_test_deps_with_dir, GC helpers, daemon helpers), and backend descriptors (BackendCapability, BackendDescriptor) for conformance. minibox-core::adapters (behind test-utils) provides mocks.rs as the canonical cross-platform mock adapters, which minibox::testing::mocks re-exports; test_fixtures.rs shared fixtures; conformance.rs the conformance harness.",
-          "offset": 800
+          "id": "fee02868-aff3-41aa-ab06-1739427e276f",
+          "doc_id": "xtask_cli",
+          "text": "---",
+          "offset": 0
         }
       ]
     },
@@ -306,25 +410,13 @@
       "id": "xtask_cli_mbx",
       "title": "XTASK_CLI.mbx.md",
       "source": "/Users/joe/dev/minibox/docs/core/XTASK_CLI.mbx.md",
-      "raw_content": "cargo xtask test unit runs workspace --lib tests plus the minibox-testsuite zero-test guard. cargo xtask test conformance runs the commit+build+push conformance suite plus reports. cargo xtask check protocol-drift verifies core contract hashes against xtask/protocol-drift.lock; --update writes new hashes instead of comparing; --hook reads a Claude Code PostToolUse hook JSON payload from stdin. cargo xtask check protocol-sites verifies HandlerDependencies construction-site count, default file crates/miniboxd/src/main.rs, default expected 4. cargo xtask docs audit audits docs/core/ facts against code; --full also rewrites the tracked xtask/docs-audit-report.json. cargo xtask info context emits the evidence-ledger context snapshot v3, replacing snapshot v2's ambiguous summary fields; top-level sections are identity, environment, workspace, adapters, tests, context_map, evidence, diagnostics. cargo xtask verify runs fmt check, workspace check, targeted clippy, architecture guard, borrow fixtures, docs lint, and quick docs audit; does not mutate files. cargo xtask pre-commit always runs targeted clippy and the architecture guard; with staged Rust, also runs cargo fmt --all and re-stages tracked .rs changes; no release build or conformance. cargo xtask prepush, if Rust is in the push range, starts with musl-check, then release build (miniboxd, minibox-core, minibox-cli, minibox, minibox-macros), release library nextest, and conformance; SKIP_PHASE_2=1 only skips conformance locally. cargo xtask musl-check cross-builds miniboxd and minibox-cli for x86_64-unknown-linux-musl. cargo xtask promote cascade-merges one stability tier into the next (develop -> staging -> release -> main); --skip-ci-check bypasses the source-branch status gate. cargo xtask bump bumps the workspace version; optionally promotes release fragments into the changelog with --changelog.",
+      "raw_content": "cargo xtask command reference. xtask verify: fmt check, clippy, architecture rings, borrow fixtures. xtask prepush: release build, nextest, conformance. xtask test unit/property: cross-platform tests. xtask demo: showcase binary. xtask ci-watch: monitor GHA runs. xtask promote: branch cascade develop→staging→release→main.",
       "chunks": [
         {
-          "id": "f56a8eec-3f34-4c0d-a25e-7155962fbc42",
+          "id": "ea876d7e-610b-4395-932e-e8243ecc3cd8",
           "doc_id": "xtask_cli_mbx",
-          "text": "cargo xtask test unit runs workspace --lib tests plus the minibox-testsuite zero-test guard. cargo xtask test conformance runs the commit+build+push conformance suite plus reports. cargo xtask check protocol-drift verifies core contract hashes against xtask/protocol-drift.lock; --update writes new hashes instead of comparing; --hook reads a Claude Code PostToolUse hook JSON payload from stdin. cargo xtask check protocol-sites verifies HandlerDependencies construction-site count, default file crates/miniboxd/src/main.rs, default expected 4. cargo xtask docs audit audits docs/core/ facts against code; --full also rewrites the tracked xtask/docs-audit-report.json. cargo xtask info context emits the evidence-ledger context snapshot v3, replacing snapshot v2's ambiguous summary fields; top-level sections are identity, environment, workspace, adapters, tests, context_map, evidence, diagnostics. cargo xtask verify runs fmt check, workspace check, targeted clippy, architecture guard, borrow fi",
+          "text": "cargo xtask command reference. xtask verify: fmt check, clippy, architecture rings, borrow fixtures. xtask prepush: release build, nextest, conformance. xtask test unit/property: cross-platform tests. xtask demo: showcase binary. xtask ci-watch: monitor GHA runs. xtask promote: branch cascade develop→staging→release→main.",
           "offset": 0
-        },
-        {
-          "id": "e6b256f7-d145-421f-b297-f433509da186",
-          "doc_id": "xtask_cli_mbx",
-          "text": "l sections are identity, environment, workspace, adapters, tests, context_map, evidence, diagnostics. cargo xtask verify runs fmt check, workspace check, targeted clippy, architecture guard, borrow fixtures, docs lint, and quick docs audit; does not mutate files. cargo xtask pre-commit always runs targeted clippy and the architecture guard; with staged Rust, also runs cargo fmt --all and re-stages tracked .rs changes; no release build or conformance. cargo xtask prepush, if Rust is in the push range, starts with musl-check, then release build (miniboxd, minibox-core, minibox-cli, minibox, minibox-macros), release library nextest, and conformance; SKIP_PHASE_2=1 only skips conformance locally. cargo xtask musl-check cross-builds miniboxd and minibox-cli for x86_64-unknown-linux-musl. cargo xtask promote cascade-merges one stability tier into the next (develop -> staging -> release -> main); --skip-ci-check bypasses the source-branch status gate. cargo xtask bump bumps the workspace vers",
-          "offset": 800
-        },
-        {
-          "id": "61fb8aa3-6d47-4817-9faa-a140f23ad64b",
-          "doc_id": "xtask_cli_mbx",
-          "text": "xtask promote cascade-merges one stability tier into the next (develop -> staging -> release -> main); --skip-ci-check bypasses the source-branch status gate. cargo xtask bump bumps the workspace version; optionally promotes release fragments into the changelog with --changelog.",
-          "offset": 1600
         }
       ]
     }

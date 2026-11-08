@@ -1,8 +1,9 @@
 # Design: VZ EFI Boot Path
 
-**Status**: proposal, not approved. The Phase 0 gate has been **executed and passed** (cell D;
-see "Result" below), which selects Phase 1 as the implementation path. Phase 1 itself is not
-approved or started.
+**Status**: implemented. Phase 0 gate has been **executed and passed** (cell D; see
+"Result" below), which selected Phase 1 as the implementation path. Phase 1 (T1-T5) has
+landed and the adapter boots a guest through `VZEFIBootLoader` on macOS 26.x. Updated
+2026-11-06 to record the as-built state and the docs/maturity follow-ups (T6).
 
 **Supersedes**: the closing "or minibox switches to `VZEFIBootLoader` ... out of scope for
 this design" note in `docs/designs/2026-08-15-vz-adapter-revival-design.md`.

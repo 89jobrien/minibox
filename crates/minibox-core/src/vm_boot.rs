@@ -50,7 +50,7 @@ pub const GUEST_MODULES: &[&str] = &[
 #[must_use]
 pub fn kernel_cmdline() -> String {
     format!(
-        "console=hvc0 root={ROOTFS_TAG} rootfstype=virtiofs rw quiet modules={}",
+        "console=hvc0 root={ROOTFS_TAG} rootfstype=virtiofs rw loglevel=8 modules={}",
         GUEST_MODULES.join(",")
     )
 }

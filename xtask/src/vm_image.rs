@@ -463,30 +463,42 @@ pub struct EspFilePlan {
     pub data: Vec<u8>,
 }
 
-/// Write a FAT32 image containing `files`, with deterministic metadata.
+/// Write a GPT-partitioned disk image with one EFI System Partition (FAT32) containing
+/// `files`, with deterministic metadata.
+///
+/// The whole disk is built in an in-memory buffer (GPT structures + FAT32 formatting + file
+/// content) and persisted to `dest` via a temp file + atomic rename, never by truncating
+/// `dest` in place. Root cause, confirmed 2026-11-07: `VZDiskImageStorageDeviceAttachment`
+/// permanently rejected one specific inode (`VZErrorDomain code=2: storage device
+/// attachment is invalid`) after an earlier failed attach attempt against it, regardless of
+/// subsequent content, GPT-partitioning, or materialization changes written into that same
+/// inode via `File::create(dest)` (which truncates in place, reusing the inode). A `dd`
+/// byte-copy to a fresh path — and simply deleting `dest` and letting it be recreated —
+/// both produce a new inode and always passed. Writing to a temp path and `fs::rename`-ing
+/// into place guarantees a fresh inode on every build. See
+/// `.ctx/godmode/BLOCKED-vz-pivot-root-einval.md` ("NEW BLOCKER (2026-11-07)").
 pub fn build_fat_image(
     dest: &Path,
     size_bytes: u64,
     files: &[EspFilePlan],
 ) -> Result<Vec<EspFile>> {
-    {
-        let file = File::create(dest).with_context(|| format!("creating {}", dest.display()))?;
-        file.set_len(size_bytes)
-            .with_context(|| format!("sizing {}", dest.display()))?;
-    }
-    let mut file = File::options()
-        .read(true)
-        .write(true)
-        .open(dest)
-        .with_context(|| format!("reopening {}", dest.display()))?;
+    let mut buffer =
+        vec![0u8; usize::try_from(size_bytes).context("size_bytes too large for this host")?];
+    let window = crate::gpt::write_protective_gpt(&mut buffer, size_bytes)
+        .context("writing protective MBR + GPT")?;
+
+    let start = usize::try_from(window.offset).context("partition offset too large")?;
+    let len = usize::try_from(window.len).context("partition length too large")?;
+    let mut partition = std::io::Cursor::new(&mut buffer[start..start + len]);
+
     let options = FormatVolumeOptions::new()
         .fat_type(FatType::Fat32)
         .volume_id(ESP_VOLUME_ID)
         .volume_label(ESP_VOLUME_LABEL);
-    fatfs::format_volume(&mut file, options).context("formatting FAT32 ESP")?;
+    fatfs::format_volume(&mut partition, options).context("formatting FAT32 ESP")?;
 
     let esp_files = {
-        let fs = FileSystem::new(&file, FsOptions::new()).context("opening FAT32 ESP")?;
+        let fs = FileSystem::new(&mut partition, FsOptions::new()).context("opening FAT32 ESP")?;
         let mut esp_files = Vec::new();
         {
             let root = fs.root_dir();
@@ -527,6 +539,37 @@ pub fn build_fat_image(
         fs.unmount().context("unmounting FAT32 ESP")?;
         esp_files
     };
+
+    // Write to a fresh temp file and rename into place rather than `File::create(dest)`
+    // directly: truncating an existing `dest` in place reuses its inode, and
+    // `VZDiskImageStorageDeviceAttachment` was observed to permanently reject a specific
+    // inode after an earlier failed attach attempt against it — independent of the file's
+    // content, size, or GPT/materialization state. A fresh inode every build avoids this
+    // entirely. See `.ctx/godmode/BLOCKED-vz-pivot-root-einval.md` ("NEW BLOCKER
+    // (2026-11-07)").
+    let parent = dest
+        .parent()
+        .context("destination has no parent directory")?;
+    let temp_path = parent.join(format!(
+        ".{}.tmp-{}",
+        dest.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("boot.img"),
+        std::process::id()
+    ));
+    {
+        let mut temp_file = File::create(&temp_path)
+            .with_context(|| format!("creating {}", temp_path.display()))?;
+        temp_file
+            .write_all(&buffer)
+            .with_context(|| format!("writing {}", temp_path.display()))?;
+        temp_file
+            .sync_all()
+            .with_context(|| format!("syncing {}", temp_path.display()))?;
+    }
+    fs::rename(&temp_path, dest)
+        .with_context(|| format!("renaming {} to {}", temp_path.display(), dest.display()))?;
+
     Ok(esp_files)
 }
 
@@ -1283,8 +1326,12 @@ mod tests {
             data: b"menuentry".to_vec(),
         }];
         build_fat_image(&path, 4 * 1024 * 1024, &files).unwrap();
-        let file = File::open(&path).unwrap();
-        let fs = FileSystem::new(file, FsOptions::new()).unwrap();
+        let mut buffer = fs::read(&path).unwrap();
+        let window = crate::gpt::partition_window(4 * 1024 * 1024).unwrap();
+        let start = usize::try_from(window.offset).unwrap();
+        let len = usize::try_from(window.len).unwrap();
+        let partition = std::io::Cursor::new(&mut buffer[start..start + len]);
+        let fs = FileSystem::new(partition, FsOptions::new()).unwrap();
         let mut read = String::new();
         fs.root_dir()
             .open_dir("boot")

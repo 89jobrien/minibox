@@ -357,21 +357,24 @@ marked _(Linux/root)_ require a Linux host with root privileges.
 
 ### Testing
 
-| Task                              | Command                         | When to use                             |
-| --------------------------------- | ------------------------------- | --------------------------------------- |
-| Unit library tests                | `cargo xtask test unit`         | Any platform; no root required          |
-| Property-based tests              | `cargo xtask test property`     | Any platform; proptest suite            |
-| Borrow-reasoning fixtures         | `cargo xtask borrow-fixtures`   | Standalone rustc must-pass/must-fail    |
-| Protocol e2e tests                | `cargo xtask test e2e`          | Any platform; no root required          |
-| Cgroup integration tests          | `just test-integration`         | Linux + root; cgroup v2                 |
-| Full-stack system tests           | `cargo xtask test system-suite` | Linux + root; daemon + CLI              |
-| Sandbox contract tests            | `cargo xtask test sandbox`      | Linux + root; requires Docker Hub       |
-| Adapter isolation tests           | `just test-adapters`            | Any platform                            |
-| CLI subprocess tests              | `just test-cli-subprocess`      | Any platform; builds mbx first          |
-| Linux dogfood (build + run in VM) | `cargo xtask test-linux`        | macOS + smolvm; runs suite in container |
-| Full pipeline                     | `just test-all`                 | Linux + root; nuke → all tests → nuke   |
-| Remote VPS e2e                    | `just test-e2e-vps`             | Runs test-system-suite on VPS over SSH  |
-| HTML coverage report              | `just coverage`                 | Any platform; opens target/llvm-cov/    |
+| Task                              | Command                         | When to use                                               |
+| --------------------------------- | ------------------------------- | --------------------------------------------------------- |
+| Unit library tests                | `cargo xtask test unit`         | Any platform; no root required                            |
+| Property-based tests              | `cargo xtask test property`     | Any platform; proptest suite                              |
+| Borrow-reasoning fixtures         | `cargo xtask borrow-fixtures`   | Standalone rustc must-pass/must-fail                      |
+| Protocol e2e tests                | `cargo xtask test e2e`          | Any platform; no root required                            |
+| Cgroup integration tests          | `just test-integration`         | Linux + root; cgroup v2                                   |
+| Full-stack system tests           | `cargo xtask test system-suite` | Linux + root; daemon + CLI                                |
+| Sandbox contract tests            | `cargo xtask test sandbox`      | Linux + root; requires Docker Hub                         |
+| Adapter isolation tests           | `just test-adapters`            | Any platform                                              |
+| CLI subprocess tests              | `just test-cli-subprocess`      | Any platform; builds mbx first                            |
+| Linux dogfood (build + run in VM) | `cargo xtask test-linux`        | macOS + smolvm; runs suite in container                   |
+| macOS vz EFI boot image           | `cargo xtask build-vm-image`    | macOS; builds the ESP + provisioned rootfs/agent for `vz` |
+| vz daemon entitlement signing     | `just sign-vz`                  | macOS; ad-hoc signs miniboxd for Virtualization.framework |
+| macOS vz isolation tests          | `just test-vz-isolation`        | macOS; signed probe/test binaries, boots a real VM        |
+| Full pipeline                     | `just test-all`                 | Linux + root; nuke → all tests → nuke                     |
+| Remote VPS e2e                    | `just test-e2e-vps`             | Runs test-system-suite on VPS over SSH                    |
+| HTML coverage report              | `just coverage`                 | Any platform; opens target/llvm-cov/                      |
 
 ### Codebase Integrity Checks
 

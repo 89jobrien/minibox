@@ -9,6 +9,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- VZ EFI boot: `xtask vm-image` now writes a GPT-partitioned EFI System Partition (`xtask/src/gpt.rs` protective MBR + primary/backup GPT headers) built in an in-memory buffer and persisted via a temp file + atomic rename, instead of formatting FAT32 directly onto a truncated `dest` file. `VZDiskImageStorageDeviceAttachment` was observed to permanently reject a specific inode after an earlier failed attach attempt against it, regardless of subsequent content or partitioning changes written into that same inode; writing to a fresh temp path and renaming into place guarantees a new inode on every build.
+- QEMU Linux test init script now brings the loopback interface up before running tests, fixing `ENETUNREACH` failures in wiremock-based HTTP tests (e.g. GHCR) that bind/connect on `127.0.0.1`.
+- Kernel cmdline now passes `loglevel=8` instead of `quiet` to surface guest boot output during VZ EFI boot debugging.
+
 ### Added
 
 - `mbx doctor` is now a built-in runtime health check. It no longer shells out to

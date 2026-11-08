@@ -1,4 +1,10 @@
 ---
+title: mbx-ARCHITECTURE
+doctype: ARCHITECTURE
+project: mbx
+status: active
+created: 2026-05-06
+updated: 2026-11-06
 source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - Cargo.toml
@@ -40,6 +46,8 @@ generated: 2026-09-16
 > `minibox-cni` and `minibox-tui`).
 > Updated 2026-08-26: extracted the pure `minibox-domain` dependency ring and
 > added an enforced domain -> core -> runtime dependency direction.
+> Updated 2026-11-06: vz adapter moved to experimental — booted end-to-end via a
+> pinned EFI disk image (see `docs/designs/2026-10-22-vz-efi-boot-design.md`).
 
 ## Workspace Overview
 
