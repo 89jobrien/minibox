@@ -1,6 +1,6 @@
 # Minibox-in-Minibox (DinD) Analysis
 
-Last updated: 2026-10-02
+Last updated: 2026-11-08
 guest run)
 
 ---
@@ -171,20 +171,22 @@ cannot pull an image.
 never reads it; it appears only in two test fixtures. This is unimplemented,
 not misconfigured.
 
-### P2 — `native_network_provider` undefined
+### P2 — RESOLVED: `native_network_provider` claim was stale
 
-`crates/miniboxd/src/main.rs:1501,1516` call `native_network_provider` under
-`#[cfg(target_os = "linux")]`, but the function is not defined anywhere in the
-workspace. miniboxd's binary unit tests therefore fail to compile on Linux:
+This note previously claimed `crates/miniboxd/src/main.rs:1501,1516` called an
+undefined `native_network_provider` function, blocking Linux test compilation.
+Verified 2026-11-08: no such symbol exists anywhere in the workspace, and the
+cited line numbers no longer match `main.rs`'s current content — the real
+function is `resolve_native_network()` (main.rs:956). That claim was already
+stale.
 
-```
-error[E0425]: cannot find function `native_network_provider` in this scope
-```
-
-macOS skips those tests via cfg, so a macOS-only dev loop never sees it. It
-blocks `cargo test --no-run -p miniboxd --target aarch64-unknown-linux-musl`,
-which is the command `test-in-vm` runs, so cross-compiling the suite for Linux
-currently fails outright.
+The actual, currently-reproducible Linux-only compile break (found via a real
+`cargo zigbuild --target x86_64-unknown-linux-musl -p miniboxd --tests` run)
+was `error[E0063]: missing field 'dind' in initializer of 'RunParams'` at
+`crates/miniboxd/tests/integration_tests.rs:67` — the `RunParams` struct
+literal predated the `dind` field added for DinD support and was never
+recompiled on macOS since the test module is `#![cfg(target_os = "linux")]`.
+Fixed by adding `dind: false,` to the literal (t523).
 
 ### P3 — Port forwarding
 
