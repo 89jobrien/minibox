@@ -5,7 +5,6 @@ project: mbx
 status: active
 created: 2026-05-02
 updated: 2026-11-06
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
 sources:
   - crates/minibox-core/src/image/layer.rs
   - crates/minibox/src/container/process.rs
@@ -29,7 +28,7 @@ security-critical invariant has been broken.
 
 Reference commits: `8ea4f73` (tar extraction safety), `2fc7036` (symlink rewrite + setuid strip).
 
-Last updated: 2026-11-07
+Last updated: 2026-11-08
 
 ---
 

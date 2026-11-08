@@ -1,5 +1,4 @@
 ---
-source_sha: f9aa9a79348227ca3c517fe7ea86b3bc6eb16829
 status: proposed
 sources:
   - docs/designs/2026-09-12-guaranteed-security-profiles-design.md

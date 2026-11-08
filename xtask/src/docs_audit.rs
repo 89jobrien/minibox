@@ -25,7 +25,7 @@ struct AuditReport {
     timestamp: String,
     quick_checks: Vec<FactResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    freshness: Vec<FreshnessResult>,
+    freshness: Vec<StaleDoc>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     coverage_gaps: Vec<CoverageGap>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,14 +40,6 @@ struct FactResult {
     doc_value: String,
     file: String,
     line: usize,
-}
-
-#[derive(Debug, Serialize)]
-struct FreshnessResult {
-    doc: String,
-    last_modified: String,
-    code_commits_since: usize,
-    status: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -301,142 +293,330 @@ fn compare_facts(code: &BTreeMap<String, String>, docs: &[DocFact]) -> Vec<FactR
     results
 }
 
-// ── Freshness (full mode only) ───────────────────────────────────────────
+// ── Staleness: derived-from-git, hard-failing ────────────────────────────
 
-fn check_freshness(sh: &Shell, root: &Path) -> Result<Vec<FreshnessResult>> {
-    let docs_dir = root.join("docs/core");
-    let mut results = Vec::new();
+/// Paths exempt from staleness collection: point-in-time decision records,
+/// not living reference docs expected to track current code.
+pub const FRESHNESS_EXEMPT_PREFIXES: [&str; 2] = ["docs/designs/", "docs/plans/"];
 
-    if !docs_dir.is_dir() {
-        return Ok(results);
-    }
+/// Cap on how many commits `substantive_last_change` walks before giving up
+/// and reporting [`StaleReason::IndeterminateHistory`] rather than guessing.
+pub const MAX_SUBSTANTIVE_WALK: usize = 50;
 
-    for entry in std::fs::read_dir(&docs_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.extension().is_none_or(|e| e != "md") {
-            continue;
-        }
-        let filename = entry.file_name().to_string_lossy().to_string();
-
-        // Read watches from YAML frontmatter
-        let content = std::fs::read_to_string(&path)?;
-        let watches = parse_watches(&content);
-        if watches.is_empty() {
-            continue;
-        }
-
-        // Get doc last-modified date
-        let doc_rel = format!("docs/core/{filename}");
-        let last_modified = cmd!(sh, "git log -1 --format=%aI -- {doc_rel}")
-            .read()
-            .unwrap_or_default();
-
-        if last_modified.is_empty() {
-            continue;
-        }
-
-        // Count commits touching watched paths since doc was modified
-        let date_arg = format!("--since={last_modified}");
-        let mut total_commits = 0usize;
-        for watch_glob in &watches {
-            let count_str = cmd!(sh, "git log --oneline {date_arg} -- {watch_glob}")
-                .read()
-                .unwrap_or_default();
-            total_commits += count_str.lines().filter(|l| !l.is_empty()).count();
-        }
-
-        let status = if total_commits > 15 {
-            "stale"
-        } else if total_commits > 5 {
-            "aging"
-        } else {
-            "fresh"
-        };
-
-        // Truncate ISO date to YYYY-MM-DD
-        let date_short = last_modified
-            .split('T')
-            .next()
-            .unwrap_or(&last_modified)
-            .to_string();
-
-        results.push(FreshnessResult {
-            doc: filename,
-            last_modified: date_short,
-            code_commits_since: total_commits,
-            status: status.to_string(),
-        });
-    }
-
-    Ok(results)
+/// True if `rel` falls under a [`FRESHNESS_EXEMPT_PREFIXES`] prefix.
+pub fn is_exempt_path(rel: &str) -> bool {
+    FRESHNESS_EXEMPT_PREFIXES
+        .iter()
+        .any(|prefix| rel.starts_with(prefix))
 }
 
-/// Run the freshness check and fail if any watched doc is `stale`.
-///
-/// Unlike [`check_freshness`], which is informational in `--full` mode, this
-/// is a hard gate: suitable for wiring into `cargo xtask verify` so stale
-/// docs block the gate rather than just being reported.
-pub fn enforce_staleness(sh: &Shell, root: &Path) -> Result<()> {
-    let freshness = check_freshness(sh, root)?;
-    let stale: Vec<&FreshnessResult> = freshness.iter().filter(|f| f.status == "stale").collect();
+/// Git queries the staleness rule depends on, injectable so the
+/// substantive-change walk is testable without a repository on disk.
+pub trait GitHistory {
+    fn is_shallow_repository(&self) -> Result<bool>;
+    fn last_change(&self, path: &str) -> Result<Option<String>>;
+    fn commit_subject(&self, sha: &str) -> Result<String>;
+    fn is_ancestor(&self, ancestor: &str, descendant: &str) -> Result<bool>;
+    fn commits_touching(&self, path: &str) -> Result<Vec<String>>;
+    fn commit_changed_lines(&self, sha: &str, path: &str) -> Result<Vec<String>>;
+}
 
-    if stale.is_empty() {
+/// [`GitHistory`] backed by real `git` invocations via `xshell`.
+pub struct ShellGitHistory {
+    pub sh: Shell,
+}
+
+impl GitHistory for ShellGitHistory {
+    fn is_shallow_repository(&self) -> Result<bool> {
+        let out = cmd!(self.sh, "git rev-parse --is-shallow-repository")
+            .read()
+            .context("git rev-parse --is-shallow-repository failed")?;
+        Ok(out.trim() == "true")
+    }
+
+    fn last_change(&self, path: &str) -> Result<Option<String>> {
+        let out = cmd!(self.sh, "git log -1 --format=%H -- {path}")
+            .read()
+            .unwrap_or_default();
+        let sha = out.trim();
+        Ok(if sha.is_empty() {
+            None
+        } else {
+            Some(sha.to_string())
+        })
+    }
+
+    fn commit_subject(&self, sha: &str) -> Result<String> {
+        let out = cmd!(self.sh, "git log -1 --format=%s {sha}")
+            .read()
+            .with_context(|| format!("git log failed for {sha}"))?;
+        Ok(out.trim().to_string())
+    }
+
+    fn is_ancestor(&self, ancestor: &str, descendant: &str) -> Result<bool> {
+        let output = cmd!(
+            self.sh,
+            "git merge-base --is-ancestor {ancestor} {descendant}"
+        )
+        .ignore_status()
+        .output()
+        .with_context(|| format!("git merge-base --is-ancestor {ancestor} {descendant}"))?;
+        Ok(output.status.success())
+    }
+
+    fn commits_touching(&self, path: &str) -> Result<Vec<String>> {
+        let out = cmd!(self.sh, "git log --format=%H -- {path}")
+            .read()
+            .unwrap_or_default();
+        Ok(out
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect())
+    }
+
+    fn commit_changed_lines(&self, sha: &str, path: &str) -> Result<Vec<String>> {
+        let out = cmd!(self.sh, "git show {sha} -U0 -- {path}")
+            .read()
+            .with_context(|| format!("git show {sha} -- {path} failed"))?;
+        let mut lines = Vec::new();
+        for line in out.lines() {
+            let Some(body) = line.strip_prefix('+').or_else(|| line.strip_prefix('-')) else {
+                continue;
+            };
+            // A leading "++"/"--" is a file header, not content.
+            if body.starts_with('+') || body.starts_with('-') {
+                continue;
+            }
+            lines.push(body.to_string());
+        }
+        Ok(lines)
+    }
+}
+
+/// Why a doc was reported stale.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StaleReason {
+    /// A declared source has a commit after the doc's last substantive change.
+    SourceChangedAfterDoc,
+    /// A declared source path does not exist in the working tree.
+    SourcePathMissing,
+    /// A declared source path exists but has no commits.
+    SourceUntracked,
+    /// The doc's history is exhausted by stamp-only commits, or the walk
+    /// exceeded [`MAX_SUBSTANTIVE_WALK`] before a substantive commit was found.
+    IndeterminateHistory,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StaleSource {
+    pub path: String,
+    pub last_change: String,
+    pub last_change_subject: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StaleDoc {
+    pub doc: String,
+    pub reason: StaleReason,
+    pub sources: Vec<StaleSource>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct StalenessReport {
+    pub checked_docs: usize,
+    pub exempt_docs: usize,
+    pub untracked_docs: usize,
+    pub stale: Vec<StaleDoc>,
+}
+
+/// Walk `doc_rel`'s commit history newest-first, skipping commits whose
+/// changed lines are entirely stamp lines (see
+/// [`crate::feature_matrix_date::is_stamp_line`]), capped at
+/// [`MAX_SUBSTANTIVE_WALK`]. Returns `None` if the walk is exhausted or
+/// capped before a substantive commit is found.
+fn substantive_last_change(history: &dyn GitHistory, doc_rel: &str) -> Result<Option<String>> {
+    let commits = history.commits_touching(doc_rel)?;
+    for sha in commits.iter().take(MAX_SUBSTANTIVE_WALK) {
+        let changed = history.commit_changed_lines(sha, doc_rel)?;
+        if !changed.is_empty()
+            && changed
+                .iter()
+                .any(|l| !crate::feature_matrix_date::is_stamp_line(l))
+        {
+            return Ok(Some(sha.clone()));
+        }
+    }
+    Ok(None)
+}
+
+/// Recursively collect every `.md` file under `dir`.
+fn collect_markdown_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    let entries = std::fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_markdown_files(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "md") {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Derived-from-git staleness: a doc is stale when a declared source has
+/// changed (per [`substantive_last_change`]) after the doc's own last
+/// substantive change.
+pub fn check_staleness(sh: &Shell, root: &Path) -> Result<StalenessReport> {
+    let history = ShellGitHistory { sh: sh.clone() };
+    check_staleness_with(&history, root)
+}
+
+fn check_staleness_with(history: &dyn GitHistory, root: &Path) -> Result<StalenessReport> {
+    if history.is_shallow_repository()? {
+        bail!(
+            "docs-audit: repository is a shallow clone; staleness requires full history \
+             (fetch-depth: 0)"
+        );
+    }
+
+    let docs_dir = root.join("docs");
+    let mut md_files = Vec::new();
+    if docs_dir.is_dir() {
+        collect_markdown_files(&docs_dir, &mut md_files)?;
+    }
+
+    let mut checked_docs = 0usize;
+    let mut exempt_docs = 0usize;
+    let mut untracked_docs = 0usize;
+    let mut stale = Vec::new();
+
+    for path in md_files {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+
+        let content = std::fs::read_to_string(&path)?;
+        let Some(fm) = crate::frontmatter::frontmatter_block(&content) else {
+            continue;
+        };
+
+        // Shape (provenance contract) is checked regardless of exemption:
+        // a design/plan doc may be exempt from staleness, but it still must
+        // not carry the deleted source_sha scalar or a malformed
+        // regenerated_from entry.
+        let violations = crate::frontmatter::validate_provenance_contract(fm, &rel);
+        if !violations.is_empty() {
+            bail!("docs-audit: provenance contract violation(s) in {rel}: {violations:?}");
+        }
+
+        if is_exempt_path(&rel) {
+            exempt_docs += 1;
+            continue;
+        }
+
+        let sources = crate::frontmatter::frontmatter_list(fm, "sources");
+        if sources.is_empty() {
+            continue;
+        }
+
+        if history.commits_touching(&rel)?.is_empty() {
+            untracked_docs += 1;
+            continue;
+        }
+
+        checked_docs += 1;
+
+        let Some(doc_sha) = substantive_last_change(history, &rel)? else {
+            stale.push(StaleDoc {
+                doc: rel,
+                reason: StaleReason::IndeterminateHistory,
+                sources: Vec::new(),
+            });
+            continue;
+        };
+
+        let mut stale_sources = Vec::new();
+        let mut doc_level_reason = None;
+        for source in &sources {
+            if !root.join(source).exists() {
+                doc_level_reason = Some(StaleReason::SourcePathMissing);
+                break;
+            }
+            let Some(src_sha) = history.last_change(source)? else {
+                doc_level_reason = Some(StaleReason::SourceUntracked);
+                break;
+            };
+            if src_sha != doc_sha && history.is_ancestor(&doc_sha, &src_sha)? {
+                stale_sources.push(StaleSource {
+                    path: source.clone(),
+                    last_change: src_sha.clone(),
+                    last_change_subject: history.commit_subject(&src_sha)?,
+                });
+            }
+        }
+
+        if let Some(reason) = doc_level_reason {
+            stale.push(StaleDoc {
+                doc: rel,
+                reason,
+                sources: Vec::new(),
+            });
+        } else if !stale_sources.is_empty() {
+            stale.push(StaleDoc {
+                doc: rel,
+                reason: StaleReason::SourceChangedAfterDoc,
+                sources: stale_sources,
+            });
+        }
+    }
+
+    Ok(StalenessReport {
+        checked_docs,
+        exempt_docs,
+        untracked_docs,
+        stale,
+    })
+}
+
+/// Run the derived staleness check and fail if any doc is stale.
+///
+/// Suitable for wiring into `cargo xtask verify` so stale docs block the
+/// gate rather than just being reported.
+pub fn enforce_staleness(sh: &Shell, root: &Path) -> Result<()> {
+    let report = check_staleness(sh, root)?;
+
+    if report.stale.is_empty() {
         return Ok(());
     }
 
-    let details: Vec<String> = stale
+    let details: Vec<String> = report
+        .stale
         .iter()
-        .map(|f| {
-            format!(
-                "  {} (last modified {}, {} commits since)",
-                f.doc, f.last_modified, f.code_commits_since
-            )
+        .map(|d| {
+            if d.sources.is_empty() {
+                format!("  {} ({:?})", d.doc, d.reason)
+            } else {
+                let sources = d
+                    .sources
+                    .iter()
+                    .map(|s| format!("{} ({})", s.path, s.last_change_subject))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("  {} ({:?}): {}", d.doc, d.reason, sources)
+            }
         })
         .collect();
     bail!(
         "docs-audit: {} doc(s) stale:\n{}",
-        stale.len(),
+        report.stale.len(),
         details.join("\n")
     );
-}
-
-/// Parse `watches:` list from YAML frontmatter.
-fn parse_watches(content: &str) -> Vec<String> {
-    let mut watches = Vec::new();
-    let mut in_frontmatter = false;
-    let mut in_watches = false;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed == "---" {
-            if in_frontmatter {
-                break; // End of frontmatter
-            }
-            in_frontmatter = true;
-            continue;
-        }
-        if !in_frontmatter {
-            continue;
-        }
-
-        if trimmed.starts_with("watches:") {
-            in_watches = true;
-            continue;
-        }
-
-        if in_watches {
-            if trimmed.starts_with("- ") {
-                let val = trimmed.trim_start_matches("- ").trim();
-                watches.push(val.to_string());
-            } else if !trimmed.is_empty() {
-                // Another YAML key — done with watches
-                break;
-            }
-        }
-    }
-
-    watches
 }
 
 // ── Coverage gaps (full mode only) ───────────────────────────────────────
@@ -589,17 +769,9 @@ pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
         }
         Mode::Full => {
             eprintln!("--- docs-audit: freshness ---");
-            let freshness = check_freshness(sh, root)?;
-            for f in &freshness {
-                if f.status != "fresh" {
-                    eprintln!(
-                        "docs-audit: {} {} (last modified {}, {} commits since)",
-                        f.status.to_uppercase(),
-                        f.doc,
-                        f.last_modified,
-                        f.code_commits_since
-                    );
-                }
+            let staleness = check_staleness(sh, root)?;
+            for d in &staleness.stale {
+                eprintln!("docs-audit: STALE {} ({:?})", d.doc, d.reason);
             }
 
             eprintln!("--- docs-audit: coverage ---");
@@ -613,15 +785,16 @@ pub fn run(sh: &Shell, root: &Path, mode: Mode) -> Result<()> {
                 );
             }
 
-            let stale_count = freshness.iter().filter(|f| f.status == "stale").count();
-            let aging_count = freshness.iter().filter(|f| f.status == "aging").count();
             eprintln!(
-                "docs-audit (full): {} mismatches, {} stale, {} aging, {} gaps",
+                "docs-audit (full): {} mismatches, {} checked, {} stale, {} exempt, {} untracked, {} gaps",
                 mismatches,
-                stale_count,
-                aging_count,
+                staleness.checked_docs,
+                staleness.stale.len(),
+                staleness.exempt_docs,
+                staleness.untracked_docs,
                 coverage_gaps.len()
             );
+            let freshness = staleness.stale;
 
             // Write JSON report
             let report = AuditReport {
@@ -717,27 +890,182 @@ required_in_ci = true
         assert!(first.contains("docs/core/FEATURE_MATRIX.mbx.md"), "{first}");
     }
 
-    #[test]
-    fn enforce_staleness_passes_when_no_docs_core_dir() {
-        let temp = tempfile::tempdir().expect("temporary root should be created");
-        let sh = Shell::new().expect("shell should be created");
-        enforce_staleness(&sh, temp.path())
-            .expect("no docs/core dir means nothing to check, so it should pass");
+    #[derive(Default)]
+    struct FakeGitHistory {
+        shallow: bool,
+        commits_touching: BTreeMap<String, Vec<String>>,
+        changed_lines: BTreeMap<String, Vec<String>>,
+        last_change: BTreeMap<String, String>,
+        subjects: BTreeMap<String, String>,
+        ancestors: BTreeSet<(String, String)>,
+    }
+
+    impl GitHistory for FakeGitHistory {
+        fn is_shallow_repository(&self) -> Result<bool> {
+            Ok(self.shallow)
+        }
+        fn last_change(&self, path: &str) -> Result<Option<String>> {
+            Ok(self.last_change.get(path).cloned())
+        }
+        fn commit_subject(&self, sha: &str) -> Result<String> {
+            Ok(self.subjects.get(sha).cloned().unwrap_or_default())
+        }
+        fn is_ancestor(&self, ancestor: &str, descendant: &str) -> Result<bool> {
+            Ok(self
+                .ancestors
+                .contains(&(ancestor.to_string(), descendant.to_string())))
+        }
+        fn commits_touching(&self, path: &str) -> Result<Vec<String>> {
+            Ok(self.commits_touching.get(path).cloned().unwrap_or_default())
+        }
+        fn commit_changed_lines(&self, sha: &str, _path: &str) -> Result<Vec<String>> {
+            Ok(self.changed_lines.get(sha).cloned().unwrap_or_default())
+        }
     }
 
     #[test]
-    fn enforce_staleness_passes_when_docs_have_no_watches() {
-        let temp = tempfile::tempdir().expect("temporary root should be created");
-        std::fs::create_dir_all(temp.path().join("docs/core"))
-            .expect("docs/core fixture should be created");
+    fn substantive_change_skips_stamp_only_commit() {
+        let mut fake = FakeGitHistory::default();
+        fake.commits_touching
+            .insert("doc.md".into(), vec!["c2".into(), "c1".into()]);
+        fake.changed_lines
+            .insert("c2".into(), vec!["Last updated: 2026-01-01".into()]);
+        fake.changed_lines
+            .insert("c1".into(), vec!["some real content".into()]);
+
+        let result = substantive_last_change(&fake, "doc.md").expect("walk should succeed");
+        assert_eq!(result, Some("c1".to_string()));
+    }
+
+    #[test]
+    fn substantive_change_indeterminate_when_history_is_stamp_only() {
+        let mut fake = FakeGitHistory::default();
+        fake.commits_touching
+            .insert("doc.md".into(), vec!["c1".into()]);
+        fake.changed_lines
+            .insert("c1".into(), vec!["Last updated: 2026-01-01".into()]);
+
+        let result = substantive_last_change(&fake, "doc.md").expect("walk should succeed");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn check_staleness_errors_on_shallow_repo() {
+        let fake = FakeGitHistory {
+            shallow: true,
+            ..Default::default()
+        };
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        let err = check_staleness_with(&fake, temp.path())
+            .expect_err("shallow repository should refuse rather than report a false pass");
+        assert!(err.to_string().contains("shallow"));
+    }
+
+    #[test]
+    fn check_staleness_skips_docs_without_sources() {
+        let fake = FakeGitHistory::default();
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        std::fs::create_dir_all(temp.path().join("docs/core")).expect("fixture dir");
         std::fs::write(
             temp.path().join("docs/core/ARCHITECTURE.mbx.md"),
-            "---\nstatus: active\n---\n# No watches\n",
+            "---\nstatus: active\n---\n# No sources\n",
         )
-        .expect("doc fixture should be written");
-        let sh = Shell::new().expect("shell should be created");
-        enforce_staleness(&sh, temp.path())
-            .expect("docs without a watches: list are skipped by freshness, so should pass");
+        .expect("fixture doc");
+
+        let report = check_staleness_with(&fake, temp.path()).expect("check should succeed");
+        assert_eq!(report.checked_docs, 0);
+        assert!(report.stale.is_empty());
+    }
+
+    #[test]
+    fn check_staleness_skips_exempt_design_docs() {
+        let fake = FakeGitHistory::default();
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        std::fs::create_dir_all(temp.path().join("docs/designs")).expect("fixture dir");
+        std::fs::write(
+            temp.path()
+                .join("docs/designs/2026-01-01-example-design.md"),
+            "---\nstatus: proposed\nsources:\n  - xtask/src/docs_audit.rs\n---\n# Design\n",
+        )
+        .expect("fixture doc");
+
+        let report = check_staleness_with(&fake, temp.path()).expect("check should succeed");
+        assert_eq!(report.exempt_docs, 1);
+        assert_eq!(report.checked_docs, 0);
+        assert!(report.stale.is_empty());
+    }
+
+    #[test]
+    fn check_staleness_reports_source_changed_after_doc() {
+        let mut fake = FakeGitHistory::default();
+        fake.commits_touching
+            .insert("docs/core/ARCHITECTURE.mbx.md".into(), vec!["doc1".into()]);
+        fake.changed_lines
+            .insert("doc1".into(), vec!["real doc content".into()]);
+        fake.last_change
+            .insert("xtask/src/docs_audit.rs".into(), "src2".into());
+        fake.subjects
+            .insert("src2".into(), "feat: change the audited behavior".into());
+        fake.ancestors.insert(("doc1".into(), "src2".into()));
+
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        std::fs::create_dir_all(temp.path().join("docs/core")).expect("fixture dir");
+        std::fs::create_dir_all(temp.path().join("xtask/src")).expect("fixture dir");
+        std::fs::write(
+            temp.path().join("docs/core/ARCHITECTURE.mbx.md"),
+            "---\nstatus: active\nsources:\n  - xtask/src/docs_audit.rs\n---\n# Doc\n",
+        )
+        .expect("fixture doc");
+        std::fs::write(temp.path().join("xtask/src/docs_audit.rs"), "// src").expect("fixture");
+
+        let report = check_staleness_with(&fake, temp.path()).expect("check should succeed");
+        assert_eq!(report.checked_docs, 1);
+        assert_eq!(report.stale.len(), 1);
+        assert!(matches!(
+            report.stale[0].reason,
+            StaleReason::SourceChangedAfterDoc
+        ));
+        assert_eq!(report.stale[0].sources[0].path, "xtask/src/docs_audit.rs");
+    }
+
+    #[test]
+    fn check_staleness_reports_source_path_missing() {
+        let mut fake = FakeGitHistory::default();
+        fake.commits_touching
+            .insert("docs/core/ARCHITECTURE.mbx.md".into(), vec!["doc1".into()]);
+        fake.changed_lines
+            .insert("doc1".into(), vec!["real doc content".into()]);
+
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        std::fs::create_dir_all(temp.path().join("docs/core")).expect("fixture dir");
+        std::fs::write(
+            temp.path().join("docs/core/ARCHITECTURE.mbx.md"),
+            "---\nstatus: active\nsources:\n  - xtask/src/nonexistent.rs\n---\n# Doc\n",
+        )
+        .expect("fixture doc");
+
+        let report = check_staleness_with(&fake, temp.path()).expect("check should succeed");
+        assert_eq!(report.stale.len(), 1);
+        assert!(matches!(
+            report.stale[0].reason,
+            StaleReason::SourcePathMissing
+        ));
+    }
+
+    #[test]
+    fn check_staleness_rejects_legacy_source_sha() {
+        let fake = FakeGitHistory::default();
+        let temp = tempfile::tempdir().expect("temp dir should be created");
+        std::fs::create_dir_all(temp.path().join("docs/core")).expect("fixture dir");
+        std::fs::write(
+            temp.path().join("docs/core/ARCHITECTURE.mbx.md"),
+            "---\nstatus: active\nsources:\n  - xtask/src/docs_audit.rs\nsource_sha: deadbeef\n---\n# Doc\n",
+        )
+        .expect("fixture doc");
+
+        let err = check_staleness_with(&fake, temp.path())
+            .expect_err("a returned legacy source_sha scalar should fail the check");
+        assert!(err.to_string().contains("LegacySourceSha"));
     }
 
     #[test]

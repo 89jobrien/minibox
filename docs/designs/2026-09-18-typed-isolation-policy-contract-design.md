@@ -1,5 +1,4 @@
 ---
-source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 status: superseded
 superseded_by: docs/designs/2026-09-18-environment-attested-isolation-design.md
 sources:

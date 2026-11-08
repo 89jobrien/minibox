@@ -44,7 +44,6 @@ frontmatter naming the commit it was derived from:
 
 ```yaml
 ---
-source_sha: 4add60894f29527483dd1200aae362faad78f589
 sources:
   - crates/minibox-core/src/protocol.rs
   - crates/minibox/src/daemon/handler/

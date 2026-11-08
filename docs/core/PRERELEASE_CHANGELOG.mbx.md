@@ -5,7 +5,6 @@ project: mbx
 status: active
 created: 2026-06-13
 updated: 2026-11-06
-source_sha: 2c75b559ca42931c63a10f60e2ef227777ed2245
 sources:
   - CHANGELOG.md
 generated: 2026-08-22

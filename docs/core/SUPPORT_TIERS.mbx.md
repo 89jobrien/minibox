@@ -5,7 +5,6 @@ project: mbx
 status: active
 created: 2026-06-13
 updated: 2026-11-06
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
 sources:
   - crates/minibox-core
   - crates/minibox-domain
@@ -26,7 +25,7 @@ generated: 2026-09-16
 
 Formal support-tier definitions for minibox crates and adapters.
 
-Last updated: 2026-11-07
+Last updated: 2026-11-08
 
 See also: `docs/core/STABILITY_CHECKLIST.mbx.md` (mandatory gate list), `docs/core/FEATURE_MATRIX.mbx.md`
 (per-adapter capability breakdown), `docs/core/CRATE_TIERS.mbx.md` (architectural layer

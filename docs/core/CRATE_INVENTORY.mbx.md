@@ -5,7 +5,6 @@ project: mbx
 status: active
 created: 2026-05-06
 updated: 2026-11-06
-source_sha: 583d795681594db0435e7fbc4d196e19edfef358
 sources:
   - Cargo.toml
   - crates/minibox-domain

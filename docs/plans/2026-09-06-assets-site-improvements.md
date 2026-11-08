@@ -1,5 +1,4 @@
 ---
-source_sha: 98cfc0e94b126624f7c86c89e8edc86444ab63c4
 sources:
   - .gitignore
   - docs/core/ARCHITECTURE.mbx.md

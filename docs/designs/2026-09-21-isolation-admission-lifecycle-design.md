@@ -1,5 +1,4 @@
 ---
-source_sha: f9aa9a79348227ca3c517fe7ea86b3bc6eb16829
 status: proposed
 sources:
   - crates/minibox-domain/src/runtime.rs

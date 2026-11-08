@@ -5,7 +5,6 @@ project: mbx
 status: active
 created: 2026-06-13
 updated: 2026-11-06
-source_sha: f5481a9482fbb04690db6b7a52ee8eca9c5fe5e9
 sources:
   - crates/minibox/src/daemon/handler
   - crates/minibox/src/adapters/network/bridge.rs
@@ -26,7 +25,7 @@ generated: 2026-09-16
 
 # Minibox Roadmap
 
-Last updated: 2026-11-07
+Last updated: 2026-11-08
 
 ## Engineering Priorities
 

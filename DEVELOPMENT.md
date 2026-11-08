@@ -1,5 +1,4 @@
 ---
-source_sha: a72281f338bd3ea9b790b77145de108c97281f20
 sources:
   - xtask/src/main.rs
   - Justfile
