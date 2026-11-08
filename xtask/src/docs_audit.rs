@@ -372,6 +372,35 @@ fn check_freshness(sh: &Shell, root: &Path) -> Result<Vec<FreshnessResult>> {
     Ok(results)
 }
 
+/// Run the freshness check and fail if any watched doc is `stale`.
+///
+/// Unlike [`check_freshness`], which is informational in `--full` mode, this
+/// is a hard gate: suitable for wiring into `cargo xtask verify` so stale
+/// docs block the gate rather than just being reported.
+pub fn enforce_staleness(sh: &Shell, root: &Path) -> Result<()> {
+    let freshness = check_freshness(sh, root)?;
+    let stale: Vec<&FreshnessResult> = freshness.iter().filter(|f| f.status == "stale").collect();
+
+    if stale.is_empty() {
+        return Ok(());
+    }
+
+    let details: Vec<String> = stale
+        .iter()
+        .map(|f| {
+            format!(
+                "  {} (last modified {}, {} commits since)",
+                f.doc, f.last_modified, f.code_commits_since
+            )
+        })
+        .collect();
+    bail!(
+        "docs-audit: {} doc(s) stale:\n{}",
+        stale.len(),
+        details.join("\n")
+    );
+}
+
 /// Parse `watches:` list from YAML frontmatter.
 fn parse_watches(content: &str) -> Vec<String> {
     let mut watches = Vec::new();
@@ -686,6 +715,29 @@ required_in_ci = true
         assert_eq!(first, second);
         assert!(first.contains("xtask/context.toml"), "{first}");
         assert!(first.contains("docs/core/FEATURE_MATRIX.mbx.md"), "{first}");
+    }
+
+    #[test]
+    fn enforce_staleness_passes_when_no_docs_core_dir() {
+        let temp = tempfile::tempdir().expect("temporary root should be created");
+        let sh = Shell::new().expect("shell should be created");
+        enforce_staleness(&sh, temp.path())
+            .expect("no docs/core dir means nothing to check, so it should pass");
+    }
+
+    #[test]
+    fn enforce_staleness_passes_when_docs_have_no_watches() {
+        let temp = tempfile::tempdir().expect("temporary root should be created");
+        std::fs::create_dir_all(temp.path().join("docs/core"))
+            .expect("docs/core fixture should be created");
+        std::fs::write(
+            temp.path().join("docs/core/ARCHITECTURE.mbx.md"),
+            "---\nstatus: active\n---\n# No watches\n",
+        )
+        .expect("doc fixture should be written");
+        let sh = Shell::new().expect("shell should be created");
+        enforce_staleness(&sh, temp.path())
+            .expect("docs without a watches: list are skipped by freshness, so should pass");
     }
 
     #[test]

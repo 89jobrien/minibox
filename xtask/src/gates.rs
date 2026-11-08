@@ -193,6 +193,9 @@ pub fn verify(sh: &Shell, root: &Path) -> Result<()> {
         eprintln!("--- verify: docs audit (quick) ---");
         docs_audit::run(&sh, &root, docs_audit::Mode::Quick { strict: false })?;
 
+        eprintln!("--- verify: docs staleness ---");
+        docs_audit::enforce_staleness(&sh, &root)?;
+
         eprintln!("verify gate passed");
         Ok(())
     })
