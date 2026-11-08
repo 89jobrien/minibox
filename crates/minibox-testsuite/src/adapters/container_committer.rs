@@ -23,6 +23,7 @@ const fn commit_config() -> CommitConfig {
         message: None,
         env_overrides: vec![],
         cmd_override: None,
+        include_volumes: false,
     }
 }
 

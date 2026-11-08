@@ -141,6 +141,9 @@ pub struct ImageMetadata {
     pub tag: String,
     /// List of layers in bottom-to-top order.
     pub layers: Vec<LayerInfo>,
+    /// Non-fatal warnings generated while committing (e.g. excluded volume
+    /// data). Empty when nothing was excluded.
+    pub warnings: Vec<String>,
 }
 
 /// Information about a single image layer.
@@ -228,6 +231,9 @@ pub struct CommitConfig {
     pub env_overrides: Vec<String>,
     /// Optional replacement image command.
     pub cmd_override: Option<Vec<String>>,
+    /// When true, keep declared-volume data in the committed image instead
+    /// of excluding it by default.
+    pub include_volumes: bool,
 }
 
 /// Port for snapshotting a container's filesystem diff into a new image.

@@ -206,6 +206,7 @@ impl ImageRegistry for MockRegistry {
                     size: 2048,
                 },
             ],
+            warnings: Vec::new(),
         })
     }
 
@@ -1323,6 +1324,7 @@ impl ContainerCommitter for MockContainerCommitter {
                     .to_string(),
                 size: 1024,
             }],
+            warnings: Vec::new(),
         })
     }
 }
@@ -1405,6 +1407,7 @@ impl ImageBuilder for MockImageBuilder {
                     .to_string(),
                 size: 2048,
             }],
+            warnings: Vec::new(),
         })
     }
 }

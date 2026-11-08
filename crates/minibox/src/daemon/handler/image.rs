@@ -324,6 +324,7 @@ pub async fn handle_commit(
     message: Option<String>,
     env_overrides: Vec<String>,
     cmd_override: Option<Vec<String>>,
+    include_volumes: bool,
     _state: Arc<DaemonState>,
     deps: Arc<HandlerDependencies>,
     tx: mpsc::Sender<DaemonResponse>,
@@ -356,6 +357,7 @@ pub async fn handle_commit(
         message,
         env_overrides,
         cmd_override,
+        include_volumes,
     };
 
     match committer.commit(&cid, &target_image, &config).await {
@@ -375,13 +377,15 @@ pub async fn handle_commit(
                 start.elapsed().as_secs_f64(),
                 &[("op", "commit"), ("adapter", "daemon")],
             );
+            let mut lines = meta.warnings.clone();
+            lines.push(format!(
+                "committed {} digest:{}",
+                target_image,
+                meta.layers.first().map_or("unknown", |l| l.digest.as_str())
+            ));
             let _ = tx
                 .send(DaemonResponse::Success {
-                    message: format!(
-                        "committed {} digest:{}",
-                        target_image,
-                        meta.layers.first().map_or("unknown", |l| l.digest.as_str())
-                    ),
+                    message: lines.join("\n"),
                 })
                 .await;
         }

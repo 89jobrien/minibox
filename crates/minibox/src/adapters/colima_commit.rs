@@ -219,6 +219,9 @@ fn import_docker_archive(
         name: name.to_string(),
         tag: tag.to_string(),
         layers: layer_infos,
+        // Volume masking (#452/#522) is not ported to the Colima path yet;
+        // tracked separately by #520.
+        warnings: Vec::new(),
     })
 }
 
@@ -292,6 +295,7 @@ mod tests {
             message: Some("test-message".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         }
     }
 

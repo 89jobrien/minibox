@@ -227,6 +227,7 @@ mod tests {
                     name: "test".to_string(),
                     tag: "latest".to_string(),
                     layers: vec![],
+                    warnings: Vec::new(),
                 })
             }
 

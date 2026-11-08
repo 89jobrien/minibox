@@ -463,6 +463,7 @@ impl ImageRegistry for GhcrRegistry {
             name: store_key,
             tag: tag.to_owned(),
             layers: layer_infos,
+            warnings: Vec::new(),
         })
     }
 

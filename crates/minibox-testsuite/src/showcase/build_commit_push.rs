@@ -192,6 +192,7 @@ impl BuildCommitPush {
             message: Some("showcase build_commit_push scenario".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
 
         match committer
@@ -244,6 +245,7 @@ impl BuildCommitPush {
             message: Some("showcase push test".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
         commit_upper_dir_to_image(
             Arc::clone(&image_store),

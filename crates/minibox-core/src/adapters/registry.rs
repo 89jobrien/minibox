@@ -172,6 +172,7 @@ impl ImageRegistry for DockerHubRegistry {
             name: store_name,
             tag: tag.clone(),
             layers,
+            warnings: Vec::new(),
         })
     }
 

@@ -148,6 +148,7 @@ fn default_commit_config() -> CommitConfig {
         message: Some("conformance commit".to_string()),
         env_overrides: vec![],
         cmd_override: None,
+        include_volumes: false,
     }
 }
 

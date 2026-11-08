@@ -14,6 +14,7 @@ use minibox_core::domain::{
 use minibox_core::image::ImageStore;
 use minibox_core::image::manifest::{Descriptor, OciManifest};
 use minibox_core::image::reference::ImageRef;
+use minibox_core::image::volume::{parse_volume_paths, path_is_volume_masked};
 use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -85,10 +86,11 @@ fn commit_merged_rootfs_with_base(
     let _manifest = image_store
         .load_manifest_pub(&name, &tag)
         .with_context(|| format!("load source manifest {name}:{tag}"))?;
-    let mut config: Value = match image_store.load_config_blob_pub(&name, &tag) {
-        Ok(bytes) => serde_json::from_slice(&bytes)
+    let config_bytes = image_store.load_config_blob_pub(&name, &tag).ok();
+    let mut config: Value = match &config_bytes {
+        Some(bytes) => serde_json::from_slice(bytes)
             .with_context(|| format!("parse source config {name}:{tag}"))?,
-        Err(_) => json!({
+        None => json!({
             "architecture": match std::env::consts::ARCH {
                 "aarch64" => "arm64",
                 "x86_64" => "amd64",
@@ -98,13 +100,33 @@ fn commit_merged_rootfs_with_base(
             "config": {}
         }),
     };
+    let declared_volumes = match &config_bytes {
+        Some(bytes) => {
+            parse_volume_paths(bytes).context("parse declared volumes from source image config")?
+        }
+        None => Vec::new(),
+    };
     apply_commit_config(&mut config, commit_config)?;
-    commit_layer_stack_to_image(
-        image_store,
-        &[LayerInput::existing(merged_rootfs.to_path_buf())],
-        target_ref,
-        config,
-    )
+
+    let exclude = if commit_config.include_volumes {
+        Vec::new()
+    } else {
+        declared_volumes.clone()
+    };
+    let layer = if exclude.is_empty() {
+        LayerInput::existing(merged_rootfs.to_path_buf())
+    } else {
+        LayerInput::existing_excluding(merged_rootfs.to_path_buf(), exclude)
+    };
+
+    let mut metadata = commit_layer_stack_to_image(image_store, &[layer], target_ref, config)?;
+    if !commit_config.include_volumes {
+        metadata.warnings = declared_volumes
+            .iter()
+            .map(|volume| format!("warning: image VOLUME {} contains data", volume.display()))
+            .collect();
+    }
+    Ok(metadata)
 }
 
 fn apply_commit_config(config: &mut Value, commit_config: &CommitConfig) -> Result<()> {
@@ -182,15 +204,28 @@ pub fn commit_upper_dir_to_image(
 #[derive(Debug, Clone)]
 pub(crate) struct LayerInput {
     pub(crate) directory: PathBuf,
+    /// Layer-relative paths to skip while materializing (declared-volume masking).
+    pub(crate) exclude: Vec<PathBuf>,
 }
 
 impl LayerInput {
     pub(crate) const fn generated(directory: PathBuf) -> Self {
-        Self { directory }
+        Self {
+            directory,
+            exclude: Vec::new(),
+        }
     }
 
     pub(crate) const fn existing(directory: PathBuf) -> Self {
-        Self { directory }
+        Self {
+            directory,
+            exclude: Vec::new(),
+        }
+    }
+
+    /// An existing layer with declared-volume paths masked out during materialization.
+    pub(crate) const fn existing_excluding(directory: PathBuf, exclude: Vec<PathBuf>) -> Self {
+        Self { directory, exclude }
     }
 }
 
@@ -242,6 +277,7 @@ pub(crate) fn commit_layer_stack_to_image(
             digest: descriptor.digest,
             size: descriptor.size,
         }],
+        warnings: Vec::new(),
     })
 }
 
@@ -315,12 +351,17 @@ pub(crate) fn materialize_layer_directories(
     std::fs::create_dir_all(destination)
         .with_context(|| format!("create materialized rootfs {}", destination.display()))?;
     for layer in layers {
-        apply_layer_directory(&layer.directory, destination)?;
+        apply_layer_directory(&layer.directory, destination, Path::new(""), &layer.exclude)?;
     }
     Ok(())
 }
 
-fn apply_layer_directory(source: &Path, destination: &Path) -> Result<()> {
+fn apply_layer_directory(
+    source: &Path,
+    destination: &Path,
+    relative: &Path,
+    exclude: &[PathBuf],
+) -> Result<()> {
     let destination_metadata = std::fs::symlink_metadata(destination)
         .with_context(|| format!("inspect materialization root {}", destination.display()))?;
     if destination_metadata.file_type().is_symlink() || !destination_metadata.is_dir() {
@@ -344,6 +385,11 @@ fn apply_layer_directory(source: &Path, destination: &Path) -> Result<()> {
             continue;
         }
 
+        let entry_relative = relative.join(&name);
+        if !exclude.is_empty() && path_is_volume_masked(&entry_relative, exclude) {
+            continue;
+        }
+
         let source_path = entry.path();
         let target = destination.join(&name);
         let metadata = std::fs::symlink_metadata(&source_path)
@@ -356,7 +402,7 @@ fn apply_layer_directory(source: &Path, destination: &Path) -> Result<()> {
             }
             std::fs::create_dir_all(&target)
                 .with_context(|| format!("create merged directory {}", target.display()))?;
-            apply_layer_directory(&source_path, &target)?;
+            apply_layer_directory(&source_path, &target, &entry_relative, exclude)?;
             std::fs::set_permissions(&target, metadata.permissions())?;
             preserve_ownership(&target, &metadata)?;
         } else {
@@ -548,6 +594,7 @@ mod tests {
                 message: None,
                 env_overrides: vec![],
                 cmd_override: None,
+                include_volumes: false,
             },
         )
         .expect("commit");
@@ -586,6 +633,7 @@ mod tests {
             message: None,
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
 
         let meta1 =
@@ -658,6 +706,7 @@ mod tests {
                 message: Some("commit".to_string()),
                 env_overrides: vec!["BASE=2".to_string(), "NEW=1".to_string()],
                 cmd_override: Some(vec!["run".to_string()]),
+                include_volumes: false,
             },
         )
         .expect("commit with base");
@@ -720,5 +769,133 @@ mod tests {
             "new"
         );
         assert!(!layers[0].join(".wh.removed.txt").exists());
+    }
+
+    /// Regression test for #452/#522: `VOLUME /data` declared on the source
+    /// image must be excluded from the committed layer by default, with a
+    /// warning naming the excluded path.
+    #[test]
+    fn masked_volume_data_is_detected_and_excluded() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let store = Arc::new(ImageStore::new(temp.path().join("images")).expect("create store"));
+        store
+            .store_config_blob(
+                "library/base",
+                "latest",
+                br#"{"architecture":"amd64","os":"linux","config":{"Volumes":{"/data":{}}}}"#,
+            )
+            .expect("store base config");
+        store
+            .store_manifest(
+                "library/base",
+                "latest",
+                &OciManifest {
+                    schema_version: 2,
+                    media_type: "application/vnd.oci.image.manifest.v1+json".to_string(),
+                    config: Descriptor {
+                        media_type: "application/vnd.oci.image.config.v1+json".to_string(),
+                        size: 0,
+                        digest: "sha256:config".to_string(),
+                        platform: None,
+                    },
+                    layers: vec![],
+                },
+            )
+            .expect("store base manifest");
+
+        let merged = temp.path().join("merged");
+        std::fs::create_dir_all(merged.join("data")).expect("create volume dir");
+        std::fs::write(merged.join("data/state.db"), "volume data").expect("write volume file");
+        std::fs::write(merged.join("app.txt"), "app data").expect("write non-volume file");
+
+        let meta = commit_merged_rootfs_with_base(
+            Arc::clone(&store),
+            &merged,
+            "base:latest",
+            "committed:masked",
+            &CommitConfig {
+                author: None,
+                message: None,
+                env_overrides: vec![],
+                cmd_override: None,
+                include_volumes: false,
+            },
+        )
+        .expect("commit excluding volumes");
+
+        assert_eq!(
+            meta.warnings,
+            vec!["warning: image VOLUME /data contains data"]
+        );
+        let layers = store
+            .get_image_layers("committed", "masked")
+            .expect("load committed layers");
+        assert!(
+            !layers[0].join("data").exists(),
+            "volume data must be excluded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(layers[0].join("app.txt")).expect("read non-volume file"),
+            "app data"
+        );
+    }
+
+    /// `--include-volumes` must disable exclusion and keep declared-volume data.
+    #[test]
+    fn include_volumes_keeps_declared_volume_data() {
+        let temp = tempfile::TempDir::new().expect("create temp dir");
+        let store = Arc::new(ImageStore::new(temp.path().join("images")).expect("create store"));
+        store
+            .store_config_blob(
+                "library/base",
+                "latest",
+                br#"{"architecture":"amd64","os":"linux","config":{"Volumes":{"/data":{}}}}"#,
+            )
+            .expect("store base config");
+        store
+            .store_manifest(
+                "library/base",
+                "latest",
+                &OciManifest {
+                    schema_version: 2,
+                    media_type: "application/vnd.oci.image.manifest.v1+json".to_string(),
+                    config: Descriptor {
+                        media_type: "application/vnd.oci.image.config.v1+json".to_string(),
+                        size: 0,
+                        digest: "sha256:config".to_string(),
+                        platform: None,
+                    },
+                    layers: vec![],
+                },
+            )
+            .expect("store base manifest");
+
+        let merged = temp.path().join("merged");
+        std::fs::create_dir_all(merged.join("data")).expect("create volume dir");
+        std::fs::write(merged.join("data/state.db"), "volume data").expect("write volume file");
+
+        let meta = commit_merged_rootfs_with_base(
+            Arc::clone(&store),
+            &merged,
+            "base:latest",
+            "committed:kept",
+            &CommitConfig {
+                author: None,
+                message: None,
+                env_overrides: vec![],
+                cmd_override: None,
+                include_volumes: true,
+            },
+        )
+        .expect("commit including volumes");
+
+        assert!(meta.warnings.is_empty(), "no warning when volumes are kept");
+        let layers = store
+            .get_image_layers("committed", "kept")
+            .expect("load committed layers");
+        assert_eq!(
+            std::fs::read_to_string(layers[0].join("data/state.db")).expect("read volume file"),
+            "volume data"
+        );
     }
 }

@@ -220,6 +220,7 @@ async fn push_image_returns_digest() -> Result<()> {
         message: Some("conformance push test".to_string()),
         env_overrides: vec![],
         cmd_override: None,
+        include_volumes: false,
     };
     commit_upper_dir_to_image(
         Arc::clone(&store),
@@ -294,6 +295,7 @@ async fn push_image_tag_visible_after_push() -> Result<()> {
         message: Some("conformance tag test".to_string()),
         env_overrides: vec![],
         cmd_override: None,
+        include_volumes: false,
     };
     commit_upper_dir_to_image(
         Arc::clone(&store),

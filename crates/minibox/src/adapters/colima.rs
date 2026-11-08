@@ -365,6 +365,7 @@ impl ImageRegistry for ColimaRegistry {
             name: cache_name,
             tag,
             layers,
+            warnings: Vec::new(),
         })
     }
 

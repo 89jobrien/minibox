@@ -210,6 +210,7 @@ async fn test_handle_commit_no_adapter_returns_error() {
         None, // message
         vec![],
         None, // cmd_override
+        false,
         state,
         deps,
         tx,

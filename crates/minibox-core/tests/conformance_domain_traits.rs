@@ -574,6 +574,7 @@ fn conformance_image_metadata_construction_and_fields() {
                 size: 10485760,
             },
         ],
+        warnings: Vec::new(),
     };
 
     assert_eq!(metadata.name, "library/alpine");

@@ -726,6 +726,7 @@ mod commit_conformance {
             message: Some("commit test".to_string()),
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
         let meta = committer
             .commit(&container_id, "conformance-image:v1", &config)
@@ -771,6 +772,7 @@ mod commit_conformance {
             message: None,
             env_overrides: vec![],
             cmd_override: None,
+            include_volumes: false,
         };
 
         let meta_a = committer_a

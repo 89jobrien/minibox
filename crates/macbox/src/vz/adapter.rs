@@ -110,6 +110,7 @@ impl ImageRegistry for VzRegistry {
                 name: format!("{}/{}", image_ref.namespace, image_ref.name),
                 tag: image_ref.tag.clone(),
                 layers: vec![],
+                warnings: Vec::new(),
             }),
             DaemonResponse::Error { message } => bail!("vz: pull_image failed: {message}"),
             other => bail!("vz: unexpected response to Pull: {other:?}"),
