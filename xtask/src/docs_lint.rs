@@ -6,32 +6,36 @@ use std::path::Path;
 use crate::sarif::{self, Diagnostic, Level};
 
 /// Allowed values for the `status` frontmatter field in plans and specs.
-const ALLOWED_STATUSES: &[&str] = &["open", "done", "archived", "approved", "draft"];
+const ALLOWED_STATUSES: &[&str] = &[
+    "open",
+    "done",
+    "archived",
+    "approved",
+    "draft",
+    "active",
+    "proposed",
+    "superseded",
+    "partial",
+];
 
-/// Lint all Markdown files under `docs/superpowers/{plans,specs}/`.
+/// Lint all Markdown files under `docs/`.
 ///
 /// Checks:
 /// 1. If YAML frontmatter delimiters (`---`) are present, every non-blank line
-///    between them must be a valid `key: value` pair.
+///    between them must be a valid `key: value` pair or a YAML list item
+///    (a line starting with `-`).
 /// 2. If a `status` key exists, its value must be one of [`ALLOWED_STATUSES`].
 pub fn lint_docs(root: &Path, sarif_path: Option<&Path>) -> Result<()> {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     let mut checked = 0u32;
 
-    for subdir in &["plans", "specs"] {
-        let dir = root.join("docs/superpowers").join(subdir);
-        if !dir.is_dir() {
-            continue;
-        }
-        let entries =
-            std::fs::read_dir(&dir).with_context(|| format!("read_dir {}", dir.display()))?;
-        for entry in entries {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().is_some_and(|e| e == "md") {
-                checked += 1;
-                lint_file_diagnostics(&path, root, &mut diagnostics);
-            }
+    let dir = root.join("docs");
+    if dir.is_dir() {
+        let mut md_files = Vec::new();
+        collect_markdown_files(&dir, &mut md_files)?;
+        for path in md_files {
+            checked += 1;
+            lint_file_diagnostics(&path, root, &mut diagnostics);
         }
     }
 
@@ -61,6 +65,21 @@ pub fn lint_docs(root: &Path, sarif_path: Option<&Path>) -> Result<()> {
             .collect();
         bail!("docs-lint failed:\n{}", errors.join("\n"));
     }
+}
+
+/// Recursively collect every `.md` file under `dir`.
+fn collect_markdown_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    let entries = std::fs::read_dir(dir).with_context(|| format!("read_dir {}", dir.display()))?;
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_markdown_files(&path, out)?;
+        } else if path.extension().is_some_and(|e| e == "md") {
+            out.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn lint_file_diagnostics(path: &Path, root: &Path, diagnostics: &mut Vec<Diagnostic>) {
@@ -94,7 +113,7 @@ fn lint_file_diagnostics(path: &Path, root: &Path, diagnostics: &mut Vec<Diagnos
         if trimmed.is_empty() {
             continue;
         }
-        if !trimmed.contains(':') {
+        if !trimmed.starts_with('-') && !trimmed.contains(':') {
             diagnostics.push(Diagnostic {
                 rule_id: "docs-lint/malformed-frontmatter".into(),
                 level: Level::Error,
@@ -184,6 +203,18 @@ mod tests {
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("invalid status \"wip\""));
         assert_eq!(diags[0].rule_id, "docs-lint/invalid-status");
+    }
+
+    #[test]
+    fn list_line_accepted() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            "---\nstatus: done\ntags:\n  - alpha\n  - beta\n---\n# Doc\n",
+        )
+        .unwrap();
+        let diags = collect_diagnostics(tmp.path());
+        assert!(diags.is_empty());
     }
 
     #[test]
