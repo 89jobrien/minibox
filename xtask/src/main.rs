@@ -58,6 +58,7 @@ mod profile;
 mod promote;
 mod protocol_drift;
 mod protocol_sites;
+mod removal_audit;
 mod sarif;
 mod setup_test_vm;
 mod stale_names;
@@ -438,6 +439,7 @@ fn cmd_check(sh: &Shell, root: &std::path::Path, rest: &[String]) -> Result<()> 
         eprintln!("  adapter-coverage   verify each adapter has integration test files");
         eprintln!("  no-unwrap          scan production code for .unwrap() [--strict]");
         eprintln!("  repo-clean         warn if generated artifacts are tracked by git");
+        eprintln!("  removal-audit <name>   audit for residual references to a deleted component");
         Ok(())
     }
 }
@@ -471,6 +473,12 @@ fn dispatch_check(sh: &Shell, root: &std::path::Path, sub: &str, rest: &[String]
         "repo-clean" => {
             gates::check_repo_cleanliness(sh);
             Ok(())
+        }
+        "removal-audit" => {
+            let name = rest
+                .first()
+                .ok_or_else(|| anyhow::anyhow!("usage: cargo xtask check removal-audit <name>"))?;
+            removal_audit::run(root, name)
         }
         other => bail!("unknown check target: {other}"),
     }

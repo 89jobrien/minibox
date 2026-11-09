@@ -24,7 +24,7 @@ sources:
   - crates/minibox-cni
   - crates/minibox-tui
   - crates/minibox-signpost
-  - xtask
+  - xtask/Cargo.toml
 generated: 2026-09-16
 ---
 

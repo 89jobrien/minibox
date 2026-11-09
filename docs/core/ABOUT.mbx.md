@@ -22,7 +22,7 @@ sources:
   - crates/minibox-cni
   - crates/minibox-tui
   - crates/ail
-  - xtask
+  - xtask/Cargo.toml
 generated: 2026-09-16
 ---
 

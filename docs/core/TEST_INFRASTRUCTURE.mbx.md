@@ -22,7 +22,7 @@ sources:
   - crates/minibox-tui
   - crates/mcp
   - crates/ail
-  - xtask/src/main.rs
+  - xtask/schema/cli.schema.json
   - .github/workflows
 generated: 2026-09-16
 ---
@@ -154,6 +154,7 @@ workflows listed above. Handler function coverage is a `nightly.yml` job
 | `musl-check`            | release cross-build for Linux musl targets               |
 | `bench`                 | criterion benchmarks in crates/minibox-bench (8 targets) |
 | `check stale-names`     | audit workspace for banned old crate/binary names        |
+| `check removal-audit <name>` | residual-reference audit after deleting a crate/module/dependency |
 | `nuke-test-state`       | kill orphans, unmount overlays, clean cgroups            |
 
 ---

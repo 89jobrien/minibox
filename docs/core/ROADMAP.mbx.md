@@ -12,7 +12,6 @@ sources:
   - crates/minibox-core/src/image/dockerfile.rs
   - crates/minibox/src/adapters/docker_desktop.rs
   - Justfile
-  - xtask/src/main.rs
   - crates/minibox/src/daemon/telemetry
   - crates/mcp
   - crates/macbox/src/vz
@@ -25,7 +24,7 @@ generated: 2026-09-16
 
 # Minibox Roadmap
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ## Engineering Priorities
 

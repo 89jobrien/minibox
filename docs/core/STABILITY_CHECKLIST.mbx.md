@@ -7,7 +7,6 @@ created: 2026-06-13
 updated: 2026-11-06
 sources:
   - .github/workflows
-  - xtask/src/main.rs
   - CONTRIBUTING.md
 generated: 2026-09-16
 ---
@@ -18,7 +17,7 @@ Gates and review prompts for adding new Core or Platform crates, or promoting an
 crate. See `docs/core/SUPPORT_TIERS.mbx.md` for the full support-tier definitions and promotion
 criteria.
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ---
 
