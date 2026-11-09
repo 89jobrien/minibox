@@ -546,6 +546,7 @@ fn cmd_docs(sh: &Shell, root: &std::path::Path) -> Result<()> {
         eprintln!();
         eprintln!("Actions:");
         eprintln!("  audit [--full] [--strict]   audit docs/core/ facts vs code");
+        eprintln!("  audit --stale                print the derived staleness report as JSON");
         eprintln!("  lint [--sarif <path>]       validate frontmatter + status values");
         eprintln!("  update-date                 rewrite Last-updated stamp in FEATURE_MATRIX");
         eprintln!("  sync-adapters               regenerate manifest-backed adapter tables");
@@ -556,6 +557,11 @@ fn cmd_docs(sh: &Shell, root: &std::path::Path) -> Result<()> {
 fn dispatch_docs(sh: &Shell, root: &std::path::Path, sub: &str) -> Result<()> {
     match sub {
         "audit" => {
+            if env::args().any(|a| a == "--stale") {
+                let report = docs_audit::check_staleness(sh, root)?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                return Ok(());
+            }
             let strict = env::args().any(|a| a == "--strict");
             let full = env::args().any(|a| a == "--full");
             let mode = if full {

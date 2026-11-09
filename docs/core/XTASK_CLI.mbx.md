@@ -20,7 +20,7 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -86,8 +86,8 @@ Bare `cargo xtask docs` prints the action list.
 
 | Action | Flags | Notes |
 |---|---|---|
-| `audit` | `--full` `--strict` | Audit `docs/core/` facts against code. `--full` also rewrites the tracked `xtask/docs-audit-report.json`; `--strict` only affects Quick mode (the default when `--full` is absent). |
-| `lint` | `--sarif <path>` | Validate frontmatter + status values under the legacy `docs/superpowers/{plans,specs}/` paths. If those directories are absent, zero files are checked. |
+| `audit` | `--full` `--strict` `--stale` | Audit `docs/core/` facts against code. `--full` also rewrites the tracked `xtask/docs-audit-report.json`; `--strict` only affects Quick mode (the default when `--full` is absent). `--stale` prints the git-derived `StalenessReport` as JSON on stdout and takes precedence over `--full`/`--strict`. |
+| `lint` | `--sarif <path>` | Validate frontmatter + status values and the doc provenance contract (no `source_sha`, well-formed `regenerated_from`) for every `.md` file under `docs/` (recursive). |
 | `update-date` | — | Rewrite the Last-updated stamp in `FEATURE_MATRIX.mbx.md`. |
 | `sync-adapters` | — | Idempotently regenerate only the marked adapter-suite and capability blocks from `xtask/context.toml`. |
 
@@ -161,7 +161,7 @@ The v3 schema rejects the removed `crate_assignments`, `file_assignments`, and `
 
 | Command | Mutates files? | Description |
 |---|---|---|
-| `verify` | No | fmt check, workspace check, targeted clippy, architecture guard, borrow fixtures, docs lint, and quick docs audit. Checkpointed. |
+| `verify` | No | fmt check, workspace check, targeted clippy, architecture guard, borrow fixtures, docs lint, quick docs audit, and derived docs staleness (`enforce_staleness`, hard-fails on any stale doc). Checkpointed. |
 | `lint` | No | fmt check, targeted clippy (`minibox`, domain, macros, CLI, core, macbox, miniboxd, winbox, ail), workspace check, and architecture guard. Checkpointed. |
 | `fix` | **Yes** | `cargo fmt --all`, re-stage, version bump, `clippy --fix --allow-dirty --allow-staged`, re-stage again. Only runs the mutating steps if Rust files are currently staged. |
 | `pre-commit` | **Yes, conditionally** | Always runs targeted clippy and the architecture guard. With staged Rust, also runs `cargo fmt --all` and re-stages tracked `.rs` changes. Conditionally runs agentlint/actionlint; always lints docs, refreshes the FEATURE_MATRIX date, and warns on tracked generated artifacts. No release build or conformance. |

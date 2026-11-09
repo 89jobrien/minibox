@@ -3,6 +3,7 @@
 use anyhow::{Context, Result, bail};
 use std::path::Path;
 
+use crate::frontmatter::{self, ContractViolation};
 use crate::sarif::{self, Diagnostic, Level};
 
 /// Allowed values for the `status` frontmatter field in plans and specs.
@@ -104,7 +105,7 @@ fn lint_file_diagnostics(path: &Path, root: &Path, diagnostics: &mut Vec<Diagnos
         }
     };
 
-    let Some(fm) = extract_frontmatter(&content) else {
+    let Some(fm) = frontmatter::frontmatter_block(&content) else {
         return;
     };
 
@@ -128,7 +129,7 @@ fn lint_file_diagnostics(path: &Path, root: &Path, diagnostics: &mut Vec<Diagnos
         }
     }
 
-    if let Some(status) = frontmatter_value(fm, "status")
+    if let Some(status) = frontmatter::frontmatter_scalar(fm, "status")
         && !ALLOWED_STATUSES.contains(&status)
     {
         diagnostics.push(Diagnostic {
@@ -138,36 +139,33 @@ fn lint_file_diagnostics(path: &Path, root: &Path, diagnostics: &mut Vec<Diagnos
                 "invalid status \"{status}\" (allowed: {})",
                 ALLOWED_STATUSES.join(", ")
             ),
-            file: Some(relative),
+            file: Some(relative.clone()),
             line: None,
             column: None,
         });
     }
-}
 
-/// Extract the text between the opening and closing `---` delimiters.
-fn extract_frontmatter(content: &str) -> Option<&str> {
-    let trimmed = content.trim_start();
-    let rest = trimmed.strip_prefix("---")?;
-    let end = rest.find("\n---")?;
-    Some(&rest[..end])
-}
-
-/// Get the value for a key from simple `key: value` frontmatter.
-fn frontmatter_value<'a>(fm: &'a str, key: &str) -> Option<&'a str> {
-    for line in fm.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix(key) {
-            let rest = rest.trim_start();
-            if let Some(val) = rest.strip_prefix(':') {
-                let val = val.trim().trim_matches('"');
-                if !val.is_empty() {
-                    return Some(val);
-                }
+    for violation in frontmatter::validate_provenance_contract(fm, &relative) {
+        let message = match violation {
+            ContractViolation::LegacySourceSha => {
+                "frontmatter declares the deleted source_sha scalar".to_string()
             }
-        }
+            ContractViolation::UndeclaredRegeneratedSource { key } => {
+                format!("regenerated_from key \"{key}\" is not declared in sources")
+            }
+            ContractViolation::MalformedRegeneratedValue { key, value } => {
+                format!("regenerated_from value for \"{key}\" is not a 40-char hex sha: {value}")
+            }
+        };
+        diagnostics.push(Diagnostic {
+            rule_id: "docs-lint/provenance-contract".into(),
+            level: Level::Error,
+            message,
+            file: Some(relative.clone()),
+            line: None,
+            column: None,
+        });
     }
-    None
 }
 
 #[cfg(test)]
@@ -186,13 +184,13 @@ mod tests {
     #[test]
     fn valid_frontmatter() {
         let content = "---\nstatus: done\ncompleted: \"2026-04-23\"\n---\n# Title\n";
-        let fm = extract_frontmatter(content).unwrap();
-        assert_eq!(frontmatter_value(fm, "status"), Some("done"));
+        let fm = frontmatter::frontmatter_block(content).unwrap();
+        assert_eq!(frontmatter::frontmatter_scalar(fm, "status"), Some("done"));
     }
 
     #[test]
     fn no_frontmatter_is_ok() {
-        assert!(extract_frontmatter("# Just a heading\n").is_none());
+        assert!(frontmatter::frontmatter_block("# Just a heading\n").is_none());
     }
 
     #[test]
@@ -224,6 +222,22 @@ mod tests {
         let diags = collect_diagnostics(tmp.path());
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].rule_id, "docs-lint/malformed-frontmatter");
+    }
+
+    #[test]
+    fn legacy_source_sha_rejected() {
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            tmp.path(),
+            "---\nstatus: done\nsource_sha: deadbeef\n---\n# Doc\n",
+        )
+        .unwrap();
+        let diags = collect_diagnostics(tmp.path());
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.rule_id == "docs-lint/provenance-contract")
+        );
     }
 
     #[test]

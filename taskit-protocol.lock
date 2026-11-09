@@ -40,7 +40,7 @@
     {
       "name": "xtask-docs_audit",
       "path": "xtask/src/docs_audit.rs",
-      "hash": "f3fc5ff563262099cb621bbd90793501a6da49aa97942853d91c70656a572145"
+      "hash": "58d09e068b58e6e62f2f4eea0ac39046efb8a1c5e3388fbdd574de574b6b06b1"
     },
     {
       "name": "xtask-preflight",

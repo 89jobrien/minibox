@@ -1,6 +1,7 @@
 #!/usr/bin/env nu
-# Audit generated docs: freshness (source changed after the doc's SHA),
-# home-collisions, and dead links.
+# Audit generated docs: freshness (delegated to `cargo xtask docs audit
+# --stale`, the git-derived staleness engine), home-collisions, and dead
+# links.
 #
 # Exits non-zero when anything actionable is found, so it can gate a commit.
 #
@@ -32,32 +33,17 @@ def read-frontmatter [path: string] {
     try { $block | from yaml } catch { null }
 }
 
-# A doc is stale when any of its sources picked up a commit that is a
-# descendant of the SHA the doc was generated from. Comparing SHAs alone
-# would also fire when the doc is *ahead* of the source, which is fine.
-def source-drift [doc_sha: string, sources: list] {
-    mut drifted = []
-    # An unknown SHA (typo, or a commit that never landed / was rebased away)
-    # would make every ancestry test fail and the doc would look permanently
-    # fresh. Surface it instead of silently passing.
-    let known = (do { git cat-file -e $"($doc_sha)^{commit}" } | complete | get exit_code)
-    if $known != 0 {
-        return [{source: "(frontmatter)", reason: $"source_sha ($doc_sha | str substring 0..8) is not a commit in this repo"}]
+# Freshness is derived from git history by `cargo xtask docs audit --stale`
+# (xtask/src/docs_audit.rs) — walks each doc's substantive commit history
+# (skipping restamp-only commits) and compares against each declared
+# source's last change. Returns the StalenessReport, parsed from JSON.
+def stale-report [] {
+    let result = (do { cargo xtask docs audit --stale } | complete)
+    if $result.exit_code != 0 {
+        print -e $"(ansi red)docs audit --stale failed:(ansi reset)\n($result.stderr)"
+        exit 1
     }
-    for src in $sources {
-        if not ($src | path exists) {
-            $drifted = ($drifted | append {source: $src, reason: "source path missing"})
-            continue
-        }
-        let latest = (do { git log -1 --format=%H -- $src } | complete | get stdout | str trim)
-        if ($latest | is-empty) or $latest == $doc_sha { continue }
-        let is_desc = (do { git merge-base --is-ancestor $doc_sha $latest } | complete | get exit_code)
-        if $is_desc == 0 {
-            let subject = (do { git log -1 --format=%s -- $src } | complete | get stdout | str trim)
-            $drifted = ($drifted | append {source: $src, reason: $"changed in ($latest | str substring 0..8) — ($subject)"})
-        }
-    }
-    $drifted
+    $result.stdout | from json
 }
 
 def collect-docs [] {
@@ -135,16 +121,8 @@ def main [--links, --json] {
     let stamped = ($docs | where front != null)
     let unstamped = ($docs | where front == null)
 
-    mut stale = []
-    for d in $stamped {
-        let sha = ($d.front | get -o source_sha)
-        let sources = ($d.front | get -o sources | default [])
-        if $sha == null or ($sources | is-empty) { continue }
-        let drift = (source-drift $sha $sources)
-        if not ($drift | is-empty) {
-            $stale = ($stale | append {doc: $d.path, source_sha: ($sha | str substring 0..8), drift: $drift})
-        }
-    }
+    let report = (stale-report)
+    let stale = $report.stale
 
     let collisions = (find-collisions $docs)
     let dead = if $links { check-links $docs } else { [] }
@@ -155,6 +133,7 @@ def main [--links, --json] {
     }
 
     print $"docs audited: ($docs | length) \(($stamped | length) stamped, ($unstamped | length) unstamped\)"
+    print $"staleness \(cargo xtask docs audit --stale\): ($report.checked_docs) checked, ($report.exempt_docs) exempt, ($report.untracked_docs) untracked"
 
     if not ($collisions | is-empty) {
         print $"\n(ansi red)COLLISIONS(ansi reset) — same topic in two homes; pick one canonical location:"
@@ -167,12 +146,12 @@ def main [--links, --json] {
     }
 
     if ($stale | is-empty) {
-        print $"\n(ansi green)No stale docs.(ansi reset) Every stamped doc's sources are unchanged since its source_sha."
+        print $"\n(ansi green)No stale docs.(ansi reset) Every checked doc's sources are unchanged since its last substantive edit."
     } else {
-        print $"\n(ansi yellow)STALE — source changed after the doc was generated(ansi reset):"
+        print $"\n(ansi yellow)STALE — source changed after the doc's last substantive edit(ansi reset):"
         for s in $stale {
-            print $"  ($s.doc)  \(generated from ($s.source_sha)\)"
-            for d in $s.drift { print $"      ($d.source): ($d.reason)" }
+            print $"  ($s.doc)  \(($s.reason)\)"
+            for src in $s.sources { print $"      ($src.path): ($src.last_change_subject)" }
         }
     }
 

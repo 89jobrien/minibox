@@ -122,6 +122,7 @@
               "action": { "enum": ["audit", "lint", "update-date", "sync-adapters"] },
               "full": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Full audit mode instead of Quick; rewrites the tracked xtask/docs-audit-report.json report." },
               "strict": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Only meaningful in Quick mode (ignored when --full is set)." },
+              "stale": { "type": "boolean", "default": false, "appliesTo": ["audit"], "description": "Print the derived git-based staleness report as JSON on stdout instead of running the full/quick audit; takes precedence over --full/--strict." },
               "sarif": { "type": "string", "format": "path", "appliesTo": ["lint"], "description": "Write a SARIF report of frontmatter/status violations." }
             }
           }

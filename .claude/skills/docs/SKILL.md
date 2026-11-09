@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Write, generate, or update project documentation in this repo, and audit existing docs for staleness, dead links, and misplaced files. Enforces where a doc lives (.ctx/memory-bank/ for agent memory, top-level ALL-CAPS.md for repo docs, docs/core/*.mbx.md for reference docs), stamps every generated doc with YAML frontmatter recording the source commit SHA it was derived from, verifies links with real HTTP requests, and finishes by naming every doc whose source files have changed since that SHA. Make sure to use this whenever the user asks to write/update/refresh/generate a doc, README, CHANGELOG, architecture or testing doc, memory-bank file, or asks "are the docs stale", "check the docs", "which docs need updating", "do the links still work", or where a doc should live — including when they name a specific file like TESTING.md or active-context.mbx.md rather than saying "docs".
+description: Write, generate, or update project documentation in this repo, and audit existing docs for staleness, dead links, and misplaced files. Enforces where a doc lives (.ctx/memory-bank/ for agent memory, top-level ALL-CAPS.md for repo docs, docs/core/*.mbx.md for reference docs), stamps every generated doc with YAML frontmatter declaring the source files/dirs it was derived from, verifies links with real HTTP requests, and finishes by naming every doc whose declared sources have changed since the doc's last substantive edit (derived from git history, not a stored SHA). Make sure to use this whenever the user asks to write/update/refresh/generate a doc, README, CHANGELOG, architecture or testing doc, memory-bank file, or asks "are the docs stale", "check the docs", "which docs need updating", "do the links still work", or where a doc should live — including when they name a specific file like TESTING.md or active-context.mbx.md rather than saying "docs".
 ---
 
 # Docs
@@ -39,8 +39,8 @@ files use plain `.md`.
 
 ## Freshness frontmatter
 
-Any doc you generate or substantially regenerate from source carries YAML
-frontmatter naming the commit it was derived from:
+Any doc you generate or substantially regenerate from source declares the
+files it was derived from:
 
 ```yaml
 ---
@@ -51,9 +51,6 @@ generated: 2026-08-18
 ---
 ```
 
-- `source_sha` — full SHA of `HEAD` at generation time. Get it with
-  `git rev-parse HEAD`. A short SHA works but the full one is unambiguous
-  forever; abbreviations can collide as the repo grows.
 - `sources` — the files or directories you actually read to write the doc.
   This is the load-bearing field: it's what makes staleness detectable. List
   the real inputs, not the whole crate. A doc claiming to derive from
@@ -61,15 +58,32 @@ generated: 2026-08-18
   to ignore it.
 - `generated` — the date, for humans skimming.
 
+There is no `source_sha` field. An earlier version of this convention stamped
+the commit SHA a doc was generated from and compared it against each source's
+latest commit; that field is deleted everywhere and the contract check in
+`cargo xtask docs audit`/`docs lint` now rejects it if it reappears. Staleness
+is derived from git history instead (`xtask/src/docs_audit.rs`,
+`GitHistory`/`check_staleness`): a doc is stale when a declared source's last
+change is newer than the doc's own last _substantive_ edit — found by walking
+the doc's commit history and skipping commits that only rewrite the
+`Last updated:` stamp. No scalar to keep in sync, nothing to go stale itself.
+
+An optional `regenerated_from:` mapping (source path → 40-hex-char SHA) exists
+for advisory point-in-time notes on specific sources; it's never required and
+nothing reads it to decide freshness.
+
 Frontmatter coexists with the existing `Last updated:` line that
 `cargo xtask pre-commit`'s doc-dates step rewrites automatically under `docs/`.
 Leave that line alone; it's stamped by tooling, and the frontmatter answers a
-different question — not "when did someone touch this" but "what was the code
-doing when this was true".
+different question — not "when did someone touch this" but "what code this
+doc claims to be derived from".
 
 Hand-written docs (`README.md`, `CONTRIBUTING.md`) don't need frontmatter —
 nothing generated them, so there's no source to drift from. The audit lists
 them as unstamped for visibility, which is informational, not a failure.
+`docs/designs/` and `docs/plans/` are exempt from the staleness check itself
+(point-in-time decision records) but still subject to the provenance-contract
+shape check (no `source_sha`, well-formed `regenerated_from`).
 
 ## Links are checked, not assumed
 
@@ -114,24 +128,28 @@ nu .claude/skills/docs/scripts/doc-audit.nu --links   # when links changed or on
 ```
 
 Then tell the user what it found — specifically, **which docs have sources
-that changed after the doc's `source_sha`**. This is the part that makes the
-convention worth having: without it, stamping SHAs is bookkeeping nobody reads.
+that changed after the doc's last substantive edit**. This is the part that
+makes the convention worth having: without it, declaring `sources:` is
+bookkeeping nobody reads.
 
-The script reports four things and exits non-zero if any of the first three
-appear:
+`doc-audit.nu` delegates freshness to `cargo xtask docs audit --stale`, which
+prints the `StalenessReport` as JSON (`checked_docs`, `exempt_docs`,
+`untracked_docs`, `stale: [...]`). The script reports four things and exits
+non-zero if any of the first three appear:
 
-- **STALE** — a source file picked up a commit descended from the doc's
-  `source_sha`. Reported with the commit and its subject so you can judge
-  whether the change actually affects the doc. It often doesn't; a rename or a
-  formatting pass won't invalidate prose. Say which ones look like real drift
-  rather than dumping the list.
+- **STALE** — a declared source's last change is a descendant of the doc's
+  last substantive edit. Each entry names the reason
+  (`SourceChangedAfterDoc`, `SourcePathMissing`, `SourceUntracked`, or
+  `IndeterminateHistory`) and, for `SourceChangedAfterDoc`, the commit subject
+  that changed. Judge whether the change actually affects the doc — a rename
+  or a formatting pass won't invalidate prose. Say which ones look like real
+  drift rather than dumping the list.
 - **COLLISIONS** — same base name in two homes.
 - **DEAD LINKS** — non-2xx/3xx, with status codes (only with `--links`).
 - **UNSTAMPED** — no frontmatter, so freshness can't be checked. Informational.
 
-A doc whose `source_sha` isn't a commit in the repo is reported explicitly
-rather than passing — a typo'd or rebased-away SHA would otherwise make a doc
-look permanently fresh.
+`cargo xtask verify` runs the same check as a hard gate (`enforce_staleness`)
+— if it fails there, it fails here too; the two can't drift apart.
 
 `--json` emits the same data for another tool to consume.
 
