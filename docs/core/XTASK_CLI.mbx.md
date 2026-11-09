@@ -70,6 +70,7 @@ Bare `cargo xtask check` prints the target list.
 | Target | Flags | Notes |
 |---|---|---|
 | `stale-names` | — | Audit for banned old crate/binary names |
+| `removal-audit <name>` | — | Grep tracked `.rs`/`.toml`/`.md` files plus `cargo tree -i <name>` for residual references after deleting a crate/module/dependency. Markdown hits are reported but excluded from the failure count. On-demand only, not wired into `verify`. |
 | `protocol-drift` | `--update` `--warn-only` `--hook` `--sarif <path>` | Verify core contract hashes against `xtask/protocol-drift.lock`. `--update` writes new hashes instead of comparing. `--hook` reads a Claude Code PostToolUse hook JSON payload from stdin and only checks if the edited file is a tracked surface. |
 | `protocol-sites` | `[<file>]` `--expected N` `--warn-only` | Verify `HandlerDependencies` construction-site count. Default file: `crates/miniboxd/src/main.rs`. Default expected: `4`. |
 | `protocol-variants` | — | Scan for `DaemonRequest`/`DaemonResponse` variants with no handler sites |
