@@ -68,6 +68,7 @@ const DIND_STAGING_ROOT: &str = "/var/lib/minibox";
 /// persistent path keyed by container ID, not a `tempfile::TempDir` — its
 /// lifetime is tied to the container record (removed explicitly by the
 /// remove handler), not to any process holding it alive.
+#[derive(Debug)]
 pub(super) struct DindProvisioning {
     /// Host-side staging directory; persists until the container is removed.
     pub staging_dir: PathBuf,
@@ -396,5 +397,117 @@ mod tests {
             dind_staging_dir("abc123"),
             PathBuf::from("/var/lib/minibox/dind-abc123"),
         );
+    }
+
+    static PATH_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn test_find_miniboxd_binary_resolves_current_exe() {
+        let resolved = find_miniboxd_binary().expect("resolve current exe");
+        assert_eq!(resolved, std::env::current_exe().expect("current_exe"));
+    }
+
+    #[test]
+    fn test_find_mbx_binary_finds_executable_on_path() {
+        let _guard = PATH_ENV_LOCK.lock().expect("acquire PATH_ENV_LOCK");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mbx = dir.path().join("mbx");
+        std::fs::write(&mbx, b"#!/bin/sh\nexit 0\n").expect("write dummy mbx");
+        std::fs::set_permissions(&mbx, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let original_path = std::env::var_os("PATH");
+        // SAFETY: guarded by PATH_ENV_LOCK; restored before the guard drops.
+        unsafe {
+            std::env::set_var("PATH", dir.path());
+        }
+        let result = find_mbx_binary();
+        // SAFETY: guarded by PATH_ENV_LOCK; restores the pre-test PATH.
+        unsafe {
+            match original_path {
+                Some(p) => std::env::set_var("PATH", p),
+                None => std::env::remove_var("PATH"),
+            }
+        }
+
+        assert_eq!(result.expect("find mbx on PATH"), mbx);
+    }
+
+    #[test]
+    fn test_find_mbx_binary_errors_when_absent() {
+        let _guard = PATH_ENV_LOCK.lock().expect("acquire PATH_ENV_LOCK");
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        let original_path = std::env::var_os("PATH");
+        // SAFETY: guarded by PATH_ENV_LOCK; restored before the guard drops.
+        unsafe {
+            std::env::set_var("PATH", dir.path());
+        }
+        let result = find_mbx_binary();
+        // SAFETY: guarded by PATH_ENV_LOCK; restores the pre-test PATH.
+        unsafe {
+            match original_path {
+                Some(p) => std::env::set_var("PATH", p),
+                None => std::env::remove_var("PATH"),
+            }
+        }
+
+        let err = result.expect_err("mbx should not be found");
+        assert!(err.to_string().contains("mbx binary not found"));
+    }
+
+    #[test]
+    fn test_validate_dind_binary_accepts_executable() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("miniboxd");
+        std::fs::write(&bin, b"#!/bin/sh\nexit 0\n").expect("write dummy binary");
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+        validate_dind_binary(&bin).expect("executable binary should validate");
+    }
+
+    #[test]
+    fn test_validate_dind_binary_rejects_non_executable() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("miniboxd");
+        std::fs::write(&bin, b"not executable\n").expect("write dummy binary");
+        std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let err = validate_dind_binary(&bin).expect_err("non-executable should fail");
+        assert!(err.to_string().contains("is not executable"));
+    }
+
+    #[test]
+    fn test_validate_dind_binary_errors_on_missing_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("does-not-exist");
+        let err = validate_dind_binary(&missing).expect_err("missing file should fail");
+        assert!(err.to_string().contains("failed to stat"));
+    }
+
+    #[test]
+    fn test_dind_entrypoint_script_debug_redirects_to_log_file() {
+        let script = dind_entrypoint_script_for_container(true);
+        assert!(script.contains("2>/tmp/miniboxd-debug.log"));
+        assert!(script.contains(DIND_MINIBOXD_PATH));
+        assert!(script.contains(DIND_SOCKET_PATH));
+    }
+
+    #[test]
+    fn test_dind_entrypoint_script_non_debug_redirects_to_null() {
+        let script = dind_entrypoint_script_for_container(false);
+        assert!(script.contains("2>/dev/null"));
+        assert!(!script.contains("2>/tmp/miniboxd-debug.log"));
+    }
+
+    #[test]
+    fn test_stage_dind_resources_errors_without_cgroup_v2() {
+        // This test host (macOS, or a Linux host without cgroup v2 mounted at
+        // DIND_CGROUP_FS_PATH) has no /sys/fs/cgroup, so stage_dind_resources
+        // must fail fast at the preflight check rather than proceeding to
+        // binary staging.
+        if Path::new(DIND_CGROUP_FS_PATH).is_dir() {
+            return;
+        }
+        let err = stage_dind_resources("test-container", false)
+            .expect_err("missing cgroup v2 mount should fail preflight");
+        assert!(err.to_string().contains("cgroup v2 filesystem"));
     }
 }
