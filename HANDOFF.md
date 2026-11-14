@@ -1,4 +1,4 @@
-# Handoff — minibox (2026-11-07)
+# Handoff — minibox (2026-11-14)
 
 | ID                       | P   | Status  | Title                                                        |
 | ------------------------ | --- | ------- | ------------------------------------------------------------ |
@@ -40,4 +40,4 @@
 
 ## Log
 
-- 20261107.055524: done=105 running=0 pending=32 blocked=3 [4f84cfe, c80a562, 6a1cfb1, 54a3eca, b38afd5, 8c2ca3e, a9c8d0d, d2dbe8f, 526663b, fe8513d]
+- 20261114.043721: done=114 running=0 pending=32 blocked=3 [8e7b095, 2bac64a, cfe888b, 3899189, fe97bf9, e919f78, 38889ff, 2d52b4a, a588f4d, 0eef38e]

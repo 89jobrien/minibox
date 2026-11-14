@@ -1,10 +1,14 @@
 //! macOS `os_signpost` instrumentation for minibox.
 //!
-//! Signposts appear as named intervals on the Points of Interest track in
-//! Instruments, recorded by `cargo xtask profile native` (which enables the
-//! `os_signpost` instrument). Unlike Time Profiler they attribute time to
+//! Signposts are `os_signpost` intervals intended for the Points of Interest
+//! track in Instruments, recorded by `cargo xtask profile native` (which enables
+//! the `os_signpost` instrument). Unlike Time Profiler they attribute time to
 //! *named operations* rather than sampled stacks, which is what makes
 //! "where did the container boot spend its two seconds" answerable.
+//!
+//! Capture of daemon-side markers via `xctrace` is currently unreliable — see
+//! the "Signpost markers" section of `docs/core/XTASK_CLI.mbx.md`. Emission
+//! itself works and can be confirmed live with `log stream`.
 //!
 //! ```no_run
 //! # fn example() {

@@ -20,7 +20,7 @@ generated: 2026-09-16
 
 # xtask CLI Reference
 
-Last updated: 2026-11-09
+Last updated: 2026-11-14
 
 Full command surface of `cargo xtask`, rendered from `xtask/schema/cli.schema.json`
 (the machine-readable source of truth — regenerate this doc by hand alongside the
@@ -274,10 +274,10 @@ and the most interesting target for System Trace — sits behind the **non-defau
 
 ### Signpost markers
 
-`crates/minibox-signpost` emits named intervals onto the Points of Interest
-track, so a trace attributes time to operations (`dispatch.run`,
-`smolvm.machine.start`) rather than to sampled stacks. Markers currently sit at
-the daemon request router and the smolvm machine lifecycle.
+`crates/minibox-signpost` emits named `os_signpost` intervals so a trace can
+attribute time to operations (`dispatch.run`, `smolvm.machine.start`) rather
+than to sampled stacks. Markers currently sit at the daemon request router and
+the smolvm machine lifecycle.
 
 Real emission is behind the `macos-signposts` cargo feature, enabled by
 default for the workspace crates that use it. It pulls in `apple-log`, which
@@ -296,8 +296,41 @@ guard should not be held across an `.await` unless it is ended explicitly —
 signpost ids are process-unique, so a correctly ended interval is safe to move
 between threads, but an abandoned guard is not.
 
-To see markers, record with `native` (which enables the `os_signpost`
-instrument), then filter the Points of Interest track on subsystem `io.minibox`.
+Record with `native`, which enables the `os_signpost` instrument, then filter
+the Points of Interest track on subsystem `io.minibox`.
+
+#### Reading markers without a trace
+
+Markers are emitted on subsystem `io.minibox`, category `performance`, at
+`process` scope, so they can be read live without a trace at all:
+
+```bash
+log stream --predicate 'subsystem == "io.minibox"' --signpost --level debug
+```
+
+Each interval appears as a matched `begin`/`end` pair carrying a `spid`, which
+confirms the marker fired and gives the interval length.
+
+#### Known limitation: xctrace may not collect daemon markers
+
+On the machine this was developed against, `xcrun xctrace record` captures
+**zero** signpost rows for a fully started `miniboxd` — under `--attach`,
+`--launch`, and `--all-processes` alike — while a concurrent probe process is
+captured in the same window. The daemon is still instrumented: its pid appears
+in the trace TOC with time samples and thread snapshots. The gap is in signpost
+collection specifically, not in whether the process is traced.
+
+The trigger has not been isolated. A probe binary that emits one marker and then
+idles is collected; the same binary with full daemon startup is not, but that
+A/B changed more than one variable, so image startup is a hypothesis rather than
+a confirmed cause. Because the markers are provably emitted (use the `log stream`
+recipe above), they stay in the code; treat the Points of Interest track as
+best-effort for daemon-side markers until this is understood. Bisecting
+`run_daemon` startup stage by stage is the experiment that would settle it.
+
+The Phase 1 modes do not depend on this. `cpu`, `mem`, `latency`, and `native`
+all capture process behaviour through sampling and system-trace instruments,
+which are unaffected.
 
 ### Relationship to the other perf tools
 
