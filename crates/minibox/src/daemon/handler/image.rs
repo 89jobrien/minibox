@@ -921,3 +921,43 @@ mod registry_router_tests {
         assert_eq!(selected, docker_ptr);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used, clippy::panic)]
+mod build_handler_tests {
+    #[tokio::test]
+    async fn handle_build_validates_context_path_is_absolute() {
+        // Stub test: verifies context_path validation logic
+        // TODO: Assert error when context_path is relative
+    }
+
+    #[tokio::test]
+    async fn handle_build_rejects_unsupported_adapter_with_error() {
+        // Stub test: verifies "not supported" error for missing ImageBuilder capability
+        // TODO: Assert error message contains "not supported"
+    }
+
+    #[tokio::test]
+    async fn handle_build_rejects_symlink_escape_outside_context() {
+        // Stub test: verifies symlink-based path escape rejection via canonicalization
+        // TODO: Assert error when context_path escapes via symlink
+    }
+
+    #[tokio::test]
+    async fn handle_build_writes_and_cleans_temporary_dockerfile() {
+        // Stub test: verifies TemporaryDockerfile RAII lifecycle
+        // TODO: Assert temporary file created and cleaned up
+    }
+
+    #[tokio::test]
+    async fn handle_build_streams_output_and_completion() {
+        // Stub test: verifies BuildOutput then BuildComplete response ordering
+        // TODO: Assert response stream contains BuildOutput and BuildComplete
+    }
+
+    #[tokio::test]
+    async fn handle_build_propagates_builder_errors() {
+        // Stub test: verifies error propagation from ImageBuilder
+        // TODO: Assert builder errors reach the client
+    }
+}

@@ -31,6 +31,7 @@
 //! Both binaries exit `0` on success, `1` on any test failure.
 
 pub mod adapters;
+pub mod build_capability;
 pub mod harness;
 mod progress;
 pub mod showcase;
