@@ -117,6 +117,10 @@ const SURFACES: &[Surface] = &[
         name: "typestate",
         path: "crates/minibox-core/src/typestate.rs",
     },
+    Surface {
+        name: "build-protocol",
+        path: "crates/minibox-core/src/protocol.rs",
+    },
 ];
 
 #[derive(Debug, Clone, Copy)]
