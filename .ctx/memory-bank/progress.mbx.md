@@ -106,10 +106,10 @@
 
 - `cargo xtask prepush` is the gate that builds, lints, and tests: musl cross-build,
   release build, release lib tests, vm_checkpoint, and the 123-test conformance suite.
-- `cargo xtask pre-commit` is conditional. `xtask/src/gates.rs:245` wraps fmt, clippy, and
-  the architecture check in `if rust_staged`, so with no Rust staged it runs docs-lint only
-  and still prints "pre-commit checks passed". It runs no release build and no tests.
-  A gate that skips its work should report the skip rather than a generic pass.
+- `cargo xtask pre-commit` runs clippy and the architecture check unconditionally
+  (`xtask/src/gates.rs`, fixed after the earlier `if rust_staged` wrapping let docs-only
+  commits pass without compiling). Only `cargo fmt` and re-staging are gated on staged Rust.
+  It runs no release build and no tests; `prepush` does.
 
 ### CI pipeline
 
@@ -434,9 +434,6 @@
   `validate_lima_paths_rejects_opt` test, which passes on a dev machine only because
   `$HOME` is a real directory. Same bug class as the cgroup root issue fixed in 1db50b86.
   Not yet filed as an issue.
-- **`cargo xtask pre-commit` can report success without verifying anything** —
-  `gates.rs:245` gates fmt/clippy/architecture on `if rust_staged`. CLAUDE.md also
-  overstates it as including a release build. Prefer `cargo xtask prepush`.
 - **Duplicate memory banks** — canonical `.ctx/memory-bank/` (`*.mbx.md`) coexists with a
   stale `.ctx/godmode/memory-bank/` (~2 weeks old). The `mistake-tracker` skill still writes
   to the legacy path, so ledger entries can land in the wrong file.

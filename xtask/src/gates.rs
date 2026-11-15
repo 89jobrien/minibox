@@ -2131,7 +2131,10 @@ fn staged_rust_files(sh: &Shell) -> Result<bool> {
 /// pick up `.RS` or other case variants a filesystem may report.
 #[allow(clippy::case_sensitive_file_extension_comparisons)]
 fn staged_rust_paths(sh: &Shell) -> Result<Vec<String>> {
-    let staged = cmd!(sh, "git diff --cached --name-only")
+    // `--diff-filter=d` drops deletions: `git add -u -- <deleted path>` fails with a
+    // pathspec error once the file is gone, which made any commit that deletes a
+    // `.rs` file fail the pre-commit gate.
+    let staged = cmd!(sh, "git diff --cached --name-only --diff-filter=d")
         .output()
         .context("git diff --cached failed")?;
     let staged = String::from_utf8_lossy(&staged.stdout);

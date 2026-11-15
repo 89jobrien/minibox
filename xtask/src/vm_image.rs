@@ -49,7 +49,7 @@ pub const LINUX_VIRT_SHA256: &str =
 /// `uname -r` of the pinned kernel, i.e. the `/lib/modules` directory name.
 ///
 /// Re-exported from [`vm_boot::KERNEL_RELEASE`] rather than redefined, so this builder and
-/// the guest init script (`crates/macbox/src/vz/agent_init.rs`) cannot silently diverge.
+/// the guest init script (generated below) cannot silently diverge.
 pub use vm_boot::KERNEL_RELEASE;
 
 /// Size of the FAT32 ESP image in bytes.
@@ -716,8 +716,7 @@ impl Options {
 /// channel) and `crates/miniboxd/src/listener.rs::VsockServerListener`.
 ///
 /// Re-exported from [`vm_boot::VSOCK_AGENT_PORT`] rather than redefined, so this builder
-/// and the guest init script (`crates/macbox/src/vz/agent_init.rs`) cannot silently
-/// diverge.
+/// and the guest init script (generated below) cannot silently diverge.
 use vm_boot::VSOCK_AGENT_PORT;
 
 /// Target triple the guest agent is cross-compiled for (Apple Silicon hosts
@@ -728,10 +727,8 @@ const AGENT_TARGET_TRIPLE: &str = "aarch64-unknown-linux-musl";
 /// itself, staged as `/sbin/minibox-agent` and started with
 /// `MINIBOX_VSOCK_PORT` set) via busybox init.
 ///
-/// Intentionally duplicated from the shape of `macbox::vz::agent_init`
-/// rather than shared via a dependency: `xtask` does not depend on `macbox`,
-/// which pulls in macOS-only Virtualization.framework bindings behind the
-/// `vz` feature.
+/// This is the only generator of the guest init files: the VM boot path in
+/// `macbox` never writes them, it boots whatever image this builder left on disk.
 ///
 /// `MINIBOX_ALLOW_PRIVILEGED`/`MINIBOX_ALLOW_BIND_MOUNTS` are set because the
 /// guest agent IS the thing the vz isolation tests exercise -- they boot

@@ -33,7 +33,6 @@ sources:
   - crates/macbox/src/krun/runtime.rs
   - crates/macbox/src/lib.rs
   - crates/macbox/src/vz/adapter.rs
-  - crates/macbox/src/vz/agent_init.rs
   - crates/macbox/src/vz/proxy.rs
   - crates/mbx/src/commands/doctor.rs
   - crates/mcp/src/tools/containers.rs

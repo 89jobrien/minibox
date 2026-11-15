@@ -21,7 +21,7 @@ pub const CONTAINERS_TAG: &str = "minibox-containers";
 ///
 /// `cargo xtask build-vm-image` stages modules under this path and the guest init
 /// script `insmod`s them from the same path — defined once here so the builder and
-/// the guest init script (`agent_init.rs`) cannot silently diverge.
+/// the guest init script (`xtask/src/vm_image.rs`) cannot silently diverge.
 pub const KERNEL_RELEASE: &str = "6.12.114-0-virt";
 
 /// vsock port the guest agent listens on, and the port the host VZ adapter connects to.

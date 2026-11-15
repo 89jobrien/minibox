@@ -116,7 +116,7 @@ pub fn build_colima_handler_dependencies(
         },
         exec: minibox::daemon::handler::ExecDeps {
             // TODO(feature-idea-13): provide VM-backed exec and historical log retrieval for
-            // macOS adapters instead of leaving the shared execution port unavailable.
+            // the Colima and VZ adapters; krun already has both (`krun::exec`).
             exec_runtime: None,
             pty_sessions: std::sync::Arc::new(tokio::sync::Mutex::new(
                 minibox::daemon::handler::PtySessionRegistry::default(),

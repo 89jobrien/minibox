@@ -565,8 +565,9 @@ fn child_init(config: ContainerConfig) -> anyhow::Result<()> {
     crate::container::mount_seccomp::install_mount_immutability_filter()
         .with_context(|| "child: install_mount_immutability_filter")?;
 
-    // TODO(feature-idea-14): add and verify a default capability drop policy plus
-    // no_new_privs for unprivileged containers; keep privileged mode an explicit relaxation.
+    // TODO(feature-idea-14): add and verify a default capability drop policy for
+    // unprivileged containers; keep privileged mode an explicit relaxation.
+    // `no_new_privs` is already set by the mount-immutability filter above.
     // TODO(feature-idea-16): the user namespace and its uid_map/gid_map are now
     // installed (see `configure_child_isolation`), but the storage, networking,
     // and cgroup support required for genuinely *rootless* operation are not.
