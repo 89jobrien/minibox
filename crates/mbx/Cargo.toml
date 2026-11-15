@@ -31,7 +31,6 @@ reqwest = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
-which = "5"
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
@@ -44,10 +43,6 @@ tui = ["dep:minibox-tui"]
 # Enable subprocess integration tests (requires a pre-built minibox binary).
 # Run via: just test-cli-subprocess
 subprocess-tests = []
-
-[package.metadata.cargo-machete]
-# base64 is used in commands/run.rs for streaming output decoding
-ignored = ["base64"]
 
 [dev-dependencies]
 minibox-core = { workspace = true }
