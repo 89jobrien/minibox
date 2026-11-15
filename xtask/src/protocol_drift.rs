@@ -692,6 +692,7 @@ mod tests {
             "error-types",
             "client-api",
             "typestate",
+            "build-protocol",
         ];
         let tracked: Vec<&str> = SURFACES.iter().map(|s| s.name).collect();
         for name in &expected {
