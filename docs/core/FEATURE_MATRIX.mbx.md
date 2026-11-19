@@ -42,7 +42,7 @@ generated: 2026-09-16
 
 Per-platform capability breakdown for minibox adapters.
 
-Last updated: 2026-11-08
+Last updated: 2026-11-19
 
 ---
 
@@ -266,10 +266,10 @@ Key implementation sites backing the "Yes" entries above:
   kernel command line rendered from `minibox_core::vm_boot::kernel_cmdline`)
   and launching the config requires the daemon to carry the
   `com.apple.security.virtualization` entitlement (`just sign-vz`, checked by
-  `cargo xtask doctor`). Guest networking (virtio-net, DHCP with retries) and
-  virtiofs root mount are wired in and diagnostic-instrumented but not yet
-  verified end-to-end; the isolation suite and `mbx run` over vsock are not
-  yet verified end-to-end.
+  `cargo xtask doctor`). The guest boots to a virtiofs-mounted root on macOS 26.x via the
+  EFI path; guest networking (virtio-net, DHCP with retries) is diagnostic-instrumented but
+  not yet verified end-to-end. The isolation suite and `mbx run` over vsock are not yet
+  verified end-to-end.
   Removed 2026-05-07 (issue #305); code restored 2026-08-15. See
   `docs/designs/2026-10-22-vz-efi-boot-design.md` for the boot mechanism and
   evidence. `exec`/`logs`/`push`/`commit`/`build` are unimplemented, same gaps

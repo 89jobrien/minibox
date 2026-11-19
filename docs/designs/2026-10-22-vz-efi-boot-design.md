@@ -20,8 +20,53 @@ VM start FAILED: Internal Virtualization error. The virtual machine failed to st
 
 The 2026-08-15 design concluded `VZLinuxBootLoader` is broken on macOS 26.x after ruling out
 a stale kernel image and a missing `VZGenericPlatformConfiguration`. Those two are genuinely
-ruled out. The conclusion still rests on one uncontrolled variable, described below, which is
-cheaper to test than the boot-mechanism rewrite it currently implies.
+ruled out; the remaining confound (signing, versus the boot mechanism itself) is what Phase 0
+controls explicitly below.
+
+## As-built status (2026-11-19)
+
+Phase 1 landed and is recorded in the capability matrix as `experimental` (docs/core/FEATURE_MATRIX.mbx.md, updated via `cargo xtask docs sync-adapters` from `xtask/context.toml`). Summary of what shipped and what remains unverified:
+
+- `cargo xtask build-vm-image` (xtask/src/vm_image.rs) pins two artifacts by release and sha256 —
+  the Alpine virt ISO 3.22.7 (`alpine-virt-3.22.7-aarch64.iso`, sha256 `3e37f238f6317ef56a12f4cff5c4265f99d25785945f777b19d41b35a7fabbc7`) and the
+  `linux-virt` APK 6.12.114-r0 (sha256 `345b2d561443cd8c978cbcc0f36f2374b3ef702debb747221384b4ddc07d6a77` for the `/lib/modules` tree). It extracts
+  `vmlinuz-virt`, `initramfs-virt`, and `efi/boot/bootaa64.efi` from the ISO, appends the eight
+  vsock/virtio-net/overlay modules to the initramfs (Alpine's own virt image has `virtiofs`/`fuse`
+  but no vsock or network driver modules), and emits a deterministic 128 MiB FAT32 ESP — fixed
+  volume id/label, fixed DOS epoch timestamps (fatfs without `chrono`), files in a fixed order, so
+  two runs over unchanged inputs produce byte-identical bytes (`b38afd5c`). A sha256 manifest
+  (`manifest.json`) beside the image gates the runtime preflight.
+- The rootfs is provisioned by the same command: it cross-compiles `miniboxd` for
+  `aarch64-unknown-linux-musl`, stages it as `<vm_dir>/rootfs/sbin/minibox-agent`, installs
+  busybox `inittab`/`rcS` (the same mechanism the isolation suite relies on), and copies the
+  eight guest modules into `<vm_dir>/rootfs/lib/modules/`.
+- `minibox_core::vm_boot::kernel_cmdline()` renders `console=hvc0 root=minibox-rootfs
+rootfstype=virtiofs rw quiet modules=vsock,vmw_vsock_virtio_transport_common,vmw_vsock_virtio_transport,failover,net_failover,virtio_net,af_packet,overlay`
+  — the same value is baked into the ESP's `/boot/grub/grub.cfg`. Both the builder and the
+  runtime read it, so they cannot drift.
+- The ESP layout is the one planned: `/EFI/BOOT/BOOTAA64.EFI`, `/boot/grub/grub.cfg`,
+  `/boot/{vmlinuz-virt,initramfs-virt}`. GRUB comes from the ISO's own `efi/boot/bootaa64.efi`
+  rather than a separately pinned binary.
+- Guest mount point is `/sysroot`, not `/newroot` as originally written.
+- `modules=` on the cmdline asks the initramfs init to `modprobe` the listed modules; observed
+  not to be reliable, so the rootfs's `rcS` also loads them explicitly with `insmod`, in
+  dependency order, emitting per-module `OK:`/`FAIL:` reporting for the virtio-net failover chain
+  plus `lsmod` and a `-- net diag --` block (`ip link`/`ip addr`/`ip route`, `/etc/resolv.conf`,
+  virtio device enumeration, `dmesg` grep) — added in `538bfe90` to diagnose the virtio-net and
+  overlayfs issues found during the signing/EFI work. That diagnostic output is not captured in
+  a committed artifact, so treat any guest-side observation beyond "virtiofs root mounted" as
+  unverified until `just test-vz-isolation` runs to completion.
+- `rcS` brings `lo`/`eth0` up and runs `udhcpc -i eth0 -n -q` with 10 retries (eth0 may still
+  be negotiating, or the host's VZNAT DHCP server may not be ready); the udhcpc default script
+  (provisioned in the rootfs) writes `/etc/resolv.conf`. Whether the lease completes has not
+  been re-verified. The provisioned rootfs has no `/sbin/openrc` by design — the agent boots
+  via busybox init.
+- The `vz` daemon must carry `com.apple.security.virtualization`; ad-hoc signing via
+  `just sign-vz` suffices on macOS 26.x and `cargo xtask doctor` checks it.
+
+Not yet verified: the isolation suite booting the guest (`just test-vz-isolation`), full
+`mbx run`/`mbx console` client traffic over vsock, and the phase-2 smoke test. These are
+tracked as follow-ups; see "Validation plan / acceptance criteria" below.
 
 ## New evidence: the entitlement confound
 
@@ -150,15 +195,16 @@ becomes a Phase 1 acceptance criterion rather than a Phase 0 one.
 
 Boot the guest through `VZEFIBootLoader` from a FAT32 EFI system partition (ESP) image, while
 keeping the existing guest contract unchanged: virtiofs `minibox-rootfs` / `minibox-images` /
-`minibox-containers` shares, the vsock agent on port 1024, the serial console on `hvc0`, and
+`minibox-containers` shares, the vsock agent on port 9000, the serial console on `hvc0`, and
 the busybox init that execs `minibox-agent`.
 
 ## Non-goals
 
 - Making `vz` the default macOS adapter, or changing `smolvm`/`krun`/`colima` selection.
 - A full disk-image rootfs. The rootfs stays a virtiofs share (see "Deferred alternative").
-- Graphics (`VZVirtualMachineView`), networking devices, Rosetta directory share, snapshots,
-  suspend/resume, or nested virtualization.
+- Graphics (`VZVirtualMachineView`), Rosetta directory share, snapshots, suspend/resume, or
+  nested virtualization. (Networking devices were originally listed here as a non-goal, but the
+  as-built adapter attaches a virtio-net device with NAT — see the Boot mechanism section.)
 - Guaranteeing `vz` works in CI. Booting a VM in CI requires the entitlement and nested
   virtualization; Phase 1 validates locally and records the OS build.
 
@@ -166,37 +212,43 @@ the busybox init that execs `minibox-agent`.
 
 `VZEFIBootLoader` takes exactly one input: a `VZEFIVariableStore`. It exposes no way to pass a
 kernel command line or an initrd URL. Firmware therefore needs a boot manager on the ESP that
-can load both. Use GRUB's AArch64 EFI build:
+can load both. As built, GRUB (`BOOTAA64.EFI`) comes from the pinned Alpine ISO's own
+`efi/boot/bootaa64.efi` rather than a separately pinned GRUB binary:
 
 ```text
-ESP (FAT32, read-only attachment)
-  /EFI/BOOT/BOOTAA64.EFI   <- grubaa64.efi (pinned upstream artifact)
+ESP (FAT32, read-only attachment, 128 MiB)
+  /EFI/BOOT/BOOTAA64.EFI   <- grubaa64.efi (from pinned Alpine ISO)
   /boot/grub/grub.cfg
   /boot/vmlinuz-virt
   /boot/initramfs-virt
 ```
 
-`grub.cfg`:
+`grub.cfg` (generated at build time; the `modules=` parameter was added during bring-up — see
+the as-built notes above):
 
 ```text
 set timeout=0
 set default=0
 menuentry "minibox" {
-  linux /boot/vmlinuz-virt console=hvc0 root=minibox-rootfs rootfstype=virtiofs rw quiet
+  linux /boot/vmlinuz-virt console=hvc0 root=minibox-rootfs rootfstype=virtiofs rw quiet \
+    modules=vsock,vmw_vsock_virtio_transport_common,vmw_vsock_virtio_transport,failover,net_failover,virtio_net,af_packet,overlay
   initrd /boot/initramfs-virt
 }
 ```
 
 The kernel command line moves out of `VZLinuxBootLoader::setCommandLine` and into `grub.cfg`.
-Both boot modes render it from one shared constant so the two paths cannot drift:
+Both boot modes render it from one shared function so the two paths cannot drift (as built):
 
 ```rust
-// crates/macbox/src/vz/boot.rs
-pub const KERNEL_CMDLINE: &str =
-    "console=hvc0 root=minibox-rootfs rootfstype=virtiofs rw quiet";
+// crates/minibox-core/src/vm_boot.rs — minibox_core::vm_boot::kernel_cmdline()
+"console=hvc0 root=minibox-rootfs rootfstype=virtiofs rw quiet modules=vsock,vmw_vsock_virtio_transport_common,vmw_vsock_virtio_transport,failover,net_failover,virtio_net,af_packet,overlay"
 ```
 
-`grub.cfg` is generated, not checked in, so the constant is the only source of truth.
+`grub.cfg` is generated, not checked in, so `minibox_core::vm_boot::kernel_cmdline()` is the
+only source of truth. One part of the original plan changed: the non-goals list excluded
+networking devices, but the as-built adapter attaches a virtio-net device (the guest's rcS
+brings `eth0` up and runs `udhcpc`), because the provisioned rootfs expects network access for
+the isolation tests.
 
 ### Why a boot manager rather than the kernel as an EFI application
 
@@ -218,12 +270,12 @@ boot but EFI-plus-disk-rootfs does, this is the fallback, not the starting point
 
 ## VZ object graph
 
+As built: the machine-identifier block was not needed and is not wired up — a plain
+`VZGenericPlatformConfiguration` plus the variable store boots the Linux guest. The graph:
+
 ```rust
 // crates/macbox/src/vz/vm.rs — EFI branch of prepare_on_main_queue
 let platform = unsafe { VZGenericPlatformConfiguration::new() };
-if let Some(id) = load_machine_identifier(&config)? {
-    unsafe { platform.setMachineIdentifier(&id) };
-}
 // VZEFIBootLoader requires a VZGenericPlatformConfiguration, and that platform
 // configuration must not be combined with a macOS (VZMac*) platform configuration.
 unsafe { vm_config.setPlatform(&platform) };
@@ -246,7 +298,7 @@ let boot_loader = unsafe { VZEFIBootLoader::new() };
 unsafe { boot_loader.setVariableStore(Some(&store)) };
 unsafe { vm_config.setBootLoader(Some(&*boot_loader)) };
 
-// ESP is immutable at runtime; NVRAM lives in vars.fd, not on the FAT volume.
+// ESP is immutable at runtime; NVRAM lives in efi/NVRAM/efi_vars.fd, not on the FAT volume.
 let esp_url = path_to_nsurl(&config.efi_boot_image_path())?;
 let attachment = unsafe {
     VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
@@ -269,113 +321,122 @@ unsafe { vm_config.setEntropyDevices(&NSArray::from_retained_slice(&[rng.into_su
 ```
 
 Cargo feature additions to `crates/macbox/Cargo.toml` (`objc2-virtualization` is already
-feature-gated per class; none of these are enabled today):
-
-```text
-VZEFIBootLoader, VZEFIVariableStore, VZPlatformConfiguration,
-VZGenericPlatformConfiguration, VZGenericMachineIdentifier,
-VZStorageDeviceConfiguration, VZStorageDeviceAttachment,
-VZDiskImageStorageDeviceAttachment, VZVirtioBlockDeviceConfiguration,
-VZEntropyDeviceConfiguration, VZVirtioEntropyDeviceConfiguration
-```
+feature-gated per class; none of these are enabled today). As built, the active set is
+`VZEFIBootLoader`, `VZEFIVariableStore`, `VZPlatformConfiguration`,
+`VZGenericPlatformConfiguration`, `VZStorageDeviceConfiguration`,
+`VZDiskImageStorageDeviceAttachment`, `VZVirtioBlockDeviceConfiguration`, and
+`VZVirtioNetworkDeviceConfiguration`/`VZNATNetworkDeviceAttachment`/
+`VZVirtioSocketDeviceConfiguration`; the `VZGenericMachineIdentifier` block was not needed
+and is not wired up, and entropy devices are not attached.
 
 Threading is unchanged: all of the above still happens inside
 `VzVm::prepare_on_main_queue`, called through `dispatch_sync_f` from `vz_main()`.
 
 ## Boot asset layout
 
+As built (`~/.minibox/vm/`):
+
 ```text
 ~/.minibox/vm/
   boot/
-    vmlinuz-virt              (existing)
-    initramfs-virt            (existing)
-    grub/grubaa64.efi         (pinned artifact, fetched once)
+    vmlinuz-virt              (extracted from the pinned ISO)
+    initramfs-virt            (extracted, then augmented with the 8 guest modules)
   efi/
     boot.img                  (FAT32 ESP, built by xtask)
-    boot.img.sha256           (manifest; boot refuses on mismatch)
-    vars.fd                   (EFI NVRAM, created at first boot)
-    machine-id                (VZGenericMachineIdentifier dataRepresentation)
-  rootfs/                     (virtiofs, unchanged)
+    manifest.json             (per-file + ESP sha256, cmdline, pinned input hashes)
+    NVRAM/efi_vars.fd         (EFI NVRAM variable store, created at first boot)
+  rootfs/                     (virtiofs; provisioned by build-vm-image — agent, rcS, modules)
+  cache/                      (downloaded pinned artifacts: the ISO and the linux-virt APK)
 ```
 
-- `boot.img` is a 128 MiB fixed-size image (Alpine kernel ~10-15 MB, initramfs ~5-10 MB,
-  GRUB ~3 MB). FAT32 with a 512-byte sector size.
-- `vars.fd` and `machine-id` are per-VM state under `vm_dir`, mode `0600`. They contain no
-  secrets, but they are boot-influencing state: delete both to return to a factory boot.
+Deltas from the original plan: no separate `grub/grubaa64.efi` (GRUB is read from the pinned
+ISO), the sha256 manifest is `manifest.json` (not `boot.img.sha256`), the variable store is
+`efi/NVRAM/efi_vars.fd`, and there is no `machine-id` — `VZGenericMachineIdentifier` was not
+needed to boot the Linux guest and is not wired up.
+
+- `boot.img` is a 128 MiB fixed-size image (Alpine kernel ~10 MB, initramfs ~10 MB,
+  GRUB ~1 MB). FAT32 with fixed volume id/label and DOS epoch timestamps for determinism.
+- `NVRAM/efi_vars.fd` is per-VM state under `vm_dir`. It contains no secrets, but it is
+  boot-influencing state: delete it to return to a factory boot.
 - The ESP is attached read-only. Nothing at runtime writes to it, so a mutable boot volume
   cannot be used to persist inside the guest.
 
 ## Provisioning: `cargo xtask build-vm-image`
 
-Restore the command name the isolation suite already tells you to run. It is the boot-asset
-provisioner, not a second test-image pipeline: `crates/macbox/tests/vz_isolation_tests.rs` and
-`scripts/qemu-linux-tests/run.rs` both consume
-`~/.minibox/vm/boot/{vmlinuz-virt,initramfs-virt}`, while `cargo xtask test-linux` already
-stages guest binaries into `rootfs/` and packs an initramfs from it
-(`xtask/src/test_linux.rs`). `build-vm-image` therefore owns kernel/initramfs acquisition and
-ESP assembly, and must not duplicate the rootfs staging that already exists.
+Restore the command name the isolation suite already tells you to run. As built, the command
+owns the **entire** VM asset tree, not just kernel/initramfs/ESP: it extracts the pinned ISO
+(kernel/initramfs/GRUB), appends the eight vsock/virtio-net/overlay modules to the initramfs
+(Alpine virt does not ship them), builds the deterministic ESP plus `manifest.json`, and
+provisions the virtiofs rootfs itself (cross-compiling `miniboxd` for
+`aarch64-unknown-linux-musl` and staging it as `rootfs/sbin/minibox-agent`, plus busybox init
+files and the eight guest modules under `rootfs/lib/modules/`). The plan had
+`build-vm-image` not touching `rootfs/`; that premise did not survive contact with the
+module-load gap — see the as-built section. `cargo xtask test-linux` still owns its own
+initramfs pipeline for the QEMU harness; the two are separate paths with different guest
+contents.
 
-Inputs: existing Alpine `vmlinuz-virt` / `initramfs-virt` (or the pinned upstream URLs when
-absent), the pinned `grubaa64.efi`, and the ESP size. Alpine artifacts are pinned by release
-and sha256 (the 2026-08-15 repro used the official v3.22 aarch64 `netboot` pair), not fetched
-by "latest". It renders `grub.cfg` from `vz::boot::KERNEL_CMDLINE`, formats a FAT32 volume,
-writes the four files, and emits `boot.img` plus `boot.img.sha256`. It never touches `rootfs/`.
+Inputs are pinned by release and sha256 (the Alpine 3.22.7 virt ISO and the `linux-virt`
+6.12.114-r0 APK for the module tree) — nothing is fetched by "latest". It renders `grub.cfg`
+from `minibox_core::vm_boot::kernel_cmdline()`, formats a FAT32 volume, writes the four files,
+and emits `boot.img` plus `manifest.json`.
 
-Implementation notes:
+Implementation notes (as built):
 
-- Build the FAT image in-process with the `fatfs` crate (`format_volume` + `create_dir` +
-  `File::create`). No root, no `hdiutil`, no loopback mount, works identically on macOS and
-  Linux CI. If `fatfs` cannot produce a FAT32 volume at this size, fall back to `mtools`
-  (`mformat`/`mcopy`) and make it a documented dev dependency.
-- Deterministic output: fixed volume label, fixed timestamps, files written in sorted order,
-  so re-running on unchanged inputs yields identical bytes and an unchanged sha256. That makes
-  the hash meaningful for the runtime preflight.
-- Idempotent: if `boot.img.sha256` matches the inputs' manifest, skip the rebuild.
-- Missing `grubaa64.efi` is a hard error with the expected URL and sha256, not a silent skip.
+- Builds the FAT image in-process with the `fatfs` crate (no root, no `hdiutil`, no loopback).
+  `fatfs` is built with `default-features = false` (`alloc` + `std` only) — its default
+  `chrono` feature stamped directory entries with `Local::now()`, which broke byte determinism
+  until `b38afd5c`. The `mtools` fallback was not needed.
+- Deterministic output: fixed volume id (`0x4d42_5845`), fixed label (`MINIBOX`), fixed DOS
+  epoch timestamps, files written in fixed order, so re-running on unchanged inputs yields
+  identical bytes and an unchanged sha256. Unit test:
+  `xtask::vm_image::tests::fat_image_is_deterministic_and_contains_every_file`.
+- Idempotent: if the pinned inputs manifest matches, it prints a cached line and skips the
+  rebuild; `--force` rebuilds.
+- Missing or hash-mismatched pinned artifacts are hard errors with the expected URL and
+  sha256, not silent skips.
+- The runtime preflight (`macbox::vz::boot::EfiBootAssets::check_boot_assets`) reads
+  `manifest.json` and refuses to start the VM on missing files or an `esp_sha256` mismatch,
+  printing ``run `cargo xtask build-vm-image` `` as the remedy.
 
-`cargo xtask doctor` gains a `vz` section that reports: kernel/initramfs present, ESP present
-and hash-matching, `vars.fd` state, and whether the **current `miniboxd` binary** carries
-`com.apple.security.virtualization` (shell out to
-`codesign -d --entitlements :- <exe>` and look for the key).
+`cargo xtask doctor` has a `vz` section reporting kernel/initramfs/ESP presence and whether
+the **current `miniboxd` binary** carries `com.apple.security.virtualization` (via
+`codesign -d --entitlements :- <exe>`).
 
 ## Runtime changes
 
-`crates/macbox/src/vz/vm.rs`:
+As built (`VzBootMode` is now a single-variant enum — the `LinuxKernel` mode it once carried
+was deleted when the boot-loader fix landed):
 
 ```rust
 pub enum VzBootMode {
-    /// VZLinuxBootLoader — kernel + initrd paths, command line via setCommandLine.
-    LinuxKernel,
     /// VZEFIBootLoader — GRUB on a FAT32 ESP, command line via grub.cfg.
     Efi,
 }
 
-pub struct VzVmConfig {
-    pub vm_dir: PathBuf,
-    pub images_dir: PathBuf,
-    pub containers_dir: PathBuf,
-    pub memory_bytes: u64,
-    pub cpu_count: usize,
-    pub boot_mode: VzBootMode,
-}
-
-impl VzVmConfig {
-    pub fn efi_boot_image_path(&self) -> PathBuf;   // vm_dir/efi/boot.img
-    pub fn efi_vars_path(&self) -> PathBuf;         // vm_dir/efi/vars.fd
-    pub fn efi_machine_id_path(&self) -> PathBuf;   // vm_dir/efi/machine-id
+pub struct EfiBootAssets {
+    pub esp_image: PathBuf,     // vm_dir/efi/boot.img
+    pub variable_store: PathBuf, // vm_dir/efi/NVRAM/efi_vars.fd
 }
 ```
 
-Boot mode resolution order, evaluated once in `start_vz()`:
+Boot mode resolution, evaluated once in `start_vz()`:
 
-1. `MINIBOX_VZ_BOOT=efi|kernel` if set (invalid value is a hard error, not a fallback).
-2. `Efi` when `vm_dir/efi/boot.img` exists.
-3. `LinuxKernel` otherwise (preserves current behaviour on a provisioned kernel-only image).
+1. `MINIBOX_VZ_BOOT=efi` is required to be set to "efi" (or unset); any other value is a hard
+   error (`validate_boot_mode_env` in `crates/macbox/src/vz/boot.rs`).
+2. The boot assets are checked via `EfiBootAssets::check_boot_assets()` before `start`; a
+   missing/mismatched `boot.img` fails closed with the `cargo xtask build-vm-image` remedy.
 
-`prepare_on_main_queue` splits into `build_linux_boot_loader` and `build_efi_boot_loader`, both
-returning `Retained<VZBootLoader>`, then calls the shared `setPlatform` path. `boot_mode` and
-the full `VzVmConfig` are retained on `VzVm` for logging and diagnostics (the existing
-`#[allow(dead_code)] config` field stops being dead).
+Storage and device wiring as built (vm.rs): read-only `VZDiskImageStorageDeviceAttachment`
+around `boot.img` + `VZVirtioBlockDeviceConfiguration` for the ESP, a
+`VZVirtioNetworkDeviceConfiguration` with `VZNATNetworkDeviceAttachment` (so the guest can
+resolve DNS and pull images), `VZVirtioSocketDeviceConfiguration` via `setSocketDevices`
+(the agent is reached over vsock on port 9000), and `VZSerialPortConfiguration` for the hvc0
+serial output that the boot triage table reads. `prepare_on_main_queue` builds the boot loader
+and sets the platform + variable store + storage devices; `boot_mode` is validated once in
+`start_vz()` by `validate_boot_mode_env`.
+
+`prepare_on_main_queue` builds the boot loader and sets the platform + variable store + storage
+devices; the full `VzVmConfig`-equivalent is retained on `VzVm` for logging and diagnostics.
 
 ## Preflight and diagnostics
 
@@ -427,52 +488,56 @@ Virtualization.framework is signed with `com.apple.security.virtualization`.
 - `grub.cfg` uses `set timeout=0`. No GRUB shell entry, no editing, no recovery menu: the
   serial console is a host-owned channel, and an interactive boot prompt is an unnecessary
   second entry point.
-- GRUB is a pinned artifact with a recorded sha256, fetched by an explicit provisioning step,
-  never at boot. A missing or mismatched binary fails closed.
-- `vars.fd` and `machine-id` are VM-local state, `0600`, under `vm_dir` alongside the rootfs.
+- GRUB is pinned as part of the pinned Alpine ISO (whose sha256 is recorded in
+  `manifest.json`), and the runtime preflight (`check_boot_assets`) refuses to start the VM on
+  a missing or hash-mismatched `esp_sha256`. Every per-file SHA-256 for the ESP is recorded in
+  the manifest, so tampering with any of them fails closed.
+- `NVRAM/efi_vars.fd` is VM-local state under `vm_dir`; it contains no secrets, but it is
+  boot-influencing state (EFI boot order). Delete it to return to a factory boot.
 - The virtiofs shares keep their current read-only/read-write split; this design adds no new
   host-path exposure.
 
 ## Risk
 
-| Risk                                                               | Likelihood | Mitigation                                                                                            |
-| ------------------------------------------------------------------ | ---------- | ----------------------------------------------------------------------------------------------------- |
-| EFI boot still returns `code=1` (OS-level VZ regression is real)   | Medium     | **Resolved by Phase 0**: cell D starts and runs.                                                      |
-| EFI + virtiofs root does not work (proven part is EFI + disk root) | Medium     | Fallback is the full-disk rootfs variant; decide after one boot attempt.                              |
-| GRUB artifact supply chain / licensing                             | Low        | Pin URL + sha256; download at provisioning time rather than vendoring the GPL-3 binary into the repo. |
-| Command line drifts between boot modes                             | Low        | Single `KERNEL_CMDLINE` constant rendered into `grub.cfg`.                                            |
-| FAT32 image built non-deterministically, breaking the hash gate    | Medium     | Fixed timestamps/label/ordering; unit test asserts two builds are byte-identical.                     |
-| `fatfs` cannot format FAT32 at the chosen size                     | Low        | `mtools` fallback, documented as a dev dependency.                                                    |
-| Signing requirement makes local dev awkward                        | High       | `just sign-vz`, doctor check, startup log, and an error hint that names the command.                  |
-| EFI boot adds latency                                              | Low        | Budget +2s; measure in the smoke test and record it.                                                  |
-| Docs drift (`FEATURE_MATRIX`, `ARCHITECTURE`, `context.toml`)      | Medium     | Task T6 updates maturity, adapter notes, and `[[profiles]]`.                                          |
+| Risk                                                               | Likelihood | Mitigation                                                                                                |
+| ------------------------------------------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------- |
+| EFI boot still returns `code=1` (OS-level VZ regression is real)   | Medium     | **Resolved by Phase 0**: cell D starts and runs.                                                          |
+| EFI + virtiofs root does not work (proven part is EFI + disk root) | Medium     | Fallback is the full-disk rootfs variant; decide after one boot attempt.                                  |
+| GRUB artifact supply chain / licensing                             | Low        | Pin URL + sha256; download at provisioning time rather than vendoring the GPL-3 binary into the repo.     |
+| Command line drifts between the ESP `grub.cfg` and the runtime     | Low        | Single `kernel_cmdline()` source in `minibox_core::vm_boot` rendered by both the builder and the adapter. |
+| FAT32 image built non-deterministically, breaking the hash gate    | Medium     | Fixed timestamps/label/ordering; unit test asserts two builds are byte-identical.                         |
+| `fatfs` cannot format FAT32 at the chosen size                     | Low        | `mtools` fallback, documented as a dev dependency.                                                        |
+| Signing requirement makes local dev awkward                        | High       | `just sign-vz`, doctor check, startup log, and an error hint that names the command.                      |
+| EFI boot adds latency                                              | Low        | Budget +2s; measure in the smoke test and record it.                                                      |
+| Docs drift (`FEATURE_MATRIX`, `ARCHITECTURE`, `context.toml`)      | Medium     | Task T6 updated maturity, adapter notes, and `[[profiles]]`; doc-audit gates run on commit.               |
 
 ## Validation plan / acceptance criteria
 
 1. Phase 0 matrix recorded in this document with per-cell outcomes and the exact macOS build.
    **Met** (see "Result (executed 2026-10-22)").
-2. If Phase 1 proceeds: `cargo xtask build-vm-image` is idempotent and produces identical
-   bytes across two runs; `boot.img.sha256` matches on re-run.
+2. `cargo xtask build-vm-image` is idempotent and produces identical bytes across two runs on
+   unchanged inputs; the `manifest.json` hashes match on re-run. **Met** (as of `b38afd5c`,
+   via `vm_image::tests::fat_image_is_deterministic_and_contains_every_file`, 8/8 passing).
 3. `just test-vz-isolation` boots a real VM (no `SKIP`), with every isolation test passing or
-   failing for a documented reason.
-4. `vz_adapter_smoke.rs` reaches the guest agent over vsock within the existing 60s budget,
-   with serial output showing firmware -> GRUB -> kernel -> init.
-5. `MINIBOX_ADAPTER=vz mbx run alpine echo ok` succeeds end to end on a signed daemon.
-6. `cargo xtask verify` passes; `FEATURE_MATRIX.mbx.md` moves `vz` from `blocked` to
-   `experimental` with the OS build and evidence link, or stays `blocked` with the Phase 0
-   finding recorded.
+   failing for a documented reason. **Not met** — not run since the EFI switch.
+4. The smoke path reaches the guest agent over vsock within the existing 60s budget, with
+   serial output showing firmware → GRUB → kernel → init. **Not met / unverified** — see
+   "As-built status" (guest runtime behavior past virtiofs root mount is not captured).
+5. `MINIBOX_ADAPTER=vz mbx run alpine echo ok` succeeds end to end on a signed daemon. **Not met / unverified.**
+6. `FEATURE_MATRIX.mbx.md` records `vz` as `experimental` (os build + evidence) and
+   `cargo xtask verify` passes. **Met** via this change; verify gates run on commit.
 
 ## Implementation outline (ordered, one commit each)
 
-| Task | Scope                                                                                                      | Files                                                                                                                                                  |
-| ---- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| T0   | Phase 0 matrix experiment + record results; update this doc's status. **Done**                             | `crates/macbox/examples/vz_boot_probe.rs` (new)                                                                                                        |
-| T1   | Signing plumbing: daemon entitlement file, `just sign-vz`, doctor check, startup entitlement log. **Done** | `entitlements/vz-daemon.entitlements` (new), `Justfile`, `xtask/src/preflight.rs`, `crates/macbox/src/vz/signing.rs` (new), `crates/macbox/src/lib.rs` |
-| T2   | `cargo xtask build-vm-image`: ESP builder, grub rendering, sha256 manifest                                 | `xtask/src/vm_image.rs` (new), `xtask/src/main.rs`                                                                                                     |
-| T3   | EFI boot loader branch, platform config, storage + entropy devices, cargo features                         | `crates/macbox/Cargo.toml`, `crates/macbox/src/vz/vm.rs`, new `vz/boot.rs`                                                                             |
-| T4   | Asset preflight, boot-mode resolution, code=1 remediation text                                             | `crates/macbox/src/vz/vm.rs`, `crates/macbox/src/lib.rs`                                                                                               |
-| T5   | Tests: ESP builder units, boot-mode unit tests, real-image isolation + smoke                               | `xtask/src/vm_image.rs`, `crates/macbox/src/vz/`, `crates/macbox/tests/`                                                                               |
-| T6   | Docs and maturity: feature matrix, gotchas triage table, `xtask/context.toml` profile                      | `docs/core/`, `xtask/context.toml`, `DEVELOPMENT.md`                                                                                                   |
+| Task | Scope                                                                                                         | Files                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| T0   | Phase 0 matrix experiment + record results; update this doc's status. **Done**                                | `crates/macbox/examples/vz_boot_probe.rs` (new)                                                                                                        |
+| T1   | Signing plumbing: daemon entitlement file, `just sign-vz`, doctor check, startup entitlement log. **Done**    | `entitlements/vz-daemon.entitlements` (new), `Justfile`, `xtask/src/preflight.rs`, `crates/macbox/src/vz/signing.rs` (new), `crates/macbox/src/lib.rs` |
+| T2   | `cargo xtask build-vm-image`: ESP builder, grub rendering, sha256 manifest. **Done** (`4cd2fa47`)             | `xtask/src/vm_image.rs`, `xtask/src/main.rs`                                                                                                           |
+| T3   | EFI boot loader branch, platform config, storage devices, cargo features. **Done** (`4cd2fa47`)               | `crates/macbox/Cargo.toml`, `crates/macbox/src/vz/vm.rs`, `crates/macbox/src/vz/boot.rs`                                                               |
+| T4   | Asset preflight, boot-mode validation, code=1 remediation text. **Done** (`6d8c009a`)                         | `crates/macbox/src/vz/vm.rs`, `crates/macbox/src/lib.rs`, `crates/macbox/src/vz/boot.rs`                                                               |
+| T5   | Tests: ESP builder units, boot-mode unit tests pass; isolation suite + smoke unverified                       | `xtask/src/vm_image.rs`, `crates/macbox/src/vz/`, `crates/macbox/tests/`                                                                               |
+| T6   | Docs and maturity: feature matrix, gotchas triage table, `xtask/context.toml` profile. **Done** (this change) | `docs/core/`, `xtask/context.toml`, `DEVELOPMENT.md`                                                                                                   |
 
 T1 is required regardless: cells A and C show an unsigned process cannot even validate a
 configuration, so the daemon must be signed before any `vz` boot can be attempted.
@@ -481,19 +546,25 @@ configuration, so the daemon must be signed before any `vz` boot can be attempte
 
 1. Does the ESP need a written EFI boot entry, or does firmware fall back to
    `/EFI/BOOT/BOOTAA64.EFI` on an empty NVRAM? (Expected: fallback works; verify with a fresh
-   `vars.fd`.) **Answered**: a freshly created `vars.fd` with no boot entries booted
-   `/EFI/BOOT/BOOTAA64.EFI` unaided; the VM stayed running with a real ESP and powered off
+   `NVRAM/efi_vars.fd`.) **Answered**: a freshly created variable store with no boot entries
+   booted `/EFI/BOOT/BOOTAA64.EFI` unaided; the VM stayed running with a real ESP and powered off
    within 210 ms with an unbootable one.
-2. Does Alpine's `initramfs-virt` load `virtiofs` before switch-root, given the root is
-   virtiofs rather than a block device? The running `VZLinuxBootLoader` path proves the
-   modules exist in the initramfs; it does not prove EFI ordering is identical.
+2. Is `modules=` on the kernel cmdline a viable mechanism, or must the rootfs `rcS` insmod the
+   modules explicitly? **Answered (as built)**: `modules=` was observed not to be reliable
+   (`socket(AF_VSOCK)` and `AF_PACKET` still failed after `switch_root` during the
+   signing/EFI bring-up), so `rcS` now `insmod`s the eight modules explicitly in dependency
+   order, with per-module `OK:`/`FAIL:` diagnostics (`lsmod` + `-- net diag --`), and the ESP
+   builder appends the same modules to the initramfs as a second line of defense. Mitigation,
+   not yet verified to completion — see "As-built status" above.
 3. Is a read-only `VZDiskImageStorageDeviceAttachment` accepted for the boot volume? **Answered**:
    yes; cells D and B used `readOnly = true`.
 4. Ad-hoc versus Developer ID entitlements on macOS 26. **Answered**: ad-hoc entitlements are
    honoured; the entitled ad-hoc binary reached a running VM.
-5. GRUB versus systemd-boot as the pinned boot manager: GRUB is larger but its `linux`/`initrd`
-   commands map exactly onto the existing kernel+initramfs artifacts; systemd-boot needs the
-   kernel to be an EFI-stub binary and a different config format. Default to GRUB unless the
-   artifact proves hard to source. Note that Phase 0 booted the kernel directly as
-   `BOOTAA64.EFI`, which proves the EFI stub works but supplies no `console=` or `root=`, so it
-   cannot replace a boot manager.
+5. GRUB versus systemd-boot as the pinned boot manager: **Answered as built** — GRUB is
+   sourced from the pinned Alpine ISO's `efi/boot/bootaa64.efi` rather than a separately pinned
+   binary (one artifact fewer to pin). Why GRUB and not systemd-boot: its `linux`/`initrd`
+   commands map exactly onto the existing kernel+initramfs artifacts, while systemd-boot needs
+   the kernel to be an EFI-stub binary and a different config format. Note that Phase 0 booted
+   the kernel directly as `BOOTAA64.EFI`, which proves the EFI stub works but supplies no
+   `console=` or `root=`, so it cannot replace a boot manager. The systemd-boot alternative
+   remains possible if GRUB's binary ever proves hard to source.

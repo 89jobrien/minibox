@@ -50,6 +50,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
   reported adapters instead of failing.
 - Docs that described `mbx doctor` as delegating to `cargo xtask doctor` now describe the
   split: `mbx doctor` for runtime health, `cargo xtask doctor` for toolchain readiness.
+- The `vz` macOS adapter moved from `blocked` to `experimental` (`xtask/context.toml` +
+  `docs/core/FEATURE_MATRIX.mbx.md`): the guest now boots end-to-end on macOS 26.x through a
+  `VZEFIBootLoader` path backed by a deterministic FAT32 ESP built by `cargo xtask
+build-vm-image`. Full agent traffic and the isolation suite are still unverified; see
+  `docs/designs/2026-10-22-vz-efi-boot-design.md`.
 
 ## [v0.32.0] - 2026-08-15
 
