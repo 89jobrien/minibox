@@ -459,4 +459,6 @@
   daemon via `minibox-core::vm_boot`; tags `minibox-rootfs`/`minibox-images`/
   `minibox-containers`. Landed as 9200022e (probe/Phase 0), e9ec4b5c (signing/doctor),
   4cd2fa47 (ESP builder + EFI switch, T2/T3), 6d8c009a (boot-mode resolution, preflight,
-  code=1 remediation, T4/T5), 538bfe90 (diagnostics). T6 docs/maturity still open.
+  code=1 remediation, T4/T5), 538bfe90 (diagnostics). T6 (vz design docs +
+  maturity — FEATURE_MATRIX.mbx.md, CHANGELOG.md; commit 8c0f53cd) done.
+  CI-fix: gh API 401 dead-end — manual steps in `.ctx/_WORKING_DIR/pending-manual.txt`.
